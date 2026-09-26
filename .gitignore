@@ -14,11 +14,6 @@ dist/
 venv/
 env/
 
-# Node / dsh plugin build output
-node_modules/
-lib/
-*.tsbuildinfo
-
 # Test / coverage artifacts
 .pytest_cache/
 .mypy_cache/
