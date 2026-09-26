@@ -16,10 +16,10 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from laya_dsh_rag.chunking import Document
-from laya_dsh_rag.config import EngineConfig
-from laya_dsh_rag.engine import RagEngine
-from laya_dsh_rag.model import HashingEmbedder
+from laya_rag.chunking import Document
+from laya_rag.config import EngineConfig
+from laya_rag.engine import RagEngine
+from laya_rag.model import HashingEmbedder
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
@@ -29,7 +29,7 @@ def tokens(text: str) -> set[str]:
 
 
 class StubModel:
-    """Deterministic stand-in for :class:`laya_dsh_rag.model.LayaModel`.
+    """Deterministic stand-in for :class:`laya_rag.model.LayaModel`.
 
     Embeddings are hashed bag-of-words; decisions are query/state token overlap. It
     is deliberately simple: the tests assert on plumbing and ordering, not on
@@ -128,10 +128,7 @@ class StubModel:
 def make_config(tmp_path: Path, **overrides: Any) -> EngineConfig:
     """An engine config rooted in ``tmp_path`` so tests never touch the real index.
 
-    ``dsh_settings`` points at a path that does not exist on purpose: the default is
-    the developer's own ``~/.dsh/settings.yaml``, and a test that quietly picked up
-    this machine's composition model would not be testing anything reproducible.
-    """
+"""
     defaults: dict[str, Any] = {
         "index_dir": tmp_path / "index",
         "models_dir": tmp_path / "models",
@@ -142,7 +139,6 @@ def make_config(tmp_path: Path, **overrides: Any) -> EngineConfig:
         "rerank_k": 3,
         "relevance_threshold": 0.3,
         "answerability_threshold": 0.3,
-        "dsh_settings": tmp_path / "dsh-settings-absent.yaml",
     }
     defaults.update(overrides)
     return EngineConfig(**defaults)

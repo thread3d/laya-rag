@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Browser smoke test for the Laya DSH RAG GUI.
+ * Browser smoke test for the Laya RAG GUI.
  *
  * The Python suite covers the server side of the GUI: that the assets ship and that
  * mounting it at "/" does not shadow the API routes. It cannot cover what the page
@@ -14,13 +14,13 @@
  *
  * Usage:
  *   node tools/gui-smoke.mjs
- *   LAYA_DSH_RAG_BASE_URL=http://127.0.0.1:8079 LAYA_DSH_RAG_API_KEY=secret \
+ *   LAYA_RAG_BASE_URL=http://127.0.0.1:8079 LAYA_RAG_API_KEY=secret \
  *     node tools/gui-smoke.mjs
  *   node tools/gui-smoke.mjs --screenshots /tmp/gui
  *
  * Environment:
- *   LAYA_DSH_RAG_BASE_URL  engine to test (default http://127.0.0.1:8077)
- *   LAYA_DSH_RAG_API_KEY   bearer token, when the engine requires one
+ *   LAYA_RAG_BASE_URL  engine to test (default http://127.0.0.1:8077)
+ *   LAYA_RAG_API_KEY   bearer token, when the engine requires one
  *   CHROME                 path to a Chrome/Chromium binary
  */
 import { spawn } from "node:child_process";
@@ -28,8 +28,8 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const BASE = (process.env.LAYA_DSH_RAG_BASE_URL || "http://127.0.0.1:8077").replace(/\/+$/, "");
-const TOKEN = process.env.LAYA_DSH_RAG_API_KEY || "";
+const BASE = (process.env.LAYA_RAG_BASE_URL || "http://127.0.0.1:8077").replace(/\/+$/, "");
+const TOKEN = process.env.LAYA_RAG_API_KEY || "";
 const SHOTS = (() => {
   const at = process.argv.indexOf("--screenshots");
   return at === -1 ? null : (process.argv[at + 1] || "gui-screenshots");
@@ -75,7 +75,7 @@ async function engineReachable() {
 }
 
 if (!(await engineReachable())) {
-  skip(`no engine answering at ${BASE}/health — start it with \`.venv/bin/laya-dsh-rag-serve\``);
+  skip(`no engine answering at ${BASE}/health — start it with \`.venv/bin/laya-rag-serve\``);
 }
 
 /* ── chrome + CDP plumbing ───────────────────────────────────────────── */
@@ -234,7 +234,7 @@ if (!servingGui) {
   console.log(`FAIL: ${BASE}/ did not serve the GUI (HTTP ${pageStatus} for the page itself).`);
   console.log("      The engine is answering /health, so it is running — but a process started");
   console.log("      before the GUI shipped serves the JSON API only. Restart it and retry:");
-  console.log("        .venv/bin/laya-dsh-rag-serve");
+  console.log("        .venv/bin/laya-rag-serve");
   cleanup();
   process.exit(1);
 }

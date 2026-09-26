@@ -10,7 +10,7 @@ does not exist, or an assertion with no citation at all are facts about the text
 they can be decided mechanically with no model and no threshold — so a check like
 this cannot itself be wrong in the way a model can. Whether a correctly-cited
 sentence is a *fair reading* of its source is a different question, and it is left to
-Laya (:meth:`laya_dsh_rag.engine.RagEngine.adjudicate_claims`).
+Laya (:meth:`laya_rag.engine.RagEngine.adjudicate_claims`).
 
 Because these checks are deterministic they need no calibration, which is what makes
 them safe to show immediately: there is no probability to misread.

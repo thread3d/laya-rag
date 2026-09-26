@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from laya_dsh_rag import api
-from laya_dsh_rag.verify import (
+from laya_rag import api
+from laya_rag.verify import (
     extract_citations,
     extract_quotes,
     normalize,
@@ -269,7 +269,7 @@ def test_verify_endpoint_does_not_need_a_model(tmp_path, monkeypatch):
     def explode(*_a, **_k):
         raise AssertionError("the citation check contacted a model")
 
-    monkeypatch.setattr("laya_dsh_rag.compose.urllib.request.urlopen", explode)
+    monkeypatch.setattr("laya_rag.compose.urllib.request.urlopen", explode)
     response = client.post("/v1/verify", json={
         "answer": "Refunds arrive within five business days [1].",
         "passages": [{"text": REFUND}],
@@ -312,8 +312,8 @@ def test_without_a_query_the_behaviour_is_unchanged():
 def test_the_endpoint_accepts_the_query():
     """The GUI sends the question so the false alarm cannot reach a reader."""
     from fastapi.testclient import TestClient
-    from laya_dsh_rag import api
-    from laya_dsh_rag.config import EngineConfig
+    from laya_rag import api
+    from laya_rag.config import EngineConfig
     import tempfile, pathlib as _p
 
     app = api.create_app(EngineConfig(index_dir=_p.Path(tempfile.mkdtemp()) / "i", warmup=False))

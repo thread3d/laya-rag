@@ -1,5 +1,5 @@
 /* ============================================================================
-   Laya DSH RAG — evidence console
+   Laya RAG — evidence console
    No frameworks, no build step, no CDN. Tokens first, then layout, then parts.
    Colour tokens are declared as a plain dark value followed by a light-dark()
    pair: browsers without light-dark() keep the dark value, so the page never

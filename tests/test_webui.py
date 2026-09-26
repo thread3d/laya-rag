@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from laya_dsh_rag import api
+from laya_rag import api
 
 from .support import make_config, stub_engine, write_corpus
 
@@ -46,7 +46,7 @@ def test_root_serves_the_gui(ctx):
     response = client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "Laya DSH RAG" in response.text
+    assert "Laya RAG" in response.text
 
 
 def test_stylesheet_and_script_are_served(ctx):

@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "laya-dsh-rag"
+name = "laya-rag"
 version = "0.1.0"
-description = "Retrieval-augmented generation engine powered by the Laya decision engine, with a DeepSeek Harness (dsh) interface"
+description = "Retrieval-augmented generation engine powered by the Laya decision engine, with an HTTP API and a web interface"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -24,17 +24,17 @@ dev = [
 ]
 
 [project.scripts]
-laya-dsh-rag = "laya_dsh_rag.cli:main"
-laya-dsh-rag-serve = "laya_dsh_rag.api:main"
+laya-rag = "laya_rag.cli:main"
+laya-rag-serve = "laya_rag.api:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-packages = ["laya_dsh_rag"]
+packages = ["laya_rag"]
 
 [tool.setuptools.package-data]
 # The GUI ships as static files rather than a build artefact, so they must be listed
 # explicitly: without this a wheel install would serve the JSON API with no interface.
-laya_dsh_rag = ["web/*.html", "web/*.css", "web/*.js"]
+laya_rag = ["web/*.html", "web/*.css", "web/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

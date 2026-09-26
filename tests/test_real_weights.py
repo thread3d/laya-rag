@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import pytest
 
-from laya_dsh_rag.config import EngineConfig
-from laya_dsh_rag.engine import RagEngine
-from laya_dsh_rag.model import LayaModel
-from laya_dsh_rag.rerank import LayaReranker
+from laya_rag.config import EngineConfig
+from laya_rag.engine import RagEngine
+from laya_rag.model import LayaModel
+from laya_rag.rerank import LayaReranker
 
 from .support import make_config
 
@@ -85,7 +85,7 @@ def test_laya_relevance_beats_dense_cosine_on_a_probe(model):
 
 @requires_checkpoints
 def test_answerability_gates_unrelated_evidence(model):
-    from laya_dsh_rag.rerank import ScoredPassage
+    from laya_rag.rerank import ScoredPassage
 
     reranker = LayaReranker(model)
 

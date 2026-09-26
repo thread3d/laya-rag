@@ -1,8 +1,7 @@
-"""Configuration for the Laya DSH RAG engine.
+"""Configuration for the Laya RAG engine.
 
 Every value here is deployment-varying and therefore overridable through the
-environment, matching the "no hardcoded tunables" rule the harness applies to its
-own plugins. Defaults target this repository's local checkout: the Laya submodule
+environment. Defaults target this repository's local checkout: the Laya submodule
 under ``vendor/laya``, with the checkpoints it downloads symlinked into ``models/``.
 """
 from __future__ import annotations
@@ -12,10 +11,10 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-# <repo>/src/laya_dsh_rag/config.py -> <repo>
+# <repo>/src/laya_rag/config.py -> <repo>
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-ENV_PREFIX = "LAYA_DSH_RAG_"
+ENV_PREFIX = "LAYA_RAG_"
 
 # Fields that must never be serialised verbatim. ``as_dict`` feeds ``/v1/stats`` and
 # the CLI's ``--json`` output, so a secret here would land in a response body or a
@@ -118,9 +117,8 @@ class EngineConfig:
     # returned. Laya cannot generate text, so everything above is calibrated and
     # nothing here is. Off unless the caller explicitly asks for it.
     #
-    # Empty means "not configured here" and the value is resolved from the harness's
-    # own settings at runtime (see compose.py), so the model dsh uses is the model
-    # this uses rather than a second, drifting copy of the same configuration.
+    # Both are this project's own settings. COMPOSE_MODEL is required for composition
+    # to be available at all; COMPOSE_BASE_URL defaults to Ollama's endpoint.
     compose_base_url: str = field(default_factory=lambda: _env("COMPOSE_BASE_URL") or "")
     compose_model: str = field(default_factory=lambda: _env("COMPOSE_MODEL") or "")
     # Which route to call. Ollama's native /api/chat honours `think: false`; its
@@ -134,9 +132,6 @@ class EngineConfig:
     # can spend a few hundred more reasoning even with thinking disabled: at 600,
     # two runs in three hit the ceiling and stopped mid-answer.
     compose_max_tokens: int = field(default_factory=lambda: _env_int("COMPOSE_MAX_TOKENS", 1200))
-    dsh_settings: Path = field(
-        default_factory=lambda: Path(_env("DSH_SETTINGS") or Path.home() / ".dsh" / "settings.yaml")
-    )
 
     # Service
     host: str = field(default_factory=lambda: _env("HOST") or "127.0.0.1")

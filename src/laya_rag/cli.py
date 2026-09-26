@@ -1,4 +1,4 @@
-"""Command line interface for the Laya DSH RAG engine."""
+"""Command line interface for the Laya RAG engine."""
 from __future__ import annotations
 
 import argparse
@@ -150,7 +150,7 @@ def _cmd_doctor(args: argparse.Namespace, config: EngineConfig) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="laya-dsh-rag",
+        prog="laya-rag",
         description="Retrieval-augmented generation over the Laya decision engine.",
     )
     sub = parser.add_subparsers(dest="command", required=True)

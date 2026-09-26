@@ -1,5 +1,5 @@
 /* ============================================================================
-   Laya DSH RAG — evidence console
+   Laya RAG — evidence console
    Plain ES2020, no dependencies, no build step. Every corpus-derived string is
    inserted with textContent or createTextNode; nothing from the engine or the
    filesystem is ever parsed as HTML.
@@ -117,7 +117,7 @@
       });
     } catch (error) {
       if (error && error.name === "AbortError") throw error;
-      throw new ApiError("could not reach the engine — is `laya-dsh-rag-serve` running?", 0);
+      throw new ApiError("could not reach the engine — is `laya-rag-serve` running?", 0);
     }
 
     let data = null;
@@ -202,7 +202,7 @@
 
     if (state.authBlocked) {
       strip.appendChild(pill("engine", "token required", "warn",
-        "This engine has LAYA_DSH_RAG_API_KEY set; supply the bearer token under Connection"));
+        "This engine has LAYA_RAG_API_KEY set; supply the bearer token under Connection"));
       return;
     }
     if (!state.health && !state.stats) {
@@ -318,8 +318,8 @@
       state.authBlocked = true;
       openConnection(
         state.token
-          ? "The bearer token was rejected. Check it against LAYA_DSH_RAG_API_KEY."
-          : "This engine has LAYA_DSH_RAG_API_KEY set. Enter the token to continue."
+          ? "The bearer token was rejected. Check it against LAYA_RAG_API_KEY."
+          : "This engine has LAYA_RAG_API_KEY set. Enter the token to continue."
       );
       renderConnection();
       return true;
@@ -543,7 +543,7 @@
   }
 
   function evidenceMarkdown(result) {
-    const lines = [`Laya DSH RAG evidence for: ${result.query}`];
+    const lines = [`Laya RAG evidence for: ${result.query}`];
     // Same gate as the verdict card: this text is what a downstream reader (often an
     // LLM) treats as the measurement, so a short-circuited 0.0 must never appear here.
     const measured = answerabilityIsMeasured(result);
@@ -643,7 +643,7 @@
       el("span", { class: "actions" }, [
         el("button", {
           class: "btn btn-ghost btn-sm", type: "button", text: "Copy markdown",
-          title: "Copy the evidence bundle as markdown, as the harness tool renders it. Evidence only — the composed answer is never included.",
+          title: "Copy the evidence bundle as markdown. Evidence only — the composed answer is never included.",
           onclick: (event) => copyText(evidenceMarkdown(result), event.currentTarget),
         }),
         el("button", {
@@ -999,7 +999,7 @@
                 el("b", { text: "Answer truncated: " }),
                 document.createTextNode(
                   "the model hit its token limit before finishing. The text above stops mid-thought — " +
-                  "raise LAYA_DSH_RAG_COMPOSE_MAX_TOKENS for a longer answer."),
+                  "raise LAYA_RAG_COMPOSE_MAX_TOKENS for a longer answer."),
               ]));
             }
           }
@@ -1637,7 +1637,7 @@
         showAlert(
           "error",
           "Cannot reach the engine",
-          "Start it with `.venv/bin/laya-dsh-rag-serve`, then refresh. The GUI is served by the same process."
+          "Start it with `.venv/bin/laya-rag-serve`, then refresh. The GUI is served by the same process."
         );
       } else {
         showAlert("error", "Engine reported a problem", error.message);

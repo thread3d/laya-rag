@@ -8,9 +8,9 @@ The pipeline is deliberately two-stage:
    the surviving evidence set gets an answerability decision. Expensive, narrow,
    and — because Laya does not generate text — impossible to hallucinate through.
 
-The engine returns *evidence*, not prose. Composing an answer is the caller's job;
-in the dsh integration the harness agent does it from the passages this engine
-returns, which is why every passage carries its source path and probabilities.
+The engine returns *evidence*, not prose. Composing an answer is the caller's job —
+the optional compose step, or a reading of the interface — which is why every
+passage carries its source path and probabilities.
 """
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ class RagEngine:
             if not VectorIndex.exists_on_disk(self.config.index_dir):
                 raise IndexNotBuiltError(
                     f"no index at {self.config.index_dir}. Index a directory first "
-                    f"(laya-dsh-rag index <path>)."
+                    f"(laya-rag index <path>)."
                 )
             self._index = VectorIndex.load(self.config.index_dir)
         return self._index

@@ -1,21 +1,20 @@
-# laya_dsh_rag
+# laya_rag
 
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
-retrieval and decision engine, with a web GUI and [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
-(`dsh`) tools as its user interfaces.
+retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
 Clients meet the engine over a local HTTP service:
 
 ```
 ┌──────────────────────────────┐            ┌───────────────────────────────┐
-│  clients                     │            │  Laya DSH RAG engine (Python) │
+│  clients                     │            │  Laya RAG engine (Python)     │
 │                              │            │                               │
 │  browser ── the GUI at /     │─────► 8077 │  chunk → embed → index        │
-│  dsh ────── search, index,   │   ◄─────   │  hybrid recall (dense + BM25) │
-│             status tools     │            │  Laya re-rank + gate          │
+│  curl ───── the HTTP API     │   ◄─────   │  hybrid recall (dense + BM25) │
+│  cli ────── laya-rag         │            │  Laya re-rank + gate          │
 │                              │            │  evidence bundle              │
-│  the harness agent writes    │            │                               │
-│  the answer from evidence    │            │  Laya checkpoint (torch)      │
+│  the caller composes         │            │                               │
+│  the answer, or not          │            │  Laya checkpoint (torch)      │
 └──────────────────────────────┘            └───────────────────────────────┘
 ```
 
@@ -34,11 +33,12 @@ That determines the architecture:
 | Embeddings | **Laya** | `embed_fn_from_agent` mean-pools the checkpoint encoder |
 | Relevance re-ranking | **Laya** | calibrated `noul` decision, thresholdable |
 | Answerability gating | **Laya** | calibrated `noul` decision over the evidence set |
-| Writing the answer | **dsh's agent** | Laya cannot generate text |
+| Writing the answer | **the caller**, or the optional compose step | Laya cannot generate text |
 
 The engine returns **evidence, not prose**. It never invents an answer; it reports which passages
-support one, with a calibrated probability that they do, and abstains when they do not. The harness
-agent — or a person reading the GUI — composes the final answer from exactly those passages.
+support one, with a calibrated probability that they do, and abstains when they do not. Whoever
+consumes it — a person reading the interface, or the optional compose step — writes the final wording
+from exactly those passages.
 
 ## What is actually measured here
 
@@ -83,8 +83,8 @@ The Laya checkout lives in the `vendor/laya` submodule and ships a setup script 
 Intel (PyTorch stopped publishing macOS x86_64 wheels after 2.2.2):
 
 ```sh
-git clone --recurse-submodules <repository-url> laya_dsh_rag
-cd laya_dsh_rag
+git clone --recurse-submodules <repository-url> laya_rag
+cd laya_rag
 
 # 1. Laya itself: venv, pinned deps, checkpoints, integrity check, smoke test
 PYTHON=python3 vendor/laya/setup_laya.sh
@@ -99,7 +99,7 @@ reuses the pip cache from step 1 so it is quick.
 Verify everything is wired up:
 
 ```sh
-.venv/bin/laya-dsh-rag doctor
+.venv/bin/laya-rag doctor
 ```
 
 ## Using it
@@ -108,13 +108,13 @@ Verify everything is wired up:
 
 ```sh
 # Index a corpus (Markdown, source code, config, plain text)
-.venv/bin/laya-dsh-rag index vendor/laya/docs --rebuild
+.venv/bin/laya-rag index vendor/laya/docs --rebuild
 
 # Ask for evidence
-.venv/bin/laya-dsh-rag query "How do I run Laya in Docker?"
+.venv/bin/laya-rag query "How do I run Laya in Docker?"
 
 # Show configuration, model and corpus state
-.venv/bin/laya-dsh-rag stats --json
+.venv/bin/laya-rag stats --json
 ```
 
 `query` prints Laya's calibrated verdict, the passages it selected with their sources, and which
@@ -123,7 +123,7 @@ recall channel found each one. Use `--json` for machine-readable output.
 ### HTTP service
 
 ```sh
-.venv/bin/laya-dsh-rag-serve          # 127.0.0.1:8077
+.venv/bin/laya-rag-serve          # 127.0.0.1:8077
 ```
 
 | Route | Purpose |
@@ -145,7 +145,7 @@ recall channel found each one. Use `--json` for machine-readable output.
 The engine serves its own interface at the root, so one command is the whole setup:
 
 ```sh
-.venv/bin/laya-dsh-rag-serve          # then open http://127.0.0.1:8077/
+.venv/bin/laya-rag-serve          # then open http://127.0.0.1:8077/
 ```
 
 It is plain HTML, CSS and JavaScript shipped inside the Python package — no bundler, no npm, no CDN
@@ -167,8 +167,7 @@ What it does:
   sees, so a surprising ranking can be traced to the text that produced it.
 - **Indexing and reset.** Index paths or directories (optionally rebuilding), with the engine's
   report — including which paths it refused and why.
-- **Evidence export.** Copy a result as markdown in the same shape the harness tool renders it, or as
-  raw JSON.
+- **Evidence export.** Copy a result as markdown or as raw JSON.
 
 **Composing an answer (opt-in, and not Laya's).** There is a switch above the run button. Off — the
 default — the engine behaves exactly as described above and returns evidence only. On, a generative
@@ -186,8 +185,8 @@ what is and is not calibrated:
 | Thresholdable | yes | no |
 | Can invent facts | no — it cannot generate text | yes |
 
-The model is not configured here: the engine reads the harness's own `settings.yaml` for the endpoint
-and model (`agent-default-model.model`), so there is one source of truth for which model is in play.
+The model is configured here: `LAYA_RAG_COMPOSE_MODEL` names it and `LAYA_RAG_COMPOSE_BASE_URL` the
+endpoint, both read from this project's own environment.
 Composition is unavailable — with the reason shown in the interface — when no model can be resolved,
 and the switch is disabled rather than offering something that cannot work. If the model is
 unreachable or times out mid-answer, the prose is dropped or marked incomplete, the evidence below is
@@ -271,34 +270,14 @@ claim that *does* carry a valid citation — "Laya was first released in 2019 by
 passage is caught by the citation check alone.
 
 Two small things worth knowing. The page itself loads without a token so it can ask for one: if
-`LAYA_DSH_RAG_API_KEY` is set, paste it under **Connection** and it is kept in this browser's local
+`LAYA_RAG_API_KEY` is set, paste it under **Connection** and it is kept in this browser's local
 storage only, then sent as a bearer token. And the GUI needs no restart to reflect a change on disk —
 it re-reads engine and corpus state, and has a **Refresh** button besides.
-
-### DeepSeek Harness
-
-The tools are registered by a cordis plugin that imports nothing from the harness, so it needs no
-build step and no dependency install. Load it with a `--patch` overlay:
-
-```sh
-dsh --profile web --patch "$PWD/dsh-plugin/cordis.local.yml"
-```
-
-This gives the agent three tools:
-
-| Tool | Purpose |
-| --- | --- |
-| `laya_dsh_rag_search` | retrieve Laya-ranked, Laya-gated evidence for a question |
-| `laya_dsh_rag_index` | index files or directories into the corpus |
-| `laya_dsh_rag_status` | report checkpoint, corpus size and reachability |
-
-See [`dsh-plugin/README.md`](dsh-plugin/README.md) for installation into a profile, configuration,
-and how the answerability verdict reaches the model.
 
 ## Configuration
 
 Every value is an environment variable with a working default, so the engine can be retargeted
-without editing code. Prefix: `LAYA_DSH_RAG_`.
+without editing code. Prefix: `LAYA_RAG_`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -314,16 +293,22 @@ without editing code. Prefix: `LAYA_DSH_RAG_`.
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
 | `HOST` / `PORT` | `127.0.0.1` / `8077` | service bind address |
 | `API_KEY` | unset | when set, requires `Authorization: Bearer <key>` |
-| `COMPOSE_BASE_URL` | from `~/.dsh/settings.yaml`, else Ollama's `http://localhost:11434/v1` | OpenAI-compatible endpoint used to compose an answer |
-| `COMPOSE_MODEL` | from `~/.dsh/settings.yaml` (`agent-default-model.model`) | model that writes the composed answer |
+| `COMPOSE_BASE_URL` | Ollama's `http://localhost:11434/v1` | endpoint used to compose an answer |
+| `COMPOSE_MODEL` | unset | model that writes the composed answer; composition is unavailable until this is set |
 | `COMPOSE_API` | `ollama` | `ollama` calls the native `/api/chat`; `openai` calls any OpenAI-compatible `/v1/chat/completions` |
 | `COMPOSE_TIMEOUT_S` | `300` | how long composition may take before it is abandoned |
 | `COMPOSE_MAX_TOKENS` | `600` | token budget for one composed answer; hitting it is reported as truncated |
-| `DSH_SETTINGS` | `~/.dsh/settings.yaml` | where to read the composition endpoint and model from |
 
 The default checkpoint is `multilingual` (322M parameters, 768-dim embeddings): it matches the
 English checkpoint's accuracy on the measured queries while being roughly twice as fast, and it
 handles non-English text and long documents. Set `CHECKPOINT=laya` for an English-only corpus.
+
+For example, against a local Ollama with that model pulled:
+
+```sh
+export LAYA_RAG_COMPOSE_MODEL=ornith-1.5:35b
+export LAYA_RAG_COMPOSE_BASE_URL=http://localhost:11434/v1   # the default
+```
 
 Composition is the only place where a model name matters, and the engine will not invent one: with
 no `COMPOSE_MODEL` and no readable `agent-default-model.model`, composition is simply unavailable and
@@ -333,7 +318,6 @@ the interface says so rather than guessing at a model that would fail later.
 
 ```sh
 make test          # Python suite, offline, deterministic (190 tests)
-make test-plugin   # Node suite for the harness tools (10 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```
@@ -351,7 +335,7 @@ and keep the primary action above a 4.5:1 contrast ratio, that the compose switc
 hallucination warning move together in both directions, that an answerable query renders a measured
 verdict with threshold marker and highlights, that an unanswerable one abstains *without* drawing the
 engine's short-circuited `0.0` as a measurement, and that no console error escaped. It skips rather
-than fails when Chrome or the engine is absent, and reads `LAYA_DSH_RAG_API_KEY` so it can test an
+than fails when Chrome or the engine is absent, and reads `LAYA_RAG_API_KEY` so it can test an
 engine that requires a token. Add `GUI_SMOKE_COMPOSE=1` to also compose a real answer and check it
 streams in badged as unverified; that one is off by default because it calls a model and takes tens
 of seconds, while everything else stays deterministic.
@@ -362,8 +346,8 @@ in the table above.
 ## Repository layout
 
 ```
-laya_dsh_rag/
-├── src/laya_dsh_rag/          Python engine
+laya_rag/
+├── src/laya_rag/          Python engine
 │   ├── config.py            environment-driven configuration
 │   ├── chunking.py          document loading and paragraph-aware chunking
 │   ├── model.py             the single loaded Laya Agent (embeddings + decisions)
@@ -372,28 +356,22 @@ laya_dsh_rag/
 │   ├── rerank.py            Laya relevance re-ranking and answerability gate
 │   ├── engine.py            orchestration: index, hybrid recall, evidence bundle
 │   ├── api.py               FastAPI service
-│   ├── cli.py               `laya-dsh-rag` command line
+│   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
-├── dsh-plugin/            DeepSeek Harness tools (zero harness imports)
 ├── tools/                 gui-smoke.mjs, the headless-browser GUI check
 ├── tests/                 Python suite plus a real-weights suite
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
-└── vendor/                submodules: laya, deepseek-harness
+└── vendor/                submodule: laya
 ```
 
 ## Two things worth knowing
 
-**The submodules live under `vendor/`.** They were originally at `laya/` and `deepseek-harness/`, but
-a top-level `laya/` directory shadows the installed `laya` Python package for any process started
-from the repository root, so `import laya` resolved to the checkout folder. Moving them under
-`vendor/` removed the collision. The Python package for this project is `laya_dsh_rag`, which does not
-collide.
-
-**`dsh plugin add` is not used.** It forwards to `pnpm`, which is not installed on this machine, so
-the plugin is loaded through a `--patch` overlay or a profile patch file instead. Both are documented
-in [`dsh-plugin/README.md`](dsh-plugin/README.md).
+**The vendored submodule lives under `vendor/`.** It was originally at `laya/`, but a top-level
+`laya/` directory shadows the installed `laya` Python package for any process started from the
+repository root, so `import laya` resolved to the checkout folder. Moving it under `vendor/` removed
+the collision. The Python package for this project is `laya_rag`, which does not collide.
 
 ## License
 
-Apache-2.0. Laya and DeepSeek Harness carry their own licenses in their checkouts under `vendor/`.
+Apache-2.0. Laya carries its own license in its checkout under `vendor/`.

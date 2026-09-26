@@ -12,9 +12,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from laya_dsh_rag import api
-from laya_dsh_rag.engine import IndexNotBuiltError, RagEngine
-from laya_dsh_rag.rerank import ANSWERABILITY_QUESTION, DecisionError, LayaReranker
+from laya_rag import api
+from laya_rag.engine import IndexNotBuiltError, RagEngine
+from laya_rag.rerank import ANSWERABILITY_QUESTION, DecisionError, LayaReranker
 
 from .support import StubModel, make_config, stub_engine, write_corpus
 

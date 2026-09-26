@@ -1,7 +1,6 @@
 """HTTP service exposing the RAG engine.
 
-DeepSeek Harness plugins run in Node and this engine runs in Python, so the two
-halves meet over HTTP. The route names mirror what the engine actually does —
+The route names mirror what the engine actually does —
 ``/v1/index`` and ``/v1/query`` — rather than pretending to be an OpenAI-compatible
 endpoint, because Laya is not a completion model and a shim would misrepresent it.
 
@@ -29,7 +28,7 @@ from .model import ModelUnavailableError
 from .rerank import DecisionError
 from .verify import split_claims, verify_citations
 
-log = logging.getLogger("laya_dsh_rag.api")
+log = logging.getLogger("laya_rag.api")
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
@@ -160,7 +159,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         holder.clear()
 
     app = FastAPI(
-        title="Laya DSH RAG engine",
+        title="Laya RAG engine",
         description="Retrieval-augmented generation over Laya embeddings and decisions.",
         version="0.1.0",
         lifespan=lifespan,

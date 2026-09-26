@@ -9,9 +9,9 @@ Two consequences shape the design:
 
 * It is **opt-in per request**. Nothing here runs unless the caller asks, and the
   interface that exposes it is expected to say plainly that the prose is unverified.
-* The model is **not configured here**. The engine reads the harness's own
-  ``settings.yaml`` for its endpoint and model, so there is one source of truth for
-  which model is in play rather than a second copy that drifts.
+* The model is **configured here, explicitly**. ``LAYA_RAG_COMPOSE_MODEL`` names the
+  model and ``LAYA_RAG_COMPOSE_BASE_URL`` the endpoint; nothing is discovered from
+  elsewhere and no model name is ever invented.
 
 The transport is the OpenAI-compatible ``/chat/completions`` route that Ollama
 serves, using only the standard library: this project has no HTTP client dependency
@@ -51,82 +51,6 @@ SYSTEM_PROMPT = (
     "Do not speculate, and do not add facts that are not present in the evidence. "
     "Sentences without a supporting passage number are treated as unsupported."
 )
-
-
-def _scan_settings(text: str) -> dict[str, str]:
-    """Read the two keys we need without a YAML parser.
-
-    A deliberately tiny, indentation-aware scan for ``baseURL`` and the
-    ``agent-default-model.model`` value, used when PyYAML is not installed. It is
-    not a general YAML reader and does not pretend to be one.
-    """
-    found: dict[str, str] = {}
-    section = ""
-    for raw in text.splitlines():
-        stripped = raw.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        indent = len(raw) - len(raw.lstrip())
-        if indent == 0 and stripped.endswith(":"):
-            section = stripped[:-1].strip()
-            continue
-        if ":" not in stripped:
-            continue
-        key, _, value = stripped.partition(":")
-        key, value = key.strip(), value.strip().strip("'\"")
-        if not value:
-            continue
-        if key == "baseURL" and "baseURL" not in found:
-            found["baseURL"] = value
-        elif key == "model" and section == "agent-default-model" and "model" not in found:
-            found["model"] = value
-    return found
-
-
-def read_dsh_settings(path: Path | None) -> dict[str, str]:
-    """Best-effort read of the harness's settings for its LLM endpoint and model.
-
-    Any problem — no file, no parser, an unexpected shape — yields an empty mapping
-    so the caller falls back rather than failing. A missing model simply means
-    composition stays unavailable, which is reported rather than guessed at.
-    """
-    if path is None:
-        return {}
-    try:
-        if not Path(path).is_file():
-            return {}
-        text = Path(path).read_text(encoding="utf-8")
-    except OSError:
-        return {}
-
-    parsed: dict[str, Any] = {}
-    try:
-        import yaml  # noqa: PLC0415 - optional, and imported only when present
-
-        loaded = yaml.safe_load(text)
-        if isinstance(loaded, dict):
-            parsed = loaded
-    except Exception:  # noqa: BLE001 - any parser problem falls back to the scan
-        parsed = {}
-
-    settings = _scan_settings(text)
-    if isinstance(parsed, dict):
-        # Only the agent default names the model this engine should use; a model key
-        # in some other section is a different concern and must not be picked up.
-        agent = parsed.get("agent-default-model")
-        if isinstance(agent, dict):
-            model = agent.get("model")
-            if isinstance(model, str) and model.strip():
-                settings["model"] = model.strip()
-        if not settings.get("baseURL"):
-            for name in ("llm-deepseek", "llm", "llm-openai"):
-                section = parsed.get(name)
-                if isinstance(section, dict):
-                    base_url = section.get("baseURL")
-                    if isinstance(base_url, str) and base_url.strip():
-                        settings["baseURL"] = base_url.strip()
-                        break
-    return settings
 
 
 @dataclass(frozen=True)
@@ -181,24 +105,17 @@ class ComposeTarget:
 def resolve_target(config: EngineConfig) -> tuple[ComposeTarget | None, str]:
     """Resolve where and with what to compose. Returns ``(target, reason)``.
 
-    Precedence for the model is environment, then the harness's own settings; a
-    model name is never invented, because guessing one would fail confusingly later.
+    Both values come from this project's own configuration. A model name is never
+    invented: guessing one would only fail confusingly later, so an unset
+    ``LAYA_RAG_COMPOSE_MODEL`` simply means composition is unavailable and says so.
     """
-    settings = read_dsh_settings(config.dsh_settings)
-    base_url = (config.compose_base_url or settings.get("baseURL") or "").strip()
-    model = (config.compose_model or settings.get("model") or "").strip()
-
-    if config.compose_model:
-        source = "environment"
-    elif settings.get("model"):
-        source = f"dsh settings ({config.dsh_settings})"
-    else:
-        source = "unset"
+    base_url = (config.compose_base_url or "").strip()
+    model = (config.compose_model or "").strip()
 
     if not model:
         return None, (
-            "no composition model is configured: set LAYA_DSH_RAG_COMPOSE_MODEL, or give "
-            f"`agent-default-model.model` in {config.dsh_settings}"
+            "no composition model is configured: set LAYA_RAG_COMPOSE_MODEL to the model "
+            "the endpoint should use"
         )
 
     return (
@@ -207,7 +124,7 @@ def resolve_target(config: EngineConfig) -> tuple[ComposeTarget | None, str]:
             model=model,
             timeout_s=int(config.compose_timeout_s),
             max_tokens=int(config.compose_max_tokens),
-            source=source,
+            source="environment",
             api="openai" if (config.compose_api or "").strip().lower() == "openai" else "ollama",
         ),
         "",

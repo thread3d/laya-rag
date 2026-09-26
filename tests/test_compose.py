@@ -14,20 +14,10 @@ import urllib.error
 import pytest
 from fastapi.testclient import TestClient
 
-from laya_dsh_rag import api, compose
-from laya_dsh_rag.compose import Composer, build_messages, read_dsh_settings, resolve_target
+from laya_rag import api, compose
+from laya_rag.compose import Composer, build_messages, resolve_target
 
 from .support import make_config, stub_engine, write_corpus
-
-SETTINGS = """\
-# User settings document (hot-reloaded).
-llm-deepseek:
-  baseURL: http://localhost:11434/v1
-agent-default-model:
-  provider: deepseek-official
-  model: ornith-1.5:35b
-"""
-
 
 class FakeResponse:
     """Stands in for the streaming HTTP response object."""
@@ -54,70 +44,35 @@ def sse(*chunks: str) -> list[bytes]:
 
 @pytest.fixture
 def configured(tmp_path):
-    """A config with a composition model and a settings file that names one."""
-    settings = tmp_path / "settings.yaml"
-    settings.write_text(SETTINGS, encoding="utf-8")
-    return make_config(tmp_path, dsh_settings=settings)
-
-
-# -- reading the harness's own configuration ---------------------------------
-
-def test_settings_are_read_from_the_harness_file(tmp_path):
-    path = tmp_path / "settings.yaml"
-    path.write_text(SETTINGS, encoding="utf-8")
-    assert read_dsh_settings(path) == {
-        "baseURL": "http://localhost:11434/v1",
-        "model": "ornith-1.5:35b",
-    }
-
-
-def test_the_fallback_scanner_reads_the_same_keys_without_yaml(tmp_path, monkeypatch):
-    """PyYAML is optional, so the tiny scanner has to agree with it."""
-    scanned = compose._scan_settings(SETTINGS)
-    assert scanned == {"baseURL": "http://localhost:11434/v1", "model": "ornith-1.5:35b"}
-
-
-def test_the_scanner_ignores_a_model_key_from_another_section():
-    text = "some-other-llm:\n  model: not-the-agent-model\nagent-default-model:\n  model: the-agent-model\n"
-    assert compose._scan_settings(text)["model"] == "the-agent-model"
-
-
-def test_missing_or_unreadable_settings_are_not_an_error(tmp_path):
-    assert read_dsh_settings(tmp_path / "absent.yaml") == {}
-    assert read_dsh_settings(None) == {}
+    """A config with a composition model set explicitly."""
+    return make_config(tmp_path, compose_model="ornith-1.5:35b")
 
 
 # -- resolving the target ----------------------------------------------------
 
-def test_target_comes_from_the_harness_settings(configured):
+def test_target_comes_from_this_project_s_configuration(configured):
     target, reason = resolve_target(configured)
     assert reason == ""
     assert target.model == "ornith-1.5:35b"
     assert target.base_url == "http://localhost:11434/v1"
-    assert "dsh settings" in target.source
-
-
-def test_environment_overrides_the_harness_settings(configured):
-    configured.compose_model = "from-env"
-    configured.compose_base_url = "http://elsewhere/v1"
-    target, _ = resolve_target(configured)
-    assert target.model == "from-env"
-    assert target.base_url == "http://elsewhere/v1"
     assert target.source == "environment"
+
+
+def test_the_base_url_can_be_set_explicitly(configured):
+    configured.compose_base_url = "http://elsewhere:1234/v1"
+    target, _ = resolve_target(configured)
+    assert target.base_url == "http://elsewhere:1234/v1"
 
 
 def test_no_model_configured_means_unavailable_with_a_reason(tmp_path):
     """A model name is never invented: guessing one would only fail later, worse."""
-    config = make_config(tmp_path)
-    target, reason = resolve_target(config)
+    target, reason = resolve_target(make_config(tmp_path))
     assert target is None
     assert "COMPOSE_MODEL" in reason
 
 
-def test_base_url_falls_back_to_ollamas_endpoint(tmp_path):
-    settings = tmp_path / "settings.yaml"
-    settings.write_text("agent-default-model:\n  model: only-a-model\n", encoding="utf-8")
-    target, _ = resolve_target(make_config(tmp_path, dsh_settings=settings))
+def test_the_base_url_defaults_to_ollama(tmp_path):
+    target, _ = resolve_target(make_config(tmp_path, compose_model="only-a-model"))
     assert target.base_url == compose.DEFAULT_BASE_URL
 
 
@@ -320,11 +275,9 @@ def test_a_complete_answer_reports_the_stop_reason(monkeypatch, configured):
 
 @pytest.fixture
 def ctx(tmp_path, monkeypatch):
-    settings = tmp_path / "settings.yaml"
-    settings.write_text(SETTINGS, encoding="utf-8")
-    engine = stub_engine(tmp_path, dsh_settings=settings)
+    engine = stub_engine(tmp_path, compose_model="ornith-1.5:35b")
     monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
-    app = api.create_app(make_config(tmp_path, warmup=False, dsh_settings=settings))
+    app = api.create_app(make_config(tmp_path, warmup=False, compose_model="ornith-1.5:35b"))
     return TestClient(app), engine, write_corpus(tmp_path / "corpus")
 
 
@@ -338,7 +291,7 @@ def test_stats_report_the_compose_target(ctx):
 def test_stats_explain_why_composition_is_unavailable(tmp_path, monkeypatch):
     engine = stub_engine(tmp_path)
     monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
-    app = api.create_app(make_config(tmp_path, warmup=False, dsh_settings=tmp_path / "absent.yaml"))
+    app = api.create_app(make_config(tmp_path, warmup=False))
     body = TestClient(app).get("/v1/stats").json()["compose"]
     assert body["available"] is False
     assert "COMPOSE_MODEL" in body["reason"]
@@ -364,7 +317,7 @@ def test_compose_streams_newline_delimited_events(ctx, monkeypatch):
 def test_compose_is_unavailable_without_a_model(tmp_path, monkeypatch):
     engine = stub_engine(tmp_path)
     monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
-    app = api.create_app(make_config(tmp_path, warmup=False, dsh_settings=tmp_path / "absent.yaml"))
+    app = api.create_app(make_config(tmp_path, warmup=False))
     response = TestClient(app).post("/v1/compose", json={
         "query": "q", "passages": [{"text": "t"}],
     })
@@ -423,12 +376,10 @@ def test_compose_streams_an_error_event_when_the_model_is_down(ctx, monkeypatch)
 
 
 def test_compose_needs_the_token_when_one_is_configured(tmp_path, monkeypatch):
-    settings = tmp_path / "settings.yaml"
-    settings.write_text(SETTINGS, encoding="utf-8")
-    engine = stub_engine(tmp_path, dsh_settings=settings)
+    engine = stub_engine(tmp_path, compose_model="ornith-1.5:35b")
     monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
     app = api.create_app(
-        make_config(tmp_path, warmup=False, api_key="secret", dsh_settings=settings)
+        make_config(tmp_path, warmup=False, api_key="secret", compose_model="ornith-1.5:35b")
     )
     client = TestClient(app)
     payload = {"query": "q", "passages": [{"text": "t"}]}
