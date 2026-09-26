@@ -650,6 +650,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
 }
 .answer-model { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
 .answer-head .actions { margin-left: auto; display: flex; gap: 5px; }
+/* The question the answer was written from, so a model that loses it is obvious. */
+.answer-asked {
+  display: flex; gap: 8px; align-items: baseline;
+  padding: 7px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
+  font-size: 12px;
+}
+.answer-asked-label {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.answer-asked-text { color: var(--text); word-break: break-word; }
 .answer-body {
   padding: 12px 14px;
   font-size: 13.5px; line-height: 1.62;

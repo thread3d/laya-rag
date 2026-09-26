@@ -483,6 +483,8 @@ if (indexed) {
         const body = document.querySelector('.answer-body');
         return {
           text: body.dataset.text || "",
+          asked: document.querySelector('.answer-asked-text')?.textContent.trim() || "",
+          askedLabel: document.querySelector('.answer-asked-label')?.textContent.trim() || "",
           badge: document.querySelector('.answer-badge')?.textContent.trim() || "",
           model: document.querySelector('.answer-model')?.textContent.trim() || "",
           caveat: document.querySelector('.answer-caveat')?.textContent.trim() || "",
@@ -499,6 +501,12 @@ if (indexed) {
         `a finished answer should be a paragraph, got ${answer.text.length} chars ` +
         `(state=${answer.state}, errors=${JSON.stringify(answer.errors)})`);
       assert(/Composed/i.test(answer.badge), `the answer is not badged as composed: ${answer.badge}`);
+      // The panel must name the question it answered: an answer that asks for the
+      // question reads like a real answer unless the reader can see what was asked.
+      assert(answer.askedLabel === "Question",
+        `the composed answer does not label the question it used: ${JSON.stringify(answer.askedLabel)}`);
+      assert(/Laya in Docker/i.test(answer.asked),
+        `the composed answer names the wrong question: ${JSON.stringify(answer.asked)}`);
       assert(answer.model.length > 0, "the answer does not name the model that wrote it");
       assert(/not been verified|not a Laya output/i.test(answer.caveat),
         `the answer lacks an unverified caveat: ${answer.caveat}`);

@@ -373,6 +373,29 @@ def test_compose_requires_a_query(ctx):
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize("blank", ["   ", "\t\n", "\u200b", "\u200b\ufeff ", "\u00a0"])
+def test_compose_rejects_a_query_with_no_visible_text(ctx, blank):
+    """A blank query reaches the model as "Question: " and comes back as prose asking
+    for the question, which reads like an answer. Reject it at the edge instead."""
+    client, _engine, _corpus = ctx
+    response = client.post("/v1/compose", json={"query": blank, "passages": [{"text": "t"}]})
+    assert response.status_code == 422, f"{blank!r} should not be composable"
+
+
+def test_compose_trims_the_query_before_use(ctx, monkeypatch):
+    captured = {}
+
+    def capture(request, *_a, **_k):
+        captured["body"] = json.loads(request.data.decode())
+        return FakeResponse(sse("ok"))
+
+    monkeypatch.setattr(compose.urllib.request, "urlopen", capture)
+    client, _engine, _corpus = ctx
+    client.post("/v1/compose", json={"query": "  How long do refunds take?  ",
+                                     "passages": [{"text": "t", "path": "p"}]})
+    assert captured["body"]["messages"][1]["content"].endswith("Question: How long do refunds take?")
+
+
 def test_compose_streams_an_error_event_when_the_model_is_down(ctx, monkeypatch):
     client, _engine, _corpus = ctx
 

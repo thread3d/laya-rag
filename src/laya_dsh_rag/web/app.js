@@ -872,6 +872,16 @@
     state.composeAbort = controller;
 
     const meta = state.composeMeta || {};
+    // Never ask the model to answer nothing: a blank question wastes a model call and
+    // comes back as prose asking for the question, which reads like a real answer.
+    if (!(result.query || "").trim()) {
+      clear(slot);
+      slot.appendChild(el("p", {
+        class: "hint empty-hint",
+        text: "Cannot compose: the query this evidence came from is empty.",
+      }));
+      return;
+    }
     const body = el("div", { class: "answer-body is-waiting", text: "Waiting for the model…" });
     const copyBtn = el("button", {
       class: "btn btn-ghost btn-sm", type: "button", text: "Copy", disabled: true,
@@ -882,12 +892,15 @@
       class: "btn btn-ghost btn-sm", type: "button", text: "Stop",
       title: "Stop generating. Any text already written is kept.",
       onclick: () => controller.abort(),
-    });
-    // Filled in once the answer is complete: a truncation warning, then the
+    });    // Filled in once the answer is complete: a truncation warning, then the
     // deterministic citation check.
     const warnSlot = el("div");
     const checkSlot = el("div");
     const adjSlot = el("div");
+    // Naming the question the answer was written from makes a mismatch impossible to
+    // miss: an answer that asks for the question is then obviously a model failure
+    // rather than something the reader has to guess about.
+    const asked = (result.query || "").trim();
     const panel = el("section", { class: "answer", dataset: { state: "streaming" } }, [
       el("div", { class: "answer-head" }, [
         el("span", { class: "answer-badge" }, [
@@ -896,6 +909,10 @@
         ]),
         el("span", { class: "answer-model", text: meta.model || "" }),
         el("span", { class: "actions" }, [copyBtn, stopBtn]),
+      ]),
+      el("p", { class: "answer-asked" }, [
+        el("span", { class: "answer-asked-label", text: "Question" }),
+        el("span", { class: "answer-asked-text", text: asked || "(none)" }),
       ]),
       body,
       warnSlot,

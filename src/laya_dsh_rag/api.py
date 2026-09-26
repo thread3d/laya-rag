@@ -20,7 +20,7 @@ from typing import Any, Iterable, Iterator
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .compose import resolve_target
 from .config import EngineConfig
@@ -65,6 +65,21 @@ class ComposePassage(BaseModel):
     path: str | None = Field(None, description="Source path, cited in the answer")
 
 
+#: Characters that occupy a string without being visible. A query pasted from a rich
+#: text source can be nothing but these, which passes `min_length=1`, reaches the model
+#: as "Question: " and produces an answer complaining the question was empty.
+_INVISIBLE = "\u200b\u200c\u200d\u200e\u200f\u2060\u2028\u2029\ufeff"
+
+
+def _require_visible(value: str, field: str) -> str:
+    """Reject a string that has no visible content, and trim the rest."""
+    stripped = value.strip()
+    visible = stripped.strip(_INVISIBLE).strip()
+    if not visible:
+        raise ValueError(f"{field} must contain visible text, not just whitespace")
+    return stripped
+
+
 class ComposeRequest(BaseModel):
     """A request to write prose from evidence the caller already holds.
 
@@ -76,12 +91,22 @@ class ComposeRequest(BaseModel):
     passages: list[ComposePassage] = Field(..., min_length=1, max_length=50)
     max_tokens: int | None = Field(None, ge=64, le=4000)
 
+    @field_validator("query")
+    @classmethod
+    def _query_has_content(cls, value: str) -> str:
+        return _require_visible(value, "query")
+
 
 class VerifyRequest(BaseModel):
     """A request to check an answer's citations against the evidence it was given."""
 
     answer: str = Field(..., min_length=1, description="The composed answer to check")
     passages: list[ComposePassage] = Field(..., min_length=1, max_length=50)
+
+    @field_validator("answer")
+    @classmethod
+    def _answer_has_content(cls, value: str) -> str:
+        return _require_visible(value, "answer")
 
 
 class AdjudicateRequest(BaseModel):
@@ -91,6 +116,11 @@ class AdjudicateRequest(BaseModel):
     retrieve_k: int | None = Field(None, ge=1, le=100, description="Candidates per claim")
     relevance_threshold: float | None = Field(None, ge=0.0, le=1.0)
     answerability_threshold: float | None = Field(None, ge=0.0, le=1.0)
+
+    @field_validator("answer")
+    @classmethod
+    def _answer_has_content(cls, value: str) -> str:
+        return _require_visible(value, "answer")
 
 
 def _engine_holder(config: EngineConfig) -> tuple[dict[str, RagEngine], Any]:
