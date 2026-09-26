@@ -83,8 +83,8 @@ The Laya checkout lives in the `vendor/laya` submodule and ships a setup script 
 Intel (PyTorch stopped publishing macOS x86_64 wheels after 2.2.2):
 
 ```sh
-git clone --recurse-submodules <repository-url> laya_rag
-cd laya_rag
+git clone --recurse-submodules <repository-url> laya-rag
+cd laya-rag
 
 # 1. Laya itself: venv, pinned deps, checkpoints, integrity check, smoke test
 PYTHON=python3 vendor/laya/setup_laya.sh
@@ -346,7 +346,7 @@ in the table above.
 ## Repository layout
 
 ```
-laya_rag/
+laya-rag/
 ├── src/laya_rag/          Python engine
 │   ├── config.py            environment-driven configuration
 │   ├── chunking.py          document loading and paragraph-aware chunking
