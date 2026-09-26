@@ -1,6 +1,6 @@
 [submodule "laya"]
-	path = laya
+	path = vendor/laya
 	url = https://github.com/thread3d/laya
 [submodule "deepseek-harness"]
-	path = deepseek-harness
+	path = vendor/deepseek-harness
 	url = https://github.com/deepseek-ai/deepseek-harness

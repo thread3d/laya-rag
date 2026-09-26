@@ -14,6 +14,11 @@ dist/
 venv/
 env/
 
+# Node / dsh plugin build output
+node_modules/
+lib/
+*.tsbuildinfo
+
 # Test / coverage artifacts
 .pytest_cache/
 .mypy_cache/
@@ -32,6 +37,15 @@ indexes/
 models/
 *.faiss
 *.index
+
+# Model and package download caches
+.hf-cache/
+.pip-cache/
+.cache/
+
+# Runtime artifacts
+*.log
+run/
 
 # Editors and OS files
 .idea/
