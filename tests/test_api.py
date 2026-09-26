@@ -100,3 +100,25 @@ def test_api_key_is_enforced_when_configured(tmp_path, monkeypatch):
     assert client.get("/health").status_code == 401
     assert client.get("/health", headers={"authorization": "Bearer wrong"}).status_code == 401
     assert client.get("/health", headers={"authorization": "Bearer secret"}).status_code == 200
+
+
+def test_stats_never_disclose_the_api_key(tmp_path, monkeypatch):
+    """A configured secret must be reported as present, never echoed back."""
+    engine = stub_engine(tmp_path, api_key="secret")
+    monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
+    app = api.create_app(make_config(tmp_path, warmup=False, api_key="secret"))
+    client = TestClient(app)
+    headers = {"authorization": "Bearer secret"}
+
+    config = client.get("/v1/stats", headers=headers).json()["config"]
+    assert config["api_key"] == "<redacted>"
+    assert "secret" not in str(config)
+
+
+def test_stats_report_an_absent_api_key_as_null(tmp_path, monkeypatch):
+    engine = stub_engine(tmp_path)
+    monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
+    app = api.create_app(make_config(tmp_path, warmup=False))
+    client = TestClient(app)
+
+    assert client.get("/v1/stats").json()["config"]["api_key"] is None

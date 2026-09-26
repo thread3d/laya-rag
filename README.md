@@ -179,7 +179,7 @@ handles non-English text and long documents. Set `CHECKPOINT=laya` for an Englis
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (71 tests)
+make test          # Python suite, offline, deterministic (73 tests)
 make test-plugin   # Node suite for the harness tools (10 tests)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```

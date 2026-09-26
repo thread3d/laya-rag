@@ -3,7 +3,7 @@
 Every value here is deployment-varying and therefore overridable through the
 environment, matching the "no hardcoded tunables" rule the harness applies to its
 own plugins. Defaults target this repository's local checkout: the Laya submodule
-under ``laya/`` with its checkpoints in ``laya/models``.
+under ``vendor/laya``, with the checkpoints it downloads symlinked into ``models/``.
 """
 from __future__ import annotations
 
@@ -16,6 +16,11 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ENV_PREFIX = "LAYA_DSH_RAG_"
+
+# Fields that must never be serialised verbatim. ``as_dict`` feeds ``/v1/stats`` and
+# the CLI's ``--json`` output, so a secret here would land in a response body or a
+# log line. Report that one is configured without disclosing it.
+REDACTED_FIELDS: frozenset[str] = frozenset({"api_key"})
 
 
 def _env(name: str) -> str | None:
@@ -112,6 +117,9 @@ class EngineConfig:
         out: dict[str, Any] = {}
         for f in fields(self):
             value = getattr(self, f.name)
+            if f.name in REDACTED_FIELDS:
+                out[f.name] = "<redacted>" if value else None
+                continue
             out[f.name] = str(value) if isinstance(value, Path) else value
         return out
 
