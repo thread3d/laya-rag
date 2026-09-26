@@ -102,6 +102,11 @@ class VerifyRequest(BaseModel):
 
     answer: str = Field(..., min_length=1, description="The composed answer to check")
     passages: list[ComposePassage] = Field(..., min_length=1, max_length=50)
+    query: str | None = Field(
+        None,
+        description="The question the answer was written from, so that quoting it back "
+                    "is not mistaken for a fabricated quote",
+    )
 
     @field_validator("answer")
     @classmethod
@@ -295,7 +300,11 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         makes no claim about whether the answer is *true*, and nothing consuming this
         should present it as if it did.
         """
-        return verify_citations(request.answer, [passage.text for passage in request.passages])
+        return verify_citations(
+            request.answer,
+            [passage.text for passage in request.passages],
+            query=request.query or "",
+        )
 
     @app.post("/v1/adjudicate")
     def adjudicate(request: AdjudicateRequest, _: None = Depends(authorise)) -> dict[str, Any]:

@@ -36,6 +36,25 @@ _DOUBLE_QUOTE = re.compile(r"[\"“]([^\"“”\n]{%d,})[\"”]" % QUOTE_MIN_CHA
 
 _WHITESPACE = re.compile(r"\s+")
 
+#: Punctuation that a quotation absorbs from the sentence around it. A quote written
+#: as "five business days," is still a verbatim quote of "five business days".
+_SURROUNDING = " \t.,;:!?\"'()[]{}—–-"
+
+
+def _quote_variants(needle: str) -> list[str]:
+    """A normalised quote, plus itself with surrounding punctuation stripped.
+
+    Quotations routinely absorb the comma or full stop that follows them. Trying the
+    trimmed form as a *fallback* keeps this a literal comparison — only the ends are
+    ignored, never the middle — while removing a false alarm that would otherwise fire
+    on correctly-quoted text.
+    """
+    variants = [needle]
+    trimmed = needle.strip(_SURROUNDING)
+    if trimmed and trimmed != needle:
+        variants.append(trimmed)
+    return variants
+
 
 def normalize(text: str) -> str:
     """Fold text to a comparable form: case, whitespace, and quote style.
@@ -116,7 +135,11 @@ def split_claims(answer: str) -> list[str]:
     return claims
 
 
-def verify_citations(answer: str, passages: Sequence[str]) -> dict[str, Any]:
+def verify_citations(
+    answer: str,
+    passages: Sequence[str],
+    query: str = "",
+) -> dict[str, Any]:
     """Check the answer's citations and quoted spans against the evidence.
 
     Quoted spans are checked against the evidence as a whole, whichever sentence
@@ -124,16 +147,23 @@ def verify_citations(answer: str, passages: Sequence[str]) -> dict[str, Any]:
     does turn up is reported, so an uncited sentence that is nevertheless faithful
     is visible as such rather than merely flagged.
 
+    ``query`` is optional and exists to remove a false alarm: an answer that quotes
+    *the question back* is not quoting the evidence, and flagging that as "not found"
+    would train a reader to ignore the check. Such spans are reported as
+    ``from_question`` instead.
+
     Returns a JSON-ready report. ``clean`` means every claim cites in-range evidence
     and every quoted span was found; it does **not** mean the answer is correct.
     """
     texts = list(passages)
     passage_count = len(texts)
+    query_normalized = normalize(query)
 
     claims: list[dict[str, Any]] = []
     totals = {
         "claims": 0, "cited": 0, "uncited": 0, "invalid_citations": 0,
         "quotes_checked": 0, "quotes_found": 0, "quotes_not_found": 0,
+        "quotes_from_question": 0,
     }
 
     for claim in split_claims(answer):
@@ -160,15 +190,25 @@ def verify_citations(answer: str, passages: Sequence[str]) -> dict[str, Any]:
 
     quotes: list[dict[str, Any]] = []
     for quote in extract_quotes(answer):
-        hits = [position + 1 for position, text in enumerate(texts)
-                if normalize(quote) and normalize(quote) in normalize(text)]
+        variants = [v for v in _quote_variants(normalize(quote)) if v]
+        hits: list[int] = []
+        for variant in variants:
+            hits = [position + 1 for position, text in enumerate(texts)
+                    if variant in normalize(text)]
+            if hits:
+                break
         totals["quotes_checked"] += 1
         if hits:
             totals["quotes_found"] += 1
             quotes.append({"text": quote, "status": "found", "found_in": hits})
-        else:
-            totals["quotes_not_found"] += 1
-            quotes.append({"text": quote, "status": "not_found", "found_in": []})
+            continue
+        # The answer quoting the question is expected, not a fabrication.
+        if query_normalized and any(v in query_normalized for v in variants):
+            totals["quotes_from_question"] += 1
+            quotes.append({"text": quote, "status": "from_question", "found_in": []})
+            continue
+        totals["quotes_not_found"] += 1
+        quotes.append({"text": quote, "status": "not_found", "found_in": []})
 
     # Scan for out-of-range citations across the whole answer, not just the sentences
     # that survive claim splitting: a short fragment such as "See [7]." is not a
@@ -222,8 +262,12 @@ def _summarise(totals: dict[str, int], passage_count: int) -> str:
 
     checked = totals["quotes_checked"]
     missing = totals["quotes_not_found"]
+    from_question = totals["quotes_from_question"]
     if checked and missing == 0:
-        parts.append("every quoted span appears verbatim")
+        if from_question:
+            parts.append("every quoted span either appears in the evidence or quotes the question")
+        else:
+            parts.append("every quoted span appears verbatim")
     elif missing:
         noun = "quoted span" if missing == 1 else "quoted spans"
         parts.append(f"{missing} of {checked} {noun} {'is' if missing == 1 else 'are'} not in the evidence")

@@ -1050,6 +1050,9 @@
         method: "POST",
         body: {
           answer: answerText,
+          // Pass the question so an answer that quotes it back is not flagged as a
+          // fabricated quote.
+          query: result.query || "",
           passages: result.passages.map((p) => ({ text: p.text, path: p.path })),
         },
       });

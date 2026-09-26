@@ -275,3 +275,86 @@ def test_verify_endpoint_does_not_need_a_model(tmp_path, monkeypatch):
         "passages": [{"text": REFUND}],
     })
     assert response.status_code == 200
+
+# -- quotes of the question are not fabrications -----------------------------
+
+def test_a_quote_of_the_question_is_not_flagged():
+    """An answer that quotes the question back is not quoting the evidence, and
+    flagging it as "not found" would train a reader to ignore the check."""
+    report = verify_citations(
+        'Your question is "Laya in Docker", which is a topic rather than a question.',
+        EVIDENCE,
+        query="Laya in Docker",
+    )
+    assert report["counts"]["quotes_not_found"] == 0
+    assert report["counts"]["quotes_from_question"] == 1
+    assert report["quotes"][0]["status"] == "from_question"
+    assert "quotes the question" in report["summary"]
+
+
+def test_a_quote_of_the_question_still_has_to_match_it():
+    """Only a real quote of the question is excused; an invented one is not."""
+    report = verify_citations(
+        'You asked "something entirely different", which I cannot place.',
+        EVIDENCE,
+        query="Laya in Docker",
+    )
+    assert report["counts"]["quotes_not_found"] == 1
+    assert report["counts"]["quotes_from_question"] == 0
+
+
+def test_without_a_query_the_behaviour_is_unchanged():
+    report = verify_citations('It says "processed within five business days" [1].', EVIDENCE)
+    assert report["counts"]["quotes_from_question"] == 0
+    assert report["counts"]["quotes_not_found"] == 0
+
+
+def test_the_endpoint_accepts_the_query():
+    """The GUI sends the question so the false alarm cannot reach a reader."""
+    from fastapi.testclient import TestClient
+    from laya_dsh_rag import api
+    from laya_dsh_rag.config import EngineConfig
+    import tempfile, pathlib as _p
+
+    app = api.create_app(EngineConfig(index_dir=_p.Path(tempfile.mkdtemp()) / "i", warmup=False))
+    response = TestClient(app).post("/v1/verify", json={
+        "answer": 'Your question is "Laya in Docker", which is a topic.',
+        "passages": [{"text": REFUND}],
+        "query": "Laya in Docker",
+    })
+    assert response.status_code == 200
+    assert response.json()["counts"]["quotes_not_found"] == 0
+
+def test_a_quote_that_absorbed_sentence_punctuation_is_still_found():
+    """Quotations routinely absorb the comma that follows them."""
+    report = verify_citations(
+        'The policy says "processed within five business days," exactly [1].', EVIDENCE
+    )
+    assert report["counts"]["quotes_not_found"] == 0
+    assert report["quotes"][0]["status"] == "found"
+
+
+def test_a_quote_of_the_question_that_absorbed_a_comma_is_excused():
+    """The exact shape that produced a false alarm in a real answer."""
+    report = verify_citations(
+        'Your question is "Laya in Docker," which is a topic heading.', EVIDENCE,
+        query="Laya in Docker",
+    )
+    assert report["counts"]["quotes_from_question"] == 1
+    assert report["counts"]["quotes_not_found"] == 0
+
+
+def test_stripping_punctuation_does_not_stop_a_fabrication_being_caught():
+    """Only the ends are ignored: the middle still has to match."""
+    report = verify_citations(
+        'It claims "processed within two hours," which is wrong [1].', EVIDENCE
+    )
+    assert report["counts"]["quotes_not_found"] == 1
+    assert report["quotes"][0]["status"] == "not_found"
+
+
+def test_a_fabrication_that_merely_extends_a_real_span_is_caught():
+    report = verify_citations(
+        'It says "processed within five business days and never otherwise" [1].', EVIDENCE
+    )
+    assert report["counts"]["quotes_not_found"] == 1
