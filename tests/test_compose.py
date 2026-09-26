@@ -1,0 +1,443 @@
+"""Tests for the optional composition step.
+
+Composition is the only part of this engine that a model can invent, so the tests
+care most about two things: that it never happens unless it is asked for, and that
+everything it reports about itself — the model it used, the errors it hit, the fact
+that the prose is unverified — is accurate.
+"""
+from __future__ import annotations
+
+import io
+import json
+import urllib.error
+
+import pytest
+from fastapi.testclient import TestClient
+
+from laya_dsh_rag import api, compose
+from laya_dsh_rag.compose import Composer, build_messages, read_dsh_settings, resolve_target
+
+from .support import make_config, stub_engine, write_corpus
+
+SETTINGS = """\
+# User settings document (hot-reloaded).
+llm-deepseek:
+  baseURL: http://localhost:11434/v1
+agent-default-model:
+  provider: deepseek-official
+  model: ornith-1.5:35b
+"""
+
+
+class FakeResponse:
+    """Stands in for the streaming HTTP response object."""
+
+    def __init__(self, lines: list[bytes]) -> None:
+        self._lines = lines
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+    def __iter__(self):
+        return iter(self._lines)
+
+
+def sse(*chunks: str) -> list[bytes]:
+    """Build OpenAI-style SSE lines, ending with the [DONE] sentinel."""
+    lines = [f'data: {json.dumps({"choices": [{"delta": {"content": c}}]})}'.encode() for c in chunks]
+    lines.append(b"data: [DONE]")
+    return lines
+
+
+@pytest.fixture
+def configured(tmp_path):
+    """A config with a composition model and a settings file that names one."""
+    settings = tmp_path / "settings.yaml"
+    settings.write_text(SETTINGS, encoding="utf-8")
+    return make_config(tmp_path, dsh_settings=settings)
+
+
+# -- reading the harness's own configuration ---------------------------------
+
+def test_settings_are_read_from_the_harness_file(tmp_path):
+    path = tmp_path / "settings.yaml"
+    path.write_text(SETTINGS, encoding="utf-8")
+    assert read_dsh_settings(path) == {
+        "baseURL": "http://localhost:11434/v1",
+        "model": "ornith-1.5:35b",
+    }
+
+
+def test_the_fallback_scanner_reads_the_same_keys_without_yaml(tmp_path, monkeypatch):
+    """PyYAML is optional, so the tiny scanner has to agree with it."""
+    scanned = compose._scan_settings(SETTINGS)
+    assert scanned == {"baseURL": "http://localhost:11434/v1", "model": "ornith-1.5:35b"}
+
+
+def test_the_scanner_ignores_a_model_key_from_another_section():
+    text = "some-other-llm:\n  model: not-the-agent-model\nagent-default-model:\n  model: the-agent-model\n"
+    assert compose._scan_settings(text)["model"] == "the-agent-model"
+
+
+def test_missing_or_unreadable_settings_are_not_an_error(tmp_path):
+    assert read_dsh_settings(tmp_path / "absent.yaml") == {}
+    assert read_dsh_settings(None) == {}
+
+
+# -- resolving the target ----------------------------------------------------
+
+def test_target_comes_from_the_harness_settings(configured):
+    target, reason = resolve_target(configured)
+    assert reason == ""
+    assert target.model == "ornith-1.5:35b"
+    assert target.base_url == "http://localhost:11434/v1"
+    assert "dsh settings" in target.source
+
+
+def test_environment_overrides_the_harness_settings(configured):
+    configured.compose_model = "from-env"
+    configured.compose_base_url = "http://elsewhere/v1"
+    target, _ = resolve_target(configured)
+    assert target.model == "from-env"
+    assert target.base_url == "http://elsewhere/v1"
+    assert target.source == "environment"
+
+
+def test_no_model_configured_means_unavailable_with_a_reason(tmp_path):
+    """A model name is never invented: guessing one would only fail later, worse."""
+    config = make_config(tmp_path)
+    target, reason = resolve_target(config)
+    assert target is None
+    assert "COMPOSE_MODEL" in reason
+
+
+def test_base_url_falls_back_to_ollamas_endpoint(tmp_path):
+    settings = tmp_path / "settings.yaml"
+    settings.write_text("agent-default-model:\n  model: only-a-model\n", encoding="utf-8")
+    target, _ = resolve_target(make_config(tmp_path, dsh_settings=settings))
+    assert target.base_url == compose.DEFAULT_BASE_URL
+
+
+# -- the prompt --------------------------------------------------------------
+
+def test_messages_number_the_evidence_and_cite_it():
+    messages = build_messages("Why?", [("a.md", "first"), ("b.md", "second")])
+    assert messages[0]["role"] == "system"
+    system = messages[0]["content"]
+    # The citation rule is what makes the citation check meaningful, so it is stated
+    # as a requirement with the exact marker format rather than a preference.
+    assert "square brackets" in system
+    assert "[1]" in system
+    assert "outside knowledge" in system
+    body = messages[1]["content"]
+    assert "[1] a.md" in body and "first" in body
+    assert "[2] b.md" in body and "second" in body
+    assert body.rstrip().endswith("Question: Why?")
+
+
+def test_messages_tolerate_a_passage_without_a_path():
+    body = build_messages("q", [("", "bare text")])[1]["content"]
+    assert "[1]\nbare text" in body
+
+
+# -- streaming ---------------------------------------------------------------
+
+def test_stream_yields_deltas_then_done(monkeypatch, configured):
+    monkeypatch.setattr(
+        compose.urllib.request, "urlopen",
+        lambda *_a, **_k: FakeResponse(sse("Hello", " world")),
+    )
+    events = list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert [e["type"] for e in events] == ["delta", "delta", "done"]
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == "Hello world"
+    done = events[-1]
+    assert done["model"] == "ornith-1.5:35b"
+    assert done["chars"] == len("Hello world")
+
+
+def test_the_request_disables_thinking(monkeypatch, configured):
+    """Reasoning tokens can consume the whole budget and return empty content."""
+    captured = {}
+
+    def capture(request, *_a, **_k):
+        captured["url"] = request.full_url
+        captured["body"] = json.loads(request.data.decode())
+        return FakeResponse(sse("x"))
+
+    monkeypatch.setattr(compose.urllib.request, "urlopen", capture)
+    list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert captured["body"]["think"] is False
+    assert captured["body"]["stream"] is True
+    assert captured["body"]["model"] == "ornith-1.5:35b"
+
+
+# -- transport: the native route is not just a different URL -----------------
+
+def test_the_native_route_is_used_by_default(configured):
+    """The OpenAI-compatible route silently ignores think:false; the native one does not."""
+    target, _ = resolve_target(configured)
+    assert target.api == "ollama"
+    assert target.request_url == "http://localhost:11434/api/chat"
+
+
+def test_the_openai_route_can_be_selected(configured):
+    configured.compose_api = "openai"
+    target, _ = resolve_target(configured)
+    assert target.api == "openai"
+    assert target.request_url == "http://localhost:11434/v1/chat/completions"
+
+
+def test_a_base_url_without_a_v1_suffix_is_left_alone(configured):
+    configured.compose_base_url = "http://box:11434"
+    target, _ = resolve_target(configured)
+    assert target.request_url == "http://box:11434/api/chat"
+
+
+def test_the_native_payload_uses_num_predict(configured):
+    """The native route carries its limits under `options`, not top-level keys."""
+    target, _ = resolve_target(configured)
+    payload = target.payload("q", [("p.md", "t")], 321)
+    assert payload["options"]["num_predict"] == 321
+    assert payload["think"] is False
+    assert "max_tokens" not in payload
+
+
+def test_native_ndjson_streams_are_parsed(monkeypatch, configured):
+    """Ollama's native route streams `message.content` NDJSON, not SSE choices."""
+    lines = [
+        b'{"message":{"role":"assistant","content":"Refunds "},"done":false}',
+        b'{"message":{"role":"assistant","content":"take five days [1]."},"done":false}',
+        b'{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop",'
+        b'"eval_count":42,"prompt_eval_count":300}',
+    ]
+    monkeypatch.setattr(compose.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(lines))
+    events = list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert [e["type"] for e in events] == ["delta", "delta", "done"]
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == "Refunds take five days [1]."
+    done = events[-1]
+    assert done["finish_reason"] == "stop"
+    assert done["usage"]["completion_tokens"] == 42
+
+
+def test_native_truncation_is_reported(monkeypatch, configured):
+    lines = [
+        b'{"message":{"content":"half an answer"},"done":false}',
+        b'{"message":{"content":""},"done":true,"done_reason":"length","eval_count":1200}',
+    ]
+    monkeypatch.setattr(compose.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(lines))
+    events = list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert events[-1]["finish_reason"] == "length"
+
+
+def test_an_unreachable_model_is_reported_not_raised(monkeypatch, configured):
+    def boom(*_a, **_k):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(compose.urllib.request, "urlopen", boom)
+    events = list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert len(events) == 1
+    assert events[0]["type"] == "error"
+    assert "could not reach the model" in events[0]["message"]
+
+
+def test_an_http_error_is_reported_with_its_body(monkeypatch, configured):
+    def boom(request, *_a, **_k):
+        raise urllib.error.HTTPError(
+            request.full_url, 404, "Not Found", {}, io.BytesIO(b'{"error":"no such model"}')
+        )
+
+    monkeypatch.setattr(compose.urllib.request, "urlopen", boom)
+    events = list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert events[0]["type"] == "error"
+    assert "HTTP 404" in events[0]["message"]
+    assert "no such model" in events[0]["message"]
+
+
+def test_a_drop_mid_answer_still_reports_the_text_it_produced(monkeypatch, configured):
+    """Partial prose is kept, but the caller must learn it is incomplete."""
+    class Drops(FakeResponse):
+        def __iter__(self):
+            yield from sse("Half an")[:1]
+            raise OSError("connection reset")
+
+    monkeypatch.setattr(compose.urllib.request, "urlopen", lambda *_a, **_k: Drops([]))
+    events = list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert events[0] == {"type": "delta", "text": "Half an"}
+    assert events[-1]["type"] == "error"
+
+
+def test_unavailable_composition_streams_a_single_error(tmp_path):
+    events = list(Composer(make_config(tmp_path)).stream("q", [("a.md", "t")]))
+    assert events[0]["type"] == "error"
+    assert "COMPOSE_MODEL" in events[0]["message"]
+
+
+def test_malformed_lines_are_skipped(monkeypatch, configured):
+    lines = [b"", b"not json at all", b'data: {"choices":[]}', *sse("ok")]
+    monkeypatch.setattr(compose.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(lines))
+    events = list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert [e["type"] for e in events] == ["delta", "done"]
+
+
+def test_a_truncated_answer_reports_its_finish_reason(monkeypatch, configured):
+    """A cut-off answer otherwise looks exactly like a complete one."""
+    lines = [
+        b'data: {"choices":[{"delta":{"content":"half an answer"},"finish_reason":null}]}',
+        b'data: {"choices":[{"delta":{},"finish_reason":"length"}]}',
+        b"data: [DONE]",
+    ]
+    monkeypatch.setattr(compose.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(lines))
+    events = list(Composer(configured).stream("q", [("a.md", "t")]))
+    assert events[-1]["type"] == "done"
+    assert events[-1]["finish_reason"] == "length"
+    assert events[-1]["chars"] == len("half an answer")
+
+
+def test_a_complete_answer_reports_the_stop_reason(monkeypatch, configured):
+    lines = [
+        b'data: {"choices":[{"delta":{"content":"done"},"finish_reason":null}]}',
+        b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+        b"data: [DONE]",
+    ]
+    monkeypatch.setattr(compose.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(lines))
+    assert list(Composer(configured).stream("q", [("a.md", "t")]))[-1]["finish_reason"] == "stop"
+
+
+# -- the HTTP surface --------------------------------------------------------
+
+@pytest.fixture
+def ctx(tmp_path, monkeypatch):
+    settings = tmp_path / "settings.yaml"
+    settings.write_text(SETTINGS, encoding="utf-8")
+    engine = stub_engine(tmp_path, dsh_settings=settings)
+    monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
+    app = api.create_app(make_config(tmp_path, warmup=False, dsh_settings=settings))
+    return TestClient(app), engine, write_corpus(tmp_path / "corpus")
+
+
+def test_stats_report_the_compose_target(ctx):
+    client, _engine, _corpus = ctx
+    body = client.get("/v1/stats").json()["compose"]
+    assert body["available"] is True
+    assert body["model"] == "ornith-1.5:35b"
+
+
+def test_stats_explain_why_composition_is_unavailable(tmp_path, monkeypatch):
+    engine = stub_engine(tmp_path)
+    monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
+    app = api.create_app(make_config(tmp_path, warmup=False, dsh_settings=tmp_path / "absent.yaml"))
+    body = TestClient(app).get("/v1/stats").json()["compose"]
+    assert body["available"] is False
+    assert "COMPOSE_MODEL" in body["reason"]
+
+
+def test_compose_streams_newline_delimited_events(ctx, monkeypatch):
+    client, _engine, _corpus = ctx
+    monkeypatch.setattr(
+        compose.urllib.request, "urlopen",
+        lambda *_a, **_k: FakeResponse(sse("Refunds take ", "five days [1].")),
+    )
+    response = client.post("/v1/compose", json={
+        "query": "How long does a refund take?",
+        "passages": [{"text": "Refunds are processed within five business days.", "path": "refunds.md"}],
+    })
+    assert response.status_code == 200
+    assert "ndjson" in response.headers["content-type"]
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    assert [e["type"] for e in events] == ["delta", "delta", "done"]
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == "Refunds take five days [1]."
+
+
+def test_compose_is_unavailable_without_a_model(tmp_path, monkeypatch):
+    engine = stub_engine(tmp_path)
+    monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
+    app = api.create_app(make_config(tmp_path, warmup=False, dsh_settings=tmp_path / "absent.yaml"))
+    response = TestClient(app).post("/v1/compose", json={
+        "query": "q", "passages": [{"text": "t"}],
+    })
+    assert response.status_code == 503
+    assert "COMPOSE_MODEL" in response.json()["detail"]
+
+
+def test_compose_requires_evidence(ctx):
+    client, _engine, _corpus = ctx
+    assert client.post("/v1/compose", json={"query": "q", "passages": []}).status_code == 422
+
+
+def test_compose_requires_a_query(ctx):
+    client, _engine, _corpus = ctx
+    response = client.post("/v1/compose", json={"query": "", "passages": [{"text": "t"}]})
+    assert response.status_code == 422
+
+
+def test_compose_streams_an_error_event_when_the_model_is_down(ctx, monkeypatch):
+    client, _engine, _corpus = ctx
+
+    def boom(*_a, **_k):
+        raise urllib.error.URLError("refused")
+
+    monkeypatch.setattr(compose.urllib.request, "urlopen", boom)
+    response = client.post("/v1/compose", json={
+        "query": "q", "passages": [{"text": "t", "path": "p"}],
+    })
+    # A 200 with an error event: the stream had already started successfully.
+    assert response.status_code == 200
+    event = json.loads(response.text.splitlines()[0])
+    assert event["type"] == "error"
+
+
+def test_compose_needs_the_token_when_one_is_configured(tmp_path, monkeypatch):
+    settings = tmp_path / "settings.yaml"
+    settings.write_text(SETTINGS, encoding="utf-8")
+    engine = stub_engine(tmp_path, dsh_settings=settings)
+    monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
+    app = api.create_app(
+        make_config(tmp_path, warmup=False, api_key="secret", dsh_settings=settings)
+    )
+    client = TestClient(app)
+    payload = {"query": "q", "passages": [{"text": "t"}]}
+    assert client.post("/v1/compose", json=payload).status_code == 401
+
+    # Stub the model: a test must not depend on a live one being installed, and an
+    # unstubbed call here really does reach out and take ten seconds.
+    monkeypatch.setattr(
+        compose.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(sse("ok"))
+    )
+    authorised = client.post(
+        "/v1/compose", json=payload, headers={"authorization": "Bearer secret"}
+    )
+    assert authorised.status_code == 200
+    assert json.loads(authorised.text.splitlines()[0])["type"] == "delta"
+
+
+# -- opt-in guarantee --------------------------------------------------------
+
+def test_a_query_never_calls_the_model(ctx, monkeypatch):
+    """Composition must be impossible to trigger by accident."""
+    client, _engine, corpus = ctx
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+
+    def forbidden(*_a, **_k):
+        raise AssertionError("the model was contacted by a plain query")
+
+    monkeypatch.setattr(compose.urllib.request, "urlopen", forbidden)
+    body = client.post("/v1/query", json={"query": "How long does a refund take?"}).json()
+    assert body["passages"]
+    assert "answer" not in body
+    assert "composed" not in body
+
+
+def test_the_query_response_carries_no_generated_text(ctx):
+    client, _engine, corpus = ctx
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+    body = client.post("/v1/query", json={"query": "refunds"}).json()
+    allowed = {
+        "query", "answerable", "answerability", "passages", "considered", "kept",
+        "dropped_below_threshold", "checkpoint", "timings", "usage", "note",
+    }
+    assert set(body) <= allowed, f"unexpected keys: {set(body) - allowed}"
+    # The point of the guarantee: no field of /v1/query is ever model-generated.
+    assert not set(body) & {"answer", "composed", "completion", "prose", "text"}

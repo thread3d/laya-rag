@@ -1,1 +1,1 @@
-"""Test package for the Laya RAG engine."""
+"""Test package for the Laya DSH RAG engine."""

@@ -1,4 +1,4 @@
-# Bundle layer for the Laya RAG tools.
+# Bundle layer for the Laya DSH RAG tools.
 #
 # Install with:  dsh plugin --profile web add ./dsh-plugin
 # The row names the package so Node resolution finds the installed code.

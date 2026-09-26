@@ -1,5 +1,5 @@
 /**
- * Laya RAG tools for DeepSeek Harness.
+ * Laya DSH RAG tools for DeepSeek Harness.
  *
  * The engine runs in Python (Laya is a torch library) and this plugin runs in the
  * harness's Node process, so the two halves meet over the engine's HTTP service.
@@ -49,7 +49,7 @@ async function callEngine(baseUrl, path, options = {}) {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     throw new Error(
-      `Laya RAG engine is unreachable at ${baseUrl} (${reason}). ` +
+      `Laya DSH RAG engine is unreachable at ${baseUrl} (${reason}). ` +
         'Start it with: .venv/bin/laya-dsh-rag-serve',
     )
   }
@@ -59,11 +59,11 @@ async function callEngine(baseUrl, path, options = {}) {
   try {
     payload = text ? JSON.parse(text) : {}
   } catch {
-    throw new Error(`Laya RAG engine returned non-JSON (HTTP ${response.status}): ${text.slice(0, 300)}`)
+    throw new Error(`Laya DSH RAG engine returned non-JSON (HTTP ${response.status}): ${text.slice(0, 300)}`)
   }
   if (!response.ok) {
     const detail = payload && typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload)
-    throw new Error(`Laya RAG engine error (HTTP ${response.status}): ${detail}`)
+    throw new Error(`Laya DSH RAG engine error (HTTP ${response.status}): ${detail}`)
   }
   return payload
 }
@@ -83,7 +83,7 @@ function renderEvidence(value) {
   const verdict = value.answerable
     ? `answerable (Laya answerability ${value.answerability})`
     : `NOT answerable (Laya answerability ${value.answerability})`
-  lines.push(`Laya RAG evidence for: ${value.query}`)
+  lines.push(`Laya DSH RAG evidence for: ${value.query}`)
   lines.push(`Verdict: ${verdict}`)
   if (value.note) lines.push(`Note: ${value.note}`)
   lines.push('')
@@ -127,7 +127,7 @@ const PASSAGE_SCHEMA = {
 }
 
 /**
- * Register the Laya RAG tools.
+ * Register the Laya DSH RAG tools.
  *
  * @param {any} ctx - Cordis context.
  * @param {{baseUrl?: string, timeoutMs?: number}} [config] - Row configuration.
@@ -209,7 +209,7 @@ export function apply(ctx, config) {
   register({
     name: 'laya_dsh_rag_index',
     description:
-      'Index files or directories into the Laya RAG corpus so they can be searched with ' +
+      'Index files or directories into the Laya DSH RAG corpus so they can be searched with ' +
       'laya_dsh_rag_search. Reads text files (Markdown, source code, config, plain text), splits ' +
       'them into passages and embeds them with the Laya checkpoint. Run this after adding or ' +
       'changing documents in the corpus.',
@@ -293,7 +293,7 @@ export function apply(ctx, config) {
   register({
     name: 'laya_dsh_rag_status',
     description:
-      'Report the state of the Laya RAG engine: which Laya checkpoint is loaded, how many ' +
+      'Report the state of the Laya DSH RAG engine: which Laya checkpoint is loaded, how many ' +
       'passages are indexed, and which files are searchable. Use this to check whether the ' +
       'corpus is ready before searching, or to diagnose a failed search.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
@@ -316,13 +316,13 @@ export function apply(ctx, config) {
       },
       render: (_args, value) => {
         if (!value.reachable) {
-          return [{ type: 'text', text: `Laya RAG engine unreachable: ${value.error}` }]
+          return [{ type: 'text', text: `Laya DSH RAG engine unreachable: ${value.error}` }]
         }
         return [
           {
             type: 'text',
             text:
-              `Laya RAG engine ready. Checkpoint ${value.checkpoint} ` +
+              `Laya DSH RAG engine ready. Checkpoint ${value.checkpoint} ` +
               `(model loaded: ${value.model_loaded}, embedding dim ${value.embedding_dim}). ` +
               `Corpus: ${value.chunks} passages from ${value.documents} documents across ` +
               `${value.files} files. Index at ${value.index_dir}.`,

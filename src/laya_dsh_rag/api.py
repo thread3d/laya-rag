@@ -11,18 +11,31 @@ free without any hand-rolled thread management.
 """
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Iterable
+from pathlib import Path
+from typing import Any, Iterable, Iterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .compose import resolve_target
 from .config import EngineConfig
 from .engine import IndexNotBuiltError, RagEngine
 from .model import ModelUnavailableError
+from .verify import verify_citations
 
 log = logging.getLogger("laya_dsh_rag.api")
+
+WEB_DIR = Path(__file__).resolve().parent / "web"
+
+
+def _web_dir() -> Path | None:
+    """The bundled GUI directory, or ``None`` when its assets are not installed."""
+    return WEB_DIR if (WEB_DIR / "index.html").is_file() else None
 
 
 class IndexRequest(BaseModel):
@@ -42,6 +55,32 @@ class QueryRequest(BaseModel):
     relevance_threshold: float | None = Field(None, ge=0.0, le=1.0)
     answerability_threshold: float | None = Field(None, ge=0.0, le=1.0)
     max_passage_chars: int | None = Field(2000, ge=100, le=20000)
+
+
+class ComposePassage(BaseModel):
+    """One piece of evidence to compose from."""
+
+    text: str = Field(..., min_length=1)
+    path: str | None = Field(None, description="Source path, cited in the answer")
+
+
+class ComposeRequest(BaseModel):
+    """A request to write prose from evidence the caller already holds.
+
+    The evidence travels with the request rather than being re-retrieved, so a
+    composed answer is written from exactly the passages the caller was shown.
+    """
+
+    query: str = Field(..., min_length=1, description="The question to answer")
+    passages: list[ComposePassage] = Field(..., min_length=1, max_length=50)
+    max_tokens: int | None = Field(None, ge=64, le=4000)
+
+
+class VerifyRequest(BaseModel):
+    """A request to check an answer's citations against the evidence it was given."""
+
+    answer: str = Field(..., min_length=1, description="The composed answer to check")
+    passages: list[ComposePassage] = Field(..., min_length=1, max_length=50)
 
 
 def _engine_holder(config: EngineConfig) -> tuple[dict[str, RagEngine], Any]:
@@ -76,7 +115,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         holder.clear()
 
     app = FastAPI(
-        title="Laya RAG engine",
+        title="Laya DSH RAG engine",
         description="Retrieval-augmented generation over Laya embeddings and decisions.",
         version="0.1.0",
         lifespan=lifespan,
@@ -113,6 +152,25 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
     def stats(_: None = Depends(authorise)) -> dict[str, Any]:
         """Configuration, model and corpus statistics."""
         return get_engine().stats()
+
+    @app.get("/v1/documents")
+    def documents(_: None = Depends(authorise)) -> dict[str, Any]:
+        """Every indexed document, with its chunk and character counts.
+
+        Backs the corpus browser. Returns an empty listing rather than an error when
+        no index exists, so a dashboard can render its empty state from one call.
+        """
+        listing = get_engine().list_documents()
+        return {"total": len(listing), "documents": listing}
+
+    @app.get("/v1/chunks")
+    def chunks(
+        path: str | None = None,
+        _: None = Depends(authorise),
+    ) -> dict[str, Any]:
+        """Indexed chunks in document order, optionally narrowed to one path."""
+        records = get_engine().list_chunks(path)
+        return {"total": len(records), "path": path, "chunks": records}
 
     @app.post("/v1/index")
     def index_documents(request: IndexRequest, _: None = Depends(authorise)) -> dict[str, Any]:
@@ -160,6 +218,45 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return result.as_dict()
 
+    @app.post("/v1/compose")
+    def compose(request: ComposeRequest, _: None = Depends(authorise)) -> StreamingResponse:
+        """Write prose from evidence, streaming newline-delimited JSON events.
+
+        The only route that returns generated text, and therefore the only one whose
+        output a model can have invented. Events are ``delta`` while the model writes,
+        then one terminal ``done`` or ``error`` — and an ``error`` may arrive after
+        some ``delta`` events if the connection drops mid-answer, which is the
+        caller's signal that the text it holds is incomplete.
+        """
+        engine = get_engine()
+        target, reason = resolve_target(engine.config)
+        if target is None:
+            raise HTTPException(status_code=503, detail=reason)
+
+        pairs = [(passage.path or "", passage.text) for passage in request.passages]
+
+        def events() -> Iterator[str]:
+            for event in engine.composer.stream(request.query, pairs, max_tokens=request.max_tokens):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+
+        return StreamingResponse(
+            events(),
+            media_type="application/x-ndjson",
+            # Proxies and browsers must not buffer a stream that can take a minute.
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+
+    @app.post("/v1/verify")
+    def verify(request: VerifyRequest, _: None = Depends(authorise)) -> dict[str, Any]:
+        """Check an answer's citations and quoted spans against the evidence.
+
+        Deterministic and model-free: it reports whether each claim cites in-range
+        evidence and whether each quoted span actually appears in the passages. It
+        makes no claim about whether the answer is *true*, and nothing consuming this
+        should present it as if it did.
+        """
+        return verify_citations(request.answer, [passage.text for passage in request.passages])
+
     @app.post("/v1/reset")
     def reset(_: None = Depends(authorise)) -> dict[str, Any]:
         """Delete the index."""
@@ -167,17 +264,30 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         engine.reset()
         return {"status": "ok", "index_dir": str(config.index_dir)}
 
+    # The GUI ships as plain static files — no build step, no CDN, no bundler — so the
+    # service stays self-contained and works offline. Mounted last on purpose: /health,
+    # /v1/* and FastAPI's generated /docs are registered first and therefore win.
+    web_dir = _web_dir()
+    if web_dir is not None:
+        app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
+    else:  # pragma: no cover - only if installed without package data
+        log.warning("GUI assets are not installed; serving the JSON API only")
+
     return app
 
 
 def main() -> None:
-    """Console entry point: serve the engine with uvicorn."""
+    """Console entry point: serve the engine and its GUI with uvicorn."""
     import uvicorn
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     config = EngineConfig()
     config.ensure_dirs()
     app = create_app(config)
+    host = "127.0.0.1" if config.host in {"0.0.0.0", "::"} else config.host
+    if _web_dir() is not None:
+        log.info("GUI at http://%s:%d/", host, config.port)
+    log.info("API docs at http://%s:%d/docs", host, config.port)
     uvicorn.run(app, host=config.host, port=config.port, log_level="info")
 
 

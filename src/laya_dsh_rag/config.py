@@ -1,4 +1,4 @@
-"""Configuration for the Laya RAG engine.
+"""Configuration for the Laya DSH RAG engine.
 
 Every value here is deployment-varying and therefore overridable through the
 environment, matching the "no hardcoded tunables" rule the harness applies to its
@@ -105,6 +105,31 @@ class EngineConfig:
     # Laya emits calibrated probabilities, so these are real thresholds, not scores.
     relevance_threshold: float = field(default_factory=lambda: _env_float("RELEVANCE_THRESHOLD", 0.5))
     answerability_threshold: float = field(default_factory=lambda: _env_float("ANSWERABILITY_THRESHOLD", 0.5))
+
+    # Answer composition. This is the one optional step in the pipeline that is not
+    # Laya's: a generative model writes prose from evidence the engine already
+    # returned. Laya cannot generate text, so everything above is calibrated and
+    # nothing here is. Off unless the caller explicitly asks for it.
+    #
+    # Empty means "not configured here" and the value is resolved from the harness's
+    # own settings at runtime (see compose.py), so the model dsh uses is the model
+    # this uses rather than a second, drifting copy of the same configuration.
+    compose_base_url: str = field(default_factory=lambda: _env("COMPOSE_BASE_URL") or "")
+    compose_model: str = field(default_factory=lambda: _env("COMPOSE_MODEL") or "")
+    # Which route to call. Ollama's native /api/chat honours `think: false`; its
+    # OpenAI-compatible /v1 route silently ignores it, which measured 561-614 chars of
+    # reasoning on every call, roughly 3x the latency, and once a whole token budget
+    # spent thinking with no answer written at all. "openai" exists for endpoints that
+    # are not Ollama.
+    compose_api: str = field(default_factory=lambda: _env("COMPOSE_API") or "ollama")
+    compose_timeout_s: int = field(default_factory=lambda: _env_int("COMPOSE_TIMEOUT_S", 300))
+    # A full answer over five passages measured ~520 completion tokens, and the model
+    # can spend a few hundred more reasoning even with thinking disabled: at 600,
+    # two runs in three hit the ceiling and stopped mid-answer.
+    compose_max_tokens: int = field(default_factory=lambda: _env_int("COMPOSE_MAX_TOKENS", 1200))
+    dsh_settings: Path = field(
+        default_factory=lambda: Path(_env("DSH_SETTINGS") or Path.home() / ".dsh" / "settings.yaml")
+    )
 
     # Service
     host: str = field(default_factory=lambda: _env("HOST") or "127.0.0.1")

@@ -1,5 +1,5 @@
 /**
- * Tests for the Laya RAG harness tools.
+ * Tests for the Laya DSH RAG harness tools.
  *
  * The plugin imports nothing from the harness, so a fake cordis context is enough
  * to exercise registration, the tool schemas, and the `execute` bodies. Tests that
@@ -43,7 +43,7 @@ async function engineReachable() {
 }
 
 const reachable = await engineReachable()
-const skipIfOffline = reachable ? false : `Laya RAG engine not running at ${BASE_URL}`
+const skipIfOffline = reachable ? false : `Laya DSH RAG engine not running at ${BASE_URL}`
 
 test('plugin declares its cordis identity', () => {
   assert.equal(name, 'laya-dsh-rag')
@@ -137,7 +137,7 @@ test('search render is pure and cites sources', { skip: skipIfOffline }, async (
   const second = search.output.render({}, value)
   assert.deepEqual(first, second, 'render must be a pure function of its arguments')
   assert.equal(first[0].type, 'text')
-  assert.match(first[0].text, /Laya RAG evidence for:/)
+  assert.match(first[0].text, /Laya DSH RAG evidence for:/)
   assert.match(first[0].text, /Verdict: /)
   assert.match(first[0].text, /\[1\] /)
 })

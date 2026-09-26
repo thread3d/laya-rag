@@ -1,4 +1,4 @@
-"""Command line interface for the Laya RAG engine."""
+"""Command line interface for the Laya DSH RAG engine."""
 from __future__ import annotations
 
 import argparse

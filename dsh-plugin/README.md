@@ -1,6 +1,6 @@
 # laya-dsh-rag
 
-DeepSeek Harness tools that expose the local Laya RAG engine to the harness agent.
+DeepSeek Harness tools that expose the local Laya DSH RAG engine to the harness agent.
 
 The plugin imports **nothing** from the harness: a cordis plugin only has to export
 `name`/`inject`/`apply`, and `ctx.tools.register()` accepts a raw JSON-Schema tool definition — the
@@ -22,7 +22,7 @@ verdict. When Laya judges the evidence insufficient, the rendered text tells the
 corpus does not cover the question rather than answering from memory:
 
 ```
-Laya RAG evidence for: How do I run Laya in Docker?
+Laya DSH RAG evidence for: How do I run Laya in Docker?
 Verdict: answerable (Laya answerability 0.91)
 
 [1] vendor/laya/docs/docker.md (relevance 0.91)

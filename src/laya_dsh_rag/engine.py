@@ -22,6 +22,7 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 
 from .chunking import DEFAULT_EXTENSIONS, MAX_FILE_BYTES, chunk_documents, load_documents
+from .compose import Composer
 from .config import EngineConfig
 from .index_store import Hit, VectorIndex, wipe
 from .lexical import LEXICAL_FILE, BM25Index, reciprocal_rank_fusion
@@ -119,6 +120,9 @@ class RagEngine:
         self.config = config or EngineConfig()
         self.model = model or LayaModel(self.config)
         self.reranker = LayaReranker(self.model)
+        # Optional generative step. It never runs on its own: the caller has to ask
+        # for it, and everything it produces is unverified prose.
+        self.composer = Composer(self.config)
         self.embed_batch_texts = embed_batch_texts
         self._index: VectorIndex | None = None
         self._lexical: BM25Index | None = None
@@ -327,6 +331,53 @@ class RagEngine:
             candidates.append(Hit(chunk=chunk, score=rrf_score, channels=channels))
         return candidates
 
+    # -- corpus introspection --------------------------------------------
+    def list_documents(self) -> list[dict[str, Any]]:
+        """Every indexed document, with its chunk and character counts.
+
+        Read-only and index-optional: an unbuilt index yields an empty list rather
+        than raising, because callers ask for this on every status refresh.
+
+        ``chars`` sums each chunk's own length, so text duplicated by the chunk
+        overlap is counted once per chunk — it measures indexed volume, not source
+        file size.
+        """
+        if not self.has_index():
+            return []
+        grouped: dict[str, dict[str, Any]] = {}
+        for chunk in self.index.chunks:
+            record = grouped.setdefault(
+                chunk.doc_id,
+                {"doc_id": chunk.doc_id, "path": chunk.path, "chunks": 0, "chars": 0},
+            )
+            record["chunks"] += 1
+            record["chars"] += len(chunk.text)
+        return sorted(grouped.values(), key=lambda record: record["path"])
+
+    def list_chunks(self, path: str | None = None) -> list[dict[str, Any]]:
+        """Indexed chunks in document order, optionally narrowed to one path.
+
+        The full chunk text is returned: chunks are bounded by ``chunk_chars``, so
+        this stays small enough to hand straight to a viewer.
+        """
+        if not self.has_index():
+            return []
+        chunks = [chunk for chunk in self.index.chunks if path is None or chunk.path == path]
+        chunks.sort(key=lambda chunk: (chunk.path, chunk.index))
+        return [
+            {
+                "chunk_id": chunk.chunk_id,
+                "doc_id": chunk.doc_id,
+                "path": chunk.path,
+                "index": chunk.index,
+                "start_char": chunk.start_char,
+                "end_char": chunk.end_char,
+                "chars": len(chunk.text),
+                "text": chunk.text,
+            }
+            for chunk in chunks
+        ]
+
     # -- introspection ---------------------------------------------------
     def stats(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -336,6 +387,7 @@ class RagEngine:
             "index_present": VectorIndex.exists_on_disk(self.config.index_dir),
             "lexical_present": (self._lexical is not None)
             or (self.config.index_dir / LEXICAL_FILE).is_file(),
+            "compose": self.composer.describe(),
         }
         if payload["index_present"]:
             try:
