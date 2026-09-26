@@ -1,4 +1,4 @@
-# laya_rag
+# laya_dsh_rag
 
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine and [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
@@ -10,9 +10,9 @@ The two halves meet over a local HTTP service:
 ┌─────────────────────────────┐         ┌──────────────────────────────┐
 │  dsh  (Node, user interface)│  HTTP   │  Laya RAG engine (Python)    │
 │                             │ ──────► │                              │
-│  laya_rag_search            │  8077   │  chunk → embed → index       │
-│  laya_rag_index             │         │  hybrid recall               │
-│  laya_rag_status            │         │  Laya re-rank + gate         │
+│  laya_dsh_rag_search            │  8077   │  chunk → embed → index       │
+│  laya_dsh_rag_index             │         │  hybrid recall               │
+│  laya_dsh_rag_status            │         │  Laya re-rank + gate         │
 │                             │ ◄────── │  evidence bundle             │
 │  harness agent writes the   │         │                              │
 │  final answer from evidence │         │  Laya checkpoint (torch)     │
@@ -83,8 +83,8 @@ The Laya checkout lives in the `vendor/laya` submodule and ships a setup script 
 Intel (PyTorch stopped publishing macOS x86_64 wheels after 2.2.2):
 
 ```sh
-git clone --recurse-submodules <repository-url> laya_rag
-cd laya_rag
+git clone --recurse-submodules <repository-url> laya_dsh_rag
+cd laya_dsh_rag
 
 # 1. Laya itself: venv, pinned deps, checkpoints, integrity check, smoke test
 PYTHON=python3 vendor/laya/setup_laya.sh
@@ -99,7 +99,7 @@ reuses the pip cache from step 1 so it is quick.
 Verify everything is wired up:
 
 ```sh
-.venv/bin/laya-rag doctor
+.venv/bin/laya-dsh-rag doctor
 ```
 
 ## Using it
@@ -108,13 +108,13 @@ Verify everything is wired up:
 
 ```sh
 # Index a corpus (Markdown, source code, config, plain text)
-.venv/bin/laya-rag index vendor/laya/docs --rebuild
+.venv/bin/laya-dsh-rag index vendor/laya/docs --rebuild
 
 # Ask for evidence
-.venv/bin/laya-rag query "How do I run Laya in Docker?"
+.venv/bin/laya-dsh-rag query "How do I run Laya in Docker?"
 
 # Show configuration, model and corpus state
-.venv/bin/laya-rag stats --json
+.venv/bin/laya-dsh-rag stats --json
 ```
 
 `query` prints Laya's calibrated verdict, the passages it selected with their sources, and which
@@ -123,7 +123,7 @@ recall channel found each one. Use `--json` for machine-readable output.
 ### HTTP service
 
 ```sh
-.venv/bin/laya-rag-serve          # 127.0.0.1:8077
+.venv/bin/laya-dsh-rag-serve          # 127.0.0.1:8077
 ```
 
 | Route | Purpose |
@@ -147,9 +147,9 @@ This gives the agent three tools:
 
 | Tool | Purpose |
 | --- | --- |
-| `laya_rag_search` | retrieve Laya-ranked, Laya-gated evidence for a question |
-| `laya_rag_index` | index files or directories into the corpus |
-| `laya_rag_status` | report checkpoint, corpus size and reachability |
+| `laya_dsh_rag_search` | retrieve Laya-ranked, Laya-gated evidence for a question |
+| `laya_dsh_rag_index` | index files or directories into the corpus |
+| `laya_dsh_rag_status` | report checkpoint, corpus size and reachability |
 
 See [`dsh-plugin/README.md`](dsh-plugin/README.md) for installation into a profile, configuration,
 and how the answerability verdict reaches the model.
@@ -157,7 +157,7 @@ and how the answerability verdict reaches the model.
 ## Configuration
 
 Every value is an environment variable with a working default, so the engine can be retargeted
-without editing code. Prefix: `LAYA_RAG_`.
+without editing code. Prefix: `LAYA_DSH_RAG_`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -191,8 +191,8 @@ and asserts the measured behaviour in the table above.
 ## Repository layout
 
 ```
-laya_rag/
-├── src/laya_rag/          Python engine
+laya_dsh_rag/
+├── src/laya_dsh_rag/          Python engine
 │   ├── config.py            environment-driven configuration
 │   ├── chunking.py          document loading and paragraph-aware chunking
 │   ├── model.py             the single loaded Laya Agent (embeddings + decisions)
@@ -201,7 +201,7 @@ laya_rag/
 │   ├── rerank.py            Laya relevance re-ranking and answerability gate
 │   ├── engine.py            orchestration: index, hybrid recall, evidence bundle
 │   ├── api.py               FastAPI service
-│   └── cli.py               `laya-rag` command line
+│   └── cli.py               `laya-dsh-rag` command line
 ├── dsh-plugin/            DeepSeek Harness tools (zero harness imports)
 ├── tests/                 Python suite plus a real-weights suite
 ├── models/                Laya checkpoints (gitignored)
@@ -214,7 +214,7 @@ laya_rag/
 **The submodules live under `vendor/`.** They were originally at `laya/` and `deepseek-harness/`, but
 a top-level `laya/` directory shadows the installed `laya` Python package for any process started
 from the repository root, so `import laya` resolved to the checkout folder. Moving them under
-`vendor/` removed the collision. The Python package for this project is `laya_rag`, which does not
+`vendor/` removed the collision. The Python package for this project is `laya_dsh_rag`, which does not
 collide.
 
 **`dsh plugin add` is not used.** It forwards to `pnpm`, which is not installed on this machine, so

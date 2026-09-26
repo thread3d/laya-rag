@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from laya_rag.chunking import Chunk
-from laya_rag.index_store import IndexError_, VectorIndex, wipe
+from laya_dsh_rag.chunking import Chunk
+from laya_dsh_rag.index_store import IndexError_, VectorIndex, wipe
 
 
 def make_chunk(chunk_id: str, text: str, doc_id: str = "d1", path: str = "/doc.md", index: int = 0) -> Chunk:

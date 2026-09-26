@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "laya-rag"
+name = "laya-dsh-rag"
 version = "0.1.0"
 description = "Retrieval-augmented generation engine powered by the Laya decision engine, with a DeepSeek Harness (dsh) interface"
 readme = "README.md"
@@ -24,12 +24,12 @@ dev = [
 ]
 
 [project.scripts]
-laya-rag = "laya_rag.cli:main"
-laya-rag-serve = "laya_rag.api:main"
+laya-dsh-rag = "laya_dsh_rag.cli:main"
+laya-dsh-rag-serve = "laya_dsh_rag.api:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-packages = ["laya_rag"]
+packages = ["laya_dsh_rag"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -22,7 +22,7 @@ from .config import EngineConfig
 from .engine import IndexNotBuiltError, RagEngine
 from .model import ModelUnavailableError
 
-log = logging.getLogger("laya_rag.api")
+log = logging.getLogger("laya_dsh_rag.api")
 
 
 class IndexRequest(BaseModel):

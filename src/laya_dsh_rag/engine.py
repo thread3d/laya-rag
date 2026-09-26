@@ -130,7 +130,7 @@ class RagEngine:
             if not VectorIndex.exists_on_disk(self.config.index_dir):
                 raise IndexNotBuiltError(
                     f"no index at {self.config.index_dir}. Index a directory first "
-                    f"(laya-rag index <path>)."
+                    f"(laya-dsh-rag index <path>)."
                 )
             self._index = VectorIndex.load(self.config.index_dir)
         return self._index

@@ -3,8 +3,8 @@
 # Install with:  dsh plugin --profile web add ./dsh-plugin
 # The row names the package so Node resolution finds the installed code.
 - insert:
-    - id: laya-rag
-      name: dsh-laya-rag
+    - id: laya-dsh-rag
+      name: laya-dsh-rag
       config:
         # Where the Python engine serves. Override per profile if you move it.
         baseUrl: http://127.0.0.1:8077

@@ -8,9 +8,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from laya_rag.engine import IndexNotBuiltError, RagEngine
-from laya_rag.index_store import VectorIndex
-from laya_rag.lexical import LEXICAL_FILE
+from laya_dsh_rag.engine import IndexNotBuiltError, RagEngine
+from laya_dsh_rag.index_store import VectorIndex
+from laya_dsh_rag.lexical import LEXICAL_FILE
 
 from .support import StubModel, make_config, stub_engine, write_corpus
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from laya_rag import api
+from laya_dsh_rag import api
 
 from .support import make_config, stub_engine, write_corpus
 

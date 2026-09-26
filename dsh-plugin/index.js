@@ -10,7 +10,7 @@
  * this installable with no build step and no dependency resolution against the
  * harness installation.
  *
- * @module dsh-laya-rag
+ * @module laya-dsh-rag
  */
 
 import { appendFileSync } from 'node:fs'
@@ -18,7 +18,7 @@ import { appendFileSync } from 'node:fs'
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8077'
 const DEFAULT_TIMEOUT_MS = 120000
 
-export const name = 'laya-rag'
+export const name = 'laya-dsh-rag'
 
 /** Wait for the tool registry before registering into it. */
 export const inject = ['tools']
@@ -50,7 +50,7 @@ async function callEngine(baseUrl, path, options = {}) {
     const reason = error instanceof Error ? error.message : String(error)
     throw new Error(
       `Laya RAG engine is unreachable at ${baseUrl} (${reason}). ` +
-        'Start it with: .venv/bin/laya-rag-serve',
+        'Start it with: .venv/bin/laya-dsh-rag-serve',
     )
   }
 
@@ -145,7 +145,7 @@ export function apply(ctx, config) {
   }
 
   register({
-    name: 'laya_rag_search',
+    name: 'laya_dsh_rag_search',
     description:
       'Search the indexed local corpus for evidence answering a question. Returns source ' +
       'passages ranked and gated by the Laya decision engine, plus its calibrated verdict on ' +
@@ -207,10 +207,10 @@ export function apply(ctx, config) {
   })
 
   register({
-    name: 'laya_rag_index',
+    name: 'laya_dsh_rag_index',
     description:
       'Index files or directories into the Laya RAG corpus so they can be searched with ' +
-      'laya_rag_search. Reads text files (Markdown, source code, config, plain text), splits ' +
+      'laya_dsh_rag_search. Reads text files (Markdown, source code, config, plain text), splits ' +
       'them into passages and embeds them with the Laya checkpoint. Run this after adding or ' +
       'changing documents in the corpus.',
     parameters: {
@@ -291,7 +291,7 @@ export function apply(ctx, config) {
   })
 
   register({
-    name: 'laya_rag_status',
+    name: 'laya_dsh_rag_status',
     description:
       'Report the state of the Laya RAG engine: which Laya checkpoint is loaded, how many ' +
       'passages are indexed, and which files are searchable. Use this to check whether the ' +
@@ -355,11 +355,11 @@ export function apply(ctx, config) {
     },
   })
 
-  ctx.logger?.info?.(`laya-rag: registered ${registered.length} tools against ${baseUrl}`)
+  ctx.logger?.info?.(`laya-dsh-rag: registered ${registered.length} tools against ${baseUrl}`)
 
   // Diagnostics: prove the plugin loaded, and record what it registered, without
-  // requiring a log-level change. Set LAYA_RAG_TRACE_FILE to a path to enable.
-  const traceFile = process.env.LAYA_RAG_TRACE_FILE
+  // requiring a log-level change. Set LAYA_DSH_RAG_TRACE_FILE to a path to enable.
+  const traceFile = process.env.LAYA_DSH_RAG_TRACE_FILE
   if (traceFile) {
     try {
       appendFileSync(
@@ -368,7 +368,7 @@ export function apply(ctx, config) {
       )
     } catch (error) {
       // Tracing is best-effort: an unwritable path must not fail plugin loading.
-      ctx.logger?.error?.(`laya-rag: could not write trace file: ${String(error)}`)
+      ctx.logger?.error?.(`laya-dsh-rag: could not write trace file: ${String(error)}`)
     }
   }
 }

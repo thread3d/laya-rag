@@ -8,7 +8,7 @@
 # ~/.dsh/profiles/web/cordis.patch.yml instead (that profile sets
 # patchReload: live).
 - insert:
-    - id: laya-rag
+    - id: laya-dsh-rag
       name: './index.js'
       config:
         baseUrl: http://127.0.0.1:8077

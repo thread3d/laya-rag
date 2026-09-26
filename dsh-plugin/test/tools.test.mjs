@@ -13,7 +13,7 @@ import test from 'node:test'
 
 import { apply, inject, name } from '../index.js'
 
-const BASE_URL = process.env.LAYA_RAG_BASE_URL ?? 'http://127.0.0.1:8077'
+const BASE_URL = process.env.LAYA_DSH_RAG_BASE_URL ?? 'http://127.0.0.1:8077'
 
 /** Collect registrations from a fake context. */
 function fakeContext() {
@@ -46,7 +46,7 @@ const reachable = await engineReachable()
 const skipIfOffline = reachable ? false : `Laya RAG engine not running at ${BASE_URL}`
 
 test('plugin declares its cordis identity', () => {
-  assert.equal(name, 'laya-rag')
+  assert.equal(name, 'laya-dsh-rag')
   assert.deepEqual(inject, ['tools'])
 })
 
@@ -56,7 +56,7 @@ test('apply registers the three RAG tools', () => {
 
   assert.deepEqual(
     [...ctx.tools_registered.keys()].sort(),
-    ['laya_rag_index', 'laya_rag_search', 'laya_rag_status'],
+    ['laya_dsh_rag_index', 'laya_dsh_rag_search', 'laya_dsh_rag_status'],
   )
 })
 
@@ -78,7 +78,7 @@ test('every tool declares the model-facing contract', () => {
 test('apply trims a trailing slash from baseUrl', () => {
   const ctx = fakeContext()
   apply(ctx, { baseUrl: `${BASE_URL}/` })
-  assert.ok(ctx.tools_registered.has('laya_rag_search'))
+  assert.ok(ctx.tools_registered.has('laya_dsh_rag_search'))
 })
 
 test('registration is disposable', () => {
@@ -90,10 +90,10 @@ test('registration is disposable', () => {
   assert.equal(ctx.tools_registered.has('probe'), false)
 })
 
-test('laya_rag_status reports the engine', { skip: skipIfOffline }, async () => {
+test('laya_dsh_rag_status reports the engine', { skip: skipIfOffline }, async () => {
   const ctx = fakeContext()
   apply(ctx, { baseUrl: BASE_URL })
-  const status = ctx.tools_registered.get('laya_rag_status')
+  const status = ctx.tools_registered.get('laya_dsh_rag_status')
   const value = await status.execute({}, {})
 
   assert.equal(value.reachable, true)
@@ -103,10 +103,10 @@ test('laya_rag_status reports the engine', { skip: skipIfOffline }, async () => 
   assert.match(status.output.render({}, value)[0].text, /Corpus: \d+ passages/)
 })
 
-test('laya_rag_search returns Laya-gated evidence', { skip: skipIfOffline }, async () => {
+test('laya_dsh_rag_search returns Laya-gated evidence', { skip: skipIfOffline }, async () => {
   const ctx = fakeContext()
   apply(ctx, { baseUrl: BASE_URL })
-  const search = ctx.tools_registered.get('laya_rag_search')
+  const search = ctx.tools_registered.get('laya_dsh_rag_search')
 
   const value = await search.execute({ query: 'How do I use Laya with LangChain?', top_k: 3 }, {})
 
@@ -130,7 +130,7 @@ test('laya_rag_search returns Laya-gated evidence', { skip: skipIfOffline }, asy
 test('search render is pure and cites sources', { skip: skipIfOffline }, async () => {
   const ctx = fakeContext()
   apply(ctx, { baseUrl: BASE_URL })
-  const search = ctx.tools_registered.get('laya_rag_search')
+  const search = ctx.tools_registered.get('laya_dsh_rag_search')
   const value = await search.execute({ query: 'How do I run Laya in Docker?' }, {})
 
   const first = search.output.render({}, value)
@@ -145,20 +145,20 @@ test('search render is pure and cites sources', { skip: skipIfOffline }, async (
 test('search on an empty query is rejected by the engine', { skip: skipIfOffline }, async () => {
   const ctx = fakeContext()
   apply(ctx, { baseUrl: BASE_URL })
-  const search = ctx.tools_registered.get('laya_rag_search')
+  const search = ctx.tools_registered.get('laya_dsh_rag_search')
   await assert.rejects(() => search.execute({ query: '' }, {}), /HTTP 422|error/i)
 })
 
 test('tools report an unreachable engine clearly', async () => {
   const ctx = fakeContext()
   apply(ctx, { baseUrl: 'http://127.0.0.1:9', timeoutMs: 2000 })
-  const search = ctx.tools_registered.get('laya_rag_search')
+  const search = ctx.tools_registered.get('laya_dsh_rag_search')
   await assert.rejects(
     () => search.execute({ query: 'anything' }, {}),
     /unreachable/i,
   )
 
-  const status = ctx.tools_registered.get('laya_rag_status')
+  const status = ctx.tools_registered.get('laya_dsh_rag_status')
   const value = await status.execute({}, {})
   assert.equal(value.reachable, false)
   assert.match(status.output.render({}, value)[0].text, /unreachable/i)

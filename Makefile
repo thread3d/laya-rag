@@ -38,17 +38,17 @@ setup:
 	@echo "ready: $(PY)"
 
 doctor:
-	$(PY) -m laya_rag.cli doctor
+	$(PY) -m laya_dsh_rag.cli doctor
 
 index:
-	$(PY) -m laya_rag.cli index $(CORPUS) --rebuild
+	$(PY) -m laya_dsh_rag.cli index $(CORPUS) --rebuild
 
 serve:
-	OMP_NUM_THREADS=16 $(PY) -m laya_rag.api
+	OMP_NUM_THREADS=16 $(PY) -m laya_dsh_rag.api
 
 query:
 	@test -n "$(Q)" || (echo 'usage: make query Q="your question"' >&2; exit 2)
-	$(PY) -m laya_rag.cli query "$(Q)"
+	$(PY) -m laya_dsh_rag.cli query "$(Q)"
 
 test:
 	$(PY) -m pytest tests/ -q -m "not real_weights"

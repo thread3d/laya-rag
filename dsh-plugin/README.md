@@ -1,4 +1,4 @@
-# dsh-laya-rag
+# laya-dsh-rag
 
 DeepSeek Harness tools that expose the local Laya RAG engine to the harness agent.
 
@@ -11,13 +11,13 @@ resolution against the harness installation.
 
 | Tool | Purpose |
 | --- | --- |
-| `laya_rag_search` | Retrieve evidence for a question, ranked and gated by Laya |
-| `laya_rag_index` | Index files or directories into the corpus |
-| `laya_rag_status` | Report checkpoint, corpus size and engine reachability |
+| `laya_dsh_rag_search` | Retrieve evidence for a question, ranked and gated by Laya |
+| `laya_dsh_rag_index` | Index files or directories into the corpus |
+| `laya_dsh_rag_status` | Report checkpoint, corpus size and engine reachability |
 
 ### How the answerability verdict reaches the model
 
-`laya_rag_search` returns evidence, not an answer, and the rendered tool result leads with Laya's
+`laya_dsh_rag_search` returns evidence, not an answer, and the rendered tool result leads with Laya's
 verdict. When Laya judges the evidence insufficient, the rendered text tells the model to say the
 corpus does not cover the question rather than answering from memory:
 
@@ -37,10 +37,10 @@ a model that cannot generate text, so it cannot be talked into a confident wrong
 The Python engine must be running:
 
 ```sh
-.venv/bin/laya-rag-serve          # 127.0.0.1:8077
+.venv/bin/laya-dsh-rag-serve          # 127.0.0.1:8077
 ```
 
-Every tool reports a clear error when the engine is unreachable, and `laya_rag_status` returns
+Every tool reports a clear error when the engine is unreachable, and `laya_dsh_rag_status` returns
 `reachable: false` instead of failing.
 
 ## Installing
@@ -72,7 +72,7 @@ Write the same row into the profile's own patch layer, which the shipped web pro
 ```sh
 # ~/.dsh/profiles/web/cordis.patch.yml
 - insert:
-    - id: laya-rag
+    - id: laya-dsh-rag
       name: '/absolute/path/to/dsh-plugin/index.js'
       config:
         baseUrl: http://127.0.0.1:8077
@@ -101,17 +101,17 @@ Configured through the plugin row's `config` block:
 
 ## Verifying a load
 
-Set `LAYA_RAG_TRACE_FILE` to a path and the plugin appends a JSON line when it loads, which is the
+Set `LAYA_DSH_RAG_TRACE_FILE` to a path and the plugin appends a JSON line when it loads, which is the
 quickest way to confirm the wiring took effect:
 
 ```sh
 DSH_HOME=/tmp/dsh-check \
-LAYA_RAG_TRACE_FILE=/tmp/dsh-check/trace.jsonl \
+LAYA_DSH_RAG_TRACE_FILE=/tmp/dsh-check/trace.jsonl \
   dsh --profile web --patch "$PWD/dsh-plugin/cordis.local.yml" --port 8199 --no-open
 ```
 
 ```json
-{"event":"registered","tools":["laya_rag_search","laya_rag_index","laya_rag_status"],
+{"event":"registered","tools":["laya_dsh_rag_search","laya_dsh_rag_index","laya_dsh_rag_status"],
  "baseUrl":"http://127.0.0.1:8077","at":"2026-09-26T11:26:02.339Z"}
 ```
 
@@ -125,4 +125,4 @@ node --test dsh-plugin/test/tools.test.mjs
 
 The suite uses a fake cordis context, so it covers registration, the tool schemas, the renderers and
 the HTTP calls without booting the harness. Tests that need the engine skip themselves when it is
-not running; set `LAYA_RAG_BASE_URL` to point them at a different port.
+not running; set `LAYA_DSH_RAG_BASE_URL` to point them at a different port.

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from laya_rag.chunking import Chunk
-from laya_rag.lexical import BM25Index, reciprocal_rank_fusion, tokenize
+from laya_dsh_rag.chunking import Chunk
+from laya_dsh_rag.lexical import BM25Index, reciprocal_rank_fusion, tokenize
 
 
 def make_chunk(chunk_id: str, text: str) -> Chunk:

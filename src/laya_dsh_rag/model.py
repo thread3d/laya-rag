@@ -75,7 +75,7 @@ class LayaModel:
 
         raise ModelUnavailableError(
             f"no Laya checkpoint found under {self.config.models_dir}. "
-            "Run the Laya checkout's setup_laya.sh, or set LAYA_RAG_MODELS to a directory "
+            "Run the Laya checkout's setup_laya.sh, or set LAYA_DSH_RAG_MODELS to a directory "
             "holding laya/ (plus laya-multilingual/ and laya-typed-decisions/)."
         )
 

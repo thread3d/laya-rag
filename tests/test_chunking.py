@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from laya_rag.chunking import (
+from laya_dsh_rag.chunking import (
     SKIP_DIRS,
     chunk_documents,
     chunk_text,

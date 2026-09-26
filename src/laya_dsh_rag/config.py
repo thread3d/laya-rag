@@ -12,10 +12,10 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-# <repo>/src/laya_rag/config.py -> <repo>
+# <repo>/src/laya_dsh_rag/config.py -> <repo>
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-ENV_PREFIX = "LAYA_RAG_"
+ENV_PREFIX = "LAYA_DSH_RAG_"
 
 
 def _env(name: str) -> str | None:

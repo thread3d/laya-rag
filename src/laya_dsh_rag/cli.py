@@ -150,7 +150,7 @@ def _cmd_doctor(args: argparse.Namespace, config: EngineConfig) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="laya-rag",
+        prog="laya-dsh-rag",
         description="Retrieval-augmented generation over the Laya decision engine.",
     )
     sub = parser.add_subparsers(dest="command", required=True)

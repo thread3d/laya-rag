@@ -1,5 +1,5 @@
 {
-  "name": "dsh-laya-rag",
+  "name": "laya-dsh-rag",
   "version": "0.1.0",
   "description": "Laya RAG retrieval tools for DeepSeek Harness, backed by the local Laya decision engine",
   "type": "module",

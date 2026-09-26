@@ -16,10 +16,10 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from laya_rag.chunking import Document
-from laya_rag.config import EngineConfig
-from laya_rag.engine import RagEngine
-from laya_rag.model import HashingEmbedder
+from laya_dsh_rag.chunking import Document
+from laya_dsh_rag.config import EngineConfig
+from laya_dsh_rag.engine import RagEngine
+from laya_dsh_rag.model import HashingEmbedder
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
@@ -29,7 +29,7 @@ def tokens(text: str) -> set[str]:
 
 
 class StubModel:
-    """Deterministic stand-in for :class:`laya_rag.model.LayaModel`.
+    """Deterministic stand-in for :class:`laya_dsh_rag.model.LayaModel`.
 
     Embeddings are hashed bag-of-words; decisions are query/state token overlap. It
     is deliberately simple: the tests assert on plumbing and ordering, not on
