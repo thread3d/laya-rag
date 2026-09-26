@@ -135,7 +135,17 @@ def test_messages_number_the_evidence_and_cite_it():
     body = messages[1]["content"]
     assert "[1] a.md" in body and "first" in body
     assert "[2] b.md" in body and "second" in body
-    assert body.rstrip().endswith("Question: Why?")
+
+
+
+def test_the_question_is_stated_at_both_ends_of_the_evidence():
+    """Measured: with the question only after the evidence, the model asked for the
+    question in 3 of 5 runs on a short query; with it only before, 3 of 3; with it at
+    both ends, 0 of 8. The repetition is load-bearing, not redundancy."""
+    body = build_messages("Laya in docker", [("a.md", "first")])[1]["content"]
+    assert body.startswith("Question: Laya in docker")
+    assert body.rstrip().endswith("Now answer the question: Laya in docker")
+    assert body.index("Question: Laya in docker") < body.index("Evidence:") < body.rindex("Laya in docker")
 
 
 def test_messages_tolerate_a_passage_without_a_path():
@@ -393,7 +403,7 @@ def test_compose_trims_the_query_before_use(ctx, monkeypatch):
     client, _engine, _corpus = ctx
     client.post("/v1/compose", json={"query": "  How long do refunds take?  ",
                                      "passages": [{"text": "t", "path": "p"}]})
-    assert captured["body"]["messages"][1]["content"].endswith("Question: How long do refunds take?")
+    assert captured["body"]["messages"][1]["content"].startswith("Question: How long do refunds take?")
 
 
 def test_compose_streams_an_error_event_when_the_model_is_down(ctx, monkeypatch):

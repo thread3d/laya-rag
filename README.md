@@ -193,12 +193,17 @@ and the switch is disabled rather than offering something that cannot work. If t
 unreachable or times out mid-answer, the prose is dropped or marked incomplete, the evidence below is
 left untouched, and the warning stays up.
 
-Two implementation details behind that. The request disables the model's *thinking* mode, because
+Three implementation details behind that. The request disables the model's *thinking* mode, because
 otherwise the reasoning tokens can consume the entire budget and return empty content — measured at
-41 s for no answer versus sub-second with it off. And a truncated answer (the model hitting its token
+41 s for no answer versus sub-second with it off. A truncated answer (the model hitting its token
 limit) is reported as truncated, since a cut-off answer otherwise looks identical to a complete one.
+And **the question is stated twice**, before *and* after the evidence, which is not redundancy: on a
+short topical query (`Laya in docker`) the model asked for the question in **3 of 5** runs when it
+appeared only after the evidence, in **3 of 3** when it appeared only before, and in **0 of 8** when
+it appeared at both ends — with answers several times longer besides. A large evidence block buries a
+short trailing question, so do not tidy that repetition away without re-measuring.
 
-Both of those depend on `think: false` actually being honoured, and **it is not honoured on every
+The first two depend on `think: false` actually being honoured, and **it is not honoured on every
 route**. Ollama's OpenAI-compatible `/v1/chat/completions` silently ignores the flag: measured over
 three calls it still produced 561–614 characters of reasoning each time, took 19–21 s, and once spent
 an entire 1200-token budget thinking and wrote no answer at all. The native `/api/chat` route honours
@@ -327,7 +332,7 @@ the interface says so rather than guessing at a model that would fail later.
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (183 tests)
+make test          # Python suite, offline, deterministic (190 tests)
 make test-plugin   # Node suite for the harness tools (10 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)

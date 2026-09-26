@@ -218,7 +218,20 @@ def build_messages(
     query: str,
     passages: Sequence[tuple[str, str]],
 ) -> list[dict[str, str]]:
-    """Build the chat messages: the evidence, numbered, then the question."""
+    """Build the chat messages: the question, the evidence, then the question again.
+
+    The question is stated at **both ends** of the evidence on purpose, and the
+    measurements are why. On a short topical query ("Laya in docker"):
+
+    * question only *after* the evidence — the model asked for the question in **3 of 5**
+      runs, and the replies that did come back were 268-697 chars;
+    * question only *before* the evidence — **3 of 3** runs asked for the question;
+    * question at *both* ends — **0 of 8** runs failed, with 2082-2865 char answers.
+
+    A large evidence block evidently buries a short trailing question, and putting it
+    only at the front is worse still: the block is then the last thing read. Repeating
+    it anchors both ends. Do not "tidy" this into a single mention without re-measuring.
+    """
     blocks: list[str] = []
     for index, (path, text) in enumerate(passages, start=1):
         header = f"[{index}] {path}" if path else f"[{index}]"
@@ -226,7 +239,14 @@ def build_messages(
     evidence = "\n\n".join(blocks)
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Evidence:\n\n{evidence}\n\nQuestion: {query}"},
+        {
+            "role": "user",
+            "content": (
+                f"Question: {query}\n\n"
+                f"Evidence:\n\n{evidence}\n\n"
+                f"Now answer the question: {query}"
+            ),
+        },
     ]
 
 
