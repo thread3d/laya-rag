@@ -84,6 +84,18 @@ class StubModel:
             "usage": {"input_tokens": 10, "output_tokens": 0},
         }
 
+    @staticmethod
+    def _state_text(state: Mapping[str, Any]) -> str:
+        """Every string the state carries except the query.
+
+        The real checkpoint accepts arbitrary state keys — `passage` for a relevance
+        question, `evidence` for an answerability one — so the double has to as well.
+        Reading only `passage` silently scored answerability states as zero.
+        """
+        return " ".join(
+            str(value) for key, value in state.items() if key != "query" and isinstance(value, str)
+        )
+
     def predict_many(
         self,
         states: Sequence[Any],
@@ -95,7 +107,7 @@ class StubModel:
         out = []
         for state in states:
             state = state or {}
-            out.append(self._result(qid, self._score(state.get("query", ""), state.get("passage", ""))))
+            out.append(self._result(qid, self._score(state.get("query", ""), self._state_text(state))))
         return out
 
     def predict(
@@ -107,7 +119,7 @@ class StubModel:
         self.predict_calls += 1
         qid = next(iter(questions))
         state = state or {}
-        return self._result(qid, self._score(state.get("query", ""), state.get("evidence", "")))
+        return self._result(qid, self._score(state.get("query", ""), self._state_text(state)))
 
     def info(self) -> dict[str, Any]:
         return {"model": "stub", "checkpoint": "stub", "embedding_dim": self.dim}

@@ -536,6 +536,36 @@ if (indexed) {
       assert(/does not check whether the claims are true/i.test(cite.caveat),
         `the check's caveat is missing or overclaims: ${cite.caveat}`);
       console.log(`       citation check: ${cite.state} (${cite.flagged} flagged) — ${cite.summary}`);
+
+      // Layer 3 + variant 2a runs after the citation check and is much slower, since
+      // it re-retrieves every claim and adjudicates it with Laya.
+      await waitFor(
+        `document.querySelector('.adj[data-state="done"], .adj[data-state="unavailable"]')`,
+        "corpus support", 180000);
+      const adj = await evaluate(`(() => {
+        const box = document.querySelector('.adj');
+        return {
+          state: box.dataset.state,
+          badge: box.querySelector('.adj-badge')?.textContent.trim() || "",
+          counts: box.querySelector('.adj-counts')?.textContent.trim() || "",
+          rows: box.querySelectorAll('.adj-item').length,
+          badRows: box.querySelectorAll('.adj-item.is-bad').length,
+          caveat: box.querySelector('.adj-caveat')?.textContent.trim() || "",
+        };
+      })()`);
+      if (adj.state === "unavailable") {
+        console.log("       (no index for corpus support; nothing to verify)");
+      } else {
+        assert(adj.badge === "Corpus support", `unexpected badge: ${adj.badge}`);
+        assert(/\d+ claims/.test(adj.counts), `no claim counts: ${adj.counts}`);
+        assert(adj.rows > 0, "corpus support rendered no claim rows");
+        // The reused question must be named, or the threshold reads as a claim-support one.
+        assert(/answerability question/i.test(adj.caveat),
+          `the caveat does not name the question it reused: ${adj.caveat}`);
+        const total = Number((adj.counts.match(/(\d+) claims/) || [])[1]);
+        assert(adj.rows === total, `${adj.rows} rows for ${total} claims`);
+        console.log(`       corpus support: ${adj.counts} (${adj.badRows} flagged)`);
+      }
     });
   }
 }

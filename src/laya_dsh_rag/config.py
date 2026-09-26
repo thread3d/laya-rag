@@ -102,6 +102,13 @@ class EngineConfig:
     retrieve_k: int = field(default_factory=lambda: _env_int("RETRIEVE_K", 20))
     rerank_k: int = field(default_factory=lambda: _env_int("RERANK_K", 5))
 
+    # Claim adjudication is linear in claims x candidates. Measured warm on five
+    # claims: 21.6s at retrieve_k=20 against 8.7s at 10, for the same verdicts on the
+    # sample. Claims are short, so a smaller pool is the better default here even
+    # though the query path uses the wider one.
+    claim_retrieve_k: int = field(default_factory=lambda: _env_int("CLAIM_RETRIEVE_K", 10))
+    claim_max: int = field(default_factory=lambda: _env_int("CLAIM_MAX", 25))
+
     # Laya emits calibrated probabilities, so these are real thresholds, not scores.
     relevance_threshold: float = field(default_factory=lambda: _env_float("RELEVANCE_THRESHOLD", 0.5))
     answerability_threshold: float = field(default_factory=lambda: _env_float("ANSWERABILITY_THRESHOLD", 0.5))

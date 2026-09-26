@@ -715,6 +715,45 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
 }
 .cite-caveat { font-size: 11px; color: var(--text-faint); line-height: 1.45; }
 
+/* Corpus support (layer 3 + variant 2a). Laya's calibrated adjudication over the whole
+   index, which is the half of verification the citation check cannot do. */
+.adj {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 10px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  font-size: 12px;
+}
+.adj[data-state="running"] { flex-direction: row; align-items: center; gap: 9px; color: var(--text-dim); }
+.adj[data-state="unavailable"] { color: var(--text-faint); font-size: 11.5px; }
+.adj-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.adj-badge {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.adj.is-flagged .adj-badge { color: var(--warn); }
+.adj-counts { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.adj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.adj-item {
+  display: grid;
+  grid-template-columns: 14px 76px minmax(0, 1fr) auto;
+  align-items: baseline; gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text-faint) 10%, transparent);
+}
+.adj-item.is-bad { background: var(--danger-soft); }
+.adj-mark { font-weight: 700; color: var(--ok); }
+.adj-item.is-bad .adj-mark { color: var(--danger); }
+.adj-p { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+.adj-text { color: var(--text); line-height: 1.45; word-break: break-word; }
+.adj-src { font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); white-space: nowrap; }
+.adj-caveat { font-size: 11px; color: var(--text-faint); line-height: 1.45; }
+
+@media (max-width: 900px) {
+  .adj-item { grid-template-columns: 14px minmax(0, 1fr); }
+  .adj-src { grid-column: 2; }
+}
+
 /* Footer as a warning when composition is on. */
 .footer.is-warning {
   border-top-color: var(--warn);

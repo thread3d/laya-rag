@@ -26,7 +26,8 @@ from .compose import resolve_target
 from .config import EngineConfig
 from .engine import IndexNotBuiltError, RagEngine
 from .model import ModelUnavailableError
-from .verify import verify_citations
+from .rerank import DecisionError
+from .verify import split_claims, verify_citations
 
 log = logging.getLogger("laya_dsh_rag.api")
 
@@ -81,6 +82,15 @@ class VerifyRequest(BaseModel):
 
     answer: str = Field(..., min_length=1, description="The composed answer to check")
     passages: list[ComposePassage] = Field(..., min_length=1, max_length=50)
+
+
+class AdjudicateRequest(BaseModel):
+    """A request to ask Laya whether the corpus supports each claim in an answer."""
+
+    answer: str = Field(..., min_length=1, description="The composed answer to adjudicate")
+    retrieve_k: int | None = Field(None, ge=1, le=100, description="Candidates per claim")
+    relevance_threshold: float | None = Field(None, ge=0.0, le=1.0)
+    answerability_threshold: float | None = Field(None, ge=0.0, le=1.0)
 
 
 def _engine_holder(config: EngineConfig) -> tuple[dict[str, RagEngine], Any]:
@@ -256,6 +266,35 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         should present it as if it did.
         """
         return verify_citations(request.answer, [passage.text for passage in request.passages])
+
+    @app.post("/v1/adjudicate")
+    def adjudicate(request: AdjudicateRequest, _: None = Depends(authorise)) -> dict[str, Any]:
+        """Ask Laya whether the corpus supports each claim in an answer.
+
+        The counterpart to ``/v1/verify``: that endpoint checks citations
+        deterministically, this one asks a calibrated decision engine whether the
+        claims hold up against the whole corpus. It reuses the already-measured
+        answerability question rather than a new claim-support wording, and reports
+        which question it used.
+
+        Claims are split server-side from the same answer text ``/v1/verify`` takes, so
+        the two reports describe exactly the same sentences.
+        """
+        engine = get_engine()
+        try:
+            report = engine.adjudicate_claims(
+                split_claims(request.answer),
+                retrieve_k=request.retrieve_k,
+                relevance_threshold=request.relevance_threshold,
+                answerability_threshold=request.answerability_threshold,
+            )
+        except IndexNotBuiltError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ModelUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except DecisionError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return report
 
     @app.post("/v1/reset")
     def reset(_: None = Depends(authorise)) -> dict[str, Any]:

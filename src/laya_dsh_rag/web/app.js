@@ -887,6 +887,7 @@
     // deterministic citation check.
     const warnSlot = el("div");
     const checkSlot = el("div");
+    const adjSlot = el("div");
     const panel = el("section", { class: "answer", dataset: { state: "streaming" } }, [
       el("div", { class: "answer-head" }, [
         el("span", { class: "answer-badge" }, [
@@ -899,6 +900,7 @@
       body,
       warnSlot,
       checkSlot,
+      adjSlot,
       el("div", {
         class: "answer-caveat",
         text: "Written by a generative model from the evidence below. This is not a Laya output and has not been verified.",
@@ -1002,7 +1004,10 @@
       if (state.composeAbort === controller) state.composeAbort = null;
       // Check citations only on an answer that actually finished: a partial answer
       // would report missing citations that simply had not been written yet.
-      if (!failed && text) checkCitations(text, result, checkSlot);
+      if (!failed && text) {
+        checkCitations(text, result, checkSlot);
+        adjudicateAnswer(text, adjSlot);
+      }
     }
   }
 
@@ -1090,6 +1095,100 @@
     }));
 
     clear(slot);
+    slot.appendChild(box);
+  }
+
+  /**
+   * Layer 3 + variant 2a: does the corpus actually support each claim?
+   *
+   * This re-retrieves every claim across the whole index and adjudicates it with
+   * Laya's calibrated decisions, reusing the already-measured answerability question.
+   * It costs real time (seconds, not milliseconds), so it shows elapsed progress
+   * rather than a bare spinner.
+   */
+  async function adjudicateAnswer(answerText, slot) {
+    clear(slot);
+    const started = performance.now();
+    const label = el("span", { text: "Adjudicating claims against the corpus… 0.0s" });
+    slot.appendChild(el("div", { class: "adj", dataset: { state: "running" } }, [
+      el("span", { class: "spinner", "aria-hidden": "true" }),
+      label,
+    ]));
+    const timer = setInterval(() => {
+      label.textContent =
+        `Adjudicating claims against the corpus… ${((performance.now() - started) / 1000).toFixed(1)}s`;
+    }, 200);
+
+    try {
+      const report = await api("/v1/adjudicate", { method: "POST", body: { answer: answerText } });
+      renderAdjudication(slot, report);
+    } catch (error) {
+      if (error && error.status === 401) handleAuthError(error);
+      clear(slot);
+      // No index is a normal state, not a failure — say which it is.
+      const noIndex = error && error.status === 409;
+      slot.appendChild(el("div", { class: "adj", dataset: { state: "unavailable" } }, [
+        el("span", {
+          text: noIndex
+            ? "Corpus support: nothing is indexed yet, so there is no corpus to check against."
+            : `Corpus support unavailable: ${error && error.message ? error.message : "request failed"}`,
+        }),
+      ]));
+    } finally {
+      clearInterval(timer);
+    }
+  }
+
+  function renderAdjudication(slot, report) {
+    const total = report.total || 0;
+    clear(slot);
+    if (!total) {
+      slot.appendChild(el("div", { class: "adj", dataset: { state: "unavailable" } }, [
+        el("span", { text: report.note || "Nothing in the answer was checkable as a claim." }),
+      ]));
+      return;
+    }
+
+    const bad = (report.unsupported || 0) + (report.not_measured || 0);
+    const box = el("div", { class: `adj${bad ? " is-flagged" : ""}`, dataset: { state: "done" } });
+
+    const counts = [
+      `${fmtInt(total)} claims`,
+      `${fmtInt(report.supported)} supported`,
+      report.unsupported ? `${fmtInt(report.unsupported)} unsupported` : null,
+      report.not_measured ? `${fmtInt(report.not_measured)} not measured` : null,
+    ].filter(Boolean).join(" · ");
+
+    box.appendChild(el("div", { class: "adj-head" }, [
+      el("span", { class: "adj-badge", text: "Corpus support" }),
+      el("span", { class: "adj-counts", text: counts }),
+    ]));
+
+    const list = el("ul", { class: "adj-list" });
+    (report.claims || []).forEach((claim) => {
+      // "not measured" is not a low score: it means no passage cleared the relevance
+      // bar, so Laya was never asked. Printing 0.000 there would invent a decision.
+      const mark = claim.supported ? "✓" : claim.measured ? "✗" : "·";
+      const score = claim.measured ? claim.support_probability.toFixed(3) : "not measured";
+      const sources = (claim.sources || []).map((source) => basename(source.path));
+      list.appendChild(el("li", { class: `adj-item${claim.supported ? "" : " is-bad"}` }, [
+        el("span", { class: "adj-mark", text: mark, "aria-hidden": "true" }),
+        el("span", { class: "adj-p", text: score }),
+        el("span", { class: "adj-text", text: claim.text }),
+        sources.length
+          ? el("span", { class: "adj-src", text: sources.join(", "), title: claim.sources.map((s) => s.path).join("\n") })
+          : el("span", { class: "adj-src", text: "no match in the corpus" }),
+      ]));
+    });
+    box.appendChild(list);
+
+    box.appendChild(el("p", {
+      class: "adj-caveat",
+      text: `Reuses Laya's measured answerability question (“${report.question}”) at P ≥ ${fmtProb(report.answerability_threshold)}. `
+        + "That threshold was benchmarked for questions, not for claim support, so read it as a strong signal rather than a verdict. "
+        + "“not measured” means no passage in the corpus cleared the relevance bar.",
+    }));
+
     slot.appendChild(box);
   }
 

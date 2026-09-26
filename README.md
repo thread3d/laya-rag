@@ -137,6 +137,7 @@ recall channel found each one. Use `--json` for machine-readable output.
 | `POST /v1/query` | `{query, top_k?, retrieve_k?, relevance_threshold?, answerability_threshold?}` |
 | `POST /v1/compose` | `{query, passages: [...]}` — streams composed prose as newline-delimited JSON |
 | `POST /v1/verify` | `{answer, passages: [...]}` — deterministic citation and quote checks |
+| `POST /v1/adjudicate` | `{answer, …}` — Laya decides whether the corpus supports each claim |
 | `POST /v1/reset` | delete the index |
 
 ### Web GUI
@@ -233,6 +234,37 @@ query produced 8 of 9 claims cited with all 8 quoted spans verbatim.
 What is still missing is the harder half — whether a correctly-cited claim is a fair reading of its
 source. That needs Laya's adjudication, not string matching.
 
+#### Corpus support
+
+Below the citation check, the second half of verification asks **Laya** — not the model, and not a
+string comparison — whether the corpus actually supports each claim. For every claim it re-retrieves
+candidates across the whole index (dense + BM25 fused by RRF) and adjudicates them with Laya's
+calibrated decisions, so each claim ends up with a probability and the passages that produced it.
+
+Three choices shape it:
+
+- **The corpus, not just the shown passages.** A claim can be true of the corpus and simply not have
+  been among the five passages the model was handed. Re-retrieval is what tells those apart.
+- **The already-measured question.** It reuses `ANSWERABILITY_QUESTION` — *"Can `query` be answered
+  using only `evidence`?"* — with the claim standing in as the query. A newly-worded claim-support
+  question would carry a calibration nobody has measured, and Laya's own docs warn that `noul` is
+  sensitive to wording and that the question type in use must be tested on the data you intend to
+  serve. The report names the question it used so it cannot be mistaken for a benchmarked
+  claim-support decision.
+- **"Not measured" is not zero.** When no candidate clears the relevance bar, the engine
+  short-circuits and Laya is never asked. Those claims are reported as *not measured* rather than
+  drawn as a confident `0.000` — the same distinction the query verdict makes.
+
+Cost is linear in claims × candidates, which is why the candidate pool here is narrower than the
+query path's: measured warm over five claims, `CLAIM_RETRIEVE_K=20` took 21.6 s against 8.7 s at
+`10`, for the same verdicts on the sample. The interface shows elapsed progress rather than a bare
+spinner, because this stage takes seconds.
+
+Together the two layers catch different failures, which is why both are worth having: a fabricated
+claim that *does* carry a valid citation — "Laya was first released in 2019 by a team in Iceland
+[1]" — passes the citation check cleanly and is caught only by adjudication, while a misquoted
+passage is caught by the citation check alone.
+
 Two small things worth knowing. The page itself loads without a token so it can ask for one: if
 `LAYA_DSH_RAG_API_KEY` is set, paste it under **Connection** and it is kept in this browser's local
 storage only, then sent as a bearer token. And the GUI needs no restart to reflect a change on disk —
@@ -271,6 +303,8 @@ without editing code. Prefix: `LAYA_DSH_RAG_`.
 | `INDEX_DIR` | `./indexes/default` | where the index is persisted |
 | `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `200` | chunking budget |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
+| `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
+| `CLAIM_MAX` | `25` | claims adjudicated per answer, so one long answer cannot run unbounded |
 | `RELEVANCE_THRESHOLD` | `0.5` | minimum Laya P(relevant) to keep a passage |
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
 | `HOST` / `PORT` | `127.0.0.1` / `8077` | service bind address |
@@ -293,7 +327,7 @@ the interface says so rather than guessing at a model that would fail later.
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (121 tests)
+make test          # Python suite, offline, deterministic (183 tests)
 make test-plugin   # Node suite for the harness tools (10 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)

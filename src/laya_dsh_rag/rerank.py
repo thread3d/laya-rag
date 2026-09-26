@@ -149,6 +149,56 @@ class LayaReranker:
         usage = result.get("usage")
         return _noul_value(result, ANSWERABILITY_QID), (usage if isinstance(usage, dict) else {})
 
+    def score_relevance_pairs(
+        self,
+        pairs: Sequence[tuple[str, str]],
+        batch_size: int = 8,
+    ) -> tuple[list[float], dict[str, Any]]:
+        """Score many ``(query, passage)`` pairs in one batched pass.
+
+        :meth:`score_relevance` scores one query against many passages. Adjudicating a
+        set of claims needs many queries against many passages, and batching them
+        together is the difference between a few seconds and a minute. The question
+        wording is the same one, verbatim — only the batching differs.
+        """
+        if not pairs:
+            return [], {}
+        states = [{"query": query, "passage": text} for query, text in pairs]
+        results = self.model.predict_many(
+            states, {RELEVANCE_QID: RELEVANCE_QUESTION}, batch_size=batch_size
+        )
+        if len(results) != len(pairs):
+            raise DecisionError(f"Laya returned {len(results)} results for {len(pairs)} pairs")
+        usage: dict[str, Any] = {}
+        for result in results:
+            _merge_usage(usage, result.get("usage") or {})
+        return [_noul_value(result, RELEVANCE_QID) for result in results], usage
+
+    def check_answerability_pairs(
+        self,
+        pairs: Sequence[tuple[str, str]],
+        batch_size: int = 8,
+    ) -> tuple[list[float], dict[str, Any]]:
+        """Ask the answerability question for many ``(query, evidence)`` pairs at once.
+
+        This is the already-measured ``answerability`` question, not a new
+        claim-support question: the threshold attached to it is the one this project
+        benchmarked, and inventing a differently-worded question would carry a
+        calibration that has not been established for it.
+        """
+        if not pairs:
+            return [], {}
+        states = [{"query": query, "evidence": evidence} for query, evidence in pairs]
+        results = self.model.predict_many(
+            states, {ANSWERABILITY_QID: ANSWERABILITY_QUESTION}, batch_size=batch_size
+        )
+        if len(results) != len(pairs):
+            raise DecisionError(f"Laya returned {len(results)} results for {len(pairs)} pairs")
+        usage: dict[str, Any] = {}
+        for result in results:
+            _merge_usage(usage, result.get("usage") or {})
+        return [_noul_value(result, ANSWERABILITY_QID) for result in results], usage
+
     def rerank(
         self,
         query: str,

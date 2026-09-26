@@ -27,7 +27,7 @@ from .config import EngineConfig
 from .index_store import Hit, VectorIndex, wipe
 from .lexical import LEXICAL_FILE, BM25Index, reciprocal_rank_fusion
 from .model import LayaModel
-from .rerank import LayaReranker
+from .rerank import ANSWERABILITY_QUESTION, LayaReranker
 
 
 class IndexNotBuiltError(RuntimeError):
@@ -377,6 +377,169 @@ class RagEngine:
             }
             for chunk in chunks
         ]
+
+    # -- claim adjudication ----------------------------------------------
+    def adjudicate_claims(
+        self,
+        claims: Sequence[str],
+        retrieve_k: int | None = None,
+        relevance_threshold: float | None = None,
+        answerability_threshold: float | None = None,
+    ) -> dict[str, Any]:
+        """Ask Laya whether the corpus supports each claim.
+
+        The second half of verification. The citation check decides whether an answer
+        *cites* evidence; this decides whether the corpus actually *supports* what it
+        says, by re-retrieving candidates for every claim across the whole index and
+        adjudicating them with Laya's calibrated decisions.
+
+        Two decisions shape this:
+
+        * **The corpus, not just the shown passages.** A claim can be true of the
+          corpus and simply not have been in the five passages the model was handed.
+          Re-retrieval is what tells those two cases apart.
+        * **The already-measured answerability question.** This reuses
+          ``ANSWERABILITY_QUESTION`` — "Can `query` be answered using only `evidence`?" —
+          with the claim standing in as the query, rather than inventing a
+          claim-support question. A new wording would carry a calibration nobody has
+          measured; Laya's own docs warn that ``noul`` is sensitive to wording and that
+          the question type and distribution in use must be tested. The report names the
+          question it used so a caller cannot mistake this for a measured
+          claim-support decision.
+
+        Work is batched: one embedding pass for every claim, one relevance pass over
+        every (claim, candidate) pair, one answerability pass over every surviving set.
+        """
+        started = time.perf_counter()
+        index = self.index  # raises IndexNotBuiltError when nothing is indexed
+
+        cleaned = [claim.strip() for claim in claims if claim and claim.strip()][: self.config.claim_max]
+        candidate_k = retrieve_k or self.config.claim_retrieve_k
+        relevance_bar = (
+            self.config.relevance_threshold if relevance_threshold is None else relevance_threshold
+        )
+        gate = (
+            self.config.answerability_threshold
+            if answerability_threshold is None
+            else answerability_threshold
+        )
+        keep_k = self.config.rerank_k
+
+        empty: dict[str, Any] = {
+            "claims": [],
+            "total": 0,
+            "supported": 0,
+            "unsupported": 0,
+            "not_measured": 0,
+            "answerability_threshold": gate,
+            "relevance_threshold": relevance_bar,
+            "retrieve_k": candidate_k,
+            "question": ANSWERABILITY_QUESTION["instructions"],
+            "checkpoint": self.config.checkpoint,
+            "note": "no claims to adjudicate" if not cleaned else "the index is empty",
+            "timings": {"total_seconds": round(time.perf_counter() - started, 4)},
+            "usage": {},
+        }
+        if not cleaned or not len(index):
+            return empty
+
+        # 1. Recall per claim, over the whole corpus.
+        vectors = np.asarray(self.model.embed(cleaned), dtype=np.float32)
+        lexical = self.lexical
+        per_claim_hits: list[list[Hit]] = []
+        for position, claim in enumerate(cleaned):
+            dense = index.search(vectors[position], k=candidate_k)
+            lexical_hits = lexical.search(claim, k=candidate_k) if lexical else []
+            per_claim_hits.append(self._fuse(index, dense, lexical_hits, limit=candidate_k))
+
+        # 2. One batched relevance pass across every (claim, candidate) pair.
+        pairs: list[tuple[str, str]] = []
+        for claim, hits in zip(cleaned, per_claim_hits):
+            pairs.extend((claim, hit.chunk.text) for hit in hits)
+        scores, usage = self.reranker.score_relevance_pairs(pairs)
+
+        kept_per_claim: list[list[tuple[Hit, float]]] = []
+        cursor = 0
+        for hits in per_claim_hits:
+            sliced = scores[cursor : cursor + len(hits)]
+            cursor += len(hits)
+            above = [
+                (hit, score) for hit, score in zip(hits, sliced) if score >= relevance_bar
+            ]
+            above.sort(key=lambda item: (-item[1], -item[0].score))
+            kept_per_claim.append(above[:keep_k])
+
+        # 3. One batched answerability pass over the claims that have evidence. The
+        #    others short-circuit, and their 0.0 is reported as unmeasured rather than
+        #    drawn as a decision Laya never made.
+        evidence_pairs: list[tuple[str, str]] = []
+        positions: list[int] = []
+        for position, kept in enumerate(kept_per_claim):
+            if not kept:
+                continue
+            evidence = "\n\n".join(
+                f"[{index + 1}] {hit.chunk.text}" for index, (hit, _score) in enumerate(kept)
+            )
+            evidence_pairs.append((cleaned[position], evidence))
+            positions.append(position)
+        probabilities, answer_usage = self.reranker.check_answerability_pairs(evidence_pairs)
+        by_position = dict(zip(positions, probabilities))
+
+        adjudicated: list[dict[str, Any]] = []
+        supported = unsupported = not_measured = 0
+        for position, (claim, kept) in enumerate(zip(cleaned, kept_per_claim)):
+            measured = position in by_position
+            probability = float(by_position[position]) if measured else 0.0
+            is_supported = bool(measured and probability >= gate)
+            if not measured:
+                not_measured += 1
+            elif is_supported:
+                supported += 1
+            else:
+                unsupported += 1
+            best = kept[0][1] if kept else 0.0
+            adjudicated.append({
+                "text": claim,
+                "supported": is_supported,
+                "measured": measured,
+                "support_probability": round(probability, 4),
+                "best_relevance": round(best, 4),
+                "considered": len(per_claim_hits[position]),
+                "kept": len(kept),
+                "sources": [
+                    {
+                        "path": hit.chunk.path,
+                        "chunk_id": hit.chunk.chunk_id,
+                        "relevance": round(score, 4),
+                        "channels": list(hit.channels),
+                    }
+                    for hit, score in kept
+                ],
+            })
+
+        elapsed = time.perf_counter() - started
+        merged_usage = dict(usage)
+        for key in ("input_tokens", "output_tokens"):
+            if key in answer_usage:
+                merged_usage[key] = merged_usage.get(key, 0) + answer_usage[key]
+
+        return {
+            "claims": adjudicated,
+            "total": len(adjudicated),
+            "supported": supported,
+            "unsupported": unsupported,
+            "not_measured": not_measured,
+            "answerability_threshold": gate,
+            "relevance_threshold": relevance_bar,
+            "retrieve_k": candidate_k,
+            "question": ANSWERABILITY_QUESTION["instructions"],
+            "checkpoint": self.config.checkpoint,
+            "note": None if lexical is not None else (
+                "lexical recall channel is missing, so claims were recalled densely only"
+            ),
+            "timings": {"total_seconds": round(elapsed, 4)},
+            "usage": merged_usage,
+        }
 
     # -- introspection ---------------------------------------------------
     def stats(self) -> dict[str, Any]:
