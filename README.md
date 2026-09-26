@@ -134,7 +134,7 @@ recall channel found each one. Use `--json` for machine-readable output.
 | `GET /v1/documents` | every indexed document with its chunk and character counts |
 | `GET /v1/chunks` | indexed chunks in document order, optionally `?path=` one file |
 | `POST /v1/index` | `{paths: [...], rebuild?: bool}` |
-| `POST /v1/query` | `{query, top_k?, retrieve_k?, relevance_threshold?, answerability_threshold?}` |
+| `POST /v1/query` | `{query, top_k?, retrieve_k?, relevance_threshold?, answerability_threshold?, max_passage_chars?}` |
 | `POST /v1/compose` | `{query, passages: [...]}` — streams composed prose as newline-delimited JSON |
 | `POST /v1/verify` | `{answer, passages: [...]}` — deterministic citation and quote checks |
 | `POST /v1/adjudicate` | `{answer, …}` — Laya decides whether the corpus supports each claim |
@@ -283,9 +283,15 @@ without editing code. Prefix: `LAYA_RAG_`.
 | --- | --- | --- |
 | `CHECKPOINT` | `multilingual` | `multilingual`, `laya` (English) or `typed-decisions` |
 | `DEVICE` | `auto` | `auto`, `cpu`, `mps`, `cuda` |
-| `MODELS_DIR` | `./models` | checkpoint location |
+| `MODELS` | `./models` | checkpoint location |
+| `MAX_LEN` | `2048` | token budget for the state (document/evidence) Laya reads |
+| `HEAD_MAX_LEN` | `192` | token budget for the question and its options |
+| `EMBED_MAX_LENGTH` | `512` | encoder token limit for one embedding |
+| `EMBED_BATCH_SIZE` | `16` | texts per embedding forward pass |
+| `TORCH_THREADS` | `16` | torch intra-op threads; oversubscription hurts on high-core hosts |
 | `INDEX_DIR` | `./indexes/default` | where the index is persisted |
 | `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `200` | chunking budget |
+| `MIN_CHUNK_CHARS` | `80` | a shorter trailing chunk is folded into the previous one |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
 | `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
 | `CLAIM_MAX` | `25` | claims adjudicated per answer, so one long answer cannot run unbounded |
@@ -293,11 +299,12 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
 | `HOST` / `PORT` | `127.0.0.1` / `8077` | service bind address |
 | `API_KEY` | unset | when set, requires `Authorization: Bearer <key>` |
+| `WARMUP` | `true` | load the checkpoint during service startup instead of on the first request |
 | `COMPOSE_BASE_URL` | Ollama's `http://localhost:11434/v1` | endpoint used to compose an answer |
 | `COMPOSE_MODEL` | unset | model that writes the composed answer; composition is unavailable until this is set |
 | `COMPOSE_API` | `ollama` | `ollama` calls the native `/api/chat`; `openai` calls any OpenAI-compatible `/v1/chat/completions` |
 | `COMPOSE_TIMEOUT_S` | `300` | how long composition may take before it is abandoned |
-| `COMPOSE_MAX_TOKENS` | `600` | token budget for one composed answer; hitting it is reported as truncated |
+| `COMPOSE_MAX_TOKENS` | `1200` | token budget for one composed answer; hitting it is reported as truncated |
 
 The default checkpoint is `multilingual` (322M parameters, 768-dim embeddings): it matches the
 English checkpoint's accuracy on the measured queries while being roughly twice as fast, and it
@@ -311,13 +318,13 @@ export LAYA_RAG_COMPOSE_BASE_URL=http://localhost:11434/v1   # the default
 ```
 
 Composition is the only place where a model name matters, and the engine will not invent one: with
-no `COMPOSE_MODEL` and no readable `agent-default-model.model`, composition is simply unavailable and
-the interface says so rather than guessing at a model that would fail later.
+no `COMPOSE_MODEL`, composition is simply unavailable and the interface says so rather than guessing
+at a model that would fail later.
 
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (190 tests)
+make test          # Python suite, offline, deterministic (194 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```
@@ -355,6 +362,8 @@ laya-rag/
 │   ├── lexical.py           BM25 channel and reciprocal rank fusion
 │   ├── rerank.py            Laya relevance re-ranking and answerability gate
 │   ├── engine.py            orchestration: index, hybrid recall, evidence bundle
+│   ├── compose.py           optional answer composition (the one non-Laya step)
+│   ├── verify.py            deterministic citation and quote checks
 │   ├── api.py               FastAPI service
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
@@ -365,12 +374,26 @@ laya-rag/
 └── vendor/                submodule: laya
 ```
 
-## Two things worth knowing
+## Known limits
 
-**The vendored submodule lives under `vendor/`.** It was originally at `laya/`, but a top-level
-`laya/` directory shadows the installed `laya` Python package for any process started from the
-repository root, so `import laya` resolved to the checkout folder. Moving it under `vendor/` removed
-the collision. The Python package for this project is `laya_rag`, which does not collide.
+Two behaviours are worth knowing before trusting an index or sizing a corpus.
+
+**Deleting a file does not remove its chunks.** Indexing is incremental: a path that is re-indexed
+has its old chunks replaced, but a file that has been deleted or made unreadable is never loaded, so
+its stale chunks stay in the index and remain retrievable until a rebuild. After removing files,
+re-index the parent directory with `--rebuild` rather than just the files that are left.
+
+**BM25 is pure Python.** The dense scan is one vectorised matrix multiply and scales to large
+corpora, but the lexical channel scores every query term against every chunk in a Python loop. It is
+fast at the sizes this engine targets (thousands of chunks) and will dominate query time well before
+the dense index does.
+
+## The vendored submodule
+
+The Laya checkout lives under `vendor/`. It was originally at `laya/`, but a top-level `laya/`
+directory shadows the installed `laya` Python package for any process started from the repository
+root, so `import laya` resolved to the checkout folder. Moving it under `vendor/` removed the
+collision. The Python package for this project is `laya_rag`, which does not collide.
 
 ## License
 

@@ -21,6 +21,7 @@ help:
 	@echo "query Q=...  ask the CLI for evidence"
 	@echo "test         offline Python suite (no checkpoints needed)"
 	@echo "test-real    Python suite against real Laya weights"
+	@echo "test-gui     drive the running service's GUI in headless Chrome"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
 
@@ -60,6 +61,11 @@ test:
 
 test-real:
 	$(PY) -m pytest tests/test_real_weights.py -q -m real_weights
+
+# Skips (exit 0) rather than failing when Chrome, Node's WebSocket, or a running
+# engine is absent, so run `make serve` first to actually exercise the page.
+test-gui:
+	node tools/gui-smoke.mjs
 
 lint:
 	$(PY) -m compileall -q src/ tests/
