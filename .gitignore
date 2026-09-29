@@ -33,6 +33,9 @@ models/
 *.faiss
 *.index
 
+# Evaluation output: generated corpus copies, cached indexes and reports
+eval/
+
 # Model and package download caches
 .hf-cache/
 .pip-cache/

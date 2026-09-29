@@ -350,6 +350,35 @@ of seconds, while everything else stays deterministic.
 `make test-real` is the suite that can fail on retrieval quality and asserts the measured behaviour
 in the table above.
 
+### Measuring quality and limits
+
+`make test` says whether the plumbing works. It says nothing about whether retrieval
+finds the right passage or whether Laya's probabilities are usable at the shipped
+thresholds. Two opt-in harnesses answer that, and both need the real checkpoints:
+
+```sh
+make eval      # retrieval, ranking, margin, calibration on labelled queries
+make bench     # evidence size, batch determinism, chunk boundaries, scale, concurrency
+```
+
+`tools/eval.py` scores a labelled query set — the synthetic `planted` corpus by default, whose
+gold files and unanswerable questions are unambiguous, or `--corpus docs` for the vendored
+documentation. It reports candidate recall for dense vs hybrid and after Laya's re-rank, the
+relevance margin over the best negative, reliability diagrams and ECE for both decisions, and a
+threshold sweep. Two choices there are deliberate. The corpus includes **hard negatives** that
+clear the relevance bar but do not answer the query, because without them the answerability gate
+is never reached on a negative and its abstention behaviour goes unmeasured. And answerability
+calibration is reported both for gate-reached queries and for all queries, because a
+short-circuit to `0.0` is not a probability Laya measured.
+
+`tools/bench.py` bisects the operating envelope: an evidence-size sweep against `max_len`,
+batch-shape determinism, chunk-boundary survival as a function of split distance, dense-vs-BM25
+timing and memory as the corpus grows, parallel-query correctness, and the claims × candidates
+cost of adjudication.
+
+Both write JSON and markdown under `eval/`. They measure rather than assert, so the directory is
+gitignored; pass `--baseline eval/planted.json` to a later run to see exactly which metric moved.
+
 ## Repository layout
 
 ```
@@ -367,26 +396,47 @@ laya-rag/
 │   ├── api.py               FastAPI service
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
-├── tools/                 gui-smoke.mjs, the headless-browser GUI check
-├── tests/                 Python suite plus a real-weights suite
+├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py (measurement)
+├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
+├── eval/                  generated evaluation reports and caches (gitignored)
 └── vendor/                submodule: laya
 ```
 
 ## Known limits
 
-Two behaviours are worth knowing before trusting an index or sizing a corpus.
+These are measured, by `make eval` and `make bench`, rather than inferred. The numbers come from
+the planted corpus and the synthetic scale run and will move with a different corpus or checkpoint.
+
+**A fact longer than the chunk overlap can be lost, not merely truncated.** A fact shorter than
+`CHUNK_OVERLAP_CHARS` (200 by default) survived every boundary split tested, intact and retrieved.
+A 290-character fact placed across a boundary was present in no single chunk at one split distance,
+and was not retrieved at either distance tried. Long facts need a larger `CHUNK_OVERLAP_CHARS`.
+
+**The relevance gate does most of the abstaining; the answerability gate is rarely reached on a
+negative.** Every plainly unrelated question was refused before Laya was ever asked the
+answerability question. Only a hard negative — a question the corpus discusses but does not answer —
+got that far, and it cleared both gates and was reported answerable. "Measured" is not "supported".
 
 **Deleting a file does not remove its chunks.** Indexing is incremental: a path that is re-indexed
 has its old chunks replaced, but a file that has been deleted or made unreadable is never loaded, so
 its stale chunks stay in the index and remain retrievable until a rebuild. After removing files,
 re-index the parent directory with `--rebuild` rather than just the files that are left.
 
-**BM25 is pure Python.** The dense scan is one vectorised matrix multiply and scales to large
-corpora, but the lexical channel scores every query term against every chunk in a Python loop. It is
-fast at the sizes this engine targets (thousands of chunks) and will dominate query time well before
-the dense index does.
+**BM25 is pure Python and becomes the bottleneck first.** The dense scan is one vectorised matrix
+multiply; the lexical channel loops in Python. Measured at 40,000 synthetic chunks, a lexical query
+took ~120 ms against ~1 ms dense, and the gap widens linearly with corpus size.
+
+**A fabricated claim about a topic the corpus never mentions is not refuted.** Adjudication reports
+it `not_measured`, not `unsupported`: no candidate clears the relevance bar, so Laya is never asked.
+That is the engine being honest, but it means "not measured" must be read as unverified, never as
+fine.
+
+**The state budget is a soft limit.** Answerability did not collapse when the evidence block
+overflowed `max_len` — it stayed above 0.73 even at 2.9x the budget, because Laya truncates the
+state and the relevant passage is usually read first. Chunking still keeps blocks well inside the
+budget at the default thresholds.
 
 ## The vendored submodule
 

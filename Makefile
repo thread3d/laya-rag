@@ -9,8 +9,10 @@ PY := $(VENV)/bin/python
 PIP_CACHE := $(CURDIR)/vendor/laya/.pip-cache
 CORPUS ?= vendor/laya/docs
 PORT ?= 8077
+EVAL_ARGS ?=
+BENCH_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -22,6 +24,8 @@ help:
 	@echo "test         offline Python suite (no checkpoints needed)"
 	@echo "test-real    Python suite against real Laya weights"
 	@echo "test-gui     drive the running service's GUI in headless Chrome"
+	@echo "eval         measure retrieval and calibration on labelled queries"
+	@echo "bench        probe the engine's limits (evidence, batch, scale, ...)"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
 
@@ -66,6 +70,16 @@ test-real:
 # engine is absent, so run `make serve` first to actually exercise the page.
 test-gui:
 	node tools/gui-smoke.mjs
+
+# Measurement rather than pass/fail, and both need the real checkpoints. Reports are
+# written under eval/ (gitignored). `make eval EVAL_ARGS="--corpus docs"` switches
+# corpora, and `EVAL_ARGS="--baseline eval/planted.json"` diffs against a saved run.
+eval:
+	OMP_NUM_THREADS=16 $(PY) tools/eval.py $(EVAL_ARGS)
+
+# `make bench BENCH_ARGS="--probes evidence,batch"` for a single probe.
+bench:
+	OMP_NUM_THREADS=16 $(PY) tools/bench.py $(BENCH_ARGS)
 
 lint:
 	$(PY) -m compileall -q src/ tests/
