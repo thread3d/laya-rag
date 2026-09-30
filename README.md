@@ -331,7 +331,7 @@ at a model that would fail later.
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (288 tests)
+make test          # Python suite, offline, deterministic (296 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```
@@ -441,6 +441,13 @@ Measured on this machine, multilingual checkpoint, `bge-small-en-v1.5` as the bi
 | NFCorpus | `hybrid-biencoder` | **0.364** | 0.334 | 0.573 | 0.314 | 0.173 |
 | NFCorpus | `crossencoder` | 0.360 | 0.311 | 0.587 | 0.271 | 0.167 |
 
+**Two datasets flatter this.** Adding ArguAna, SciDocs and FiQA-2018 — see
+[`RANKINGS.md`](RANKINGS.md) for the full five-dataset standing, the tuning sweeps and the plan —
+moves the best per-dataset configuration to a 0.434 four-dataset mean: level with SPLADE++
+(0.433) and 0.057 behind a 335M BGE-large (0.491), mostly because ArguAna is where a stronger
+encoder dominates (published BGE-large 0.636 against our 0.429). The rows below remain the
+detailed two-dataset comparison.
+
 The `bm25` row is the control: it lands where the published Anserini BM25 baseline lands on both
 datasets, so the evaluator is measuring what a leaderboard measures. What the rows show:
 
@@ -536,9 +543,12 @@ has its old chunks replaced, but a file that has been deleted or made unreadable
 its stale chunks stay in the index and remain retrievable until a rebuild. After removing files,
 re-index the parent directory with `--rebuild` rather than just the files that are left.
 
-**BM25 is pure Python and becomes the bottleneck first.** The dense scan is one vectorised matrix
-multiply; the lexical channel loops in Python. Measured at 40,000 synthetic chunks, a lexical query
-took ~120 ms against ~1 ms dense, and the gap widens linearly with corpus size.
+**BM25 is pure Python and grows linearly, though an inverted index halved the constant.** The
+lexical channel keeps `term -> postings` now rather than looping over every document per query
+term, which is what unblocked ArguAna (~190-word queries): 40,000 synthetic chunks went from
+~120 ms to ~37 ms per query, and ArguAna's query set from stalling past 50 minutes to 4.3. The
+dense scan is still far cheaper per chunk, so millions of documents still need an ANN index and
+a real postings store on disk.
 
 **The dense channel is off by default because it never earned its weight.** On BEIR SciFact and
 NFCorpus Laya's mean-pooled encoder scored nDCG@10 ≈ 0.014 against BM25's 0.654 and 0.304, and every

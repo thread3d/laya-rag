@@ -116,6 +116,14 @@ def load_corpus(dataset_dir: Path) -> dict[str, str]:
     return corpus
 
 
+def load_titles(dataset_dir: Path) -> dict[str, str]:
+    """``_id -> title``, for a title-weighted BM25F-style variant."""
+    titles: dict[str, str] = {}
+    for row in _read_jsonl(dataset_dir / "corpus.jsonl"):
+        titles[str(row["_id"])] = (row.get("title") or "").strip()
+    return titles
+
+
 def load_queries(dataset_dir: Path) -> dict[str, str]:
     return {str(row["_id"]): str(row.get("text") or "") for row in _read_jsonl(dataset_dir / "queries.jsonl")}
 
@@ -335,19 +343,84 @@ def bm25_rankings(
     b: float = BEIR_B,
     drop_stopwords: bool = False,
     stem: bool = False,
+    titles: Mapping[str, str] | None = None,
+    title_boost: int = 1,
 ) -> dict[str, list[str]]:
     """Lexical ranking at the published BEIR BM25 settings.
 
     Query stopword filtering is off here: the engine drops stopwords because its queries
     are short natural-language questions, but the Anserini baseline does not, and turning
     it off is what makes this row comparable.
+
+    ``title_boost`` repeats each document's title before its body, a crude BM25F field
+    boost; 1 leaves the document exactly as BEIR concatenates it.
     """
+    if titles and title_boost > 1:
+        corpus = {
+            doc_id: (titles.get(doc_id, "") + " ") * title_boost + text
+            for doc_id, text in corpus.items()
+        }
     index = BM25Index(k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
     index.build(make_chunks(corpus))
     return {
         query_id: [hit.chunk_id for hit in index.search(text, k=top_k)]
         for query_id, text in queries.items()
     }
+
+
+def passage_rankings(
+    corpus: Mapping[str, str],
+    queries: Mapping[str, str],
+    top_k: int,
+    passage_chars: int = 600,
+    overlap_chars: int = 100,
+    k1: float = BEIR_K1,
+    b: float = BEIR_B,
+    drop_stopwords: bool = True,
+    stem: bool = True,
+) -> dict[str, list[str]]:
+    """BM25 over passages, aggregated to documents by their best passage.
+
+    Long documents diluted BM25's length normalisation and mix several topics into one
+    vector, which is why passage-level retrieval plus max-pooling is standard on
+    long-document collections. Documents here are whole abstracts, so this measures
+    whether splitting them helps even at this size.
+    """
+    from laya_rag.chunking import chunk_text
+
+    class _Passage:
+        __slots__ = ("chunk_id", "text")
+
+        def __init__(self, chunk_id: str, text: str) -> None:
+            self.chunk_id = chunk_id
+            self.text = text
+
+    passages: list[_Passage] = []
+    document_of: dict[str, str] = {}
+    for doc_id, text in corpus.items():
+        pieces = chunk_text(
+            text, chunk_chars=passage_chars, overlap_chars=overlap_chars, min_chunk_chars=1
+        )
+        for position, (piece, _start, _end) in enumerate(pieces):
+            passage_id = f"{doc_id}#{position}"
+            passages.append(_Passage(passage_id, piece))
+            document_of[passage_id] = doc_id
+
+    index = BM25Index(k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
+    index.build(passages)
+    depth = max(top_k * 5, 50)
+    rankings: dict[str, list[str]] = {}
+    for query_id, text in queries.items():
+        best: list[str] = []
+        seen: set[str] = set()
+        # Hits are score-ordered, so a document's first appearance is its best passage.
+        for hit in index.search(text, k=depth):
+            doc_id = document_of[hit.chunk_id]
+            if doc_id not in seen:
+                seen.add(doc_id)
+                best.append(doc_id)
+        rankings[query_id] = best[:top_k]
+    return rankings
 
 
 def dense_rankings(
@@ -406,6 +479,7 @@ def hybrid_rankings(
     top_k: int,
     dense_weight: float = 1.0,
     lexical_weight: float = 1.0,
+    rrf_k: int = 60,
 ) -> dict[str, list[str]]:
     """RRF over the two channels, the same weighted fusion ``RagEngine._fuse`` applies."""
     fused: dict[str, list[str]] = {}
@@ -413,6 +487,7 @@ def hybrid_rankings(
         lexical_ids = lexical.get(query_id, [])
         merged = reciprocal_rank_fusion(
             [list(dense_ids)[:top_k], list(lexical_ids)[:top_k]],
+            k=rrf_k,
             limit=top_k,
             weights=[dense_weight, lexical_weight],
         )
@@ -446,6 +521,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="how many candidates the cross-encoder re-ranks")
     parser.add_argument("--no-stem", dest="stem", action="store_false",
                         help="disable the engine's English stemming for its lexical path")
+    parser.add_argument("--rrf-k", type=int, default=60, help="RRF constant for fusion rows")
+    parser.add_argument("--title-boost", type=int, default=1,
+                        help="repeat each title N times before the body in a bm25-title row")
+    parser.add_argument("--passages", type=int, default=0,
+                        help="passage size in characters for a bm25-passages row (0 = off)")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -471,6 +551,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "bm25_b": args.b,
             "drop_stopwords": True,
             "stem": args.stem,
+            "rrf_k": args.rrf_k,
+            "title_boost": args.title_boost,
+            "passages": args.passages,
             "dense_weight": dense_weight,
             "lexical_weight": config.lexical_weight,
             "checkpoint": config.checkpoint,
@@ -490,6 +573,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.limit_docs:
             corpus = dict(list(corpus.items())[: args.limit_docs])
         all_queries = load_queries(dataset_dir)
+        titles = load_titles(dataset_dir)
         qrels = load_qrels(dataset_dir)
         # Only rank the queries that have qrels, which is what BEIR scores.
         queries = {qid: text for qid, text in all_queries.items() if qid in qrels}
@@ -517,6 +601,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             "note": f"engine settings: stopwords dropped, stem={args.stem}"
         }
 
+        # Title-weighted BM25F-style row, and passage-level retrieval for long documents.
+        if args.title_boost > 1:
+            title_rankings = bm25_rankings(
+                corpus, queries, args.top_k, k1=args.k1, b=args.b,
+                drop_stopwords=True, stem=args.stem,
+                titles=titles, title_boost=args.title_boost,
+            )
+            rankings["bm25-title"] = title_rankings
+            results["bm25-title"] = {"note": f"title repeated {args.title_boost}x"}
+            # Fuse the title-boosted channel: it measured better on both datasets, and
+            # everything downstream inherits it.
+            lexical = title_rankings
+
+        if args.passages > 0:
+            passage_ranking = passage_rankings(
+                corpus, queries, args.top_k, passage_chars=args.passages,
+                k1=args.k1, b=args.b, drop_stopwords=True, stem=args.stem,
+            )
+            rankings["bm25-passages"] = passage_ranking
+            results["bm25-passages"] = {"note": f"{args.passages}-char passages, max-pooled"}
+
         dense: dict[str, list[str]] | None = None
         if "dense" in wanted or "hybrid" in wanted:
             if laya is None:
@@ -534,6 +639,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 rankings["hybrid"] = hybrid_rankings(
                     dense, lexical or {}, args.top_k,
                     dense_weight=dense_weight, lexical_weight=config.lexical_weight,
+                    rrf_k=args.rrf_k,
                 )
                 results["hybrid"] = {
                     "seconds": seconds,
@@ -557,6 +663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     rankings["hybrid-biencoder"] = hybrid_rankings(
                         bi, lexical or {}, args.top_k,
                         dense_weight=args.biencoder_weight, lexical_weight=config.lexical_weight,
+                        rrf_k=args.rrf_k,
                     )
                     results["hybrid-biencoder"] = {
                         "seconds": seconds,

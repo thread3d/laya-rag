@@ -181,3 +181,25 @@ def test_an_index_without_the_stem_key_loads_as_unstemmed(tmp_path):
     target.write_text(json.dumps(payload))
 
     assert BM25Index.load(target).stem is False
+
+
+def test_search_is_unchanged_by_a_save_and_load(tmp_path):
+    """The inverted index is rebuilt on load, so ranking must survive the round trip."""
+    docs = [make_chunk(f"d{i}", f"refund policy number {i}") for i in range(5)]
+    index = BM25Index(stem=True)
+    index.build(docs)
+    before = [(hit.chunk_id, round(hit.score, 6)) for hit in index.search("refund policy", k=5)]
+
+    target = tmp_path / "lexical.json"
+    index.save(target)
+    after = [
+        (hit.chunk_id, round(hit.score, 6))
+        for hit in BM25Index.load(target).search("refund policy", k=5)
+    ]
+    assert before == after
+
+
+def test_a_term_absent_from_the_index_scores_nothing(tmp_path):
+    index = BM25Index()
+    index.build([make_chunk("d1", "refund policy")])
+    assert index.search("zephyrous", k=5) == []

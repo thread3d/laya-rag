@@ -107,9 +107,23 @@ class BM25Index:
         self._doc_freq: Counter[str] = Counter()
         self._lengths: list[int] = []
         self._avg_len: float = 0.0
+        # term -> [(row, frequency)]. Scoring used to loop over every document for every
+        # query term, which is O(terms x documents): fine at a few thousand chunks, but on
+        # ArguAna — where a query is a ~190-word argument — it is billions of iterations
+        # and minutes per query set. Postings make it O(matching documents) instead, which
+        # is the same index Lucene keeps and the difference between "slow" and "usable".
+        self._postings: dict[str, list[tuple[int, int]]] = {}
 
     def __len__(self) -> int:
         return len(self._ids)
+
+    def _build_postings(self) -> None:
+        """Invert ``_term_freqs`` into term -> [(row, frequency)]."""
+        postings: dict[str, list[tuple[int, int]]] = {}
+        for row, counts in enumerate(self._term_freqs):
+            for term, frequency in counts.items():
+                postings.setdefault(term, []).append((row, frequency))
+        self._postings = postings
 
     def build(self, chunks: Sequence[Any]) -> None:
         """Index ``chunks`` (anything with ``chunk_id`` and ``text``)."""
@@ -126,6 +140,7 @@ class BM25Index:
             for term in counts:
                 self._doc_freq[term] += 1
         self._avg_len = (sum(self._lengths) / len(self._lengths)) if self._lengths else 0.0
+        self._build_postings()
 
     def _idf(self, term: str) -> float:
         n = len(self._ids)
@@ -151,10 +166,11 @@ class BM25Index:
             idf = self._idf(term)
             if idf == 0.0:
                 continue
-            for row, counts in enumerate(self._term_freqs):
-                freq = counts.get(term)
-                if not freq:
-                    continue
+            postings = self._postings.get(term)
+            if not postings:
+                continue
+            # Only the documents that actually contain the term are touched.
+            for row, freq in postings:
                 length = self._lengths[row] or 1
                 denom = freq + self.k1 * (1.0 - self.b + self.b * length / (self._avg_len or 1.0))
                 scores[row] += idf * (freq * (self.k1 + 1.0)) / denom
@@ -201,6 +217,7 @@ class BM25Index:
         index.drop_stopwords = bool(payload.get("drop_stopwords", True))
         # Absent means an index written before stemming existed, which is an unstemmed one.
         index.stem = bool(payload.get("stem", False))
+        index._build_postings()
         return index
 
 
