@@ -138,6 +138,11 @@ class EngineConfig:
     # embedder, which is the only case where the dense channel earns a weight.
     # -1 means auto; anything >= 0 is used verbatim.
     dense_weight: float = field(default_factory=lambda: _env_float("DENSE_WEIGHT", -1.0))
+    # Approximate dense search. The exact scan is fast to a few hundred thousand vectors and
+    # linear after that; tools/ann_bench.py measures the recall/latency trade. Off by
+    # default so small corpora keep exact results.
+    ann: bool = field(default_factory=lambda: _env_bool("ANN", False))
+    ann_nprobe: int = field(default_factory=lambda: _env_int("ANN_NPROBE", 16))
     lexical_weight: float = field(default_factory=lambda: _env_float("LEXICAL_WEIGHT", 1.0))
 
     @property

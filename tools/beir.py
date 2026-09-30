@@ -136,13 +136,21 @@ def load_queries(dataset_dir: Path) -> dict[str, str]:
     return {str(row["_id"]): str(row.get("text") or "") for row in _read_jsonl(dataset_dir / "queries.jsonl")}
 
 
-def load_qrels(dataset_dir: Path) -> dict[str, dict[str, float]]:
-    """Read ``qrels/*.tsv``, preferring the test split. Header rows are ignored."""
+def load_qrels(dataset_dir: Path, split: str | None = None) -> dict[str, dict[str, float]]:
+    """Read ``qrels/*.tsv``. ``split`` selects one; ``None`` prefers the test split.
+
+    Header rows are ignored.
+    """
     qrels_dir = dataset_dir / "qrels"
     candidates = sorted(qrels_dir.glob("*.tsv"))
     if not candidates:
         raise FileNotFoundError(f"no qrels/*.tsv under {dataset_dir}")
-    path = next((p for p in candidates if p.stem == "test"), candidates[0])
+    if split is not None:
+        path = next((p for p in candidates if p.stem == split), None)
+        if path is None:
+            raise FileNotFoundError(f"{dataset_dir} has no qrels/{split}.tsv")
+    else:
+        path = next((p for p in candidates if p.stem == "test"), candidates[0])
 
     qrels: dict[str, dict[str, float]] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -651,8 +659,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rrf-k", type=int, default=60, help="RRF constant for fusion rows")
     parser.add_argument("--title-boost", type=int, default=1,
                         help="repeat each title N times before the body in a bm25-title row")
-    parser.add_argument("--passages", type=int, default=0,
-                        help="passage size in characters for a bm25-passages row (0 = off)")
+    parser.add_argument("--passages", default="",
+                        help="comma list of passage sizes in characters for bm25-passages rows")
     parser.add_argument("--prf", type=int, default=0,
                         help="feedback documents for a bm25-prf row (0 = off)")
     parser.add_argument("--prf-terms", type=int, default=15, help="expansion terms for bm25-prf")
@@ -667,6 +675,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="apply the bi-encoder's retrieval instruction to queries")
     parser.add_argument("--ensemble-model", default=None,
                         help="second bi-encoder to fuse as a hybrid-ensemble row")
+    parser.add_argument("--splade-model", default=None,
+                        help="learned-sparse encoder for a splade / hybrid-splade row")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -703,6 +713,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "dense_text_only": args.dense_text_only,
             "query_instruction": args.query_instruction,
             "ensemble_model": args.ensemble_model,
+            "splade_model": args.splade_model,
             "dense_weight": dense_weight,
             "lexical_weight": config.lexical_weight,
             "checkpoint": config.checkpoint,
@@ -783,13 +794,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "note": f"{args.prf} feedback docs, {args.prf_terms} terms x{args.prf_weight}"
             }
 
-        if args.passages > 0:
+        for passage_size in [int(v) for v in str(args.passages).split(",") if v.strip()]:
             passage_ranking = passage_rankings(
-                corpus, queries, args.top_k, passage_chars=args.passages,
+                corpus, queries, args.top_k, passage_chars=passage_size,
                 k1=args.k1, b=args.b, drop_stopwords=True, stem=args.stem,
             )
-            rankings["bm25-passages"] = passage_ranking
-            results["bm25-passages"] = {"note": f"{args.passages}-char passages, max-pooled"}
+            label = f"bm25-passages@{passage_size}"
+            rankings[label] = passage_ranking
+            results[label] = {"note": f"{passage_size}-char passages, max-pooled"}
 
         dense: dict[str, list[str]] | None = None
         if "dense" in wanted or "hybrid" in wanted:
@@ -886,6 +898,37 @@ def main(argv: Sequence[str] | None = None) -> int:
                 }
             except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
                 results["hybrid-ensemble"] = {"error": f"{type(exc).__name__}: {exc}"}
+
+        if args.splade_model:
+            try:
+                import sparse as sparse_mod
+
+                encoder = sparse_mod.SpladeEncoder(args.splade_model, device=args.device)
+                short = args.splade_model.rsplit("/", 1)[-1]
+                doc_vectors = sparse_mod.load_or_encode(
+                    encoder,
+                    [corpus[doc_id] for doc_id in corpus],
+                    cache_dir / f"{name}.{short}.sparse",
+                    use_cache=not args.no_cache,
+                )
+                sparse_ranking, seconds = sparse_mod.sparse_rankings(
+                    corpus, queries, encoder, args.top_k, doc_vectors=doc_vectors
+                )
+                rankings["splade"] = sparse_ranking
+                results["splade"] = {"seconds": round(seconds, 1), "model": args.splade_model}
+                if "biencoder" in rankings and lexical:
+                    rankings["hybrid-splade"] = multi_channel_fusion(
+                        [rankings["biencoder"], lexical, sparse_ranking],
+                        [1.0, config.lexical_weight, 1.0],
+                        args.top_k,
+                        args.rrf_k,
+                    )
+                    results["hybrid-splade"] = {
+                        "note": "RRF of biencoder + bm25 + splade",
+                        "seconds": round(seconds, 1),
+                    }
+            except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
+                results["splade"] = {"error": f"{type(exc).__name__}: {exc}"}
 
         if "crossencoder" in wanted:
             try:

@@ -515,7 +515,8 @@ laya-rag/
 │   ├── api.py               FastAPI service
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
-├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py, beir_ablate.py
+├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py,
+│                          beir_ablate.py, ann_bench.py, sparse.py, finetune.py
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)

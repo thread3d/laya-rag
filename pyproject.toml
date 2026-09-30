@@ -23,6 +23,15 @@ dev = [
     "pytest>=8.0",
     "httpx>=0.27",
 ]
+# Only the measurement tools need these: faiss for the ANN index, and
+# sentence-transformers (+ datasets/accelerate, which its Trainer path imports) for
+# in-domain fine-tuning. Neither is required to run the engine.
+eval = [
+    "faiss-cpu>=1.8",
+    "sentence-transformers<5",
+    "datasets<4",
+    "accelerate>=0.26",
+]
 
 [project.scripts]
 laya-rag = "laya_rag.cli:main"

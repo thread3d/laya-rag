@@ -76,10 +76,10 @@ abstention — has no leaderboard counterpart.
 | 1 | Fusion and BM25 tuning: RRF `k`, channel weights, title-boosted BM25F, passage indexing | +0.005–0.02 | hours | done (RRF `k=5`, title boost; passage indexing rejected) |
 | 2 | Broaden evaluation to five datasets (add ArguAna, SciDocs, FiQA-2018) | — (credibility) | hours | in progress |
 | 3 | Stronger dense model (`bge-base` measured; `bge-large` deferred) and reranker (`bge-reranker-base` cached, not measured) | +0.01–0.03 | hours–days | partly done |
-| 4 | Passage-level indexing for long documents (TREC-COVID, Robust04) | needed there | days | harness ready, datasets deferred |
-| 5 | Scale: inverted index (**done**), ANN index (**planned**) | prerequisite | days–weeks | partly done |
-| 6 | Learned sparse (SPLADE) or document expansion (docT5query) as a third channel | +0.02–0.05 | weeks | planned |
-| 7 | Domain adaptation / fine-tuning on in-domain pairs (no longer zero-shot) | +0.02–0.05 | weeks | planned |
+| 4 | Passage-level indexing for long documents (TREC-COVID, Robust04) | needed there | days | measured: hurts; long-document datasets unavailable |
+| 5 | Scale: inverted index (**done**), ANN index (**done**, `build_ann`) | prerequisite | days–weeks | done |
+| 6 | Learned sparse (SPLADE) as a third channel | +0.02–0.05 | weeks | **done**: +0.004–0.013 fused, +0.03–0.10 standalone |
+| 7 | Domain adaptation / fine-tuning on in-domain pairs (no longer zero-shot) | +0.02–0.05 | weeks | **demonstrated**: +0.0085 with 20k of 110k pairs |
 
 ### Scale work landed: an inverted index for BM25
 
@@ -151,6 +151,89 @@ terms into every document of the cluster:
 The channels disagree: titles are high-precision lexical signal for BM25 and noise for a dense
 encoder. That is why `--dense-text-only` exists — the dense channel embeds text alone while BM25
 keeps `title + text`.
+
+### Item 5 — scale, measured
+
+The lexical half is done (the inverted index above). For the dense half,
+`tools/ann_bench.py` compares an IVF and an HNSW index against the exhaustive scan on
+synthetic clustered vectors (the data is clustered on purpose; uniform vectors in 384
+dimensions are near-orthogonal and make every ANN look perfect):
+
+| vectors | exhaustive ms/query | IVF recall@10 (nprobe 1 / 8 / 32) | IVF ms (32) | HNSW recall@10 | HNSW ms |
+| --- | --- | --- | --- | --- | --- |
+| 10k | 0.046 | 0.52 / 0.66 / 0.84 | 0.030 | 0.933 | 0.006 |
+| 100k | 1.15 | 1.00 / 1.00 / 1.00 | 0.174 | 0.865 | 0.006 |
+| 1M | 11.6 | 1.00 / 1.00 / 1.00 | 0.724 | 0.744 | 0.016 |
+
+Two honest readings. First, **exhaustive search is not the problem until well past a
+million vectors** — 11.6 ms/query at 1M against 0.046 ms at 10k, linear, and a corpus that
+size is already unusual for this engine. Second, when ANN is wanted, IVF is the better
+trade here (recall 1.00 at 16x, HNSW 0.744 at 724x), but **recall on synthetic data is not
+recall on real embeddings**, so the number to trust is the shape, not the digit.
+
+`VectorIndex` now supports it (`build_ann`, `ANN`/`ANN_NPROBE`, persisted as `ann.faiss`),
+with the exhaustive scan as the default and as the fallback when faiss is absent.
+
+### Item 6 — a learned-sparse channel (SPLADE-style), measured
+
+`tools/sparse.py` adds a third channel: a masked-LM encoder whose `log(1 + relu(logits))`
+activations are top-k'd into a sparse vocabulary vector, retrieved by sparse dot product
+over an inverted index. The checkpoint is OpenSearch's neural-sparse encoder because it
+ships `safetensors`: the SPLADE checkpoints on the Hub are `.bin` only, and transformers
+4.57 refuses to `torch.load` them on torch < 2.6 (CVE-2025-32434), which this project
+cannot upgrade past on macOS Intel.
+
+| dataset | BM25 | dense (`bge-small`) | **SPLADE** | 2-channel fusion | **3-channel fusion** |
+| --- | --- | --- | --- | --- | --- |
+| SciFact | 0.676 | 0.720 | **0.710** | 0.741 | **0.745** |
+| NFCorpus | 0.324 | 0.339 | **0.356** | 0.367 | **0.372** |
+| ArguAna | 0.313 | 0.429 | **0.408** | 0.414 | **0.426** |
+
+Learned sparse beats BM25 on every dataset by +0.03 to +0.10, and it is the first channel
+addition that improves the fusion consistently (+0.004 to +0.013). Combined with
+`bge-large` it gives the best SciFact number measured (0.751) and lifts ArguAna to 0.443.
+It does **not** close the ArguAna gap: published SPLADE scores 0.521 there against our
+0.408, so the remaining distance is model quality, not the channel being missing.
+
+### Item 4 — passage-level retrieval, measured
+
+The harness supports `--passages N` (split each document, retrieve passages, aggregate to
+documents by best passage). Measured at 600-character passages against document-level BM25:
+
+| dataset | document-level | passages@600 |
+| --- | --- | --- |
+| SciFact | 0.682 | 0.659 |
+| NFCorpus | 0.325 | 0.318 |
+| TREC-COVID (40k-document subsample) | 0.306 | 0.245 |
+
+**It hurt on all three**, so it stays out of the default path. The honest caveat is that
+TREC-COVID is not a long-document collection as hoped: its abstracts average ~160 words,
+*shorter* than NFCorpus's 232. The datasets that are genuinely long — Robust04 (466 words),
+TREC-NEWS (635) — are not on the BEIR mirror this project uses (`robust04.zip` returns a
+146-byte stub), so the long-document claim is **untested, not disproven**. Splitting 171k
+documents into passages also proved intractable in-process: the pure-Python postings for
+~half a million passages exceeded what the run could finish in well over an hour, which is
+itself an argument for the on-disk postings store in item 5.
+
+One large incidental result: on TREC-COVID, stemming is worth **+0.069** nDCG@10
+(0.237 → 0.306) and title weighting a further +0.012 — the strongest evidence yet that the
+`LEXICAL_STEM` default is the right one.
+
+### Item 7 — domain adaptation, measured
+
+`tools/finetune.py` fine-tunes the bi-encoder on a dataset's **train** split and evaluates
+on its **test** split with `MultipleNegativesRankingLoss`. NFCorpus ships 110,575 train
+pairs, and the 2,590 train queries are disjoint from the 323 test queries:
+
+| stage | nDCG@10 |
+| --- | --- |
+| zero-shot `bge-small` | 0.3392 |
+| adapted, 20k pairs, 1 epoch (15 min) | **0.3477** (+0.0085) |
+
+Positive but small, and deliberately bounded — 20k of 110k pairs for one epoch. Published
+domain-adaptation gains are 0.02–0.05 with the full split and more epochs, so this is a
+floor, not a ceiling. The result is **adapted, not zero-shot**, and labelled that way in
+the report it writes; it must never be compared as if it were a zero-shot number.
 
 ## Tuning results
 

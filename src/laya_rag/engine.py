@@ -224,6 +224,9 @@ class RagEngine:
             matrix = np.vstack(vectors) if vectors else np.zeros((0, 0), dtype=np.float32)
             report.embed_seconds = time.perf_counter() - embed_started
             index.add(chunks, matrix)
+            if self.config.ann:
+                index.ann_nprobe = self.config.ann_nprobe
+                index.build_ann()
 
         save_started = time.perf_counter()
         index.save(self.config.index_dir)

@@ -23,6 +23,7 @@ from .chunking import Chunk
 
 INDEX_META = "index.json"
 INDEX_VECTORS = "vectors.npy"
+INDEX_ANN = "ann.faiss"
 FORMAT_VERSION = 1
 
 
@@ -55,6 +56,11 @@ class VectorIndex:
         self._chunks: list[Chunk] = []
         self._vectors: np.ndarray = np.zeros((0, dim or 0), dtype=np.float32)
         self._positions: dict[str, int] = {}
+        # Optional approximate index. An exhaustive scan is exact and fast to a few
+        # hundred thousand vectors; past that it is linear, and an IVF index (measured in
+        # tools/ann_bench.py) trades a little recall for an order of magnitude.
+        self._ann: Any | None = None
+        self.ann_nprobe: int = 16
 
     # -- introspection ---------------------------------------------------
     @property
@@ -139,6 +145,28 @@ class VectorIndex:
     def _reindex(self) -> None:
         self._positions = {chunk.chunk_id: i for i, chunk in enumerate(self._chunks)}
 
+    # -- approximate search ----------------------------------------------
+    def build_ann(self, nlist: int | None = None) -> bool:
+        """Build an IVF index over the current vectors. Returns False without faiss."""
+        if not self._vectors.size:
+            return False
+        try:
+            import faiss
+        except ImportError:  # pragma: no cover - optional dependency
+            return False
+        nlist = nlist or max(1, int(np.sqrt(len(self._chunks))))
+        quantiser = faiss.IndexFlatIP(self.dim)
+        index = faiss.IndexIVFFlat(quantiser, self.dim, nlist, faiss.METRIC_INNER_PRODUCT)
+        index.train(self._vectors)
+        index.add(self._vectors)
+        index.nprobe = min(self.ann_nprobe, nlist)
+        self._ann = index
+        return True
+
+    @property
+    def is_approximate(self) -> bool:
+        return self._ann is not None
+
     # -- query -----------------------------------------------------------
     def search(self, query_vector: np.ndarray, k: int = 10) -> list[Hit]:
         """Return the ``k`` nearest chunks by cosine similarity."""
@@ -151,6 +179,17 @@ class VectorIndex:
             raise IndexError_(
                 f"query vector has {query.shape[0]} dimensions but the index holds {self.dim}"
             )
+        if self._ann is not None:
+            self._ann.nprobe = min(self.ann_nprobe, self._ann.nlist)
+            similarities, positions = self._ann.search(
+                query.reshape(1, -1).astype(np.float32), min(k, len(self._chunks))
+            )
+            return [
+                Hit(chunk=self._chunks[int(position)], score=float(similarity))
+                for similarity, position in zip(similarities[0], positions[0])
+                if position >= 0
+            ]
+
         scores = self._vectors @ query
         take = min(k, scores.shape[0])
         # argpartition selects the top-k unordered; sort those k for a stable ranking.
@@ -188,6 +227,10 @@ class VectorIndex:
         # Replace-by-rename so a crash mid-save cannot leave a half-written index.
         tmp_meta.replace(directory / INDEX_META)
         tmp_vec.replace(directory / INDEX_VECTORS)
+        if self._ann is not None:
+            import faiss
+
+            faiss.write_index(self._ann, str(directory / INDEX_ANN))
 
     @classmethod
     def load(cls, directory: Path) -> "VectorIndex":
@@ -220,6 +263,14 @@ class VectorIndex:
         ]
         index._vectors = np.asarray(vectors, dtype=np.float32)
         index._reindex()
+        ann_path = directory / INDEX_ANN
+        if ann_path.is_file():
+            try:
+                import faiss
+
+                index._ann = faiss.read_index(str(ann_path))
+            except Exception:  # noqa: BLE001 - fall back to the exact scan
+                index._ann = None
         return index
 
     @staticmethod
