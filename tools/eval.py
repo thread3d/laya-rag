@@ -85,9 +85,20 @@ def score_query(
     query_vector = engine.model.embed_one(query.query)
     dense = index.search(query_vector, k=retrieve_k)
     lexical_hits = lexical.search(query.query, k=retrieve_k) if lexical else []
-    hybrid = engine._fuse(index, dense, lexical_hits, limit=retrieve_k)
+    hybrid = engine._fuse(
+        index,
+        dense,
+        lexical_hits,
+        limit=retrieve_k,
+        dense_weight=engine.config.resolved_dense_weight,
+        lexical_weight=engine.config.lexical_weight,
+    )
 
     dense_rank = evalkit.first_match_rank([hit.chunk.path for hit in dense], query.gold)
+    lexical_rank = evalkit.first_match_rank(
+        [chunk.path for chunk in (index.get(hit.chunk_id) for hit in lexical_hits) if chunk is not None],
+        query.gold,
+    )
     hybrid_rank = evalkit.first_match_rank([hit.chunk.path for hit in hybrid], query.gold)
 
     texts = [hit.chunk.text for hit in hybrid]
@@ -106,7 +117,10 @@ def score_query(
         )
         for hit, score in zip(hybrid, scores)
     ]
-    scored.sort(key=lambda passage: (-passage.relevance, -passage.recall_score))
+    if engine.config.resolved_rerank_order == "recall":
+        scored.sort(key=lambda passage: (-passage.recall_score, -passage.relevance))
+    else:
+        scored.sort(key=lambda passage: (-passage.relevance, -passage.recall_score))
 
     relevance_pairs = [
         (passage.relevance, 1 if query.matches(passage.path) else 0) for passage in scored
@@ -131,6 +145,7 @@ def score_query(
         "category": query.category,
         "answerable_label": query.answerable,
         "dense_rank": dense_rank,
+        "lexical_rank": lexical_rank,
         "hybrid_rank": hybrid_rank,
         "rerank_rank": evalkit.first_match_rank([p.path for p in scored], query.gold),
         "best_gold_relevance": best_gold,
@@ -238,6 +253,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     summary = {
         "candidate_recall": {
             "dense": evalkit.rank_summary([row["dense_rank"] for row in labelled], args.retrieve_k),
+            "lexical": evalkit.rank_summary([row["lexical_rank"] for row in labelled], args.retrieve_k),
             "hybrid": evalkit.rank_summary([row["hybrid_rank"] for row in labelled], args.retrieve_k),
         },
         "rerank": evalkit.rank_summary([row["rerank_rank"] for row in labelled], args.rerank_k),
@@ -346,6 +362,8 @@ def render_console(payload: dict[str, Any]) -> str:
         "candidate recall (labelled queries, k=%d)" % payload["config"]["retrieve_k"],
         f"  dense     : recall {summary['candidate_recall']['dense']['recall']}  "
         f"mrr {summary['candidate_recall']['dense']['mrr']}",
+        f"  lexical   : recall {summary['candidate_recall']['lexical']['recall']}  "
+        f"mrr {summary['candidate_recall']['lexical']['mrr']}",
         f"  hybrid    : recall {summary['candidate_recall']['hybrid']['recall']}  "
         f"mrr {summary['candidate_recall']['hybrid']['mrr']}",
         f"Laya rerank : recall@k {rerank_precision}  "

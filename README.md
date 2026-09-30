@@ -293,6 +293,9 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `200` | chunking budget |
 | `MIN_CHUNK_CHARS` | `80` | a shorter trailing chunk is folded into the previous one |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
+| `EMBED_MODEL` | unset | retrieval-trained bi-encoder for the dense channel; unset uses Laya's own encoder |
+| `DENSE_WEIGHT` / `LEXICAL_WEIGHT` | `auto` / `1.0` | RRF channel weights; `auto` is `0` for Laya's encoder and `1` for a configured `EMBED_MODEL` |
+| `RERANK_ORDER` | `recall` | what the returned evidence is ranked by: `recall`, or `relevance` for Laya's probability |
 | `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
 | `CLAIM_MAX` | `25` | claims adjudicated per answer, so one long answer cannot run unbounded |
 | `RELEVANCE_THRESHOLD` | `0.5` | minimum Laya P(relevant) to keep a passage |
@@ -324,7 +327,7 @@ at a model that would fail later.
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (194 tests)
+make test          # Python suite, offline, deterministic (274 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```
@@ -389,6 +392,7 @@ metrics an IR leaderboard reports — `nDCG@10`, `nDCG@100`, `MRR@10`, `Recall@1
 ```sh
 make beir                                            # scifact + nfcorpus
 make beir BEIR_ARGS="--datasets scifact --retrievers bm25,dense"
+make beir-ablate BEIR_ABLATE_ARGS="--datasets scifact"   # sweep weight / rerank depth
 ```
 
 Four retrievers run over the same corpus, qrels, evaluator and top-k, so the difference between
@@ -411,43 +415,51 @@ channel falls short of a dedicated bi-encoder, and whether hybrid fusion recover
 Datasets download to `eval/beir/data/` and embeddings cache beside them, so a re-run skips the
 expensive part.
 
-#### What it found
+#### What it found, and what changed
 
 Measured on this machine, multilingual checkpoint, `bge-small-en-v1.5` as the bi-encoder:
 
 | dataset | retriever | nDCG@10 | nDCG@100 | MRR@10 | Recall@100 | MAP@100 |
 | --- | --- | --- | --- | --- | --- | --- |
-| SciFact | `bm25` | **0.654** | 0.678 | 0.622 | 0.875 | 0.616 |
+| SciFact | `bm25` | 0.654 | 0.678 | 0.622 | 0.875 | 0.616 |
 | SciFact | `dense` (Laya) | 0.014 | 0.022 | 0.011 | 0.067 | 0.012 |
-| SciFact | `hybrid` (Laya + bm25) | 0.370 | 0.411 | 0.276 | 0.860 | 0.277 |
+| SciFact | `hybrid` — **old default** | 0.370 | 0.411 | 0.276 | 0.860 | 0.277 |
 | SciFact | `biencoder` | **0.708** | 0.735 | 0.678 | 0.947 | 0.673 |
-| SciFact | `hybrid-biencoder` | 0.691 | 0.723 | 0.654 | 0.968 | 0.652 |
-| NFCorpus | `bm25` | **0.304** | 0.264 | 0.513 | 0.234 | 0.138 |
+| SciFact | `hybrid-biencoder` | 0.696 | 0.723 | 0.654 | 0.968 | 0.652 |
+| NFCorpus | `bm25` | 0.304 | 0.264 | 0.513 | 0.234 | 0.138 |
 | NFCorpus | `dense` (Laya) | 0.015 | 0.019 | 0.046 | 0.028 | 0.002 |
-| NFCorpus | `hybrid` (Laya + bm25) | 0.173 | 0.183 | 0.294 | 0.220 | 0.068 |
-| NFCorpus | `biencoder` | **0.348** | 0.320 | 0.532 | 0.318 | 0.161 |
-| NFCorpus | `hybrid-biencoder` | 0.352 | 0.327 | 0.555 | 0.320 | 0.168 |
+| NFCorpus | `hybrid` — **old default** | 0.173 | 0.183 | 0.294 | 0.220 | 0.068 |
+| NFCorpus | `biencoder` | 0.348 | 0.320 | 0.532 | 0.318 | 0.161 |
+| NFCorpus | `hybrid-biencoder` | **0.352** | 0.327 | 0.555 | 0.320 | 0.168 |
 
 The `bm25` row is the control: it lands where the published Anserini BM25 baseline lands on both
-datasets, so the evaluator is measuring what a leaderboard measures. What the other rows show:
+datasets, so the evaluator is measuring what a leaderboard measures. What the rows show:
 
 - **Laya's mean-pooled encoder is close to chance at retrieval.** nDCG@10 ≈ 0.014 against BM25's
-  0.654 (SciFact) and 0.304 (NFCorpus). Laya's README says a dedicated bi-encoder "will usually
-  shortlist better"; measured, it is not close — the shipped dense channel is ~45x worse on
-  SciFact.
-- **The default hybrid recall is therefore worse than BM25 alone.** Fusing a near-random channel
-  with a strong one at equal RRF weight dilutes the strong one: SciFact 0.654 → 0.370, NFCorpus
-  0.304 → 0.173, a ~43% loss on both. Recall@100 barely moves, so the relevant documents stay in
-  the candidate pool; it is the *ranking* that fusion destroys.
-- **The fusion is not the problem, the encoder is.** Replacing the dense channel with a
-  retrieval-trained bi-encoder makes fusion neutral-to-slightly-positive — SciFact 0.691 against
-  0.708 bi-encoder and 0.654 BM25, NFCorpus 0.352 against 0.348 and 0.304, and Recall@100 rises
-  above both. RRF behaves as intended when both channels are competent.
+  0.654 (SciFact) and 0.304 (NFCorpus) — not "a bi-encoder would shortlist better", but ~45x worse.
+- **Equal-weight fusion diluted BM25**, the *old* default: SciFact 0.654 → 0.370, NFCorpus
+  0.304 → 0.173. Recall@100 barely moved, so the documents stayed in the pool; the *ranking* was
+  what fusion destroyed.
+- **The fusion was not the problem, the encoder was.** Fusion with a retrieval-trained bi-encoder
+  is neutral-to-positive (0.696 / 0.352, above BM25 on both).
 
-The practical consequence is a configuration question, not a code bug: the engine would retrieve
-better with BM25-dominant fusion, or with a retrieval-trained encoder for the dense channel. Laya's
-*decision head* — the reranker and the answerability gate — is a separate component from the
-mean-pooled encoder and is not what these numbers measure.
+`make beir-ablate` then swept the candidate fixes — fusion weight, rerank order and rerank depth —
+and three changes were made to the engine as a result:
+
+| change | default now | effect |
+| --- | --- | --- |
+| `DENSE_WEIGHT` is `auto` | `0` for Laya's encoder, `1` with `EMBED_MODEL` | SciFact 0.370 → **0.654**, NFCorpus 0.173 → **0.304** |
+| `RERANK_ORDER` | `recall` — Laya's probability filters and gates, no longer reorders | SciFact 0.654 → **0.654** (was 0.470 reordered); NFCorpus 0.304 (was 0.283) |
+| `EMBED_MODEL` | unset (opt-in) | with `bge-small-en-v1.5`: SciFact **0.696**, NFCorpus **0.352** |
+
+On this project's own planted corpus the same changes move candidate MRR **0.941 → 1.0**, the
+worst gold-over-negative margin from **−0.044 → +0.165**, and the count of queries where a negative
+outranked gold from **1 → 0**; Laya's rerank MRR goes 0.971 → 1.0. Two further measurements fell
+out of the sweep and are worth keeping in mind: the engine's stopword drop is marginally *better*
+than the published BM25 settings (+0.004 / +0.007 nDCG@10), so it stays; and **Laya's decision head
+is a stronger filter than a ranker** — reordering BM25's candidates by it lowered nDCG@10 on both
+datasets (SciFact 0.654 → 0.470). It still filters and still gates answerability, which is what
+those decisions are calibrated for.
 
 ## Repository layout
 
@@ -466,7 +478,7 @@ laya-rag/
 │   ├── api.py               FastAPI service
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
-├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py (measurement)
+├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py, beir_ablate.py
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
@@ -498,13 +510,20 @@ re-index the parent directory with `--rebuild` rather than just the files that a
 multiply; the lexical channel loops in Python. Measured at 40,000 synthetic chunks, a lexical query
 took ~120 ms against ~1 ms dense, and the gap widens linearly with corpus size.
 
-**The shipped dense channel is near-random at retrieval, and fusing it costs quality.** On BEIR
-SciFact and NFCorpus the mean-pooled encoder scored nDCG@10 ≈ 0.014 against BM25's 0.654 and 0.304,
-and the default dense+BM25 RRF fusion landed ~43% *below* BM25 alone on both — the relevant
-documents stay in the pool (Recall@100 barely moves) but their ranking is diluted. Substituting a
-retrieval-trained bi-encoder made the same fusion neutral-to-positive, so the fusion is sound and
-the encoder is the weak link. The fix is a configuration one: BM25-dominant fusion, or a
-retrieval-trained encoder for the dense channel. Run `make beir` for the numbers.
+**The dense channel is off by default because it never earned its weight.** On BEIR SciFact and
+NFCorpus Laya's mean-pooled encoder scored nDCG@10 ≈ 0.014 against BM25's 0.654 and 0.304, and every
+non-zero fusion weight lowered the score — including on this project's own planted corpus, where
+lexical recall ranked gold first for every query and fusion dropped it. So `DENSE_WEIGHT` resolves
+to `0` for Laya's encoder, and the shipped recall is lexical. That costs semantic recall: a query
+with no lexical overlap retrieves nothing. Set `EMBED_MODEL` to a retrieval-trained bi-encoder
+(e.g. `BAAI/bge-small-en-v1.5`) to bring the dense channel back with weight 1, which measures at
+SciFact 0.696 and NFCorpus 0.352 — above BM25 on both. Run `make beir` for the numbers.
+
+**Laya's relevance decision is a stronger filter than a ranker.** Reordering BM25's candidates by
+Laya's probability lowered nDCG@10 on both BEIR datasets (SciFact 0.654 → 0.470, NFCorpus
+0.304 → 0.283), which is why `RERANK_ORDER` now defaults to `recall`: the probability still decides
+what is kept and whether the evidence answers the query, but the recall order decides the ordering.
+Set `RERANK_ORDER=relevance` for the calibrated ordering instead.
 
 **A fabricated claim about a topic the corpus never mentions is not refuted.** Adjudication reports
 it `not_measured`, not `unsupported`: no candidate clears the relevance bar, so Laya is never asked.

@@ -12,8 +12,9 @@ PORT ?= 8077
 EVAL_ARGS ?=
 BENCH_ARGS ?=
 BEIR_ARGS ?=
+BEIR_ABLATE_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench beir lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench beir beir-ablate lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -28,6 +29,7 @@ help:
 	@echo "eval         measure retrieval and calibration on labelled queries"
 	@echo "bench        probe the engine's limits (evidence, batch, scale, ...)"
 	@echo "beir         standard IR metrics on BEIR (nDCG@10, MRR@10, ...)"
+	@echo "beir-ablate  sweep fusion weights and rerank depth on BEIR"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
 
@@ -88,6 +90,10 @@ bench:
 # `make beir BEIR_ARGS="--datasets scifact --retrievers bm25"` narrows it.
 beir:
 	OMP_NUM_THREADS=16 $(PY) tools/beir.py $(BEIR_ARGS)
+
+# The ablation that chose the defaults (`make beir-ablate BEIR_ABLATE_ARGS="--datasets scifact"`).
+beir-ablate:
+	OMP_NUM_THREADS=16 $(PY) tools/beir_ablate.py $(BEIR_ABLATE_ARGS)
 
 lint:
 	$(PY) -m compileall -q src/ tests/

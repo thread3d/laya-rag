@@ -105,6 +105,11 @@ def _cmd_stats(args: argparse.Namespace, config: EngineConfig) -> int:
     print(f"index       : {index.get('chunks', 0)} chunks, {index.get('documents', 0)} documents, "
           f"{index.get('paths', 0)} files, dim {index.get('dim', 0)}")
     print(f"checkpoint  : {config.checkpoint} on {config.device} (loaded: {model.get('loaded')})")
+    embedder = payload.get("embedder", {})
+    print(f"embedder    : {embedder.get('embedder') or config.checkpoint} "
+          f"({embedder.get('kind', 'laya encoder')})")
+    print(f"recall      : dense weight {config.resolved_dense_weight}, "
+          f"lexical weight {config.lexical_weight}, order {config.resolved_rerank_order}")
     print(f"thresholds  : relevance {config.relevance_threshold}, "
           f"answerability {config.answerability_threshold}")
     print(f"funnel      : retrieve {config.retrieve_k} -> rerank {config.rerank_k}")

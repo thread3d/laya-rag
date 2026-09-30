@@ -291,12 +291,18 @@ def hybrid_rankings(
     dense: Mapping[str, Sequence[str]],
     lexical: Mapping[str, Sequence[str]],
     top_k: int,
+    dense_weight: float = 1.0,
+    lexical_weight: float = 1.0,
 ) -> dict[str, list[str]]:
-    """RRF over the two channels, the same fusion ``RagEngine._fuse`` applies."""
+    """RRF over the two channels, the same weighted fusion ``RagEngine._fuse`` applies."""
     fused: dict[str, list[str]] = {}
     for query_id, dense_ids in dense.items():
         lexical_ids = lexical.get(query_id, [])
-        merged = reciprocal_rank_fusion([list(dense_ids)[:top_k], list(lexical_ids)[:top_k]], limit=top_k)
+        merged = reciprocal_rank_fusion(
+            [list(dense_ids)[:top_k], list(lexical_ids)[:top_k]],
+            limit=top_k,
+            weights=[dense_weight, lexical_weight],
+        )
         fused[query_id] = [doc_id for doc_id, _ in merged]
     return fused
 
@@ -316,6 +322,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-download", action="store_true", help="fail instead of fetching a dataset")
     parser.add_argument("--no-cache", action="store_true", help="re-embed even if a cache exists")
     parser.add_argument("--limit-docs", type=int, default=None, help="truncate the corpus (smoke runs only)")
+    parser.add_argument("--dense-weight", type=float, default=None,
+                        help="dense RRF weight for the hybrid row (default: the engine's resolved value)")
+    parser.add_argument("--biencoder-weight", type=float, default=1.0,
+                        help="bi-encoder RRF weight for the hybrid-biencoder row")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -328,6 +338,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     config = EngineConfig()
     if args.device:
         config.device = args.device
+    dense_weight = (
+        config.resolved_dense_weight if args.dense_weight is None else args.dense_weight
+    )
 
     laya: LayaEmbedder | None = None
     biencoder: BiEncoder | None = None
@@ -337,6 +350,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "bm25_k1": args.k1,
             "bm25_b": args.b,
             "drop_stopwords": False,
+            "dense_weight": dense_weight,
+            "lexical_weight": config.lexical_weight,
             "checkpoint": config.checkpoint,
             "biencoder_model": args.biencoder_model if "biencoder" in wanted else None,
             "limit_docs": args.limit_docs,
@@ -387,8 +402,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 rankings["dense"] = dense
                 results["dense"] = {"seconds": seconds, "model": laya.name}
             if "hybrid" in wanted:
-                rankings["hybrid"] = hybrid_rankings(dense, lexical or {}, args.top_k)
-                results["hybrid"] = {"seconds": seconds, "note": "RRF of dense + bm25"}
+                rankings["hybrid"] = hybrid_rankings(
+                    dense, lexical or {}, args.top_k,
+                    dense_weight=dense_weight, lexical_weight=config.lexical_weight,
+                )
+                results["hybrid"] = {
+                    "seconds": seconds,
+                    "note": f"RRF of dense (w={dense_weight}) + bm25 (w={config.lexical_weight})",
+                }
 
         if "biencoder" in wanted or "hybrid-biencoder" in wanted:
             try:
@@ -404,10 +425,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     rankings["biencoder"] = bi
                     results["biencoder"] = {"seconds": seconds, "model": biencoder.name}
                 if "hybrid-biencoder" in wanted:
-                    rankings["hybrid-biencoder"] = hybrid_rankings(bi, lexical or {}, args.top_k)
+                    rankings["hybrid-biencoder"] = hybrid_rankings(
+                        bi, lexical or {}, args.top_k,
+                        dense_weight=args.biencoder_weight, lexical_weight=config.lexical_weight,
+                    )
                     results["hybrid-biencoder"] = {
                         "seconds": seconds,
-                        "note": "RRF of biencoder + bm25",
+                        "note": f"RRF of biencoder (w={args.biencoder_weight}) + bm25",
                     }
             except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
                 for retriever in ("biencoder", "hybrid-biencoder"):

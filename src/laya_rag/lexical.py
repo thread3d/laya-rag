@@ -174,16 +174,30 @@ def reciprocal_rank_fusion(
     channels: Iterable[Sequence[str]],
     k: int = 60,
     limit: int | None = None,
+    weights: Sequence[float] | None = None,
 ) -> list[tuple[str, float]]:
     """Fuse ranked id lists, returning ``(id, score)`` best-first.
 
-    RRF scores each document by ``sum(1 / (k + rank))`` across channels. It is
+    RRF scores each document by ``sum(weight_c / (k + rank))`` across channels. It is
     rank-based, so it never has to reconcile BM25's unbounded scores with cosine
     similarity in [-1, 1].
+
+    ``weights`` exists because plain RRF assumes the channels are comparably good. When
+    one channel is much weaker, an equal-weight sum lets it dilute the other: measured
+    on BEIR, fusing a near-chance dense channel with BM25 cost ~43% of nDCG@10. A weight
+    of 0 drops a channel entirely.
     """
+    channel_list = [list(channel) for channel in channels]
+    if weights is None:
+        weights = [1.0] * len(channel_list)
+    elif len(weights) != len(channel_list):
+        raise ValueError(f"got {len(channel_list)} channels but {len(weights)} weights")
+
     scores: dict[str, float] = {}
-    for channel in channels:
+    for channel, weight in zip(channel_list, weights):
+        if weight == 0.0:
+            continue
         for rank, identifier in enumerate(channel):
-            scores[identifier] = scores.get(identifier, 0.0) + 1.0 / (k + rank + 1)
+            scores[identifier] = scores.get(identifier, 0.0) + weight / (k + rank + 1)
     ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
     return ordered[:limit] if limit is not None else ordered

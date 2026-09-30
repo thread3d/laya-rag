@@ -198,6 +198,126 @@ class LayaModel:
         return payload
 
 
+class BiEncoderModel:
+    """A retrieval-trained bi-encoder, used as the dense channel instead of Laya's encoder.
+
+    Laya's encoder is mean-pooled and not retrieval-trained — its own README says a
+    dedicated bi-encoder "will usually shortlist better". Measured on BEIR, that is an
+    understatement: Laya's encoder scores nDCG@10 ~0.014 where BM25 scores ~0.65, and
+    fusing it at equal weight costs ~43% of BM25's score. A retrieval-trained model makes
+    the dense channel worth fusing again (SciFact 0.654 → 0.696, NFCorpus 0.304 → 0.352).
+
+    This is only the *embedder*. Laya still owns the decisions — relevance re-ranking and
+    answerability — so the two models are loaded side by side and ``RagEngine`` keeps
+    them separate. Enable it with ``LAYA_RAG_EMBED_MODEL``; unset, the engine uses Laya's
+    own encoder exactly as before.
+    """
+
+    #: bge-family models are trained with this instruction on the query side only.
+    QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
+    def __init__(self, config: EngineConfig | None = None) -> None:
+        self.config = config or EngineConfig()
+        self.model_id = self.config.embed_model
+        self._tokenizer: Any | None = None
+        self._encoder: Any | None = None
+        self._torch: Any | None = None
+        self._device = self.config.device
+        self._dim: int | None = None
+        self._lock = threading.RLock()
+
+    def ensure_loaded(self) -> "BiEncoderModel":
+        with self._lock:
+            if self._encoder is not None:
+                return self
+            try:
+                import torch
+            except ImportError as exc:  # pragma: no cover - environment dependent
+                raise ModelUnavailableError(
+                    "torch is not installed; a bi-encoder needs the pinned CPU build."
+                ) from exc
+            try:
+                from transformers import AutoModel, AutoTokenizer
+            except ImportError as exc:  # pragma: no cover - environment dependent
+                raise ModelUnavailableError(
+                    "transformers is not installed; a bi-encoder needs it (it ships with Laya)."
+                ) from exc
+
+            device = self.config.device
+            if device in ("auto", ""):
+                device = "mps" if torch.backends.mps.is_available() else "cpu"
+            torch.set_num_threads(self.config.torch_threads)
+            try:
+                self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+                self._encoder = AutoModel.from_pretrained(self.model_id).to(device).eval()
+            except Exception as exc:  # noqa: BLE001 - surfaced with the model name
+                raise ModelUnavailableError(
+                    f"failed to load embedding model {self.model_id!r} on device {device!r}: {exc}"
+                ) from exc
+            self._torch = torch
+            self._device = device
+            self._dim = int(self._encoder.config.hidden_size)
+            return self
+
+    def _encode(self, texts: Sequence[str]) -> np.ndarray:
+        self.ensure_loaded()
+        torch = self._torch
+        assert torch is not None
+        rows = ["" if text is None else str(text) for text in texts]
+        if not rows:
+            return np.zeros((0, self.dim), dtype=np.float32)
+        batch_size = max(1, self.config.embed_batch_size)
+        blocks: list[np.ndarray] = []
+        for start in range(0, len(rows), batch_size):
+            batch = rows[start : start + batch_size]
+            encoded = self._tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                max_length=self.config.embed_max_length,
+                return_tensors="pt",
+            ).to(self._device)
+            with torch.no_grad():
+                hidden = self._encoder(**encoded).last_hidden_state
+            mask = encoded["attention_mask"].unsqueeze(-1).to(hidden.dtype)
+            pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+            pooled = torch.nn.functional.normalize(pooled, p=2, dim=1)
+            blocks.append(pooled.cpu().numpy().astype(np.float32))
+        return np.vstack(blocks)
+
+    def embed(self, texts: Sequence[str]) -> np.ndarray:
+        """Embed documents. No query instruction on this side."""
+        return self._encode(texts)
+
+    def embed_one(self, text: str) -> np.ndarray:
+        """Embed a query, with the retrieval instruction the model was trained with."""
+        return self._encode([self.QUERY_PREFIX + str(text or "")])[0]
+
+    @property
+    def dim(self) -> int:
+        if self._dim is None:
+            self.embed([""])
+        return int(self._dim or 0)
+
+    def info(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "embedder": self.model_id,
+            "kind": "bi-encoder",
+            "device": self._device,
+            "loaded": self._encoder is not None,
+        }
+        if self._dim is not None:
+            payload["embedding_dim"] = self._dim
+        return payload
+
+
+def build_embedder(config: EngineConfig) -> Any:
+    """The dense-channel embedder for ``config``: a bi-encoder when one is configured."""
+    if (config.embed_model or "").strip():
+        return BiEncoderModel(config)
+    return LayaModel(config)
+
+
 class HashingEmbedder:
     """A dependency-free stand-in embedder for tests.
 

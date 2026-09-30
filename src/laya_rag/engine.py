@@ -26,7 +26,7 @@ from .compose import Composer
 from .config import EngineConfig
 from .index_store import Hit, VectorIndex, wipe
 from .lexical import LEXICAL_FILE, BM25Index, reciprocal_rank_fusion
-from .model import LayaModel
+from .model import BiEncoderModel, LayaModel
 from .rerank import ANSWERABILITY_QUESTION, LayaReranker
 
 
@@ -115,10 +115,20 @@ class RagEngine:
         self,
         config: EngineConfig | None = None,
         model: Any | None = None,
+        embedder: Any | None = None,
         embed_batch_texts: int = 256,
     ) -> None:
         self.config = config or EngineConfig()
+        # Laya owns the decisions (relevance, answerability) and, by default, the dense
+        # embeddings too. A configured retrieval-trained embedder replaces only the
+        # embeddings, so the two concerns can be tuned independently.
         self.model = model or LayaModel(self.config)
+        if embedder is not None:
+            self.embedder = embedder
+        elif (self.config.embed_model or "").strip():
+            self.embedder = BiEncoderModel(self.config)
+        else:
+            self.embedder = self.model
         self.reranker = LayaReranker(self.model)
         # Optional generative step. It never runs on its own: the caller has to ask
         # for it, and everything it produces is unverified prose.
@@ -203,7 +213,7 @@ class RagEngine:
             embed_started = time.perf_counter()
             vectors: list[np.ndarray] = []
             for batch in _batched(chunks, self.embed_batch_texts):
-                vectors.append(np.asarray(self.model.embed([chunk.text for chunk in batch]), dtype=np.float32))
+                vectors.append(np.asarray(self.embedder.embed([chunk.text for chunk in batch]), dtype=np.float32))
             matrix = np.vstack(vectors) if vectors else np.zeros((0, 0), dtype=np.float32)
             report.embed_seconds = time.perf_counter() - embed_started
             index.add(chunks, matrix)
@@ -249,15 +259,32 @@ class RagEngine:
 
         candidate_k = retrieve_k or self.config.retrieve_k
         retrieve_started = time.perf_counter()
-        query_vector = self.model.embed_one(query)
-        dense_hits = index.search(query_vector, k=candidate_k)
 
-        # Hybrid recall: dense similarity plus BM25, fused by rank. Laya's encoder is
-        # not retrieval-trained, so lexical recall is what keeps rare exact terms
-        # ("LangChain", "Docker") inside the candidate set the re-ranker judges.
+        # Hybrid recall: dense similarity plus BM25, fused by rank. Which channels run
+        # is a configuration question, not a constant: Laya's own encoder is not
+        # retrieval-trained, and a dense weight of zero means the channel cannot affect
+        # the ranking, so its query embedding — the expensive part — is skipped.
+        #
+        # If the lexical channel is missing, the dense channel has to carry the search
+        # even when it is otherwise weighted to zero; leaving the weight at zero there
+        # would fuse nothing and return an empty result.
         lexical = self.lexical
+        dense_weight = self.config.resolved_dense_weight
+        if lexical is None:
+            dense_weight = 1.0
+        if dense_weight == 0.0:
+            dense_hits: list[Hit] = []
+        else:
+            dense_hits = index.search(self.embedder.embed_one(query), k=candidate_k)
         lexical_hits = lexical.search(query, k=candidate_k) if lexical else []
-        candidates = self._fuse(index, dense_hits, lexical_hits, limit=candidate_k)
+        candidates = self._fuse(
+            index,
+            dense_hits,
+            lexical_hits,
+            limit=candidate_k,
+            dense_weight=dense_weight,
+            lexical_weight=self.config.lexical_weight,
+        )
         retrieval_seconds = time.perf_counter() - retrieve_started
 
         # An index written before the lexical channel existed, or one whose
@@ -281,6 +308,7 @@ class RagEngine:
                 if answerability_threshold is None
                 else answerability_threshold
             ),
+            order=self.config.resolved_rerank_order,
         )
         rerank_seconds = time.perf_counter() - rerank_started
 
@@ -306,16 +334,24 @@ class RagEngine:
         dense_hits: Sequence[Hit],
         lexical_hits: Sequence[Any],
         limit: int,
+        dense_weight: float = 1.0,
+        lexical_weight: float = 1.0,
     ) -> list[Hit]:
         """Fuse dense and lexical rankings into one candidate list.
 
         The fused ``Hit.score`` is the RRF score, not a cosine similarity; the
         channels that produced each candidate travel with it so the evidence bundle
         can say where a passage came from.
+
+        The weights are not cosmetic: equal-weight fusion of a near-chance dense channel
+        with a strong lexical one lowers BM25's nDCG@10 by roughly 43% on BEIR. A weight
+        of 0 removes that channel from the fusion without disabling it elsewhere.
         """
         dense_ids = [hit.chunk.chunk_id for hit in dense_hits]
         lexical_ids = [hit.chunk_id for hit in lexical_hits]
-        fused = reciprocal_rank_fusion([dense_ids, lexical_ids], limit=limit)
+        fused = reciprocal_rank_fusion(
+            [dense_ids, lexical_ids], limit=limit, weights=[dense_weight, lexical_weight]
+        )
         dense_set = set(dense_ids)
         lexical_set = set(lexical_ids)
         candidates: list[Hit] = []
@@ -443,14 +479,29 @@ class RagEngine:
         if not cleaned or not len(index):
             return empty
 
-        # 1. Recall per claim, over the whole corpus.
-        vectors = np.asarray(self.model.embed(cleaned), dtype=np.float32)
+        # 1. Recall per claim, over the whole corpus. As in `query`, a zero dense weight
+        #    makes the claim embeddings unnecessary when a lexical channel exists, and a
+        #    missing lexical channel forces the dense one back on.
         lexical = self.lexical
+        dense_weight = self.config.resolved_dense_weight
+        if lexical is None:
+            dense_weight = 1.0
+        use_dense = dense_weight != 0.0
+        vectors = np.asarray(self.embedder.embed(cleaned), dtype=np.float32) if use_dense else None
         per_claim_hits: list[list[Hit]] = []
         for position, claim in enumerate(cleaned):
-            dense = index.search(vectors[position], k=candidate_k)
+            dense = index.search(vectors[position], k=candidate_k) if vectors is not None else []
             lexical_hits = lexical.search(claim, k=candidate_k) if lexical else []
-            per_claim_hits.append(self._fuse(index, dense, lexical_hits, limit=candidate_k))
+            per_claim_hits.append(
+                self._fuse(
+                    index,
+                    dense,
+                    lexical_hits,
+                    limit=candidate_k,
+                    dense_weight=dense_weight,
+                    lexical_weight=self.config.lexical_weight,
+                )
+            )
 
         # 2. One batched relevance pass across every (claim, candidate) pair.
         pairs: list[tuple[str, str]] = []
@@ -546,6 +597,7 @@ class RagEngine:
         payload: dict[str, Any] = {
             "config": self.config.as_dict(),
             "model": self.model.info() if hasattr(self.model, "info") else {"model": type(self.model).__name__},
+            "embedder": self.embedder.info() if hasattr(self.embedder, "info") else {"embedder": type(self.embedder).__name__},
             "index_dir": str(self.config.index_dir),
             "index_present": VectorIndex.exists_on_disk(self.config.index_dir),
             "lexical_present": (self._lexical is not None)

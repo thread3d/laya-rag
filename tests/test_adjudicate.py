@@ -103,8 +103,15 @@ def test_a_claim_with_no_candidate_is_not_measured_not_zero(engine):
     assert "not measured" not in str(claim["support_probability"])  # it stays a number
 
 
-def test_a_measured_claim_below_the_gate_is_unsupported(engine):
-    """Admitting every candidate and then rejecting it is a different outcome."""
+def test_a_measured_claim_below_the_gate_is_unsupported(tmp_path):
+    """Admitting every candidate and then rejecting it is a different outcome.
+
+    Lexical-only recall — the default since the dense channel stopped earning its
+    weight — matches nothing for a nonsense claim, so this forces the dense channel to
+    guarantee there are candidates to admit and then reject.
+    """
+    engine = stub_engine(tmp_path, dense_weight=1.0)
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
     report = engine.adjudicate_claims(
         ["Zephyrous quintessential vocabulary."],
         relevance_threshold=0.0,

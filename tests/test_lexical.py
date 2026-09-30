@@ -110,3 +110,28 @@ def test_fusion_respects_limit():
 
 def test_fusion_of_empty_channels_is_empty():
     assert reciprocal_rank_fusion([[], []]) == []
+
+
+def test_fusion_weights_let_one_channel_dominate():
+    dense = ["dense_only", "shared"]
+    lexical = ["shared", "lexical_only"]
+    # A low dense weight must not let its exclusive document outrank the lexical
+    # channel's top hit, even though the dense channel lists it first.
+    fused = dict(reciprocal_rank_fusion([dense, lexical], weights=[0.1, 1.0]))
+    assert fused["shared"] > fused["lexical_only"] > fused["dense_only"]
+
+
+def test_fusion_weight_zero_drops_the_channel_entirely():
+    fused = dict(reciprocal_rank_fusion([["a", "b"], ["c"]], weights=[0.0, 1.0]))
+    assert "a" not in fused and "b" not in fused
+    assert "c" in fused
+
+
+def test_fusion_weight_must_match_the_channel_count():
+    with pytest.raises(ValueError, match="2 channels but 1 weights"):
+        reciprocal_rank_fusion([["a"], ["b"]], weights=[1.0])
+
+
+def test_fusion_default_weights_are_still_equal():
+    weighted = reciprocal_rank_fusion([["a", "b"], ["b", "a"]], weights=[1.0, 1.0])
+    assert weighted == reciprocal_rank_fusion([["a", "b"], ["b", "a"]])

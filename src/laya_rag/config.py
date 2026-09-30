@@ -87,6 +87,13 @@ class EngineConfig:
     embed_max_length: int = field(default_factory=lambda: _env_int("EMBED_MAX_LENGTH", 512))
     embed_batch_size: int = field(default_factory=lambda: _env_int("EMBED_BATCH_SIZE", 16))
 
+    # The dense-channel embedder. Empty keeps Laya's own mean-pooled encoder, which is
+    # not retrieval-trained: measured on BEIR it scores nDCG@10 ~0.014 where BM25 scores
+    # ~0.65. Setting this to a retrieval-trained model (e.g. "BAAI/bge-small-en-v1.5")
+    # replaces the dense channel and makes fusing it worthwhile. Laya still owns the
+    # decisions either way.
+    embed_model: str = field(default_factory=lambda: _env("EMBED_MODEL") or "")
+
     # torch thread oversubscription hurts on this host (56 logical cores); 16 is the
     # measured sweet spot recorded in the Laya checkout's LOCAL_SETUP.md.
     torch_threads: int = field(default_factory=lambda: _env_int("TORCH_THREADS", 16))
@@ -100,6 +107,37 @@ class EngineConfig:
     # Retrieval funnel: dense candidates -> Laya re-ranked -> evidence passages.
     retrieve_k: int = field(default_factory=lambda: _env_int("RETRIEVE_K", 20))
     rerank_k: int = field(default_factory=lambda: _env_int("RERANK_K", 5))
+
+    # Reciprocal-rank-fusion weights. Plain RRF assumes the two channels are
+    # comparably good; measured, they are not. Laya's mean-pooled encoder scores
+    # nDCG@10 ~0.014 on BEIR where BM25 scores ~0.654, and every non-zero dense weight
+    # lowered the score — including on this project's own planted corpus, where lexical
+    # recall ranks the gold passage first for every query and fusion drops it. So the
+    # default is "auto": off for Laya's encoder, on for a configured retrieval-trained
+    # embedder, which is the only case where the dense channel earns a weight.
+    # -1 means auto; anything >= 0 is used verbatim.
+    dense_weight: float = field(default_factory=lambda: _env_float("DENSE_WEIGHT", -1.0))
+    lexical_weight: float = field(default_factory=lambda: _env_float("LEXICAL_WEIGHT", 1.0))
+
+    @property
+    def resolved_dense_weight(self) -> float:
+        """The dense RRF weight actually used: explicit, or auto from the embedder."""
+        if self.dense_weight >= 0.0:
+            return self.dense_weight
+        return 1.0 if (self.embed_model or "").strip() else 0.0
+
+    # What the returned evidence is ranked by. "recall" keeps the retrieval order and
+    # uses Laya's probability to filter and to gate; "relevance" also reorders by it.
+    # Measured, Laya's decision is a stronger filter than ranker: reordering lowered
+    # nDCG@10 on both BEIR datasets (SciFact 0.654 -> 0.470, NFCorpus 0.304 -> 0.283)
+    # while tying on the planted corpus (MRR 1.0 either way). So "recall" is the default
+    # and set RERANK_ORDER=relevance to order the evidence by Laya's probability.
+    rerank_order: str = field(default_factory=lambda: _env("RERANK_ORDER") or "recall")
+
+    @property
+    def resolved_rerank_order(self) -> str:
+        value = (self.rerank_order or "").strip().lower()
+        return "relevance" if value == "relevance" else "recall"
 
     # Claim adjudication is linear in claims x candidates. Measured warm on five
     # claims: 21.6s at retrieve_k=20 against 8.7s at 10, for the same verdicts on the
@@ -148,6 +186,9 @@ class EngineConfig:
                 out[f.name] = "<redacted>" if value else None
                 continue
             out[f.name] = str(value) if isinstance(value, Path) else value
+        # `dense_weight` is -1 to mean "auto"; report what auto resolved to as well, so a
+        # status endpoint never shows a negative weight as if it were in use.
+        out["dense_weight_resolved"] = self.resolved_dense_weight
         return out
 
     def ensure_dirs(self) -> None:
