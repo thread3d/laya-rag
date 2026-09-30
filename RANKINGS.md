@@ -39,6 +39,20 @@ anchor that keeps the evaluator honest.
 So: **third of four, level with SPLADE++, 0.057 behind a 335M BGE-large** — not the
 "second of two datasets" the earlier two-dataset slice suggested.
 
+After the tuning and model sweeps below, the four-dataset **best-per-dataset** mean is **0.448**:
+
+| dataset | best configuration | nDCG@10 |
+| --- | --- | --- |
+| SciFact | `bge-large` + fused BM25, `k=5`, title boost | 0.750 |
+| NFCorpus | `bge-large` + fused BM25 | 0.382 |
+| ArguAna | `bge-small` dense on text-only documents | 0.459 |
+| SciDocs | `bge-small` + fused BM25 | 0.199 |
+
+That is **second of four**, above SPLADE++ (0.433) and 0.043 behind BGE-large (0.491) — the gap
+narrowed from 0.057. The caveat is that it cherry-picks a configuration per dataset: a single
+deployable configuration (`bge-small` + fused BM25) is 0.430, which is level with SPLADE++ rather
+than ahead of it.
+
 Broadening the evaluation *lowered* the standing, and that is the useful result. Two things it
 exposed:
 
@@ -103,6 +117,40 @@ The ceiling is still visible above this. Published BGE-large scores 0.636 on Arg
 leaderboard, so **encoder size on ArguAna is the highest-value remaining item**. `bge-large`
 (335M, ~2h to embed the five datasets here) was not run; `bge-reranker-base` was cached but not
 measured, since the fast `ms-marco-MiniLM` cross-encoder had already been beaten by fusion.
+
+### Experiments tried, measured, and rejected
+
+Recorded so they are not retried from intuition:
+
+| experiment | SciFact | NFCorpus | verdict |
+| --- | --- | --- | --- |
+| `bm25-title` (title repeated twice) | 0.682 | 0.325 | **kept** |
+| `bm25-prf` (10 feedback docs, 15 terms ×2) | 0.424 | 0.274 | **rejected** — the expansion drifts the query badly |
+| `bm25-passages` (600-char passages, max-pool) | 0.659 | 0.318 | rejected at this document size; kept for long docs |
+| `hybrid-combsum` (score fusion, max-normalised) | 0.712 | 0.355 | rejected vs RRF's 0.741 / 0.367 |
+| `bge-large` instead of `bge-base` | 0.750 | 0.382 | **no material gain** for 3× the embedding cost |
+
+The PRF result is the starkest: a textbook technique, implemented plainly, cost 0.26 nDCG@10 on
+SciFact. It assumes the first pass is mostly right and these queries are short enough that it is
+not. CombSUM lost to RRF because BM25's and cosine's score scales do not normalise cleanly against
+each other, which is exactly the problem RRF exists to avoid. And `bge-large` confirms the model
+size *saturates* at `bge-base` on this task — ArguAna barely moved (0.4529 → 0.4547) for a model
+3× the size, so bigger is not the lever it looked like.
+
+### Document text is a per-channel choice, not a global one
+
+ArguAna's `title` field is a shared topic keyword list (`animals environment general health …`)
+repeated across a cluster, and BEIR's convention of indexing `title + text` puts those near-identical
+terms into every document of the cluster:
+
+| ArguAna representation | BM25 | dense (`bge-small`) |
+| --- | --- | --- |
+| `title + text` (BEIR convention) | **0.295** | 0.429 |
+| text only | 0.270 | **0.459** |
+
+The channels disagree: titles are high-precision lexical signal for BM25 and noise for a dense
+encoder. That is why `--dense-text-only` exists — the dense channel embeds text alone while BM25
+keeps `title + text`.
 
 ## Tuning results
 

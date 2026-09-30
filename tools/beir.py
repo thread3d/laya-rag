@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 import os
 import sys
 import time
@@ -49,7 +50,7 @@ import evalkit  # noqa: E402
 from laya_rag.chunking import Chunk  # noqa: E402
 from laya_rag.config import EngineConfig  # noqa: E402
 from laya_rag.index_store import VectorIndex  # noqa: E402
-from laya_rag.lexical import BM25Index, reciprocal_rank_fusion  # noqa: E402
+from laya_rag.lexical import STOPWORDS, BM25Index, reciprocal_rank_fusion, tokenize  # noqa: E402
 
 #: Public BEIR mirror used by the official scripts.
 BEIR_URL = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{name}.zip"
@@ -106,13 +107,20 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def load_corpus(dataset_dir: Path) -> dict[str, str]:
-    """``_id -> "title text"``, the concatenation BEIR's own baselines index."""
+def load_corpus(dataset_dir: Path, include_titles: bool = True) -> dict[str, str]:
+    """``_id -> document text``, as ``"title text"`` unless titles are excluded.
+
+    BEIR's own baselines concatenate title and text, which is right for datasets whose
+    titles are real titles. ArguAna's "titles" are shared topic keyword lists
+    (``animals environment general health ...``) repeated across a whole cluster, so they
+    add near-identical terms to every document in the cluster and flatten discrimination.
+    ``include_titles=False`` measures that.
+    """
     corpus: dict[str, str] = {}
     for row in _read_jsonl(dataset_dir / "corpus.jsonl"):
         title = (row.get("title") or "").strip()
         text = (row.get("text") or "").strip()
-        corpus[str(row["_id"])] = f"{title} {text}".strip()
+        corpus[str(row["_id"])] = f"{title} {text}".strip() if include_titles else text
     return corpus
 
 
@@ -423,6 +431,54 @@ def passage_rankings(
     return rankings
 
 
+def bm25_rankings_prf(
+    corpus: Mapping[str, str],
+    queries: Mapping[str, str],
+    top_k: int,
+    feedback_docs: int = 10,
+    expansion_terms: int = 15,
+    expansion_weight: int = 2,
+    k1: float = BEIR_K1,
+    b: float = BEIR_B,
+    drop_stopwords: bool = True,
+    stem: bool = True,
+    titles: Mapping[str, str] | None = None,
+    title_boost: int = 1,
+) -> dict[str, list[str]]:
+    """BM25 with pseudo-relevance feedback (an RM3-style expansion).
+
+    Retrieve once, collect the most frequent terms from the top documents, and search
+    again with them appended. It assumes the first pass is mostly right; when it is not,
+    the expansion drifts the query, which is why it is measured rather than assumed.
+    """
+    if titles and title_boost > 1:
+        corpus = {
+            doc_id: (titles.get(doc_id, "") + " ") * title_boost + text
+            for doc_id, text in corpus.items()
+        }
+    index = BM25Index(k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
+    index.build(make_chunks(corpus))
+
+    rankings: dict[str, list[str]] = {}
+    for query_id, query in queries.items():
+        first = index.search(query, k=feedback_docs)
+        counts: Counter[str] = Counter()
+        for hit in first:
+            counts.update(
+                term
+                for term in tokenize(corpus[hit.chunk_id], stem=stem)
+                if (not drop_stopwords or term not in STOPWORDS) and len(term) > 2
+            )
+        for term in set(tokenize(query, stem=stem)):
+            counts.pop(term, None)
+        expanded = query
+        if counts:
+            extra = [term for term, _ in counts.most_common(expansion_terms)]
+            expanded = query + " " + " ".join(extra * max(1, expansion_weight))
+        rankings[query_id] = [hit.chunk_id for hit in index.search(expanded, k=top_k)]
+    return rankings
+
+
 def dense_rankings(
     corpus: Mapping[str, str],
     queries: Mapping[str, str],
@@ -471,6 +527,77 @@ def crossencoder_rankings(
         order = sorted(range(len(docs)), key=lambda index: -block[index])
         reranked[query_id] = [docs[index] for index in order[:top_k]]
     return reranked, elapsed
+
+
+def multi_channel_fusion(
+    channels: Sequence[Mapping[str, Sequence[str]]],
+    weights: Sequence[float],
+    top_k: int,
+    rrf_k: int = 60,
+) -> dict[str, list[str]]:
+    """RRF over any number of channels, for ensembling retrievers."""
+    fused: dict[str, list[str]] = {}
+    for query_id in channels[0]:
+        lists = [list(channel.get(query_id, []))[:top_k] for channel in channels]
+        merged = reciprocal_rank_fusion(
+            lists, k=rrf_k, limit=top_k, weights=list(weights)
+        )
+        fused[query_id] = [doc_id for doc_id, _ in merged]
+    return fused
+
+
+def score_fusion_rankings(
+    corpus: Mapping[str, str],
+    queries: Mapping[str, str],
+    embedder: Any,
+    vectors: np.ndarray,
+    top_k: int,
+    dense_weight: float = 1.0,
+    lexical_weight: float = 1.0,
+    k1: float = BEIR_K1,
+    b: float = BEIR_B,
+    stem: bool = True,
+    titles: Mapping[str, str] | None = None,
+    title_boost: int = 1,
+) -> dict[str, list[str]]:
+    """Score fusion (CombSUM) instead of rank fusion.
+
+    RRF throws away score magnitudes; CombSUM keeps them but has to reconcile BM25's
+    unbounded scores with cosine, so each channel is max-normalised per query first.
+    Same channels, same weights, different fusion -- the comparison isolates the fusion
+    method rather than the retrievers.
+    """
+    lexical_corpus = corpus
+    if titles and title_boost > 1:
+        lexical_corpus = {
+            doc_id: (titles.get(doc_id, "") + " ") * title_boost + text
+            for doc_id, text in corpus.items()
+        }
+    lexical = BM25Index(k1=k1, b=b, drop_stopwords=True, stem=stem)
+    lexical.build(make_chunks(lexical_corpus))
+    dense = VectorIndex()
+    dense.add(make_chunks(corpus), vectors)
+    query_vectors = np.asarray(embedder.embed_queries(list(queries.values())), dtype=np.float32)
+
+    fused: dict[str, list[str]] = {}
+    for (query_id, text), query_vector in zip(queries.items(), query_vectors):
+        dense_hits = dense.search(query_vector, k=top_k)
+        lexical_hits = lexical.search(text, k=top_k)
+        dense_max = max((hit.score for hit in dense_hits), default=0.0) or 1.0
+        lexical_max = max((hit.score for hit in lexical_hits), default=0.0) or 1.0
+        scores: dict[str, float] = {}
+        for hit in dense_hits:
+            scores[hit.chunk.chunk_id] = (
+                scores.get(hit.chunk.chunk_id, 0.0) + dense_weight * hit.score / dense_max
+            )
+        for hit in lexical_hits:
+            scores[hit.chunk_id] = (
+                scores.get(hit.chunk_id, 0.0) + lexical_weight * hit.score / lexical_max
+            )
+        fused[query_id] = [
+            doc_id for doc_id, _ in sorted(scores.items(), key=lambda item: -item[1])[:top_k]
+        ]
+    return fused
 
 
 def hybrid_rankings(
@@ -526,6 +653,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="repeat each title N times before the body in a bm25-title row")
     parser.add_argument("--passages", type=int, default=0,
                         help="passage size in characters for a bm25-passages row (0 = off)")
+    parser.add_argument("--prf", type=int, default=0,
+                        help="feedback documents for a bm25-prf row (0 = off)")
+    parser.add_argument("--prf-terms", type=int, default=15, help="expansion terms for bm25-prf")
+    parser.add_argument("--prf-weight", type=int, default=2, help="times each expansion term is repeated")
+    parser.add_argument("--combsum", action="store_true",
+                        help="also report a score-fused (CombSUM) row alongside RRF")
+    parser.add_argument("--no-titles", action="store_true",
+                        help="index document text only, excluding the title field")
+    parser.add_argument("--dense-text-only", action="store_true",
+                        help="embed document text without the title, while BM25 keeps title+text")
+    parser.add_argument("--query-instruction", action="store_true",
+                        help="apply the bi-encoder's retrieval instruction to queries")
+    parser.add_argument("--ensemble-model", default=None,
+                        help="second bi-encoder to fuse as a hybrid-ensemble row")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -554,6 +695,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             "rrf_k": args.rrf_k,
             "title_boost": args.title_boost,
             "passages": args.passages,
+            "prf": args.prf,
+            "prf_terms": args.prf_terms,
+            "prf_weight": args.prf_weight,
+            "combsum": args.combsum,
+            "include_titles": not args.no_titles,
+            "dense_text_only": args.dense_text_only,
+            "query_instruction": args.query_instruction,
+            "ensemble_model": args.ensemble_model,
             "dense_weight": dense_weight,
             "lexical_weight": config.lexical_weight,
             "checkpoint": config.checkpoint,
@@ -569,7 +718,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     for name in dataset_names:
         print(f"[{name}]", flush=True)
         dataset_dir = ensure_dataset(name, data_root, download=not args.no_download)
-        corpus = load_corpus(dataset_dir)
+        corpus = load_corpus(dataset_dir, include_titles=not args.no_titles)
+        # The two channels can see different document text: titles are strong lexical
+        # signal but generic topic keywords (ArguAna) flatten an embedding.
+        dense_corpus = (
+            load_corpus(dataset_dir, include_titles=False)
+            if args.dense_text_only
+            else corpus
+        )
+        dense_suffix = ".notitles" if (args.no_titles or args.dense_text_only) else ""
         if args.limit_docs:
             corpus = dict(list(corpus.items())[: args.limit_docs])
         all_queries = load_queries(dataset_dir)
@@ -614,6 +771,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             # everything downstream inherits it.
             lexical = title_rankings
 
+        if args.prf > 0:
+            prf_ranking = bm25_rankings_prf(
+                corpus, queries, args.top_k, feedback_docs=args.prf,
+                expansion_terms=args.prf_terms, expansion_weight=args.prf_weight,
+                k1=args.k1, b=args.b, drop_stopwords=True, stem=args.stem,
+                titles=titles, title_boost=args.title_boost,
+            )
+            rankings["bm25-prf"] = prf_ranking
+            results["bm25-prf"] = {
+                "note": f"{args.prf} feedback docs, {args.prf_terms} terms x{args.prf_weight}"
+            }
+
         if args.passages > 0:
             passage_ranking = passage_rankings(
                 corpus, queries, args.top_k, passage_chars=args.passages,
@@ -627,10 +796,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if laya is None:
                 laya = LayaEmbedder(config)
             vectors = cached_embed(
-                laya, corpus, cache_dir / f"{name}.{laya.name}", use_cache=not args.no_cache
+                laya, dense_corpus, cache_dir / f"{name}.{laya.name}{dense_suffix}",
+                use_cache=not args.no_cache,
             )
             started = time.perf_counter()
-            dense = dense_rankings(corpus, queries, laya, vectors, args.top_k)
+            dense = dense_rankings(dense_corpus, queries, laya, vectors, args.top_k)
             seconds = round(time.perf_counter() - started, 2)
             if "dense" in wanted:
                 rankings["dense"] = dense
@@ -649,16 +819,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         if "biencoder" in wanted or "hybrid-biencoder" in wanted:
             try:
                 if biencoder is None:
-                    biencoder = BiEncoder(args.biencoder_model, device=args.device)
+                    biencoder = BiEncoder(
+                        args.biencoder_model, device=args.device,
+                        query_instruction=args.query_instruction,
+                    )
                 vectors = cached_embed(
-                    biencoder, corpus, cache_dir / f"{name}.{biencoder.name}", use_cache=not args.no_cache
+                    biencoder,
+                    dense_corpus,
+                    cache_dir / f"{name}.{biencoder.name}{dense_suffix}",
+                    use_cache=not args.no_cache,
                 )
                 started = time.perf_counter()
-                bi = dense_rankings(corpus, queries, biencoder, vectors, args.top_k)
+                bi = dense_rankings(dense_corpus, queries, biencoder, vectors, args.top_k)
                 seconds = round(time.perf_counter() - started, 2)
                 if "biencoder" in wanted:
                     rankings["biencoder"] = bi
                     results["biencoder"] = {"seconds": seconds, "model": biencoder.name}
+                if args.combsum:
+                    rankings["hybrid-combsum"] = score_fusion_rankings(
+                        corpus, queries, biencoder, vectors, args.top_k,
+                        dense_weight=args.biencoder_weight,
+                        lexical_weight=config.lexical_weight,
+                        k1=args.k1, b=args.b, stem=args.stem,
+                        titles=titles, title_boost=args.title_boost,
+                    )
+                    results["hybrid-combsum"] = {"note": "CombSUM, max-normalised per query"}
+
                 if "hybrid-biencoder" in wanted:
                     rankings["hybrid-biencoder"] = hybrid_rankings(
                         bi, lexical or {}, args.top_k,
@@ -673,6 +859,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for retriever in ("biencoder", "hybrid-biencoder"):
                     if retriever in wanted:
                         results[retriever] = {"error": f"{type(exc).__name__}: {exc}"}
+
+        if args.ensemble_model and biencoder is not None:
+            try:
+                second = BiEncoder(
+                    args.ensemble_model, device=args.device,
+                    query_instruction=args.query_instruction,
+                )
+                vectors_second = cached_embed(
+                    second,
+                    dense_corpus,
+                    cache_dir / f"{name}.{second.name}{dense_suffix}",
+                    use_cache=not args.no_cache,
+                )
+                started = time.perf_counter()
+                bi_second = dense_rankings(dense_corpus, queries, second, vectors_second, args.top_k)
+                rankings["hybrid-ensemble"] = multi_channel_fusion(
+                    [rankings.get("biencoder", bi_second), bi_second, lexical or {}],
+                    [1.0, 1.0, config.lexical_weight],
+                    args.top_k,
+                    args.rrf_k,
+                )
+                results["hybrid-ensemble"] = {
+                    "seconds": round(time.perf_counter() - started, 2),
+                    "note": f"RRF of {args.biencoder_model}, {args.ensemble_model} and bm25",
+                }
+            except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
+                results["hybrid-ensemble"] = {"error": f"{type(exc).__name__}: {exc}"}
 
         if "crossencoder" in wanted:
             try:
