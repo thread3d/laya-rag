@@ -20,10 +20,11 @@ corpus this repository actually indexes by default.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 
 # ── queries ──────────────────────────────────────────────────────────────
@@ -351,6 +352,92 @@ def threshold_sweep(
             "tn": true_negative,
         })
     return out
+
+
+# ── standard IR metrics (TREC / BEIR) ────────────────────────────────────
+#
+# These are the metrics an IR leaderboard reports, so a number computed here can be
+# read beside a published one. They are macro-averaged over queries, use graded
+# relevance with the exponential gain convention (2**rel - 1), and are deliberately
+# separate from the single-gold metrics above, which answer a different question.
+
+def dcg_at_k(relevances: Sequence[float], k: int) -> float:
+    """Discounted cumulative gain of an already-ordered list of graded relevances."""
+    return sum(
+        (2.0 ** float(relevance) - 1.0) / math.log2(rank + 1)
+        for rank, relevance in enumerate(relevances[:k], start=1)
+    )
+
+
+def ndcg_at_k(ranked: Sequence[str], relevant: Mapping[str, float], k: int) -> float:
+    """nDCG@k against graded relevance; 0.0 when the query has no relevant document."""
+    gains = [float(relevant.get(doc, 0.0)) for doc in ranked[:k]]
+    ideal = sorted((float(v) for v in relevant.values() if v > 0), reverse=True)[:k]
+    ideal_gain = dcg_at_k(ideal, k)
+    return dcg_at_k(gains, k) / ideal_gain if ideal_gain > 0 else 0.0
+
+
+def mrr_at_k(ranked: Sequence[str], relevant: Mapping[str, float], k: int) -> float:
+    """Reciprocal rank of the first relevant document within the top ``k``."""
+    for rank, doc in enumerate(ranked[:k], start=1):
+        if float(relevant.get(doc, 0.0)) > 0:
+            return 1.0 / rank
+    return 0.0
+
+
+def recall_at_k(ranked: Sequence[str], relevant: Mapping[str, float], k: int) -> float:
+    """Fraction of the query's relevant documents that appear in the top ``k``."""
+    total = sum(1 for value in relevant.values() if value > 0)
+    if not total:
+        return 0.0
+    return sum(1 for doc in ranked[:k] if float(relevant.get(doc, 0.0)) > 0) / total
+
+
+def average_precision_at_k(ranked: Sequence[str], relevant: Mapping[str, float], k: int) -> float:
+    """Average precision over the top ``k``, normalized by all relevant documents."""
+    total = sum(1 for value in relevant.values() if value > 0)
+    if not total:
+        return 0.0
+    hits = 0
+    running = 0.0
+    for rank, doc in enumerate(ranked[:k], start=1):
+        if float(relevant.get(doc, 0.0)) > 0:
+            hits += 1
+            running += hits / rank
+    return running / total
+
+
+def evaluate_rankings(
+    rankings: Mapping[str, Sequence[str]],
+    qrels: Mapping[str, Mapping[str, float]],
+    k_values: Sequence[int] = (10, 100),
+) -> dict[str, Any]:
+    """Macro-average standard IR metrics over every query that has a relevant document.
+
+    Queries with no relevant document are skipped rather than scored zero, which is
+    what ``pytrec_eval`` and the BEIR scripts do; scoring them zero would drag the mean
+    down for reasons that have nothing to do with the retriever.
+    """
+    per_query: list[dict[str, Any]] = []
+    for query_id, relevant in qrels.items():
+        if not any(value > 0 for value in relevant.values()):
+            continue
+        ranked = list(rankings.get(query_id, ()))
+        row: dict[str, Any] = {"query": query_id}
+        for k in k_values:
+            row[f"nDCG@{k}"] = ndcg_at_k(ranked, relevant, k)
+            row[f"Recall@{k}"] = recall_at_k(ranked, relevant, k)
+        row["MRR@10"] = mrr_at_k(ranked, relevant, 10)
+        row["MAP@100"] = average_precision_at_k(ranked, relevant, 100)
+        per_query.append(row)
+
+    summary: dict[str, float] = {}
+    if per_query:
+        for key in per_query[0]:
+            if key == "query":
+                continue
+            summary[key] = round(sum(row[key] for row in per_query) / len(per_query), 4)
+    return {"queries": len(per_query), "summary": summary, "per_query": per_query}
 
 
 # ── reporting ────────────────────────────────────────────────────────────

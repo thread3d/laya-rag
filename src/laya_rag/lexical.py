@@ -55,9 +55,22 @@ class LexicalHit:
 
 
 class BM25Index:
-    """An in-memory BM25 index over chunk texts, persistable as JSON."""
+    """An in-memory BM25 index over chunk texts, persistable as JSON.
 
-    def __init__(self) -> None:
+    ``k1`` and ``b`` default to Lucene's values, which is what this engine's own
+    hybrid recall was tuned against. They are parameters rather than constants
+    because the published BM25 baselines on BEIR/Anserini use ``k1=0.9, b=0.4``,
+    and comparing against them means running that configuration
+    (``tools/beir.py`` does).
+    """
+
+    def __init__(self, k1: float = K1, b: float = B, drop_stopwords: bool = True) -> None:
+        self.k1 = float(k1)
+        self.b = float(b)
+        # The engine filters stopwords out of the query because its queries are short
+        # natural-language questions. The published BM25 baselines do not, so a
+        # benchmark comparison turns this off.
+        self.drop_stopwords = bool(drop_stopwords)
         self._ids: list[str] = []
         self._term_freqs: list[Counter[str]] = []
         self._doc_freq: Counter[str] = Counter()
@@ -97,7 +110,9 @@ class BM25Index:
             raise ValueError(f"k must be positive, got {k}")
         if not self._ids:
             return []
-        terms = [t for t in tokenize(query) if t not in STOPWORDS]
+        terms = tokenize(query)
+        if self.drop_stopwords:
+            terms = [t for t in terms if t not in STOPWORDS]
         if not terms:
             return []
         scores = [0.0] * len(self._ids)
@@ -110,8 +125,8 @@ class BM25Index:
                 if not freq:
                     continue
                 length = self._lengths[row] or 1
-                denom = freq + K1 * (1.0 - B + B * length / (self._avg_len or 1.0))
-                scores[row] += idf * (freq * (K1 + 1.0)) / denom
+                denom = freq + self.k1 * (1.0 - self.b + self.b * length / (self._avg_len or 1.0))
+                scores[row] += idf * (freq * (self.k1 + 1.0)) / denom
         ranked = sorted(range(len(scores)), key=lambda i: -scores[i])[:k]
         return [LexicalHit(chunk_id=self._ids[i], score=scores[i]) for i in ranked if scores[i] > 0.0]
 
@@ -126,6 +141,9 @@ class BM25Index:
             "doc_freq": dict(self._doc_freq),
             "lengths": self._lengths,
             "avg_len": self._avg_len,
+            "k1": self.k1,
+            "b": self.b,
+            "drop_stopwords": self.drop_stopwords,
         }
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
@@ -146,6 +164,9 @@ class BM25Index:
         index._doc_freq = Counter(payload["doc_freq"])
         index._lengths = list(payload["lengths"])
         index._avg_len = float(payload.get("avg_len", 0.0))
+        index.k1 = float(payload.get("k1", K1))
+        index.b = float(payload.get("b", B))
+        index.drop_stopwords = bool(payload.get("drop_stopwords", True))
         return index
 
 
