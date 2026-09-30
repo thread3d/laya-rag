@@ -122,6 +122,13 @@ class EngineConfig:
     retrieve_k: int = field(default_factory=lambda: _env_int("RETRIEVE_K", 20))
     rerank_k: int = field(default_factory=lambda: _env_int("RERANK_K", 5))
 
+    # English stemming for the lexical channel. Measured on BEIR it closes most of the gap
+    # to the published, stemmed Lucene BM25 baseline: SciFact nDCG@10 0.654 -> 0.677,
+    # NFCorpus 0.304 -> 0.324. Set false for corpora where exact terms matter more than
+    # morphology (source code, identifiers); the setting is stored with the index, so an
+    # existing unstemmed index keeps working and its queries stay unstemmed.
+    lexical_stem: bool = field(default_factory=lambda: _env_bool("LEXICAL_STEM", True))
+
     # Reciprocal-rank-fusion weights. Plain RRF assumes the two channels are
     # comparably good; measured, they are not. Laya's mean-pooled encoder scores
     # nDCG@10 ~0.014 on BEIR where BM25 scores ~0.654, and every non-zero dense weight

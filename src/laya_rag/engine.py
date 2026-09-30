@@ -229,7 +229,7 @@ class RagEngine:
         index.save(self.config.index_dir)
         # The lexical channel is rebuilt from the full chunk set so it always
         # matches the vector index exactly.
-        lexical = BM25Index()
+        lexical = BM25Index(stem=self.config.lexical_stem)
         lexical.build(index.chunks)
         lexical.save(self.config.index_dir / LEXICAL_FILE)
         self._lexical = lexical

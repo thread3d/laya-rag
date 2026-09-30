@@ -292,6 +292,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `INDEX_DIR` | `./indexes/default` | where the index is persisted |
 | `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `200` | chunking budget |
 | `MIN_CHUNK_CHARS` | `80` | a shorter trailing chunk is folded into the previous one |
+| `LEXICAL_STEM` | `true` | English stemming for the lexical channel; `false` keeps exact terms only |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
 | `EMBED_MODEL` | unset | retrieval-trained bi-encoder for the dense channel; unset uses Laya's own encoder |
 | `EMBED_POOLING` | `auto` | `cls` for BGE-family models, `mean` otherwise — BGE is trained with `[CLS]` |
@@ -425,30 +426,31 @@ Measured on this machine, multilingual checkpoint, `bge-small-en-v1.5` as the bi
 
 | dataset | retriever | nDCG@10 | nDCG@100 | MRR@10 | Recall@100 | MAP@100 |
 | --- | --- | --- | --- | --- | --- | --- |
-| SciFact | `bm25` | 0.654 | 0.678 | 0.622 | 0.875 | 0.616 |
+| SciFact | `bm25` (published settings) | 0.654 | 0.678 | 0.622 | 0.875 | 0.616 |
+| SciFact | `bm25-engine` (stemmed) | 0.676 | 0.701 | 0.641 | 0.912 | 0.636 |
 | SciFact | `dense` (Laya) | 0.014 | 0.022 | 0.011 | 0.067 | 0.012 |
-| SciFact | `hybrid` — **old default** | 0.370 | 0.411 | 0.276 | 0.860 | 0.277 |
-| SciFact | `biencoder` (CLS) | **0.720** | 0.743 | 0.685 | 0.953 | 0.682 |
-| SciFact | `hybrid-biencoder` | 0.704 | 0.734 | 0.668 | 0.965 | 0.667 |
-| SciFact | `crossencoder` | 0.695 | 0.722 | 0.662 | 0.944 | 0.654 |
-| NFCorpus | `bm25` | 0.304 | 0.264 | 0.513 | 0.234 | 0.138 |
+| SciFact | `hybrid` — **shipped default** | 0.676 | 0.701 | 0.641 | 0.912 | 0.636 |
+| SciFact | `biencoder` (CLS) | 0.720 | 0.743 | 0.685 | 0.953 | 0.682 |
+| SciFact | `hybrid-biencoder` | **0.732** | 0.758 | 0.701 | 0.965 | 0.696 |
+| SciFact | `crossencoder` | 0.691 | 0.720 | 0.661 | 0.938 | 0.653 |
+| NFCorpus | `bm25` (published settings) | 0.304 | 0.264 | 0.513 | 0.234 | 0.138 |
+| NFCorpus | `bm25-engine` (stemmed) | 0.324 | 0.281 | 0.532 | 0.247 | 0.145 |
 | NFCorpus | `dense` (Laya) | 0.015 | 0.019 | 0.046 | 0.028 | 0.002 |
-| NFCorpus | `hybrid` — **old default** | 0.173 | 0.183 | 0.294 | 0.220 | 0.068 |
+| NFCorpus | `hybrid` — **shipped default** | 0.324 | 0.281 | 0.532 | 0.247 | 0.145 |
 | NFCorpus | `biencoder` (CLS) | 0.339 | 0.314 | 0.528 | 0.306 | 0.157 |
-| NFCorpus | `hybrid-biencoder` | 0.351 | 0.326 | 0.563 | 0.314 | 0.167 |
-| NFCorpus | `crossencoder` | **0.361** | 0.311 | 0.583 | 0.270 | 0.169 |
+| NFCorpus | `hybrid-biencoder` | **0.364** | 0.334 | 0.573 | 0.314 | 0.173 |
+| NFCorpus | `crossencoder` | 0.360 | 0.311 | 0.587 | 0.271 | 0.167 |
 
 The `bm25` row is the control: it lands where the published Anserini BM25 baseline lands on both
 datasets, so the evaluator is measuring what a leaderboard measures. What the rows show:
 
 - **Laya's mean-pooled encoder is close to chance at retrieval.** nDCG@10 ≈ 0.014 against BM25's
   0.654 (SciFact) and 0.304 (NFCorpus) — not "a bi-encoder would shortlist better", but ~45x worse.
-- **Equal-weight fusion diluted BM25**, the *old* default: SciFact 0.654 → 0.370, NFCorpus
-  0.304 → 0.173. Recall@100 barely moved, so the documents stayed in the pool; the *ranking* was
-  what fusion destroyed.
-- **The fusion was not the problem, the encoder was.** Fusion with a retrieval-trained bi-encoder
-  is neutral-to-positive (0.704 / 0.351), and the bi-encoder alone is the best single
-  configuration on the two-dataset mean (0.720 / 0.339).
+- **Stemming closes the gap to the published lexical baseline** on its own: 0.654 → 0.676 and
+  0.304 → 0.324, against a published Lucene BM25 of 0.679 and 0.325.
+- **Fusion helps once both channels are competent.** With an unstemmed lexical channel, RRF below
+  BM25 on both; with stemming it beats either channel alone (0.732 / 0.364), which is the
+  textbook behaviour and the reverse of the first round's finding.
 
 Two rounds of `make beir-ablate` chose the configuration. The first turned the dense channel off,
 moved the rerank order to recall, and added the optional bi-encoder:
@@ -457,32 +459,37 @@ moved the rerank order to recall, and added the optional bi-encoder:
 | --- | --- | --- |
 | `DENSE_WEIGHT` is `auto` | `0` for Laya's encoder, `1` with `EMBED_MODEL` | SciFact 0.370 → **0.654**, NFCorpus 0.173 → **0.304** |
 | `RERANK_ORDER` is `auto` | recall order, unless a cross-encoder supplies a score | SciFact 0.654 (was 0.470 reordered); NFCorpus 0.304 (was 0.283) |
-| `EMBED_MODEL` is opt-in | unset | with `bge-small-en-v1.5`: SciFact **0.720**, NFCorpus **0.339** |
+| `EMBED_MODEL` is opt-in | unset | fused with BM25: SciFact **0.732**, NFCorpus **0.364** (after the second round) |
 
 The second round checked the remaining candidates — embedding pooling, query instruction, BM25
 stemming and a retrieval-trained cross-encoder:
 
 | change | default now | effect |
 | --- | --- | --- |
+| `LEXICAL_STEM` | `true` | SciFact 0.654 → **0.676**, NFCorpus 0.304 → **0.324**, matching the published stemmed Lucene baseline (0.679 / 0.325) — and it is what makes fusion pay off |
 | `EMBED_POOLING` | `auto`: `[CLS]` for BGE-family models | SciFact 0.708 → **0.720**; NFCorpus 0.348 → 0.339. BGE is trained with `[CLS]`, so mean pooling was a mismatch; SciFact prefers the fix, NFCorpus slightly prefers the old behaviour, and the two-dataset mean prefers `[CLS]` |
 | `EMBED_QUERY_INSTRUCTION` | `false` | a wash: SciFact 0.7200 off vs 0.7127 on, NFCorpus 0.3386 off vs 0.3447 on — so the simpler setting stays |
-| `RERANK_MODEL` | unset (opt-in) | on the default lexical path: SciFact 0.654 → **0.680**, NFCorpus 0.304 → **0.339**; over the hybrid it reaches NFCorpus **0.361** but costs SciFact 0.704 → 0.695 |
+| `RERANK_MODEL` | unset (opt-in) | lifts the shipped lexical path from 0.676 to **0.691** (SciFact) and 0.324 to **0.360** (NFCorpus), but still slightly below fusion and the bi-encoder |
 
-Two findings worth internalising. **No single configuration wins both datasets**: the bi-encoder
-wins SciFact, the cross-encoder wins NFCorpus, and each reranker variant trades one for the other —
-the same pattern the reproducible BEIR harnesses report, so callers should A/B their own corpus.
-And **a cross-encoder helps a weak first stage, not a strong one**: it lifts BM25 by +0.026/+0.035
-but slightly *hurts* the bi-encoder on SciFact, because the second stage is only as useful as the
-gap it is closing.
+Two findings worth internalising. **Strengthening the lexical channel flipped fusion from harmful to
+helpful**: with an unstemmed BM25, RRF sat below BM25 alone; with stemming it beats both channels
+(0.732 / 0.364). RRF is only as good as its weaker input. And **a cross-encoder helps a weak first
+stage more than a strong one** — it is now the *worst* of the three good SciFact configurations,
+because retrieval is already strong enough that re-scoring adds less than fusing.
+
+The best single configuration on the two-dataset mean is `EMBED_MODEL=bge-small-en-v1.5` with
+stemming (**0.548**), which sits just below a published 335M BGE-large (0.551) and above SPLADE++
+(0.526) and BM25 (0.502). The shipped default, with no extra model at all, is 0.500 — level with
+that published BM25 baseline.
 
 On this project's own planted corpus the first round moved candidate MRR **0.941 → 1.0**, the worst
 gold-over-negative margin from **−0.044 → +0.165**, and the count of queries where a negative
-outranked gold from **1 → 0**; Laya's rerank MRR goes 0.971 → 1.0. One more measurement fell out of
-the sweeps: the engine's stopword drop is marginally *better* than the published BM25 settings
-(+0.004 / +0.007 nDCG@10), so it stays. And **Laya's decision head is a stronger filter than a
-ranker** — reordering BM25's candidates by it lowered nDCG@10 on both datasets (SciFact 0.654 →
-0.470). It still filters and still gates answerability, which is what those decisions are calibrated
-for.
+outranked gold from **1 → 0**; Laya's rerank MRR goes 0.971 → 1.0. Stemming holds all of that
+(relevance ECE 0.123 → 0.097). One more measurement fell out of the sweeps: the engine's stopword
+drop is marginally *better* than the published BM25 settings (+0.004 / +0.007 nDCG@10), so it stays.
+And **Laya's decision head is a stronger filter than a ranker** — reordering BM25's candidates by it
+lowered nDCG@10 on both datasets (SciFact 0.654 → 0.470). It still filters and still gates
+answerability, which is what those decisions are calibrated for.
 
 ## Repository layout
 
@@ -539,13 +546,14 @@ non-zero fusion weight lowered the score — including on this project's own pla
 lexical recall ranked gold first for every query and fusion dropped it. So `DENSE_WEIGHT` resolves
 to `0` for Laya's encoder, and the shipped recall is lexical. That costs semantic recall: a query
 with no lexical overlap retrieves nothing. Set `EMBED_MODEL` to a retrieval-trained bi-encoder
-(e.g. `BAAI/bge-small-en-v1.5`) to bring the dense channel back with weight 1, which measures at
-SciFact 0.720 and NFCorpus 0.339 — at or above BM25 on both and level with a published 335M model
-on SciFact. Run `make beir` for the numbers.
+(e.g. `BAAI/bge-small-en-v1.5`) to bring the dense channel back with weight 1, which fuses with the
+stemmed lexical channel to **0.732 / 0.364** — above both channels alone, and level with a published
+335M model on SciFact. Run `make beir` for the numbers.
 
-**A cross-encoder helps a weak first stage, not a strong one.** `RERANK_MODEL` lifts the default
-lexical recall (SciFact 0.654 → 0.680, NFCorpus 0.304 → 0.339) but slightly lowers the bi-encoder on
-SciFact, so it is opt-in rather than a default. `RERANK_ORDER=auto` orders by it when configured.
+**A cross-encoder helps a weak first stage, not a strong one.** `RERANK_MODEL` lifts the shipped
+lexical path (SciFact 0.676 → 0.691, NFCorpus 0.324 → 0.360) but lands *below* the bi-encoder and the
+fusion on SciFact, so it is opt-in rather than a default. `RERANK_ORDER=auto` orders by it when
+configured.
 
 **Laya's relevance decision is a stronger filter than a ranker.** Reordering BM25's candidates by
 Laya's probability lowered nDCG@10 on both BEIR datasets (SciFact 0.654 → 0.470, NFCorpus

@@ -1,6 +1,8 @@
 """Tests for BM25 lexical recall and rank fusion."""
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from laya_rag.chunking import Chunk
@@ -135,3 +137,47 @@ def test_fusion_weight_must_match_the_channel_count():
 def test_fusion_default_weights_are_still_equal():
     weighted = reciprocal_rank_fusion([["a", "b"], ["b", "a"]], weights=[1.0, 1.0])
     assert weighted == reciprocal_rank_fusion([["a", "b"], ["b", "a"]])
+
+
+# ── stemming ─────────────────────────────────────────────────────────────
+
+def test_tokenize_stems_when_asked():
+    assert tokenize("Refunds are processed", stem=True) == ["refund", "are", "process"]
+
+
+def test_tokenize_leaves_identifiers_and_digits_alone():
+    assert tokenize("user_ids v2", stem=True) == ["user", "id", "v2"]
+
+
+def test_stemming_matches_morphological_variants_that_exact_matching_misses():
+    docs = [make_chunk("d1", "the refund policy")]
+    plain = BM25Index()
+    plain.build(docs)
+    assert plain.search("refunds", k=5) == []
+
+    stemmed = BM25Index(stem=True)
+    stemmed.build(docs)
+    assert [hit.chunk_id for hit in stemmed.search("refunds", k=5)] == ["d1"]
+
+
+def test_stemming_survives_a_save_and_load(tmp_path):
+    index = BM25Index(stem=True)
+    index.build([make_chunk("d1", "refunds processed")])
+    target = tmp_path / "lexical.json"
+    index.save(target)
+
+    restored = BM25Index.load(target)
+    assert restored.stem is True
+    assert [hit.chunk_id for hit in restored.search("refund", k=5)] == ["d1"]
+
+
+def test_an_index_without_the_stem_key_loads_as_unstemmed(tmp_path):
+    index = BM25Index()
+    index.build([make_chunk("d1", "refunds")])
+    target = tmp_path / "lexical.json"
+    index.save(target)
+    payload = json.loads(target.read_text())
+    payload.pop("stem")
+    target.write_text(json.dumps(payload))
+
+    assert BM25Index.load(target).stem is False

@@ -289,6 +289,10 @@ def test_rerank_rejects_a_score_count_mismatch():
         LayaReranker(StubModel()).rerank("q", _two_hits(), scores=[0.5])
 
 
+def test_lexical_stemming_is_on_by_default():
+    assert EngineConfig().lexical_stem is True
+
+
 def test_the_engine_orders_evidence_by_an_injected_cross_encoder(tmp_path):
     engine = RagEngine(make_config(tmp_path), model=StubModel(dim=64))
     engine.index_paths([write_corpus(tmp_path / "corpus")])

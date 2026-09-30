@@ -65,10 +65,11 @@ REFERENCES = {
     "BEIR code": "https://github.com/UKPLab/beir",
     "note": (
         "Published BM25 baselines use Anserini/Pyserini: k1=0.9, b=0.4 and a Lucene "
-        "analyzer with stemming. This harness uses the same k1/b but this project's "
-        "regex tokenizer without stemming, so a small gap is expected and the rows here "
-        "are a like-for-like comparison between retrievers, not a head-to-head with a "
-        "leaderboard entry."
+        "analyzer with stemming. The `bm25` row keeps this project's regex tokenizer "
+        "without stemming so it stays a clean control; `bm25-engine` runs the engine's own "
+        "settings (stemming on, query stopwords dropped) and is what feeds the fused and "
+        "reranked rows. The rows are a like-for-like comparison between retrievers, not a "
+        "head-to-head with a leaderboard entry."
     ),
 }
 
@@ -333,6 +334,7 @@ def bm25_rankings(
     k1: float = BEIR_K1,
     b: float = BEIR_B,
     drop_stopwords: bool = False,
+    stem: bool = False,
 ) -> dict[str, list[str]]:
     """Lexical ranking at the published BEIR BM25 settings.
 
@@ -340,7 +342,7 @@ def bm25_rankings(
     are short natural-language questions, but the Anserini baseline does not, and turning
     it off is what makes this row comparable.
     """
-    index = BM25Index(k1=k1, b=b, drop_stopwords=drop_stopwords)
+    index = BM25Index(k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
     index.build(make_chunks(corpus))
     return {
         query_id: [hit.chunk_id for hit in index.search(text, k=top_k)]
@@ -442,6 +444,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="cross-encoder used by the crossencoder row")
     parser.add_argument("--rerank-depth", type=int, default=50,
                         help="how many candidates the cross-encoder re-ranks")
+    parser.add_argument("--no-stem", dest="stem", action="store_false",
+                        help="disable the engine's English stemming for its lexical path")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -465,7 +469,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "top_k": args.top_k,
             "bm25_k1": args.k1,
             "bm25_b": args.b,
-            "drop_stopwords": False,
+            "drop_stopwords": True,
+            "stem": args.stem,
             "dense_weight": dense_weight,
             "lexical_weight": config.lexical_weight,
             "checkpoint": config.checkpoint,
@@ -500,11 +505,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             rankings["bm25"] = bm25_rankings(corpus, queries, args.top_k, k1=args.k1, b=args.b)
             results["bm25"] = {"seconds": round(time.perf_counter() - started, 2)}
 
-        # Any fused row needs the lexical channel, whether or not it is reported.
-        if {"hybrid", "hybrid-biencoder"} & set(wanted):
-            lexical = rankings.get("bm25") or bm25_rankings(
-                corpus, queries, args.top_k, k1=args.k1, b=args.b
-            )
+        # The engine's own lexical channel: query stopwords dropped, English stemming on.
+        # It is reported as its own row and feeds every fused and reranked row, while the
+        # `bm25` row above stays at the published settings so it remains a valid control.
+        lexical = bm25_rankings(
+            corpus, queries, args.top_k, k1=args.k1, b=args.b,
+            drop_stopwords=True, stem=args.stem,
+        )
+        rankings["bm25-engine"] = lexical
+        results["bm25-engine"] = {
+            "note": f"engine settings: stopwords dropped, stem={args.stem}"
+        }
 
         dense: dict[str, list[str]] | None = None
         if "dense" in wanted or "hybrid" in wanted:
@@ -633,7 +644,9 @@ def render_console(report: dict[str, Any]) -> str:
             lines.append(f"{row['dataset']:<10} {row['retriever']:<12} {row['error'][:60]}")
             continue
         cells = " ".join(f"{row[c]:>9.4f}" if isinstance(row[c], float) else f"{str(row[c]):>9}" for c in columns)
-        lines.append(f"{row['dataset']:<10} {row['retriever']:<12} {cells} {row['seconds']:>7}")
+        seconds = row["seconds"]
+        secs = f"{seconds:>7}" if isinstance(seconds, (int, float)) else " " * 7
+        lines.append(f"{row['dataset']:<10} {row['retriever']:<12} {cells} {secs}")
     return "\n".join(lines)
 
 

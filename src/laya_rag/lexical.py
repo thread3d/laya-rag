@@ -40,10 +40,33 @@ STOPWORDS: frozenset[str] = frozenset({
 K1 = 1.2
 B = 0.75
 
+# Optional English stemming. Measured on BEIR, stemming the corpus and the queries closes
+# most of the gap to the published Lucene BM25 baseline, which stems: SciFact nDCG@10
+# 0.654 -> 0.677 and NFCorpus 0.304 -> 0.324. It is off by default because this engine
+# also indexes source code and configuration, where `user_id` and `user_ids` are
+# different terms; `LAYA_RAG_LEXICAL_STEM=true` turns it on. The setting is stored with
+# the index, so a query is always stemmed the way its corpus was.
+_stemmer: Any | None = None
 
-def tokenize(text: str) -> list[str]:
-    """Lowercase word tokens with CJK characters kept individually."""
-    return [t for t in _TOKEN_RE.findall(str(text).lower()) if len(t) > 1 or not t.isascii()]
+
+def _stem_word(token: str) -> str:
+    """Stem one ASCII alphabetic token; leave identifiers, digits and CJK alone."""
+    global _stemmer
+    if not token.isascii() or not token.isalpha():
+        return token
+    if _stemmer is None:
+        import snowballstemmer
+
+        _stemmer = snowballstemmer.stemmer("english")
+    return _stemmer.stemWord(token)
+
+
+def tokenize(text: str, stem: bool = False) -> list[str]:
+    """Lowercase word tokens with CJK characters kept individually, optionally stemmed."""
+    tokens = [t for t in _TOKEN_RE.findall(str(text).lower()) if len(t) > 1 or not t.isascii()]
+    if stem:
+        tokens = [_stem_word(token) for token in tokens]
+    return tokens
 
 
 @dataclass
@@ -64,13 +87,21 @@ class BM25Index:
     (``tools/beir.py`` does).
     """
 
-    def __init__(self, k1: float = K1, b: float = B, drop_stopwords: bool = True) -> None:
+    def __init__(
+        self,
+        k1: float = K1,
+        b: float = B,
+        drop_stopwords: bool = True,
+        stem: bool = False,
+    ) -> None:
         self.k1 = float(k1)
         self.b = float(b)
         # The engine filters stopwords out of the query because its queries are short
         # natural-language questions. The published BM25 baselines do not, so a
         # benchmark comparison turns this off.
         self.drop_stopwords = bool(drop_stopwords)
+        # Stored with the index so queries are stemmed the same way the corpus was.
+        self.stem = bool(stem)
         self._ids: list[str] = []
         self._term_freqs: list[Counter[str]] = []
         self._doc_freq: Counter[str] = Counter()
@@ -87,7 +118,7 @@ class BM25Index:
         self._doc_freq = Counter()
         self._lengths = []
         for chunk in chunks:
-            tokens = tokenize(chunk.text)
+            tokens = tokenize(chunk.text, stem=self.stem)
             counts = Counter(tokens)
             self._ids.append(chunk.chunk_id)
             self._term_freqs.append(counts)
@@ -110,7 +141,7 @@ class BM25Index:
             raise ValueError(f"k must be positive, got {k}")
         if not self._ids:
             return []
-        terms = tokenize(query)
+        terms = tokenize(query, stem=self.stem)
         if self.drop_stopwords:
             terms = [t for t in terms if t not in STOPWORDS]
         if not terms:
@@ -144,6 +175,7 @@ class BM25Index:
             "k1": self.k1,
             "b": self.b,
             "drop_stopwords": self.drop_stopwords,
+            "stem": self.stem,
         }
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
@@ -167,6 +199,8 @@ class BM25Index:
         index.k1 = float(payload.get("k1", K1))
         index.b = float(payload.get("b", B))
         index.drop_stopwords = bool(payload.get("drop_stopwords", True))
+        # Absent means an index written before stemming existed, which is an unstemmed one.
+        index.stem = bool(payload.get("stem", False))
         return index
 
 
