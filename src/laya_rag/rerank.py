@@ -208,22 +208,35 @@ class LayaReranker:
         answerability_threshold: float = 0.5,
         batch_size: int = 8,
         order: str = "relevance",
+        scores: Sequence[float] | None = None,
     ) -> RerankResult:
-        """Apply Laya's relevance decision to the candidates and gate on answerability.
+        """Apply a relevance decision to the candidates and gate on answerability.
 
         ``order`` decides what the returned evidence is ranked by. ``relevance`` (the
-        default) uses Laya's calibrated probability, which is what the engine has always
-        done. ``recall`` keeps the retrieval order and uses Laya's probability only to
+        default) uses the relevance probability, which is what the engine has always
+        done. ``recall`` keeps the retrieval order and uses the probability only to
         filter and to gate — measured, Laya's decision is a better *filter* than a
         *ranker*: reordering BM25's candidates by it lowered nDCG@10 on both BEIR
         datasets (SciFact 0.654 -> 0.470, NFCorpus 0.304 -> 0.283).
+
+        ``scores`` lets the caller supply the relevance probabilities instead of having
+        Laya compute them — the engine uses this to substitute a retrieval-trained
+        cross-encoder for ordering and filtering while keeping Laya's answerability gate.
         """
         if not hits:
             return RerankResult()
 
-        relevance, usage = self.score_relevance(
-            query, [hit.chunk.text for hit in hits], batch_size=batch_size
-        )
+        if scores is None:
+            relevance, usage = self.score_relevance(
+                query, [hit.chunk.text for hit in hits], batch_size=batch_size
+            )
+        else:
+            relevance = [float(score) for score in scores]
+            if len(relevance) != len(hits):
+                raise DecisionError(
+                    f"got {len(relevance)} scores for {len(hits)} candidates"
+                )
+            usage = {}
         scored = [
             ScoredPassage(
                 text=hit.chunk.text,

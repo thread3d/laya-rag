@@ -26,7 +26,7 @@ from .compose import Composer
 from .config import EngineConfig
 from .index_store import Hit, VectorIndex, wipe
 from .lexical import LEXICAL_FILE, BM25Index, reciprocal_rank_fusion
-from .model import BiEncoderModel, LayaModel
+from .model import BiEncoderModel, CrossEncoderModel, LayaModel
 from .rerank import ANSWERABILITY_QUESTION, LayaReranker
 
 
@@ -130,6 +130,13 @@ class RagEngine:
         else:
             self.embedder = self.model
         self.reranker = LayaReranker(self.model)
+        # Optional retrieval-trained cross-encoder for ordering and filtering. Laya keeps
+        # the answerability gate either way, and `adjudicate_claims` is unchanged.
+        self.cross_encoder = (
+            CrossEncoderModel(self.config)
+            if (self.config.rerank_model or "").strip()
+            else None
+        )
         # Optional generative step. It never runs on its own: the caller has to ask
         # for it, and everything it produces is unverified prose.
         self.composer = Composer(self.config)
@@ -296,6 +303,13 @@ class RagEngine:
         )
 
         rerank_started = time.perf_counter()
+        # A configured cross-encoder replaces Laya's relevance scores for ordering and
+        # filtering; `rerank` still runs the answerability gate on the kept passages.
+        cross_scores = None
+        if self.cross_encoder is not None:
+            cross_scores = self.cross_encoder.score_pairs(
+                [(query, hit.chunk.text) for hit in candidates]
+            )
         reranked = self.reranker.rerank(
             query,
             candidates,
@@ -309,6 +323,7 @@ class RagEngine:
                 else answerability_threshold
             ),
             order=self.config.resolved_rerank_order,
+            scores=cross_scores,
         )
         rerank_seconds = time.perf_counter() - rerank_started
 
@@ -598,6 +613,7 @@ class RagEngine:
             "config": self.config.as_dict(),
             "model": self.model.info() if hasattr(self.model, "info") else {"model": type(self.model).__name__},
             "embedder": self.embedder.info() if hasattr(self.embedder, "info") else {"embedder": type(self.embedder).__name__},
+            "reranker": self.cross_encoder.info() if self.cross_encoder is not None else {"kind": "laya decisions"},
             "index_dir": str(self.config.index_dir),
             "index_present": VectorIndex.exists_on_disk(self.config.index_dir),
             "lexical_present": (self._lexical is not None)

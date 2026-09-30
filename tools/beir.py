@@ -177,7 +177,16 @@ class LayaEmbedder:
 
 
 class BiEncoder:
-    """A retrieval-trained bi-encoder, for the comparison Laya's README invites."""
+    """A retrieval-trained bi-encoder, for the comparison Laya's README invites.
+
+    Pooling is not cosmetic. BGE models are trained and served with the **[CLS]** token's
+    last hidden state (BAAI's model card uses ``model_output[0][:, 0]``), so mean pooling
+    — the obvious default for a transformer — mismatches how the model was trained.
+    ``pooling="auto"`` picks CLS for bge-family models and mean otherwise, and the name
+    carries the pooling setting so the embedding cache cannot mix the two.
+    """
+
+    QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
     def __init__(
         self,
@@ -185,19 +194,29 @@ class BiEncoder:
         device: str | None = None,
         batch_size: int = 32,
         max_length: int = 512,
-        query_prefix: str = "Represent this sentence for searching relevant passages: ",
+        pooling: str = "auto",
+        query_instruction: bool = False,
     ) -> None:
         import torch
         from transformers import AutoModel, AutoTokenizer
 
         if device in (None, "auto"):
             device = "mps" if torch.backends.mps.is_available() else "cpu"
-        self.name = model_id.rsplit("/", 1)[-1]
+        if pooling == "auto":
+            pooling = "cls" if "bge" in model_id.lower() else "mean"
+        if pooling not in {"cls", "mean"}:
+            raise ValueError(f"pooling must be cls, mean or auto, got {pooling!r}")
+
         self.torch = torch
         self.device = device
         self.batch_size = batch_size
         self.max_length = max_length
-        self.query_prefix = query_prefix
+        self.pooling = pooling
+        self.query_instruction = query_instruction
+        self.model_id = model_id
+        # Documents never take the query instruction, so the embedding cache is keyed by
+        # model and pooling only — the instruction setting is a query-side choice.
+        self.name = f"{model_id.rsplit('/', 1)[-1]}.{pooling}"
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModel.from_pretrained(model_id).to(device).eval()
 
@@ -211,14 +230,69 @@ class BiEncoder:
             ).to(self.device)
             with self.torch.no_grad():
                 hidden = self.model(**encoded).last_hidden_state
-            mask = encoded["attention_mask"].unsqueeze(-1).to(hidden.dtype)
-            pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+            if self.pooling == "cls":
+                pooled = hidden[:, 0]
+            else:
+                mask = encoded["attention_mask"].unsqueeze(-1).to(hidden.dtype)
+                pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
             pooled = self.torch.nn.functional.normalize(pooled, p=2, dim=1)
             out.append(pooled.cpu().numpy().astype(np.float32))
         return np.vstack(out) if out else np.zeros((0, 0), dtype=np.float32)
 
     def embed_queries(self, texts: Sequence[str]) -> np.ndarray:
-        return self.embed([self.query_prefix + text for text in texts])
+        if not self.query_instruction:
+            return self.embed(texts)
+        return self.embed([self.QUERY_PREFIX + text for text in texts])
+
+
+class CrossEncoder:
+    """A retrieval-trained cross-encoder reranker, the standard second stage.
+
+    BAAI's own model card recommends exactly this shape: retrieve a wide candidate set
+    with a cheap first stage, then re-rank it with a cross-encoder, which attends over
+    the query and document together and is more accurate than a bi-encoder but too slow
+    to run over a whole corpus.
+    """
+
+    def __init__(
+        self,
+        model_id: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        device: str | None = None,
+        batch_size: int = 32,
+        max_length: int = 512,
+    ) -> None:
+        import torch
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+        if device in (None, "auto"):
+            device = "mps" if torch.backends.mps.is_available() else "cpu"
+        self.torch = torch
+        self.device = device
+        self.batch_size = batch_size
+        self.max_length = max_length
+        self.model_id = model_id
+        self.name = model_id.rsplit("/", 1)[-1]
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_id).to(device).eval()
+
+    def score(self, pairs: Sequence[tuple[str, str]]) -> list[float]:
+        """Relevance score per ``(query, passage)`` pair; higher is more relevant."""
+        rows = list(pairs)
+        out: list[float] = []
+        for start in range(0, len(rows), self.batch_size):
+            batch = rows[start : start + self.batch_size]
+            encoded = self.tokenizer(
+                [query for query, _ in batch],
+                [passage for _, passage in batch],
+                padding=True,
+                truncation=True,
+                max_length=self.max_length,
+                return_tensors="pt",
+            ).to(self.device)
+            with self.torch.no_grad():
+                logits = self.model(**encoded, return_dict=True).logits.view(-1).float()
+            out.extend(logits.cpu().tolist())
+        return out
 
 
 def cached_embed(
@@ -230,8 +304,11 @@ def cached_embed(
 ) -> np.ndarray:
     """Embed the corpus once, reusing a sidecar cache keyed by the doc id order."""
     ids = list(corpus)
-    ids_file = cache.with_suffix(".ids.json")
-    vectors_file = cache.with_suffix(".npy")
+    # Append rather than `with_suffix`: a cache stem can contain dots (model.pooling),
+    # and `with_suffix` would replace the pooling tag instead of adding an extension,
+    # making every pooling variant share one cache file.
+    ids_file = Path(str(cache) + ".ids.json")
+    vectors_file = Path(str(cache) + ".npy")
     if use_cache and vectors_file.is_file() and ids_file.is_file():
         if json.loads(ids_file.read_text(encoding="utf-8")) == ids:
             print(f"  reusing cached {embedder.name} embeddings ({vectors_file.name})", flush=True)
@@ -287,6 +364,40 @@ def dense_rankings(
     return rankings
 
 
+def crossencoder_rankings(
+    corpus: Mapping[str, str],
+    queries: Mapping[str, str],
+    base: Mapping[str, Sequence[str]],
+    cross_encoder: "CrossEncoder",
+    depth: int,
+    top_k: int,
+) -> tuple[dict[str, list[str]], float]:
+    """Re-rank each query's top ``depth`` candidates with a cross-encoder.
+
+    Returns the new ranking and the seconds spent scoring, so the cost of the stage can
+    be reported separately from the recall that fed it.
+    """
+    spans: list[tuple[str, list[str]]] = []
+    pairs: list[tuple[str, str]] = []
+    for query_id, text in queries.items():
+        docs = list(base.get(query_id, []))[:depth]
+        spans.append((query_id, docs))
+        pairs.extend((text, corpus[doc_id]) for doc_id in docs)
+
+    started = time.perf_counter()
+    scores = cross_encoder.score(pairs)
+    elapsed = time.perf_counter() - started
+
+    reranked: dict[str, list[str]] = {}
+    cursor = 0
+    for query_id, docs in spans:
+        block = scores[cursor : cursor + len(docs)]
+        cursor += len(docs)
+        order = sorted(range(len(docs)), key=lambda index: -block[index])
+        reranked[query_id] = [docs[index] for index in order[:top_k]]
+    return reranked, elapsed
+
+
 def hybrid_rankings(
     dense: Mapping[str, Sequence[str]],
     lexical: Mapping[str, Sequence[str]],
@@ -312,7 +423,8 @@ def hybrid_rankings(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="beir.py", description="Standard retrieval evaluation on BEIR")
     parser.add_argument("--datasets", default="scifact,nfcorpus")
-    parser.add_argument("--retrievers", default="bm25,dense,hybrid,biencoder,hybrid-biencoder")
+    parser.add_argument("--retrievers",
+                        default="bm25,dense,hybrid,biencoder,hybrid-biencoder,crossencoder")
     parser.add_argument("--top-k", type=int, default=100)
     parser.add_argument("--k1", type=float, default=BEIR_K1)
     parser.add_argument("--b", type=float, default=BEIR_B)
@@ -326,6 +438,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="dense RRF weight for the hybrid row (default: the engine's resolved value)")
     parser.add_argument("--biencoder-weight", type=float, default=1.0,
                         help="bi-encoder RRF weight for the hybrid-biencoder row")
+    parser.add_argument("--rerank-model", default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+                        help="cross-encoder used by the crossencoder row")
+    parser.add_argument("--rerank-depth", type=int, default=50,
+                        help="how many candidates the cross-encoder re-ranks")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -354,6 +470,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "lexical_weight": config.lexical_weight,
             "checkpoint": config.checkpoint,
             "biencoder_model": args.biencoder_model if "biencoder" in wanted else None,
+            "rerank_model": args.rerank_model if "crossencoder" in wanted else None,
+            "rerank_depth": args.rerank_depth,
             "limit_docs": args.limit_docs,
         },
         "references": REFERENCES,
@@ -437,6 +555,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for retriever in ("biencoder", "hybrid-biencoder"):
                     if retriever in wanted:
                         results[retriever] = {"error": f"{type(exc).__name__}: {exc}"}
+
+        if "crossencoder" in wanted:
+            try:
+                cross_encoder = CrossEncoder(args.rerank_model, device=args.device)
+                base = (
+                    rankings.get("hybrid-biencoder")
+                    or rankings.get("bm25")
+                    or bm25_rankings(corpus, queries, args.top_k, k1=args.k1, b=args.b)
+                )
+                reranked, seconds = crossencoder_rankings(
+                    corpus, queries, base, cross_encoder, args.rerank_depth, args.top_k
+                )
+                rankings["crossencoder"] = reranked
+                results["crossencoder"] = {
+                    "seconds": round(seconds, 2),
+                    "model": cross_encoder.name,
+                    "note": f"{args.rerank_model} over the best available first stage "
+                            f"top-{args.rerank_depth}",
+                }
+            except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
+                results["crossencoder"] = {"error": f"{type(exc).__name__}: {exc}"}
 
         for retriever, ranking in rankings.items():
             evaluation = evalkit.evaluate_rankings(ranking, qrels, k_values=(10, 100))

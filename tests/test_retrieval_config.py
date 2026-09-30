@@ -8,6 +8,7 @@ configured, which is the only case where it earned a weight.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from laya_rag.config import EngineConfig
 from laya_rag.engine import RagEngine
@@ -114,16 +115,30 @@ def test_an_injected_embedder_that_changes_width_is_still_indexed(tmp_path):
 
 # ── rerank order ─────────────────────────────────────────────────────────
 
-def test_rerank_order_defaults_to_recall():
+def test_rerank_order_defaults_to_recall_without_a_cross_encoder():
     assert EngineConfig().resolved_rerank_order == "recall"
+
+
+def test_rerank_order_resolves_to_relevance_when_a_cross_encoder_is_configured():
+    config = EngineConfig(rerank_model="cross-encoder/ms-marco-MiniLM-L-6-v2")
+    assert config.resolved_rerank_order == "relevance"
+
+
+def test_an_explicit_recall_order_overrides_the_cross_encoder_default():
+    config = EngineConfig(
+        rerank_model="cross-encoder/ms-marco-MiniLM-L-6-v2", rerank_order="recall"
+    )
+    assert config.resolved_rerank_order == "recall"
 
 
 def test_rerank_order_accepts_relevance_case_insensitively():
     assert EngineConfig(rerank_order="RELEVANCE").resolved_rerank_order == "relevance"
 
 
-def test_an_unknown_rerank_order_falls_back_to_recall():
+def test_an_unknown_rerank_order_falls_back_to_auto():
     assert EngineConfig(rerank_order="sideways").resolved_rerank_order == "recall"
+    configured = EngineConfig(rerank_order="sideways", rerank_model="some/cross-encoder")
+    assert configured.resolved_rerank_order == "relevance"
 
 
 def _two_hits():
@@ -171,3 +186,124 @@ def test_recall_order_still_filters_below_the_threshold():
     )
     assert result.kept == 0
     assert result.dropped_below_threshold == 2
+
+
+# ── bi-encoder pooling ───────────────────────────────────────────────────
+
+def test_bge_models_default_to_cls_pooling(tmp_path):
+    from laya_rag.model import BiEncoderModel
+
+    engine = BiEncoderModel(make_config(tmp_path, embed_model="BAAI/bge-small-en-v1.5"))
+    assert engine.pooling == "cls"
+
+
+def test_other_models_default_to_mean_pooling(tmp_path):
+    from laya_rag.model import BiEncoderModel
+
+    engine = BiEncoderModel(
+        make_config(tmp_path, embed_model="sentence-transformers/all-MiniLM-L6-v2")
+    )
+    assert engine.pooling == "mean"
+
+
+def test_pooling_can_be_forced(tmp_path):
+    from laya_rag.model import BiEncoderModel
+
+    engine = BiEncoderModel(
+        make_config(tmp_path, embed_model="BAAI/bge-small-en-v1.5", embed_pooling="mean")
+    )
+    assert engine.pooling == "mean"
+
+
+def test_an_unknown_pooling_is_rejected(tmp_path):
+    from laya_rag.model import BiEncoderModel, ModelUnavailableError
+
+    with pytest.raises(ModelUnavailableError, match="EMBED_POOLING"):
+        BiEncoderModel(
+            make_config(tmp_path, embed_model="BAAI/bge-small-en-v1.5", embed_pooling="max")
+        )
+
+
+def test_the_query_instruction_is_off_by_default_and_can_be_turned_on(tmp_path):
+    from laya_rag.model import BiEncoderModel
+
+    config = make_config(tmp_path, embed_model="BAAI/bge-small-en-v1.5")
+    assert BiEncoderModel(config).query_instruction is False
+    config.embed_query_instruction = True
+    assert BiEncoderModel(config).query_instruction is True
+
+
+def test_the_embedder_reports_its_pooling(tmp_path):
+    from laya_rag.model import BiEncoderModel
+
+    info = BiEncoderModel(make_config(tmp_path, embed_model="BAAI/bge-small-en-v1.5")).info()
+    assert info["pooling"] == "cls"
+    assert info["query_instruction"] is False
+
+
+# ── cross-encoder reranking ──────────────────────────────────────────────
+
+def test_no_rerank_model_means_no_cross_encoder(tmp_path):
+    engine = RagEngine(make_config(tmp_path), model=StubModel(dim=64))
+    assert engine.cross_encoder is None
+    assert engine.stats()["reranker"]["kind"] == "laya decisions"
+
+
+def test_a_configured_rerank_model_selects_the_cross_encoder_without_loading_it(tmp_path):
+    from laya_rag.model import CrossEncoderModel
+
+    engine = RagEngine(
+        make_config(tmp_path, rerank_model="cross-encoder/ms-marco-MiniLM-L-6-v2"),
+        model=StubModel(dim=64),
+    )
+    assert isinstance(engine.cross_encoder, CrossEncoderModel)
+    assert engine.cross_encoder.info()["loaded"] is False
+    assert engine.stats()["reranker"]["kind"] == "cross-encoder"
+
+
+def test_rerank_can_take_scores_from_another_reranker():
+    from laya_rag.rerank import LayaReranker
+
+    reranker = LayaReranker(StubModel())
+    # The query shares nothing with the stub's scoring, so only `scores` can decide.
+    forward = reranker.rerank("zzz", _two_hits(), top_k=2, relevance_threshold=0.3, scores=[0.9, 0.4])
+    reverse = reranker.rerank("zzz", _two_hits(), top_k=2, relevance_threshold=0.3, scores=[0.4, 0.9])
+    assert [p.chunk_id for p in forward.passages] == ["a", "b"]
+    assert [p.chunk_id for p in reverse.passages] == ["b", "a"]
+
+
+def test_rerank_scores_are_still_filtered_by_the_threshold():
+    from laya_rag.rerank import LayaReranker
+
+    result = LayaReranker(StubModel()).rerank(
+        "zzz", _two_hits(), top_k=2, relevance_threshold=0.5, scores=[0.9, 0.1]
+    )
+    assert [p.chunk_id for p in result.passages] == ["a"]
+    assert result.dropped_below_threshold == 1
+
+
+def test_rerank_rejects_a_score_count_mismatch():
+    from laya_rag.rerank import DecisionError, LayaReranker
+
+    with pytest.raises(DecisionError, match="scores for"):
+        LayaReranker(StubModel()).rerank("q", _two_hits(), scores=[0.5])
+
+
+def test_the_engine_orders_evidence_by_an_injected_cross_encoder(tmp_path):
+    engine = RagEngine(make_config(tmp_path), model=StubModel(dim=64))
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+
+    class FakeCrossEncoder:
+        def score_pairs(self, pairs):
+            return [0.9 if "refund" in passage.lower() else 0.1 for _, passage in pairs]
+
+        def info(self):
+            return {"kind": "cross-encoder"}
+
+    engine.cross_encoder = FakeCrossEncoder()
+    result = engine.query("How long do refunds take?", top_k=3)
+
+    assert result.passages
+    assert "refund" in result.passages[0]["path"]
+    # Only the cross-encoder's above-threshold passages survive.
+    assert all("refund" in passage["path"] for passage in result.passages)

@@ -93,6 +93,20 @@ class EngineConfig:
     # replaces the dense channel and makes fusing it worthwhile. Laya still owns the
     # decisions either way.
     embed_model: str = field(default_factory=lambda: _env("EMBED_MODEL") or "")
+    # BGE-family models are trained with [CLS] pooling, not mean pooling; "auto" picks
+    # CLS for them and mean otherwise. Their retrieval query instruction is optional for
+    # v1.5 and measured slightly better off on BEIR SciFact, so it defaults to off.
+    embed_pooling: str = field(default_factory=lambda: _env("EMBED_POOLING") or "auto")
+    embed_query_instruction: bool = field(
+        default_factory=lambda: _env_bool("EMBED_QUERY_INSTRUCTION", False)
+    )
+
+    # Optional retrieval-trained cross-encoder that orders and filters the candidate
+    # evidence, replacing Laya's relevance ordering (Laya keeps the answerability gate,
+    # and the adjudication path is unchanged). Off by default because it is a second
+    # model to download; measured it lifts lexical recall from 0.654 to 0.680 on BEIR
+    # SciFact and 0.304 to 0.339 on NFCorpus.
+    rerank_model: str = field(default_factory=lambda: _env("RERANK_MODEL") or "")
 
     # torch thread oversubscription hurts on this host (56 logical cores); 16 is the
     # measured sweet spot recorded in the Laya checkout's LOCAL_SETUP.md.
@@ -127,17 +141,19 @@ class EngineConfig:
         return 1.0 if (self.embed_model or "").strip() else 0.0
 
     # What the returned evidence is ranked by. "recall" keeps the retrieval order and
-    # uses Laya's probability to filter and to gate; "relevance" also reorders by it.
-    # Measured, Laya's decision is a stronger filter than ranker: reordering lowered
-    # nDCG@10 on both BEIR datasets (SciFact 0.654 -> 0.470, NFCorpus 0.304 -> 0.283)
-    # while tying on the planted corpus (MRR 1.0 either way). So "recall" is the default
-    # and set RERANK_ORDER=relevance to order the evidence by Laya's probability.
-    rerank_order: str = field(default_factory=lambda: _env("RERANK_ORDER") or "recall")
+    # uses the relevance score only to filter and gate; "relevance" orders by that score;
+    # "auto" (the default) picks relevance when a cross-encoder is configured — a trained
+    # ranker's ordering is worth using — and recall otherwise, because Laya's decision is
+    # a stronger filter than ranker (reordering by it lowered nDCG@10 on both BEIR
+    # datasets: SciFact 0.654 -> 0.470, NFCorpus 0.304 -> 0.283).
+    rerank_order: str = field(default_factory=lambda: _env("RERANK_ORDER") or "auto")
 
     @property
     def resolved_rerank_order(self) -> str:
         value = (self.rerank_order or "").strip().lower()
-        return "relevance" if value == "relevance" else "recall"
+        if value in {"recall", "relevance"}:
+            return value
+        return "relevance" if (self.rerank_model or "").strip() else "recall"
 
     # Claim adjudication is linear in claims x candidates. Measured warm on five
     # claims: 21.6s at retrieve_k=20 against 8.7s at 10, for the same verdicts on the
