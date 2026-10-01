@@ -89,6 +89,31 @@ def per_query(name: str, dataset: str, retriever: str) -> list[float]:
     return list(report["per_query_nDCG@10"][retriever].values())
 
 
+#: The three-model dense ensemble was measured in two runs; route each dataset to its report.
+ENSEMBLE_REPORT = {
+    "scifact": "ensemble3", "nfcorpus": "ensemble3", "arguana": "ensemble3",
+    "scidocs": "ensemble2", "fiqa": "ensemble2",
+}
+
+
+def per_query_ensemble(dataset: str, retriever: str = "hybrid-ensemble") -> list[float]:
+    """Per-query nDCG@10 for the single three-model ensemble configuration."""
+    return per_query(ENSEMBLE_REPORT[dataset], dataset, retriever)
+
+
+def macro_with_ci(pools: dict[str, list[float]], samples: int = 4000, seed: int = 7):
+    """Mean of per-dataset means, bootstrapping queries within each dataset."""
+    rng = np.random.default_rng(seed)
+    arrays = {d: np.asarray(v, dtype=np.float64) for d, v in pools.items()}
+    point = float(np.mean([a.mean() for a in arrays.values()]))
+    draws = [
+        np.mean([a[rng.integers(0, len(a), size=len(a))].mean() for a in arrays.values()])
+        for _ in range(samples)
+    ]
+    lo, hi = np.percentile(draws, [2.5, 97.5])
+    return point, float(lo), float(hi)
+
+
 def bar(value: float, scale: float, width: int = 40) -> str:
     full = int(round(width * value / scale))
     return "█" * full + "·" * (width - full)
@@ -107,6 +132,7 @@ def ranking_chart(rows, label: str, label_width: int = 34, scale: float = 0.52) 
 OURS = "#1b6ca8"
 OURS_ALT = "#79b4d9"
 OURS_LIGHT = "#bdd7e7"
+ENSEMBLE = "#1f7a4d"
 PUBLISHED = "#c9c9c9"
 PUBLISHED_DARK = "#8a8a8a"
 ACCENT = "#c0392b"
@@ -149,10 +175,11 @@ def _save(fig, outdir: Path, name: str, plt) -> None:
     print(f"  wrote {path.relative_to(ROOT)}  ({path.stat().st_size // 1024} KB)")
 
 
-def chart_beir_ranking(outdir: Path, best: float, ci, deploy: float, plt) -> None:
-    systems = [("this system - best per dataset", best, OURS, ci)]
+def chart_beir_ranking(outdir: Path, best: float, ci, deploy: float, ensemble, ensemble_ci, plt) -> None:
+    systems = [("this system - 3-model ensemble + BM25", ensemble, OURS, ensemble_ci),
+               ("this system - best per dataset", best, OURS, ci)]
     systems += [(f"{name} ({params})", value, PUBLISHED, None) for name, params, value in PUBLISHED_4]
-    systems.append(("this system - one deployable config", deploy, OURS_ALT, None))
+    systems.append(("this system - one encoder + BM25", deploy, OURS_ALT, None))
     systems.sort(key=lambda row: -row[1])
 
     labels = [s[0] for s in systems]
@@ -179,20 +206,22 @@ def chart_beir_ranking(outdir: Path, best: float, ci, deploy: float, plt) -> Non
 
 
 def chart_beir_datasets(outdir: Path, plt) -> None:
-    series = [("shipped lexical", "bm25-engine", OURS_LIGHT),
-              ("bi-encoder (bge-small)", "biencoder", OURS_ALT),
-              ("fused BM25 + bi-encoder", "hybrid-biencoder", OURS)]
+    series = [("shipped lexical", "bm25-engine", OURS_LIGHT, False),
+              ("bi-encoder (bge-small)", "biencoder", OURS_ALT, False),
+              ("fused BM25 + bi-encoder", "hybrid-biencoder", OURS, False),
+              ("3-model ensemble + BM25", "hybrid-ensemble", ENSEMBLE, True)]
     x = np.arange(len(DATASET_ORDER))
-    width = 0.26
-    fig, ax = plt.subplots(figsize=(9, 4.8))
-    for i, (label, key, color) in enumerate(series):
+    width = 0.2
+    fig, ax = plt.subplots(figsize=(9.6, 4.8))
+    for i, (label, key, color, is_ensemble) in enumerate(series):
         vals, lo, hi = [], [], []
         for ds in DATASET_ORDER:
-            m, low, high = bootstrap_ci(per_query("five-small-fixed", ds, key))
+            values = per_query_ensemble(ds) if is_ensemble else per_query("five-small-fixed", ds, key)
+            m, low, high = bootstrap_ci(values)
             vals.append(m)
             lo.append(m - low)
             hi.append(high - m)
-        ax.bar(x + (i - 1) * width, vals, width, color=color, label=label,
+        ax.bar(x + (i - 1.5) * width, vals, width, color=color, label=label,
                yerr=np.vstack([lo, hi]), capsize=2.5, error_kw=dict(lw=0.9, ecolor="#444"))
 
     ax.scatter(x, [PUBLISHED_BM25[d] for d in DATASET_ORDER], marker="x", s=46,
@@ -296,9 +325,9 @@ def chart_overlap(outdir: Path, official: dict, plt) -> None:
     _save(fig, outdir, "chunk_overlap.png", plt)
 
 
-def make_charts(outdir: Path, best: float, ci, deploy: float, official: dict) -> None:
+def make_charts(outdir: Path, best: float, ci, deploy: float, ensemble, ensemble_ci, official: dict) -> None:
     plt = _plt_mod()
-    chart_beir_ranking(outdir, best, ci, deploy, plt)
+    chart_beir_ranking(outdir, best, ci, deploy, ensemble, ensemble_ci, plt)
     chart_beir_datasets(outdir, plt)
     chart_multihop(outdir, official, plt)
     chart_abstention(outdir, plt)
@@ -338,24 +367,18 @@ def main(argv=None) -> int:
     print("4-dataset means (SciFact, NFCorpus, ArguAna, SciDocs)")
     print("-" * 78)
     deploy = [np.mean([np.mean(per_query("five-small-fixed", d, "hybrid-biencoder")) for d in FOUR])]
-    best = [np.mean([np.mean(per_query(n, d, r)) for d, (n, r, _) in BEST_PER_DATASET.items() if d in FOUR])]
-    # Interval on a mean-of-datasets: resample queries within each dataset, then average.
-    rng = np.random.default_rng(7)
-    draws = []
-    pools = {
-        d: np.asarray(
-            per_query(BEST_PER_DATASET[d][0], d, BEST_PER_DATASET[d][1]), dtype=np.float64
-        )
-        for d in FOUR
-    }
-    for _ in range(4000):
-        draws.append(np.mean([p[rng.integers(0, len(p), size=len(p))].mean() for p in pools.values()]))
-    best_lo, best_hi = np.percentile(draws, [2.5, 97.5])
+    best_pools = {d: per_query(BEST_PER_DATASET[d][0], d, BEST_PER_DATASET[d][1]) for d in FOUR}
+    ensemble_pools = {d: per_query_ensemble(d) for d in FOUR}
+    best = [np.mean([np.mean(v) for v in best_pools.values()])]
+    _, best_lo, best_hi = macro_with_ci(best_pools)
+    ens_mean, ens_lo, ens_hi = macro_with_ci(ensemble_pools)
+    print(f"  this system — 3-model ensemble   {ens_mean:.3f}  [{ens_lo:.3f},{ens_hi:.3f}]")
     print(f"  this system — best per dataset   {best[0]:.3f}  [{best_lo:.3f},{best_hi:.3f}]")
     print(f"  this system — one deployable cfg {deploy[0]:.3f}")
     print(f"  BGE-large-v1.5 (published)       0.491")
 
-    rows = [("this system — best per dataset", "mixed", best[0]),
+    rows = [("this system — 3-model ensemble", "478M", ens_mean),
+            ("this system — best per dataset", "mixed", best[0]),
             ("BGE-large-v1.5", "335M", 0.491),
             ("this system — deployable config", "33M", deploy[0]),
             ("SPLADE++", "110M", 0.433)] + PUBLISHED_4[2:]
@@ -404,7 +427,7 @@ def main(argv=None) -> int:
         print()
         print("charts")
         print("-" * 78)
-        make_charts(outdir, best[0], (best_lo, best_hi), deploy[0], official)
+        make_charts(outdir, best[0], (best_lo, best_hi), deploy[0], ens_mean, (ens_lo, ens_hi), official)
     return 0
 
 
