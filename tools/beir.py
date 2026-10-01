@@ -70,9 +70,37 @@ REFERENCES = {
         "without stemming so it stays a clean control; `bm25-engine` runs the engine's own "
         "settings (stemming on, query stopwords dropped) and is what feeds the fused and "
         "reranked rows. The rows are a like-for-like comparison between retrievers, not a "
-        "head-to-head with a leaderboard entry."
+        "head-to-head with a leaderboard entry. Published scores, including these, come "
+        "from BEIR's own evaluator with `ignore_identical_ids=True`, which drops a "
+        "retrieved document whose id equals the query id; this harness does the same by "
+        "default, which is the only way the ArguAna row is comparable."
     ),
 }
+
+#: Published BM25 nDCG@10, the anchor the `bm25` control is checked against.
+#:
+#: These are the Pyserini 2CR numbers (https://castorini.github.io/pyserini/2cr/beir.html),
+#: which run a flat index with `--remove-query` -- Pyserini's name for the same
+#: "drop the query's own document" rule this harness applies. That matters on ArguAna: 2CR
+#: reports 0.397 there, the BEIR paper reports 0.315, and the difference is convention rather
+#: than quality. The paper's Elasticsearch baseline indexed title and body as separate
+#: *multifield* fields; a flat concatenation behaves differently, and a harness that keeps the
+#: query's own document lands near 0.30. This project's flat title+text control with the rule
+#: applied measures 0.394, so 0.397 is the baseline it is actually comparable to.
+#: See https://github.com/beir-cellar/beir/issues/197.
+#:
+#: The other four datasets have no query/document id overlap, so no scoring convention moves
+#: them and the values are stable across sources.
+PUBLISHED_BM25 = {
+    "scifact": 0.679,
+    "nfcorpus": 0.325,
+    "arguana": 0.397,
+    "scidocs": 0.158,
+    "fiqa": 0.236,
+}
+
+#: How far the `bm25` control may sit from :data:`PUBLISHED_BM25` before it is reported.
+ANCHOR_TOLERANCE = 0.05
 
 
 # ── dataset loading ──────────────────────────────────────────────────────
@@ -677,6 +705,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="second bi-encoder to fuse as a hybrid-ensemble row")
     parser.add_argument("--splade-model", default=None,
                         help="learned-sparse encoder for a splade / hybrid-splade row")
+    parser.add_argument("--keep-identical-ids", action="store_true",
+                        help="score a retrieved document whose id equals the query id; BEIR "
+                             "drops it (ArguAna only), so this makes the row non-comparable")
+    parser.add_argument("--baseline", default="bm25-engine",
+                        help="retriever every other row is significance-tested against")
+    parser.add_argument("--bootstrap-samples", type=int, default=10000,
+                        help="paired-bootstrap resamples for the significance table")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -721,8 +756,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             "rerank_model": args.rerank_model if "crossencoder" in wanted else None,
             "rerank_depth": args.rerank_depth,
             "limit_docs": args.limit_docs,
+            "ignore_identical_ids": not args.keep_identical_ids,
+            "baseline": args.baseline,
+            "bootstrap_samples": args.bootstrap_samples,
         },
         "references": REFERENCES,
+        "anchors": {},
         "datasets": {},
     }
 
@@ -951,16 +990,55 @@ def main(argv: Sequence[str] | None = None) -> int:
             except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
                 results["crossencoder"] = {"error": f"{type(exc).__name__}: {exc}"}
 
+        ignore_identical = not args.keep_identical_ids
+        per_query: dict[str, dict[str, float]] = {}
         for retriever, ranking in rankings.items():
-            evaluation = evalkit.evaluate_rankings(ranking, qrels, k_values=(10, 100))
+            evaluation = evalkit.evaluate_rankings(
+                ranking,
+                qrels,
+                k_values=(10, 100),
+                ignore_identical_ids=ignore_identical,
+            )
             results[retriever].update(evaluation["summary"])
             results[retriever]["scored_queries"] = evaluation["queries"]
+            per_query[retriever] = evalkit.per_query_metric(evaluation["per_query"], "nDCG@10")
+
+        # Where the control row lands against the published baseline. A large gap here
+        # is the evaluator's problem rather than the retriever's, so it is reported
+        # rather than left to whoever reads the table.
+        control = results.get("bm25", {})
+        anchor = (
+            evalkit.anchor_deviations(
+                {name: control["nDCG@10"]}, PUBLISHED_BM25, tolerance=ANCHOR_TOLERANCE
+            )
+            if "nDCG@10" in control
+            else []
+        )
+        report["anchors"][name] = anchor[0] if anchor else None
+
+        # Significance against the baseline row, scored on the same queries, so the
+        # intervals reflect query difficulty rather than run-to-run variation.
+        comparisons: dict[str, Any] = {}
+        baseline_scores = per_query.get(args.baseline)
+        if baseline_scores:
+            for retriever, scores in per_query.items():
+                if retriever == args.baseline:
+                    continue
+                try:
+                    comparisons[retriever] = evalkit.paired_bootstrap(
+                        baseline_scores, scores, samples=args.bootstrap_samples
+                    )
+                except ValueError:  # no query scored by both, e.g. a failed row
+                    continue
 
         report["datasets"][name] = {
             "documents": len(corpus),
             "queries": len(all_queries),
             "scored_queries": len(queries),
             "retrievers": results,
+            "per_query_nDCG@10": per_query,
+            "comparisons_vs": args.baseline,
+            "comparisons": comparisons,
         }
 
     out = Path(args.out)
@@ -1013,13 +1091,46 @@ def render_console(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _anchor_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for name, anchor in report.get("anchors", {}).items():
+        if anchor:
+            rows.append({
+                "dataset": name,
+                "bm25 control": anchor["measured"],
+                "published BM25": anchor["published"],
+                "delta": anchor["delta"],
+                "within tolerance": "yes" if anchor["within_tolerance"] else "NO",
+            })
+    return rows
+
+
+def _comparison_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for name, dataset in report["datasets"].items():
+        for retriever, comparison in dataset.get("comparisons", {}).items():
+            rows.append({
+                "dataset": name,
+                "retriever": retriever,
+                "vs": dataset.get("comparisons_vs", ""),
+                "delta nDCG@10": comparison["delta"],
+                "95% CI": f"[{comparison['ci_low']}, {comparison['ci_high']}]",
+                "p": comparison["p_value"],
+                "significant": "yes" if comparison["significant"] else "no",
+            })
+    return rows
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     settings = report["settings"]
+    identical = settings.get("ignore_identical_ids", True)
     parts = [
         "# BEIR retrieval evaluation",
         "",
         f"top_k={settings['top_k']}, BM25 k1={settings['bm25_k1']} b={settings['bm25_b']}, "
         f"query stopwords kept, checkpoint `{settings['checkpoint']}`.",
+        f"`ignore_identical_ids={identical}` — a retrieved document whose id equals the "
+        "query id is dropped, BEIR's own default.",
         "",
         "`nDCG@10` is the number the BEIR leaderboard reports; the rest are supporting metrics.",
         "All rows share corpus, qrels, evaluator and top-k, so the difference between rows is "
@@ -1027,6 +1138,34 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         evalkit.markdown_table(_rows(report)),
         "",
+    ]
+
+    anchors = _anchor_rows(report)
+    if anchors:
+        parts += [
+            "## Evaluator anchor",
+            "",
+            "The `bm25` control against the published baseline. A deviation beyond "
+            f"{ANCHOR_TOLERANCE} means the harness, not the retriever, needs a look.",
+            "",
+            evalkit.markdown_table(anchors),
+            "",
+        ]
+
+    comparisons = _comparison_rows(report)
+    if comparisons:
+        parts += [
+            "## Significance",
+            "",
+            f"Paired bootstrap over queries, each row against `{settings.get('baseline')}`. "
+            f"`delta nDCG@10` with a {settings.get('bootstrap_samples')}-resample 95% interval; "
+            "the difference is only evidence when the interval excludes zero.",
+            "",
+            evalkit.markdown_table(comparisons),
+            "",
+        ]
+
+    parts += [
         "## How to read this",
         "",
         REFERENCES["note"],

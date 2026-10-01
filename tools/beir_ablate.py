@@ -58,7 +58,11 @@ def fuse(
 
 
 def evaluate(rankings: Mapping[str, Sequence[str]], qrels: Mapping[str, Any]) -> dict[str, float]:
-    return evalkit.evaluate_rankings(rankings, qrels, k_values=(10, 100))["summary"]
+    # `ignore_identical_ids` is BEIR's default and the only way the ArguAna row is
+    # comparable, so the ablation harness has to score on the same rule as the main run.
+    return evalkit.evaluate_rankings(
+        rankings, qrels, k_values=(10, 100), ignore_identical_ids=True
+    )["summary"]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

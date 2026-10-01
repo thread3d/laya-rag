@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
@@ -411,18 +412,32 @@ def evaluate_rankings(
     rankings: Mapping[str, Sequence[str]],
     qrels: Mapping[str, Mapping[str, float]],
     k_values: Sequence[int] = (10, 100),
+    *,
+    ignore_identical_ids: bool = True,
 ) -> dict[str, Any]:
     """Macro-average standard IR metrics over every query that has a relevant document.
 
     Queries with no relevant document are skipped rather than scored zero, which is
     what ``pytrec_eval`` and the BEIR scripts do; scoring them zero would drag the mean
     down for reasons that have nothing to do with the retriever.
+
+    ``ignore_identical_ids`` mirrors BEIR's ``EvaluateRetrieval`` argument of the same
+    name, which defaults to ``True``: a retrieved document whose id equals the query id
+    is dropped before scoring. It is a no-op on every BEIR corpus except ArguAna, whose
+    queries *are* corpus documents -- 1,298 of its 1,406 test queries share an ``_id``
+    with a document and all 1,406 share the text. A retriever therefore returns the
+    query itself at rank 1 for every ArguAna query unless it is removed. BEIR removes
+    it, so published ArguAna scores assume it is gone; leaving it in caps a
+    single-relevant-document query at ``1/log2(3) = 0.631`` and cost this project
+    0.10-0.19 nDCG@10 on that dataset alone.
     """
     per_query: list[dict[str, Any]] = []
     for query_id, relevant in qrels.items():
         if not any(value > 0 for value in relevant.values()):
             continue
         ranked = list(rankings.get(query_id, ()))
+        if ignore_identical_ids:
+            ranked = [doc for doc in ranked if doc != query_id]
         row: dict[str, Any] = {"query": query_id}
         for k in k_values:
             row[f"nDCG@{k}"] = ndcg_at_k(ranked, relevant, k)
@@ -438,6 +453,110 @@ def evaluate_rankings(
                 continue
             summary[key] = round(sum(row[key] for row in per_query) / len(per_query), 4)
     return {"queries": len(per_query), "summary": summary, "per_query": per_query}
+
+
+# ── significance ─────────────────────────────────────────────────────────
+
+def per_query_metric(per_query: Sequence[Mapping[str, Any]], metric: str) -> dict[str, float]:
+    """``query_id -> metric`` for one metric, ready for :func:`paired_bootstrap`."""
+    return {str(row["query"]): float(row[metric]) for row in per_query if metric in row}
+
+
+def paired_bootstrap(
+    baseline: Mapping[str, float],
+    candidate: Mapping[str, float],
+    *,
+    samples: int = 10_000,
+    seed: int = 20210617,
+    confidence: float = 0.95,
+) -> dict[str, Any]:
+    """Paired bootstrap over per-query scores, to ask whether an A/B difference is real.
+
+    Resampling *queries* rather than runs is what makes this paired: every resample
+    scores both systems on the same query draw, so query difficulty cancels and only
+    the difference between the systems is left. Reported differences on these datasets
+    are routinely 0.004-0.013, which a few hundred queries cannot resolve without an
+    interval, so a candidate that moves nDCG@10 by 0.005 is not evidence of anything
+    until the interval excludes zero.
+
+    ``p_value`` is the two-sided bootstrap achievement level -- twice the smaller tail
+    mass at zero -- a resampling estimate, not an exact test. ``significant`` is the
+    interval criterion (the whole interval on one side of zero) and is the one to quote.
+    """
+    shared = sorted(set(baseline) & set(candidate))
+    if not shared:
+        raise ValueError("paired_bootstrap needs at least one query scored by both systems")
+    deltas = [float(candidate[q]) - float(baseline[q]) for q in shared]
+    n = len(deltas)
+    alpha = (1.0 - confidence) / 2.0
+
+    try:
+        import numpy as np
+    except ImportError:  # pragma: no cover - numpy is a declared dependency
+        np = None
+
+    if np is not None:
+        values = np.asarray(deltas, dtype=np.float64)
+        rng = np.random.default_rng(seed)
+        blocks = []
+        remaining = samples
+        # Chunked so the index matrix stays bounded on the 6k-query corpora.
+        while remaining > 0:
+            chunk = min(256, remaining)
+            blocks.append(values[rng.integers(0, n, size=(chunk, n))].mean(axis=1))
+            remaining -= chunk
+        means = np.sort(np.concatenate(blocks))
+        low = float(np.percentile(means, 100 * alpha))
+        high = float(np.percentile(means, 100 * (1 - alpha)))
+        below = float((means <= 0.0).mean())
+        above = float((means >= 0.0).mean())
+    else:  # pragma: no cover - exercised only without numpy
+        rng = random.Random(seed)
+        draws = []
+        for _ in range(samples):
+            draws.append(sum(deltas[rng.randrange(n)] for _ in range(n)) / n)
+        draws.sort()
+        low = draws[max(0, int(alpha * samples) - 1)]
+        high = draws[min(samples - 1, int((1 - alpha) * samples))]
+        below = sum(1 for value in draws if value <= 0.0) / samples
+        above = sum(1 for value in draws if value >= 0.0) / samples
+
+    return {
+        "queries": n,
+        "delta": round(sum(deltas) / n, 4),
+        "ci_low": round(low, 4),
+        "ci_high": round(high, 4),
+        "p_value": round(min(1.0, 2.0 * min(below, above)), 4),
+        "samples": samples,
+        "significant": bool(low > 0.0 or high < 0.0),
+    }
+
+
+def anchor_deviations(
+    measured: Mapping[str, float],
+    published: Mapping[str, float],
+    *,
+    tolerance: float = 0.05,
+) -> list[dict[str, Any]]:
+    """Compare a control retriever's scores against published baselines.
+
+    A benchmark's control row is what keeps its evaluator honest: if plain BM25 lands
+    where the published baseline says it should, the corpus, the qrels and the scoring
+    are probably right, and a deviation is the harness asking for a look rather than
+    the retriever underperforming. This turns that check into a reported one, because
+    it was already stated informally and still failed to surface a 0.10 ArguAna gap.
+    """
+    rows: list[dict[str, Any]] = []
+    for name in sorted(set(measured) & set(published)):
+        delta = float(measured[name]) - float(published[name])
+        rows.append({
+            "dataset": name,
+            "measured": round(float(measured[name]), 4),
+            "published": round(float(published[name]), 4),
+            "delta": round(delta, 4),
+            "within_tolerance": abs(delta) <= tolerance,
+        })
+    return rows
 
 
 # ── reporting ────────────────────────────────────────────────────────────

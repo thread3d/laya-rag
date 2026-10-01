@@ -150,3 +150,111 @@ def test_query_stopwords_are_dropped_by_default_and_kept_for_beir():
     kept = BM25Index(drop_stopwords=False)
     kept.build(docs)
     assert [hit.chunk_id for hit in kept.search("the", k=5)] == ["d1"]
+
+
+# ── identical query/document ids (the ArguAna rule) ──────────────────────
+
+def test_identical_query_and_document_ids_are_ignored_by_default():
+    # ArguAna's shape: the query is also a corpus document, so it retrieves itself at
+    # rank 1. BEIR drops it; scoring it caps a one-relevant-document query at
+    # 1/log2(3) = 0.631 and misreads the whole corpus.
+    rankings = {"q1": ["q1", "gold"], "q2": ["q2", "other", "gold2"]}
+    qrels = {"q1": {"gold": 1}, "q2": {"gold2": 1}}
+    report = evalkit.evaluate_rankings(rankings, qrels, k_values=(10,))
+    # q1: self gone -> gold at rank 1 -> nDCG 1.0
+    # q2: self gone -> gold2 at rank 2 -> nDCG 1/log2(3)
+    assert report["summary"]["nDCG@10"] == pytest.approx((1.0 + 1 / 1.58496) / 2, abs=1e-4)
+    assert report["summary"]["MRR@10"] == pytest.approx((1.0 + 0.5) / 2)
+
+
+def test_identical_ids_can_be_kept_to_reproduce_the_old_row():
+    rankings = {"q1": ["q1", "gold"]}
+    qrels = {"q1": {"gold": 1}}
+    kept = evalkit.evaluate_rankings(
+        rankings, qrels, k_values=(10,), ignore_identical_ids=False
+    )
+    assert kept["summary"]["nDCG@10"] == pytest.approx(1 / 1.58496, abs=1e-4)
+
+
+def test_ignoring_identical_ids_is_a_no_op_when_ids_do_not_collide():
+    rankings = {"q1": ["d1", "d2"]}
+    qrels = {"q1": {"d2": 1}}
+    default = evalkit.evaluate_rankings(rankings, qrels, k_values=(10,))
+    kept = evalkit.evaluate_rankings(
+        rankings, qrels, k_values=(10,), ignore_identical_ids=False
+    )
+    assert default["summary"] == kept["summary"]
+
+
+# ── per-query scores and the paired bootstrap ────────────────────────────
+
+def test_per_query_metric_projects_the_scored_queries():
+    report = evalkit.evaluate_rankings(
+        {"q1": ["a"], "q2": ["b", "a"]}, {"q1": {"a": 1}, "q2": {"a": 1}}, k_values=(10,)
+    )
+    scores = evalkit.per_query_metric(report["per_query"], "nDCG@10")
+    assert scores["q1"] == pytest.approx(1.0)
+    assert scores["q2"] == pytest.approx(1 / 1.58496, abs=1e-4)
+
+
+def test_paired_bootstrap_finds_no_difference_between_identical_scores():
+    scores = {f"q{i}": 0.5 for i in range(50)}
+    result = evalkit.paired_bootstrap(scores, dict(scores), samples=1000)
+    assert result["delta"] == 0.0
+    assert result["significant"] is False
+    assert result["ci_low"] == 0.0
+
+
+def test_paired_bootstrap_resolves_a_large_consistent_difference():
+    base = {f"q{i}": 0.1 for i in range(200)}
+    candidate = {f"q{i}": 0.4 for i in range(200)}
+    result = evalkit.paired_bootstrap(base, candidate, samples=1000)
+    assert result["delta"] == pytest.approx(0.3)
+    assert result["significant"] is True
+    assert result["p_value"] < 0.01
+
+
+def test_paired_bootstrap_declines_to_call_a_noisy_small_difference():
+    # Alternating +/- around a tiny positive mean: the interval must straddle zero, which
+    # is the case that matters for the 0.004-0.013 claims in the write-up.
+    base = {f"q{i}": 0.5 for i in range(20)}
+    candidate = {f"q{i}": 0.5 + (0.10 if i % 2 else -0.08) for i in range(20)}
+    result = evalkit.paired_bootstrap(base, candidate, samples=2000)
+    assert result["delta"] == pytest.approx(0.01)
+    assert result["significant"] is False
+
+
+def test_paired_bootstrap_uses_only_queries_scored_by_both():
+    result = evalkit.paired_bootstrap({"q1": 0.1, "q2": 0.1, "q3": 0.1}, {"q1": 0.4, "q2": 0.4}, samples=500)
+    assert result["queries"] == 2
+
+
+def test_paired_bootstrap_needs_a_shared_query():
+    with pytest.raises(ValueError):
+        evalkit.paired_bootstrap({"a": 1.0}, {"b": 1.0})
+
+
+# ── the published-baseline anchor ────────────────────────────────────────
+
+def test_anchor_deviations_flag_a_control_that_is_out_of_place():
+    rows = evalkit.anchor_deviations(
+        {"scifact": 0.676, "arguana": 0.295},
+        {"scifact": 0.679, "arguana": 0.397},
+        tolerance=0.05,
+    )
+    by_dataset = {row["dataset"]: row for row in rows}
+    assert by_dataset["scifact"]["within_tolerance"] is True
+    assert by_dataset["arguana"]["within_tolerance"] is False
+    assert by_dataset["arguana"]["delta"] == pytest.approx(-0.102)
+
+
+def test_anchor_tolerance_accepts_the_corrected_arguana_control():
+    # The number the fixed evaluator produces (0.3935) against published 0.397: this is
+    # the regression that would have caught the ArguAna artifact automatically.
+    rows = evalkit.anchor_deviations({"arguana": 0.3935}, {"arguana": 0.397}, tolerance=0.05)
+    assert rows[0]["within_tolerance"] is True
+
+
+def test_anchor_deviations_ignore_datasets_without_a_published_baseline():
+    rows = evalkit.anchor_deviations({"trec-covid": 0.306}, {"scifact": 0.679})
+    assert rows == []
