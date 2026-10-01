@@ -267,42 +267,50 @@ this document size** (BEIR abstracts average ~230 words), which is expected: it 
 technique for genuinely long documents, and it stays in the harness for the datasets in item 4
 rather than in the default path.
 
-## Deferred work — what each item actually requires
+## What remains
 
-**Item 4, passage-level retrieval for long documents.** The harness already supports it
-(`--passages N`, max-pooled). It needs the long-document datasets to be meaningful:
-TREC-COVID (171k docs) and Robust04 (528k docs), which are larger than anything run here.
-Work: a passage budget that adapts to document length, score aggregation beyond max-pool
-(sum or learned weights), and a check that title weighting survives passage splitting.
+Items 1–7 have all been attempted; these are the genuinely open threads.
 
-**Item 5, scale.** Exhaustive search is why only five datasets are measured. For the full
-18-dataset BEIR average the infrastructure is the blocker: BioASQ has 14.9M documents, NQ
-2.7M, FEVER 5.4M. Concretely:
-- an ANN index for the dense channel (FAISS or hnswlib) with a recall check against the
-  exhaustive scan at the sizes we can still afford;
-- a real inverted index for the lexical channel — the pure-Python BM25 in `lexical.py` is
-  already the slowest stage at 40k documents (~120 ms/query), so millions need Lucene or
-  Pyserini, or at least an on-disk postings list with compressed term frequencies;
-- streaming index construction, because `VectorIndex` currently holds every chunk's text and
-  vector in memory.
+**Long-document passage retrieval is untested, not disproven.** Passages hurt on SciFact,
+NFCorpus and TREC-COVID (item 4), but TREC-COVID's abstracts are *shorter* than NFCorpus's
+and Robust04/TREC-NEWS are not on the BEIR mirror this project uses. Reaching them means a
+different source, an adaptive passage budget, and aggregation beyond max-pool (sum, or
+learned weights).
 
-**Item 6, learned sparse or expansion.** A third channel, not a tweak: SPLADE (`naver/splade-cocondenser-ensembledistil`)
-or docT5query expansion. SPLADE measured 0.704/0.347 in the published table, so fusing it is
-the largest remaining single gain. Work: model dependency, sparse-vector storage, and a
-fusion weight fitted on held-out queries. docT5query is cheaper (a sequence-to-sequence
-expansion pass at index time) and is the usual first step.
+**The full 18-dataset BEIR average needs the large datasets, and they need infrastructure.**
+BioASQ is 14.9M documents, NQ 2.7M, FEVER 5.4M. The ANN index is in place; what is missing
+is an on-disk postings store with compressed term frequencies (the in-memory Python
+postings are what made splitting 171k documents intractable) and streaming index
+construction, since `VectorIndex` still holds every chunk's text and vector in memory.
 
-**Item 7, domain adaptation.** Not zero-shot, and must be reported separately. NFCorpus ships
-a 110k-pair train split; fine-tuning `bge-small` on it (or generating synthetic queries
-GenQ-style) typically buys 0.02–0.05 on that dataset. Work: a training script, hard-negative
-mining, a held-out split that is never used for tuning, and a clear label on the resulting
-row so a fine-tuned number is never presented as a zero-shot one.
+**Fine-tuning is a floor.** 20k of NFCorpus's 110k train pairs, one epoch, +0.0085. The
+full split, more epochs and hard-negative mining are the next step, and the result must
+keep the *adapted* label.
+
+**ArguAna is a model-quality gap.** Published BGE-large scores 0.636 and SPLADE 0.521
+there against our best 0.459; no configuration measured here closes it, and every channel
+we added helped less there than elsewhere.
+
+## Session state
+
+- The engine and harness are committed at `6d489e0`; `make test` is 303 offline tests and
+  `make test-real` is 4 against the real checkpoints.
+- `eval/` is gitignored and regenerable. Duplicate dataset downloads and archives were
+  removed (about 1 GB); what remains is the model cache, embedding/sparse caches, extracted
+  corpora and reports, all rebuilt by `make eval` / `make beir` / `make beir-ablate`.
+- Environment notes worth keeping: `transformers` is pinned at 4.57.6 and installing the
+  fine-tuning stack silently upgraded it once; `torch` is pinned at 2.2.2 (macOS Intel), and
+  that is why SPLADE checkpoints, which ship only `pytorch_model.bin`, cannot be loaded
+  through transformers at all. Optional dependencies are declared in the `eval` extra.
 
 ## Method notes
 
-- Documents are indexed as `title + text`, the concatenation BEIR's own baselines use.
+- Documents are indexed as `title + text` by default, the concatenation BEIR's own baselines
+  use; `--dense-text-only` lets the dense channel embed text alone, which helps datasets
+  whose "titles" are shared topic keywords (ArguAna).
 - Only queries with qrels are scored, and queries without a relevant document are skipped,
   which is what `pytrec_eval`/BEIR do.
-- Retrieval is exhaustive (no ANN), so runtime grows linearly with corpus size.
+- Dense retrieval is exhaustive by default; `ANN`/`ANN_NPROBE` switch on the IVF index, and
+  `tools/ann_bench.py` measures the recall it costs.
 - `bm25` is the unstemmed control; `bm25-engine` is the shipped configuration (stemming on,
-  query stopwords dropped) and feeds the fused and reranked rows.
+  query stopwords dropped, title weighted) and feeds the fused and reranked rows.
