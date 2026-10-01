@@ -1,0 +1,412 @@
+"""Cross-system comparison tables, error bars and text charts for the benchmark write-up.
+
+**On error bars.** Retrieval in this project is deterministic: re-running a configuration
+reproduces its nDCG@10 exactly, so repeating a run yields no interval at all — it just costs
+hours. The uncertainty that actually matters is sampling uncertainty over *queries*: 300 SciFact
+queries, 1,406 ArguAna queries, and a different draw of queries would move the mean. So every
+interval here is a 10,000-resample bootstrap over the per-query scores each report already
+persists (`per_query_nDCG@10`), and for MultiHop-RAG over the per-query rows
+`tools/multihop_official.py` emits.
+
+    .venv/bin/python tools/compare.py
+
+Printed output is what the README's comparison section quotes.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "src"))
+
+import evalkit  # noqa: E402
+
+BEIR_DIR = ROOT / "eval" / "beir"
+MH_DIR = ROOT / "eval" / "benchmarks" / "multihop-rag"
+SAMPLES = 10_000
+
+#: Published 4-dataset BEIR means, from the independent BEIR matrix compiled at
+#: github.com/ruvnet/ruflo (commit 56819391), which sources the BEIR and BGE papers.
+PUBLISHED_4 = [
+    ("BGE-large-v1.5", "335M", 0.491),
+    ("SPLADE++", "110M", 0.433),
+    ("GTR-XL", "1.2B", 0.405),
+    ("GenQ", "110M", 0.400),
+    ("BM25 (Lucene)", "—", 0.390),
+    ("Contriever", "110M", 0.387),
+    ("TAS-B", "66M", 0.385),
+    ("DocT5query", "60M", 0.378),
+    ("ColBERT", "110M", 0.339),
+    ("SBERT msmarco", "110M", 0.330),
+]
+
+#: Published MultiHop-RAG retrieval (paper Table 5) and generation (Table 6).
+PUBLISHED_MH = [
+    ("voyage-02 + rerank", 0.7467, 0.6625, 0.4795, 0.5860),
+    ("bge-large + rerank", 0.7183, 0.6364, 0.4759, 0.5630),
+    ("bge-large, no rerank", 0.6718, 0.5221, 0.3423, 0.4298),
+]
+
+DATASET_ORDER = ["scifact", "nfcorpus", "arguana", "scidocs", "fiqa"]
+FOUR = ["scifact", "nfcorpus", "arguana", "scidocs"]
+
+#: The per-dataset best configuration, as recorded in RANKINGS.md.
+BEST_PER_DATASET = {
+    "scifact": ("large-splade-fixed", "hybrid-biencoder", "bge-large + fused BM25"),
+    "nfcorpus": ("large-splade-fixed", "hybrid-biencoder", "bge-large + fused BM25"),
+    "arguana": ("dense-text-only-fixed", "biencoder", "bge-small dense, text-only"),
+    "scidocs": ("five-small-fixed", "hybrid-biencoder", "bge-small + fused BM25"),
+}
+
+
+def bootstrap_ci(values, samples: int = SAMPLES, seed: int = 20210617, confidence: float = 0.95):
+    """Mean with a percentile bootstrap interval over the values (queries)."""
+    x = np.asarray(list(values), dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    blocks, remaining = [], samples
+    while remaining > 0:
+        chunk = min(256, remaining)
+        blocks.append(x[rng.integers(0, len(x), size=(chunk, len(x)))].mean(axis=1))
+        remaining -= chunk
+    means = np.sort(np.concatenate(blocks))
+    alpha = (1 - confidence) / 2
+    return float(x.mean()), float(np.percentile(means, 100 * alpha)), float(np.percentile(means, 100 * (1 - alpha)))
+
+
+def load(name: str) -> dict:
+    return json.loads((BEIR_DIR / f"{name}.json").read_text())
+
+
+def per_query(name: str, dataset: str, retriever: str) -> list[float]:
+    report = load(name)["datasets"][dataset]
+    return list(report["per_query_nDCG@10"][retriever].values())
+
+
+def bar(value: float, scale: float, width: int = 40) -> str:
+    full = int(round(width * value / scale))
+    return "█" * full + "·" * (width - full)
+
+
+def ranking_chart(rows, label: str, label_width: int = 34, scale: float = 0.52) -> None:
+    print()
+    print(label)
+    print("-" * len(label))
+    for name, params, mean in sorted(rows, key=lambda row: -row[2]):
+        print(f"  {name:<{label_width}} {bar(mean, scale)} {mean:.3f}")
+
+
+# ── charts ───────────────────────────────────────────────────────────────
+
+OURS = "#1b6ca8"
+OURS_ALT = "#79b4d9"
+OURS_LIGHT = "#bdd7e7"
+PUBLISHED = "#c9c9c9"
+PUBLISHED_DARK = "#8a8a8a"
+ACCENT = "#c0392b"
+
+PUBLISHED_BM25 = {"scifact": 0.679, "nfcorpus": 0.325, "arguana": 0.397,
+                  "scidocs": 0.158, "fiqa": 0.236}
+PUBLISHED_BGE = {"scifact": 0.722, "nfcorpus": 0.380, "arguana": 0.636, "scidocs": 0.225}
+PUBLISHED_MH_DICT = {"bge-large + rerank": (0.7183, 0.6364, 0.4759, 0.5630),
+                     "voyage-02 + rerank": (0.7467, 0.6625, 0.4795, 0.5860)}
+
+_PLT = None
+
+
+def _plt_mod():
+    """Import matplotlib lazily, with a cache dir the sandbox will actually write to."""
+    global _PLT
+    if _PLT is None:
+        os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "eval" / ".mplconfig"))
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        plt.rcParams.update({
+            "figure.dpi": 150, "savefig.dpi": 150, "font.size": 9,
+            "axes.spines.top": False, "axes.spines.right": False,
+            "axes.titlesize": 11, "axes.titleweight": "bold", "axes.grid": True,
+            "grid.alpha": 0.25, "grid.linewidth": 0.6, "axes.axisbelow": True,
+        })
+        _PLT = plt
+    return _PLT
+
+
+def _save(fig, outdir: Path, name: str, plt) -> None:
+    outdir.mkdir(parents=True, exist_ok=True)
+    path = outdir / name
+    fig.tight_layout()
+    fig.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  wrote {path.relative_to(ROOT)}  ({path.stat().st_size // 1024} KB)")
+
+
+def chart_beir_ranking(outdir: Path, best: float, ci, deploy: float, plt) -> None:
+    systems = [("this system - best per dataset", best, OURS, ci)]
+    systems += [(f"{name} ({params})", value, PUBLISHED, None) for name, params, value in PUBLISHED_4]
+    systems.append(("this system - one deployable config", deploy, OURS_ALT, None))
+    systems.sort(key=lambda row: -row[1])
+
+    labels = [s[0] for s in systems]
+    values = [s[1] for s in systems]
+    colors = [s[2] for s in systems]
+    lo = np.array([0.0 if s[3] is None else max(0.0, s[1] - s[3][0]) for s in systems])
+    hi = np.array([0.0 if s[3] is None else max(0.0, s[3][1] - s[1]) for s in systems])
+
+    fig, ax = plt.subplots(figsize=(9, 5.4))
+    y = np.arange(len(labels))[::-1]
+    ax.barh(y, values, color=colors, height=0.66, xerr=np.vstack([lo, hi]),
+            error_kw=dict(ecolor="#333", capsize=3, lw=1.1))
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels)
+    span = max(values)
+    for yy, value, hi_delta in zip(y, values, hi):
+        ax.text(value + hi_delta + span * 0.018, yy, f"{value:.3f}", va="center", fontsize=8.5)
+    ax.set_xlim(0, span * 1.22)
+    ax.set_xlabel("4-dataset mean nDCG@10  (SciFact, NFCorpus, ArguAna, SciDocs)")
+    ax.set_title("BEIR retrieval: this system against published systems")
+    fig.text(0.005, -0.02, "Bars for this system carry a 95% bootstrap interval over queries; "
+                           "published figures carry none.", fontsize=7.5, color="#555")
+    _save(fig, outdir, "beir_ranking.png", plt)
+
+
+def chart_beir_datasets(outdir: Path, plt) -> None:
+    series = [("shipped lexical", "bm25-engine", OURS_LIGHT),
+              ("bi-encoder (bge-small)", "biencoder", OURS_ALT),
+              ("fused BM25 + bi-encoder", "hybrid-biencoder", OURS)]
+    x = np.arange(len(DATASET_ORDER))
+    width = 0.26
+    fig, ax = plt.subplots(figsize=(9, 4.8))
+    for i, (label, key, color) in enumerate(series):
+        vals, lo, hi = [], [], []
+        for ds in DATASET_ORDER:
+            m, low, high = bootstrap_ci(per_query("five-small-fixed", ds, key))
+            vals.append(m)
+            lo.append(m - low)
+            hi.append(high - m)
+        ax.bar(x + (i - 1) * width, vals, width, color=color, label=label,
+               yerr=np.vstack([lo, hi]), capsize=2.5, error_kw=dict(lw=0.9, ecolor="#444"))
+
+    ax.scatter(x, [PUBLISHED_BM25[d] for d in DATASET_ORDER], marker="x", s=46,
+               color=PUBLISHED_DARK, zorder=5, label="published BM25 (Lucene)")
+    four = [d for d in DATASET_ORDER if d in PUBLISHED_BGE]
+    ax.scatter([DATASET_ORDER.index(d) for d in four], [PUBLISHED_BGE[d] for d in four],
+               marker="D", s=30, facecolor="none", edgecolor=ACCENT, zorder=5,
+               label="published BGE-large")
+    ax.set_xticks(x)
+    ax.set_xticklabels([d.capitalize() for d in DATASET_ORDER])
+    ax.set_ylabel("nDCG@10")
+    ax.set_ylim(0, 0.88)
+    ax.set_title("BEIR per dataset: this system against published baselines")
+    ax.legend(frameon=False, fontsize=8, ncol=2, loc="upper right")
+    _save(fig, outdir, "beir_datasets.png", plt)
+
+
+def chart_multihop(outdir: Path, official: dict, plt) -> None:
+    keys = ["Hits@10", "Hits@4", "MAP@10", "MRR@10"]
+    ours = [("this system - hybrid", "hybrid (ours)@ov200", OURS),
+            ("this system - BM25", "bm25@ov200", OURS_ALT),
+            ("this system - bge-small dense", "bge-small dense@ov200", OURS_LIGHT)]
+    blocks = []
+    for label, key, color in ours:
+        vals, lo, hi = [], [], []
+        for metric in keys:
+            m, low, high = bootstrap_ci([r[metric] for r in official[key]["_per_query"]])
+            vals.append(m)
+            lo.append(m - low)
+            hi.append(high - m)
+        blocks.append((label, vals, color, np.vstack([lo, hi])))
+    for label, values in PUBLISHED_MH_DICT.items():
+        blocks.append((f"published - {label}",
+                       list(values), PUBLISHED_DARK if "bge" in label else PUBLISHED, None))
+
+    x = np.arange(len(keys))
+    width = 0.16
+    fig, ax = plt.subplots(figsize=(9.5, 4.8))
+    for i, (label, vals, color, err) in enumerate(blocks):
+        ax.bar(x + (i - 2) * width, vals, width, color=color, label=label, yerr=err,
+               capsize=2, error_kw=dict(lw=0.9, ecolor="#444"))
+    ax.set_xticks(x)
+    ax.set_xticklabels(keys)
+    ax.set_ylabel("score")
+    ax.set_ylim(0, 0.95)
+    ax.set_title("MultiHop-RAG under the benchmark's own protocol")
+    ax.legend(frameon=False, fontsize=7.5, ncol=3)
+    ax.annotate("the gap:\nall evidence, not one piece",
+                xy=(2 - 0.02, 0.30), xytext=(1.15, 0.62), fontsize=8, color=ACCENT,
+                arrowprops=dict(arrowstyle="->", color=ACCENT, lw=1.1))
+    _save(fig, outdir, "multihop_rag.png", plt)
+
+
+def chart_abstention(outdir: Path, plt) -> None:
+    gate = json.loads((MH_DIR / "gate.json").read_text())
+    groups = [("null_query\n(abstention correct)", gate["null"]),
+              ("answerable\n(abstention is an error)", gate["positive"])]
+    rates, errors, counts = [], [], []
+    for _, rows in groups:
+        n = len(rows)
+        rate = sum(1 for row in rows if not row["answerable"]) / n
+        rates.append(rate)
+        errors.append(1.96 * (rate * (1 - rate) / n) ** 0.5)
+        counts.append(n)
+
+    fig, ax = plt.subplots(figsize=(5.6, 4.4))
+    ax.bar([0, 1], rates, 0.5, color=[OURS, PUBLISHED_DARK], yerr=errors, capsize=5,
+           error_kw=dict(lw=1.2, ecolor="#333"))
+    for i, (rate, n) in enumerate(zip(rates, counts)):
+        ax.text(i, rate + 0.035, f"{rate*100:.1f}%", ha="center", fontweight="bold")
+        ax.text(i, 0.03, f"n={n}", ha="center", fontsize=8, color="white")
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels([g[0] for g in groups])
+    ax.set_ylabel("abstention rate")
+    ax.set_ylim(0, 1)
+    ax.set_title("Answerability gate: no discrimination")
+    fig.text(0.005, -0.04, "If the gate worked, the left bar would be near 1 and the right near 0. "
+                           "The 0.022 gap is within noise.", fontsize=7.5, color="#555")
+    _save(fig, outdir, "abstention.png", plt)
+
+
+def chart_overlap(outdir: Path, official: dict, plt) -> None:
+    names = ["bm25", "bm25-engine", "bge-small dense", "hybrid (ours)"]
+    a = [official[f"{n}@ov200"]["Hits@10"] for n in names]
+    b = [official[f"{n}@ov0"]["Hits@10"] for n in names]
+    x = np.arange(len(names))
+    fig, ax = plt.subplots(figsize=(8, 4.2))
+    ax.bar(x - 0.19, a, 0.38, color=OURS, label="overlap 200 (llama-index default)")
+    ax.bar(x + 0.19, b, 0.38, color=OURS_ALT, label="overlap 0")
+    for xi, (va, vb) in enumerate(zip(a, b)):
+        ax.text(xi - 0.19, va + 0.012, f"{va:.3f}", ha="center", fontsize=8)
+        ax.text(xi + 0.19, vb + 0.012, f"{vb:.3f}", ha="center", fontsize=8)
+        ax.text(xi, 0.03, f"{vb-va:+.3f}", ha="center", fontsize=8, color="white",
+                fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels(names)
+    ax.set_ylabel("Hits@10")
+    ax.set_ylim(0, 1.0)
+    ax.set_title("MultiHop-RAG: one undeclared chunking constant")
+    ax.legend(frameon=False, fontsize=8)
+    _save(fig, outdir, "chunk_overlap.png", plt)
+
+
+def make_charts(outdir: Path, best: float, ci, deploy: float, official: dict) -> None:
+    plt = _plt_mod()
+    chart_beir_ranking(outdir, best, ci, deploy, plt)
+    chart_beir_datasets(outdir, plt)
+    chart_multihop(outdir, official, plt)
+    chart_abstention(outdir, plt)
+    chart_overlap(outdir, official, plt)
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="compare.py",
+        description="Cross-system comparison tables, error bars and charts.",
+    )
+    parser.add_argument(
+        "--charts", nargs="?", const="docs/charts", default=None, metavar="DIR",
+        help="write PNG charts here (default when passed without a value: docs/charts)",
+    )
+    args = parser.parse_args(argv)
+
+    print("=" * 78)
+    print("BEIR — per-dataset nDCG@10 with 95% bootstrap intervals over queries")
+    print("=" * 78)
+    retrievers = [("bm25-engine", "shipped lexical"), ("biencoder", "bi-encoder bge-small"),
+                  ("hybrid-biencoder", "fused BM25 + bi-encoder")]
+    header = f"{'dataset':<10} {'queries':>7} " + " ".join(f"{label:>26}" for _, label in retrievers)
+    print(header)
+    for ds in DATASET_ORDER:
+        cell = []
+        for r, _ in retrievers:
+            try:
+                m, lo, hi = bootstrap_ci(per_query("five-small-fixed", ds, r))
+                cell.append(f"{m:.3f} [{lo:.3f},{hi:.3f}]".rjust(26))
+            except KeyError:
+                cell.append("—".rjust(26))
+        n = len(per_query("five-small-fixed", ds, "bm25-engine"))
+        print(f"{ds:<10} {n:>7} " + " ".join(cell))
+
+    print()
+    print("4-dataset means (SciFact, NFCorpus, ArguAna, SciDocs)")
+    print("-" * 78)
+    deploy = [np.mean([np.mean(per_query("five-small-fixed", d, "hybrid-biencoder")) for d in FOUR])]
+    best = [np.mean([np.mean(per_query(n, d, r)) for d, (n, r, _) in BEST_PER_DATASET.items() if d in FOUR])]
+    # Interval on a mean-of-datasets: resample queries within each dataset, then average.
+    rng = np.random.default_rng(7)
+    draws = []
+    pools = {
+        d: np.asarray(
+            per_query(BEST_PER_DATASET[d][0], d, BEST_PER_DATASET[d][1]), dtype=np.float64
+        )
+        for d in FOUR
+    }
+    for _ in range(4000):
+        draws.append(np.mean([p[rng.integers(0, len(p), size=len(p))].mean() for p in pools.values()]))
+    best_lo, best_hi = np.percentile(draws, [2.5, 97.5])
+    print(f"  this system — best per dataset   {best[0]:.3f}  [{best_lo:.3f},{best_hi:.3f}]")
+    print(f"  this system — one deployable cfg {deploy[0]:.3f}")
+    print(f"  BGE-large-v1.5 (published)       0.491")
+
+    rows = [("this system — best per dataset", "mixed", best[0]),
+            ("BGE-large-v1.5", "335M", 0.491),
+            ("this system — deployable config", "33M", deploy[0]),
+            ("SPLADE++", "110M", 0.433)] + PUBLISHED_4[2:]
+    ranking_chart(rows, "BEIR 4-dataset mean, nDCG@10 — this system vs published")
+
+    print()
+    print("=" * 78)
+    print("MultiHop-RAG — official protocol, 95% bootstrap intervals over queries")
+    print("=" * 78)
+    official = json.loads((MH_DIR / "official.json").read_text())
+    metric_keys = ["Hits@10", "Hits@4", "MAP@10", "MRR@10"]
+    print(f"{'system':<30} " + " ".join(f"{k:>18}" for k in metric_keys))
+    for name, h10, h4, mp, mrr in PUBLISHED_MH:
+        print(f"{(name + ' (published)'):<30} " + " ".join(
+            f"{v:>18.3f}" for v in (h10, h4, mp, mrr)))
+    for key, label in [("hybrid (ours)@ov200", "hybrid (ours)"),
+                       ("bm25@ov200", "BM25"),
+                       ("bge-small dense@ov200", "bge-small dense")]:
+        rows_pq = official[key]["_per_query"]
+        cells = []
+        for k in metric_keys:
+            m, low, high = bootstrap_ci([r[k] for r in rows_pq])
+            cells.append(f"{m:.3f} [{low:.2f},{high:.2f}]".rjust(18))
+        print(f"{label:<30} " + " ".join(cells))
+
+    mh_rows = [("this system — hybrid (ours)", "", official["hybrid (ours)@ov200"]["Hits@10"]),
+               ("this system — BM25", "", official["bm25@ov200"]["Hits@10"])]
+    mh_rows += [(n + " (published)", "", h10) for n, h10, _, _, _ in PUBLISHED_MH]
+    mh_rows.append(("this system — bge-small dense", "",
+                    official["bge-small dense@ov200"]["Hits@10"]))
+    ranking_chart(mh_rows, "MultiHop-RAG Hits@10 (overlap=200) — this system vs published",
+                  label_width=32, scale=0.86)
+
+    print()
+    print("Chunk-overlap sensitivity (same rankings, different splitter constant)")
+    print("-" * 78)
+    for key in ["bm25", "bm25-engine", "bge-small dense", "hybrid (ours)"]:
+        a = official[f"{key}@ov200"]["Hits@10"]
+        b = official[f"{key}@ov0"]["Hits@10"]
+        print(f"  {key:<18} overlap=200 {a:.3f}   overlap=0 {b:.3f}   delta {b-a:+.3f}")
+
+    if args.charts:
+        outdir = Path(args.charts)
+        if not outdir.is_absolute():
+            outdir = ROOT / outdir
+        print()
+        print("charts")
+        print("-" * 78)
+        make_charts(outdir, best[0], (best_lo, best_hi), deploy[0], official)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

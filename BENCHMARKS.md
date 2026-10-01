@@ -1,0 +1,259 @@
+# How this system stands against the RAG benchmark landscape
+
+This is the durable record of what the engine has actually been measured against, what it
+could be measured against, and what it structurally cannot be ranked on. It is deliberately
+separate from [`RANKINGS.md`](RANKINGS.md), which is the retrieval programme; this document is
+about *placement outside the project*.
+
+Numbers are nDCG@10 unless stated. Everything marked "measured" was produced by a script in
+`eval/benchmarks/` and reproducible on this machine.
+
+## The capability boundary, which decides most of the answers
+
+The engine is a **retrieval and evidence system**, not a generator. It chunks, embeds, does
+hybrid recall, re-ranks with Laya's calibrated decision head, gates answerability, and returns
+an evidence bundle with a calibrated probability. Text generation is a separate, opt-in step —
+`LAYA_RAG_COMPOSE_MODEL` names the model and `LAYA_RAG_COMPOSE_BASE_URL` the endpoint — that
+speaks the OpenAI-compatible chat route, by default to a local Ollama.
+
+That single fact determines the answer for most of the list, and it is worth stating plainly
+rather than dressing up:
+
+| what a benchmark scores | whose score is it? | can this system be ranked? |
+| --- | --- | --- |
+| Retrieval quality | **this system's** | yes — run it |
+| Answerability / abstention | **this system's** | yes — run it |
+| Citation support (does the prose cite real spans) | **this system's** (`verify.py`) | partly — TREC RAG's support assessment is the published analogue, but no run exists |
+| Answer correctness / faithfulness | the attached LLM's | only with a generator, and then the number is mostly the LLM's |
+| Hallucination detection | nothing this system is | no |
+
+There is no local generator in the repo; the machine does have Ollama with `ornith-1.5:35b`,
+which produces correctly-cited answers at roughly 10-15 s per query. So end-to-end runs are
+*possible*, but every generation-side number below is a statement about that model, not about
+Laya.
+
+## Measured: retrieval-only
+
+### BEIR (already the strongest evidence, from `RANKINGS.md`)
+
+Five datasets, shipped `bge-small` bi-encoder, corrected evaluator:
+
+| dataset | shipped lexical | bi-encoder | bi-encoder + fused BM25 | published BM25 |
+| --- | --- | --- | --- | --- |
+| SciFact | 0.676 | 0.720 | **0.741** | 0.679 |
+| NFCorpus | 0.324 | 0.339 | **0.367** | 0.325 |
+| ArguAna | 0.417 | **0.596** | 0.568 | 0.397 |
+| SciDocs | 0.150 | 0.197 | **0.199** | 0.158 |
+| FiQA-2018 | 0.239 | **0.385** | 0.382 | 0.236 |
+| **mean** | **0.361** | **0.447** | **0.452** | **0.359** |
+
+**Placement.** On the four datasets where an independent matrix carries every published system,
+and counting only systems that can be compared on all four:
+
+| system | params | 4-dataset mean |
+| --- | --- | --- |
+| **this system — best per dataset** | mixed (33M–335M) | **0.495** |
+| BGE-large-v1.5 | 335M | 0.491 |
+| SPLADE++ | 110M | 0.433 |
+| GTR-XL | 1.2B | 0.405 |
+| BM25 (Lucene) | — | 0.390 |
+| ColBERT | 110M | 0.339 |
+
+That is **first of the field, by 0.004** — which is inside the noise band, so the defensible
+claim is *level with a 335M BGE-large*. The honest caveat is that the 0.495 cherry-picks a
+configuration per dataset; the **single deployable configuration** (`bge-small` + fused BM25)
+is 0.469 on the same four, which places it **second**, above SPLADE++ and below BGE-large.
+
+### MultiHop-RAG (measured end-to-end retrieval, official protocol)
+
+MultiHop-RAG is 2,556 queries over 609 news articles, with evidence spread across 2–4 documents
+and 301 `null_query` records whose gold answer is literally *"Insufficient information."*
+
+The important part is the **protocol**. The benchmark's own `retrieval_evaluate.py` splits
+documents into 256-token chunks, substring-matches each gold evidence *fact* against each
+retrieved chunk, and reports Hits@10 / Hits@4 / MAP@10 / MRR@10. Evaluating the same rankings at
+whole-article granularity — the obvious first implementation — produces numbers that are not
+comparable at all.
+
+Measured here, reimplementing that protocol (`tools/multihop_official.py`).
+Our rows use `chunk_overlap=200`; the published rows are the paper's Table 5, which is
+**dense-only** — it contains no lexical baseline at all:
+
+| retriever | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | --- | --- | --- | --- |
+| published `bge-large` (no rerank) | 0.672 | 0.522 | 0.342 | 0.430 |
+| published `bge-large` + `bge-reranker-large` | 0.718 | 0.636 | 0.476 | 0.563 |
+| published best + reranker (`voyage-02`) | 0.747 | 0.663 | 0.480 | 0.586 |
+| **this system — `bge-small` dense** | **0.708** | 0.537 | 0.186 | 0.407 |
+| **this system — BM25** | 0.782 | 0.638 | 0.253 | 0.550 |
+| **this system — hybrid, `bge-small` + BM25** | **0.802** | **0.686** | 0.251 | 0.540 |
+
+Read honestly, that table says four things, and the first one is the least flattering:
+
+- **Most of the win is lexical, not Laya.** Plain BM25 scores 0.782 Hits@10 — above *every*
+  published dense system including the reranked ones. Any claim that this engine "beats the
+  published baselines" on MultiHop-RAG is mostly a claim about news text having strong term
+  overlap. The benchmark's own table simply never included a lexical baseline.
+- **Against the published reranked systems**, the hybrid does win on Hits@10 (0.802 vs 0.747)
+  and Hits@4 (0.686 vs 0.663), with no cross-encoder and a 33M dense model.
+- **On MAP@10 it loses badly** (0.251 vs 0.480). Hits@10 asks "was at least one piece of evidence
+  found"; MAP@10 asks "was *all* of it found, and early". The hybrid is good at the first and
+  weak at the second — the multi-hop failure mode you would expect from a lexical channel that
+  locks onto one strongly-matching article, and the clearest signal of where the remaining work is.
+- **`bge-small` dense is not a fair proxy for the published `bge-large` row** — it matches it on
+  Hits@10 while trailing on MAP/MRR, at a tenth of the parameters. An `bge-large` run under this
+  protocol is the apples-to-apples comparison and has not been done.
+
+**The protocol sensitivity is large enough to be its own finding.** Chunk overlap is a parameter
+the published harness never states (llama-index's `SentenceSplitter(chunk_size=256)` leaves
+`chunk_overlap=200` at its default). Changing only that:
+
+| retriever | Hits@10 (overlap 200) | Hits@10 (overlap 0) |
+| --- | --- | --- |
+| BM25 | 0.782 | 0.844 |
+| BM25 (stemmed + title) | 0.795 | 0.862 |
+| `bge-small` dense | 0.708 | 0.752 |
+| hybrid | 0.802 | 0.859 |
+
+Up to **+0.06 Hits@10 from an undeclared chunking constant**, larger than the gap between most of
+the published systems in Table 5. Any RAG leaderboard comparison that does not pin chunking is
+comparing harnesses.
+
+## Measured: negative rejection
+
+MultiHop-RAG's 301 `null_query` records have no supporting evidence by construction, so a system
+that always answers is wrong on all of them — the same property this engine's answerability gate
+exists to handle. Measured through `RagEngine.query` on the indexed corpus (the corpus is a
+distractor, deliberately: the articles discuss the entities named in the query, they just do not
+answer it), with the shipped thresholds and `bge-small` as the dense channel:
+
+| group | n | abstained | rate |
+| --- | --- | --- | --- |
+| `null_query` — abstention is **correct** | 301 | 93 | **30.9%** |
+| answerable — abstention is an **error** | 300 | 86 | 28.7% |
+
+**The gate does not discriminate on this corpus.** It abstains at essentially the same rate on
+questions that cannot be answered and questions that can — a 0.022 difference, well inside the
+sampling noise for these counts (SE ≈ 0.037). It behaves like a fixed ~30% abstention policy
+rather than a decision about the evidence.
+
+This is the most important negative result in this document, and it contradicts the intuitive
+story that a calibrated answerability head is the natural answer to negative rejection. Caveats,
+stated because they cut against the conclusion as much as for it:
+
+- The gate is calibrated on this project's own corpora and question shape. MultiHop-RAG is
+  2023 news with multi-entity, metadata-dependent questions — a domain shift, and thresholds
+  were left at their shipped defaults rather than tuned here.
+- These are the **hard** negatives: every `null_query` names entities that genuinely appear in
+  the corpus; only the combination is unanswerable. A gate that keys on entity overlap will be
+  fooled, and that is exactly what ~30% flat suggests.
+- The dense channel was `bge-small`, not Laya's own encoder, so the passages reaching the gate
+  are not the ones the gate was calibrated against.
+
+What it implies is concrete rather than fatal: **abstention is not a portable, zero-shot
+capability as things stand.** Claiming it on any external benchmark requires recalibrating the
+answerability head on that domain first, and the calibration procedure is the thing that would
+need to transfer — not the threshold. Until that is done, the gate should not be cited as a
+strength on MultiHop-RAG or anywhere else out of domain.
+
+## The rest of the landscape
+
+Verdicts, with the reason rather than a bare label. "Adapter" means the work is in this repo,
+not in the benchmark.
+
+### End-to-end RAG
+
+| benchmark | what it actually scores | verdict |
+| --- | --- | --- |
+| **TREC RAG Track** | nugget recall/precision via AutoNuggetizer + citation support | **blocked** — corpus and gold nuggets need NIST access, and scoring needs the official assessor. The system's `verify.py` is the closest structural match to the support-assessment half of this track, but there is nothing to submit it to |
+| **CRAG (KDD Cup 2024)** | answer accuracy over *provided* noisy web pages + mock KG/API tool calls | **blocked** — the retrieval is handed to you (5 HTML pages per question), so the engine's search is bypassed; it needs an HTML extractor and a tool-calling loop it does not have. Task 3 alone is ~50 full pages × 4,409 questions |
+| **RGB** | noise robustness, negative rejection, information integration, counterfactual | **runnable** — small, English subset exists, `reject_evalue.py` covers negative rejection which the gate addresses directly. Adapter: days |
+| **FRAMES** | multi-hop factual QA over Wikipedia, exact-match accuracy | **runnable** — 824 questions, 0.5 MB, ships the Wikipedia links needed to build the corpus. Adapter: hours for retrieval; scoring needs a judge model |
+| **MultiHop-RAG** | retrieval (above) + answer accuracy + negative rejection | **measured** (retrieval + rejection); generation not run |
+| **MTRAG** | multi-turn conversational RAG | **adapter needed** — the engine is single-turn; conversation needs query rewriting over history. Not a benchmark-config change |
+| **RAGBench** | generation faithfulness/RAGAS-style metrics over *given* contexts | **not applicable to the engine** — it supplies the retrieved contexts, so it scores the attached LLM |
+| **KILT** | entity linking + retrieval + generation, single leaderboard | **blocked** — needs an entity linker (BLINK) and a seq2seq generator; the leaderboard expects a full stack |
+
+### Classic QA
+
+| benchmark | verdict |
+| --- | --- |
+| **Natural Questions, TriviaQA, HotpotQA, 2WikiMultiHopQA, MuSiQue, ASQA, ELI5** | **blocked at full scale, runnable in "provided-context" settings.** The open-corpus variants need a Wikipedia index (the DPR corpus behind NQ/HotpotQA is ~21M passages — far past the 28 GB free here), and all of them are scored on generated answers. HotpotQA's distractor setting, 2WikiMultiHopQA and MuSiQue ship the gold paragraphs, so those are runnable — but in that setting retrieval is bypassed and the result is a statement about the generator |
+
+### Retrieval only
+
+| benchmark | verdict |
+| --- | --- |
+| **BEIR** | **measured** — 5 of 18 datasets. The other 13 are not run: Robust04 and TREC-NEWS return stubs on the mirror used here, and the largest (BioASQ 14.9M, FEVER 5.4M, NQ 2.7M documents) exceed the 28 GB free disk |
+| **MTEB (retrieval subset)** | **partially measured** — its retrieval tasks are largely BEIR's. The leaderboard wants a *model* submission; this system is an engine around a model, so it cannot be entered as-is |
+| **BRIGHT** | **runnable** — reasoning-intensive, 12 datasets; some collections are large. Adapter: days |
+| **MIRACL** | **blocked as-is** — 18 languages and per-language Wikipedia indexes (disk), and the dense channel would need a multilingual encoder. Laya's own checkpoint is multilingual, which is the one favourable fact |
+| **LoTTE** | **runnable** — search/forum splits, long-tail; several collections are large |
+| **ViDoRe** | **not applicable** — visual documents (screenshots/charts); this engine takes text only and has no OCR or vision path |
+
+### Domain-specific
+
+| benchmark | verdict |
+| --- | --- |
+| **FinanceBench** | **adapter + generator** — 10k questions over SEC PDFs; no PDF loader in this repo, and the score is answer accuracy |
+| **LegalBench-RAG** | **runnable** — it is retrieval precision/recall over legal text, which is exactly this engine's shape. Adapter: corpus ingestion |
+| **MIRAGE** | **adapter + generator** — medical RAG, scored end-to-end |
+
+### Faithfulness and hallucination
+
+| benchmark | verdict |
+| --- | --- |
+| **RAGTruth** | **not applicable** — it annotates hallucination spans in an LLM's output. Nothing here is a hallucination detector; `verify.py` checks citation *mechanics* (do cited spans exist), which is a different and narrower question |
+| **Vectara HHEM leaderboard** | **no ranking** — it ranks hallucination-detection models, which this system is not |
+
+### Tooling for fair comparison
+
+| tool | verdict |
+| --- | --- |
+| **FlashRAG / BERGEN** | **integration, not a ranking** — either could host this engine as a retriever, and doing so is the right way to get a like-for-like number against their reproduced pipelines. Neither is a score |
+| **RAGAS / ARES** | **runnable on generated output** — faithfulness, answer relevance and context relevance could be computed over composed answers; again these measure the generator against the retrieved evidence, and the context-relevance half is the only part that is this system's |
+| **DeepEval / TruLens** | same class as above — metrics, not cross-system rankings |
+
+## What can be claimed today, and what cannot
+
+**Can be claimed.** Retrieval quality on BEIR is at published-BGE-large level on four datasets
+(0.495 vs 0.491, best-per-dataset; 0.469 as a single deployable configuration). On MultiHop-RAG,
+Hits@10 and Hits@4 beat every published system in the benchmark's own Table 5, reranking included
+— with the honest qualifier that the published table has no lexical baseline and plain BM25
+already beats it.
+
+**Cannot be claimed.** There is no end-to-end RAG ranking, because no end-to-end benchmark has
+been run to completion here. There is no KILT, MTEB, HHEM or TREC RAG placement, because those
+need a submission, a full stack, or access this machine does not have. **Answerability does not
+transfer**: on MultiHop-RAG the gate abstains at ~30% whether or not the question is answerable,
+so calibrated abstention is a property of a calibrated corpus, not a portable capability. And any
+faithfulness or answer-accuracy number produced with a local 35B model would be a statement about
+that model, not about this engine — it should be labelled that way wherever it appears.
+
+## What would move this the most
+
+1. **Run `bge-large` under the MultiHop-RAG protocol.** The published comparison row is
+   `bge-large`; ours is `bge-small`. This is one cached model and ~20 minutes of embedding, and it
+   is the difference between a suggestive and a real head-to-head.
+2. **Recalibrate the answerability head on an out-of-domain set and re-measure rejection.** The
+   ~0.02 discrimination above is the single largest gap between this project's claims and its
+   measurements. A calibration split from MultiHop-RAG itself would settle whether the mechanism
+   can transfer at all.
+3. **Fix MAP@10 before adding channels.** The hybrid is strong at "found one piece of evidence"
+   and weak at "found all of it". That is a retrieval-objective problem (MMR-style diversification,
+   or scoring the fused list for coverage rather than rank), not a model-size problem.
+4. **Only then** attach a generator and report end-to-end accuracy, labelled as the LLM's number.
+
+## Reproducing
+
+The three harnesses are tracked in `tools/`; the downloaded dataset, indexes and reports stay in
+gitignored `eval/benchmarks/multihop-rag/`:
+
+```
+.venv/bin/python tools/multihop_doclevel.py    # whole-article framing — NOT comparable
+.venv/bin/python tools/multihop_official.py    # the benchmark's own 256-token protocol
+.venv/bin/python tools/multihop_gate.py        # negative rejection through the engine
+```
+
+`multihop_doclevel.py` is kept deliberately: it is the naive framing that produced numbers up to
+0.08 above the honest ones, and it is the reason the protocol section above exists.

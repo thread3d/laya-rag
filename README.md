@@ -443,10 +443,13 @@ Measured on this machine, multilingual checkpoint, `bge-small-en-v1.5` as the bi
 
 **Two datasets flatter this.** Adding ArguAna, SciDocs and FiQA-2018 — see
 [`RANKINGS.md`](RANKINGS.md) for the full five-dataset standing, the tuning sweeps and the plan —
-moves the best per-dataset configuration to a 0.434 four-dataset mean: level with SPLADE++
-(0.433) and 0.057 behind a 335M BGE-large (0.491), mostly because ArguAna is where a stronger
-encoder dominates (published BGE-large 0.636 against our 0.429). The rows below remain the
-detailed two-dataset comparison.
+moves the best per-dataset configuration to a **0.495** four-dataset mean, marginally ahead of a
+published 335M BGE-large (0.491) and clear of SPLADE++ (0.433). Reaching that needed an evaluator
+fix, not a better model: ArguAna's queries are also corpus documents, and until the harness dropped
+the query's own document the way BEIR does, that one dataset read 0.459 instead of 0.648 and the
+whole "encoder size is the gap" reading followed from it. The rows below remain the detailed
+two-dataset comparison; [How it compares](#how-it-compares-the-honest-case) is the full
+cross-system case, with ranking tables, charts and error bars.
 
 The `bm25` row is the control: it lands where the published Anserini BM25 baseline lands on both
 datasets, so the evaluator is measuring what a leaderboard measures. What the rows show:
@@ -498,6 +501,261 @@ And **Laya's decision head is a stronger filter than a ranker** — reordering B
 lowered nDCG@10 on both datasets (SciFact 0.654 → 0.470). It still filters and still gates
 answerability, which is what those decisions are calibrated for.
 
+## How it compares: the honest case
+
+This section is the summary of every benchmark comparison made here, including the ones that
+went badly. The retrieval programme behind it is in [`RANKINGS.md`](RANKINGS.md); the survey of
+what could and could not be run is in [`BENCHMARKS.md`](BENCHMARKS.md). Everything below is
+reproducible with `tools/beir.py`, `tools/multihop_official.py`, `tools/multihop_gate.py`, and
+`tools/compare.py` — the last of which prints the tables here and draws the charts:
+
+```sh
+make beir                    # the BEIR reports the numbers come from
+make charts                  # tables + error bars + docs/charts/*.png, from those reports
+```
+
+Drawing the charts needs `matplotlib` (declared in the `eval` extra), and nothing else new:
+it was installed here without disturbing the pinned `torch`/`transformers`, which is worth
+checking every time this venv gains a package.
+
+The short version: **on retrieval this system is level with a 335M BGE-large if it is allowed a
+configuration per dataset, and second — above SPLADE++, GTR-XL and ColBERT — with a single 33M
+deployable configuration; on multi-hop it finds one piece of evidence but not all of it; and its
+headline capability, calibrated abstention, did not transfer to an out-of-domain benchmark at
+all.** It has no end-to-end ranking, because it does not generate text.
+
+### What it took to make the numbers comparable
+
+Four things had to be fixed or pinned before any of these numbers meant anything. Three of them
+changed the score materially.
+
+**1. BEIR's `ignore_identical_ids` rule was missing, and it was worth 0.19 nDCG@10 on one
+dataset.** ArguAna's queries *are* corpus documents (1,298 of 1,406 share an `_id`; all 1,406
+share the text), so every query retrieved itself at rank 1 and burned a top-10 slot. BEIR's
+reference evaluator drops that document by default; this harness did not. Correcting it:
+
+| ArguAna configuration | self kept (before) | BEIR rule (after) |
+| --- | --- | --- |
+| `bm25` control | 0.295 | **0.394** |
+| `bge-small` dense, title+text | 0.428 | **0.596** |
+| `bge-small` dense, text-only | 0.459 | **0.648** |
+| `bge-base` dense | 0.453 | **0.638** |
+| `bge-large` dense | 0.454 | **0.638** |
+| fused BM25 + bi-encoder | 0.413 | **0.568** |
+
+That single fix moved the four-dataset best-per-dataset mean from **0.448 to 0.495** and turned
+"0.043 behind BGE-large" into "level with it". It also invalidated the previous conclusion that
+ArguAna was an encoder-quality gap: after the fix `bge-base` scores 0.638 where a published
+`bge-large` scores 0.636.
+
+**2. The control row is now checked, not asserted.** `bm25` is the anchor that keeps an evaluator
+honest, and on ArguAna it had been sitting 0.10 below the published baseline without anyone
+reconciling it. `tools/beir.py` now compares it against a pinned per-dataset baseline and reports
+any deviation past 0.05. All five sit inside tolerance now — SciFact −0.025, NFCorpus −0.021,
+ArguAna −0.004, SciDocs −0.012, FiQA −0.002.
+
+**3. A published baseline is convention-dependent, and the convention has to be named.** The
+BEIR paper reports ArguAna BM25 at 0.315; Pyserini's 2CR table reports 0.397. The difference is
+not quality: the paper's 2021 baseline indexed title and body as separate *multifield* fields,
+while 2CR uses a flat index with `--remove-query` ([beir#197](https://github.com/beir-cellar/beir/issues/197)).
+This harness is flat and drops the query document, so 0.397 is the number it is comparable to —
+and it measures 0.394.
+
+**4. The chunking constant moves the score more than most systems differ.** MultiHop-RAG's
+official harness never states its chunk overlap (llama-index's `SentenceSplitter(chunk_size=256)`
+leaves `chunk_overlap=200`). Changing only that, on identical rankings:
+
+![MultiHop-RAG Hits@10 under two chunk-overlap settings, same rankings](docs/charts/chunk_overlap.png)
+
+*Changing only the splitter's overlap — with the rankings held fixed — moves Hits@10 by up to
++0.067.*
+
+Evaluating the same rankings at whole-article granularity instead of 256-token chunks gives
+another ~0.08 on top. `tools/multihop_doclevel.py` is kept in the repository precisely because it
+is the naive framing that flatters the system, and it is the reason this paragraph exists.
+
+**On error bars.** Retrieval here is fully deterministic: `tools/multihop_official.py` was re-run
+and reproduced its aggregates to four decimals, and every BEIR configuration reproduces exactly.
+So re-running measures nothing — it costs hours and returns the same digit. The uncertainty that
+matters is **sampling uncertainty over queries**: SciFact has 300 scored queries, FiQA 648,
+ArguAna 1,406, and a different query draw would move the mean. Every interval below is therefore
+a 10,000-resample bootstrap over the per-query scores each report persists, which is the same
+machinery `evalkit.paired_bootstrap` uses for A/B tests.
+
+### BEIR — retrieval, five datasets
+
+Shipped `bge-small` bi-encoder, corrected evaluator, 95% bootstrap intervals over queries:
+
+| dataset | queries | shipped lexical | bi-encoder | fused BM25 + bi-encoder |
+| --- | --- | --- | --- | --- |
+| SciFact | 300 | 0.676 [0.632, 0.719] | 0.720 [0.676, 0.762] | **0.741** [0.700, 0.781] |
+| NFCorpus | 323 | 0.324 [0.290, 0.360] | 0.338 [0.304, 0.374] | **0.367** [0.332, 0.403] |
+| ArguAna | 1406 | 0.417 [0.398, 0.435] | **0.596** [0.577, 0.614] | 0.568 [0.550, 0.586] |
+| SciDocs | 1000 | 0.150 [0.137, 0.162] | 0.197 [0.183, 0.212] | **0.199** [0.185, 0.213] |
+| FiQA-2018 | 648 | 0.239 [0.215, 0.263] | **0.385** [0.357, 0.413] | 0.382 [0.354, 0.410] |
+| **5-dataset mean** | — | **0.361** | **0.447** | **0.452** |
+
+Against the published field, on the four datasets an independent matrix carries for every system:
+
+![BEIR 4-dataset mean nDCG@10: this system against published systems](docs/charts/beir_ranking.png)
+
+![BEIR per dataset, with published BM25 and BGE-large reference points](docs/charts/beir_datasets.png)
+
+The per-dataset chart is the one to read carefully: the fused configuration is **below** the
+published BGE-large marker on SciDocs, **level** with it on SciFact and NFCorpus, and only
+genuinely ahead on ArguAna.
+
+The best-per-dataset mean is **0.495 [0.481, 0.510]** against BGE-large's 0.491. That interval
+includes 0.491, so the defensible claim is **level with a 335M BGE-large**, not ahead of it — and
+it cherry-picks a configuration per dataset. The **single deployable configuration**
+(`bge-small` + fused BM25, 33M parameters) is **0.469**, which places it second, above SPLADE++
+and GTR-XL.
+
+Per-dataset, the honest reading is that `bge-small` + fusion is *behind* published BGE-large on
+SciDocs (0.199 vs 0.225) and FiQA, *level* on SciFact and NFCorpus, and only ahead on ArguAna —
+where `--dense-text-only` matters because ArguAna's "titles" are shared topic keyword lists
+(titles are worth +0.034 to BM25 and cost the dense channel 0.052).
+
+### MultiHop-RAG — end-to-end retrieval under the benchmark's own protocol
+
+2,556 queries over 609 news articles, evidence spread across 2–4 documents, plus 301
+`null_query` records whose gold answer is *"Insufficient information."* Scored with the
+benchmark's own metric definitions (`tools/multihop_official.py`), against the paper's Table 5:
+
+| system | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | --- | --- | --- | --- |
+| voyage-02 + rerank (published) | 0.747 | 0.662 | 0.479 | 0.586 |
+| bge-large + rerank (published) | 0.718 | 0.636 | 0.476 | 0.563 |
+| bge-large, no rerank (published) | 0.672 | 0.522 | 0.342 | 0.430 |
+| **hybrid (ours)** | **0.802** [0.79, 0.82] | **0.686** [0.67, 0.71] | 0.251 [0.24, 0.26] | 0.540 [0.52, 0.56] |
+| BM25 (ours) | 0.782 [0.76, 0.80] | 0.638 [0.62, 0.66] | 0.253 [0.24, 0.26] | 0.550 [0.53, 0.57] |
+| bge-small dense (ours) | 0.708 [0.69, 0.73] | 0.537 [0.52, 0.56] | 0.186 [0.18, 0.19] | 0.407 [0.39, 0.42] |
+
+![MultiHop-RAG: four metrics, this system against the paper's published systems](docs/charts/multihop_rag.png)
+
+Four things to take from this, and the first is the least flattering:
+
+- **Most of the win is lexical, not Laya.** Plain BM25 scores 0.782, above every published
+  *dense* system including the reranked ones — because Table 5 contains no lexical baseline at
+  all. On news text with strong term overlap, that is most of the story.
+- **Hits@10 and Hits@4 do beat the published reranked pipelines** (0.802 vs 0.747; 0.686 vs
+  0.662), from a 33M dense model with no cross-encoder. The published figures carry no interval,
+  so the precise claim is that our **lower** bound — 0.79 — is above their point estimate.
+- **MAP@10 loses badly** (0.251 vs 0.479). Hits@10 asks "was at least one piece of evidence
+  found"; MAP@10 asks "was *all* of it found, and early". The hybrid is good at the first and weak
+  at the second — the classic multi-hop failure of a lexical channel that locks onto one
+  strongly-matching article. This is the clearest single signal of where the remaining work is.
+- **`bge-small` is not a fair proxy for the published `bge-large` row.** It matches on Hits@10 at
+  a tenth of the parameters but trails on MAP and MRR; an `bge-large` run under this protocol is
+  the apples-to-apples comparison and has not been done.
+
+### Negative rejection — the claim that did not survive
+
+This is the one that should change how the project describes itself. MultiHop-RAG's 301
+`null_query` records are the hard negatives this engine's answerability gate exists to reject.
+Run through `RagEngine.query` on the indexed corpus with the shipped thresholds:
+
+| group | n | abstained | rate |
+| --- | --- | --- | --- |
+| `null_query` — abstention is **correct** | 301 | 93 | **30.9%** |
+| answerable — abstention is an **error** | 300 | 86 | 28.7% |
+
+![Answerability gate abstention rate on null versus answerable queries](docs/charts/abstention.png)
+
+**The gate does not discriminate on this corpus.** A 0.022 difference, against a standard error of
+about 0.037 — it behaves like a fixed ~30% abstention policy rather than a decision about the
+evidence. The caveats cut both ways (thresholds were the shipped defaults, the dense channel was
+`bge-small` rather than Laya's encoder, and these negatives are the *hard* kind, where every
+entity named genuinely appears in the corpus), but the conclusion stands: **abstention is not a
+portable zero-shot capability.** It is a property of a calibrated corpus. Claiming it on any
+external benchmark requires recalibrating the answerability head on that domain first, and until
+that is done the gate should not be cited as a strength out of domain.
+
+### Where this RAG is better
+
+- **Retrieval per parameter.** 0.495 on the four BEIR datasets — level with a 335M BGE-large and
+  ahead of SPLADE++, GTR-XL (1.2B) and ColBERT — and 0.469 from a single deployable
+  configuration. Fusion contributes most of it, and fusion is significant against the stemmed
+  lexical channel on all five datasets (+0.043 to +0.151).
+- **Multi-hop recall breadth.** Best Hits@10 and Hits@4 measured on MultiHop-RAG, including
+  against reranked published pipelines.
+- **Abstention and citation checking as first-class outputs**, which no IR leaderboard scores.
+  The engine returns calibrated probabilities and can abstain; `verify.py` checks citations and
+  quoted spans deterministically, with no model and no threshold, so it cannot be wrong in the
+  way a model can.
+- **No hallucination surface by construction.** It cannot generate, so it cannot invent facts.
+  That is a real property, not a marketing one, and it is invisible on any leaderboard.
+- **It runs anywhere.** No GPU, no API key, fp32 on CPU with Metal when present, a 2–5 s query
+  and a few hundred MB of index.
+
+### Where this RAG is worse
+
+- **Coverage on multi-hop queries.** MAP@10 0.251 against 0.479 published. It finds *an* answer
+  passage, not *the set*.
+- **Answerability out of domain**, as above — 30.9% vs 28.7% is no discrimination.
+- **No text generation**, so it cannot be entered on KILT, MTEB, HHEM or the TREC RAG track at
+  all, and any end-to-end answer accuracy would belong to whichever LLM is attached.
+- **Laya's own encoder is close to useless for retrieval** (nDCG@10 ≈ 0.014 on SciFact against
+  BM25's 0.654), so the shipped default is lexical-only and reaching competitive dense retrieval
+  means supplying `bge-small`. The engine's differentiating model is a *decision* model, and the
+  retrieval quality comes from stock components.
+- **Cross-encoder reranking did not pay off here**, unlike in most published pipelines: the fast
+  `ms-marco-MiniLM` reranker landed below plain fusion on SciFact, and `bge-reranker-base` has
+  never been measured at a usable depth.
+- **Scale.** The vector index holds every chunk's text and vector in memory and the postings are
+  Python dicts, so the large BEIR datasets (BioASQ 14.9M, FEVER 5.4M, NQ 2.7M documents) are out
+  of reach. Five of eighteen datasets is the honest coverage.
+- **SciDocs** is the weakest dataset relative to published numbers (0.199 vs 0.225).
+
+### Experiments that did not work
+
+Recorded so they are not retried from intuition:
+
+| experiment | result | verdict |
+| --- | --- | --- |
+| BM25 pseudo-relevance feedback (10 docs, 15 terms ×2) | SciFact 0.682 → 0.424 | rejected — the expansion drifts short queries badly |
+| Passage-level indexing (600-char, max-pool) | SciFact 0.682 → 0.659; TREC-COVID 0.306 → 0.245 | rejected at abstract size; untested on genuinely long documents |
+| Score fusion (CombSUM, max-normalised) | SciFact 0.712 vs RRF's 0.741 | rejected — BM25 and cosine scales do not normalise against each other, which is what RRF avoids |
+| `bge-large` instead of `bge-base` | ArguAna 0.6377 → 0.6378 | no gain for 3× the embedding cost — encoder size saturates at 110M here |
+| Cross-encoder reranking (MiniLM-L6) | SciFact 0.691 vs fusion's 0.741 | rejected against a now-stronger first stage |
+| Laya's decision head as a *re-ranker* | SciFact 0.654 → 0.470 | rejected — it is calibrated as a filter and gate, not an orderer |
+| Title weighting (`bm25-title`) | SciFact +0.006, NFCorpus +0.000, FiQA 0.000, ArguAna +0.011 | kept, but only significant on ArguAna — "helps slightly" was over-claimed |
+| Calibrated abstention, out of domain | 30.9% vs 28.7% | does not transfer |
+
+### What would raise the score
+
+In the order they are worth doing, with the expected size of the win:
+
+1. **Run `bge-large` under the MultiHop-RAG protocol** (~20 minutes, cached). The published
+   comparison row is `bge-large`; ours is `bge-small`. This converts a suggestive table into a
+   real head-to-head.
+2. **Recalibrate the answerability head on an out-of-domain split and re-measure rejection.**
+   The 0.022 discrimination is the largest gap between this project's claims and its measurements.
+   A held-out calibration split from MultiHop-RAG itself would show whether the mechanism can
+   transfer at all, which matters more than any retrieval point.
+3. **Attack MAP@10 with a coverage objective rather than a bigger model** — MMR-style
+   diversification or scoring the fused list for evidence coverage instead of per-document rank.
+   This is where the multi-hop loss actually is.
+4. **Measure `bge-reranker-base` over the fused top-100** (cached, never measured). Typically
+   +0.01–0.03, and the earlier rejection used a weaker reranker over a weaker first stage.
+5. **A multi-model dense ensemble** (`bge-small` + `bge-base` + `bge-large` by RRF). Corpus
+   embeddings are already cached for these datasets; mostly query-side cost for +0.01–0.02.
+6. **Per-corpus channel selection.** Fusion helps everywhere except ArguAna, where dense alone
+   wins (0.596 vs 0.568) — a single global configuration leaves that on the table.
+7. **Full fine-tuning** on in-domain pairs (110k NFCorpus pairs, more epochs, hard negatives).
+   The 20k-pair run was +0.0085, a floor rather than a ceiling.
+8. **On-disk postings and streaming index construction**, which is the only route to the large
+   BEIR datasets and therefore to an 18-dataset average.
+
+### What cannot be claimed
+
+There is **no end-to-end RAG ranking**, because no end-to-end benchmark has been run to
+completion. There is **no KILT, MTEB, HHEM or TREC RAG placement** — those need a submission, a
+full stack, or access this machine does not have. **Answerability is not portable**, as measured
+above. And any faithfulness or answer-accuracy figure produced with the local 35B model would be a
+statement about that model, not about this engine; it should be labelled that way wherever it
+appears. `BENCHMARKS.md` carries the full per-benchmark verdict for the rest of the landscape.
+
 ## Repository layout
 
 ```
@@ -516,7 +774,9 @@ laya-rag/
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
 ├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py,
-│                          beir_ablate.py, ann_bench.py, sparse.py, finetune.py
+│                          beir_ablate.py, ann_bench.py, sparse.py, finetune.py,
+│                          compare.py (cross-system tables, error bars, charts),
+│                          multihop_official.py / multihop_gate.py / multihop_doclevel.py
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
