@@ -315,10 +315,10 @@ await check("the compose switch drives the footer warning in both directions", a
     `the footer warned about hallucination while composition was off: ${off.footer}`);
 
   if (off.disabled) {
-    // No model configured on this engine: the switch must be off and explain itself.
-    assert(/COMPOSE_MODEL|composition model/i.test(off.hint),
+    // Composition turned off on this engine: the switch must be off and explain itself.
+    assert(/COMPOSE_MODEL|composition (model|is disabled)/i.test(off.hint),
       `a disabled switch has to say why: ${off.hint}`);
-    console.log("  ..   no composition model configured; testing the disabled path only");
+    console.log("  ..   composition is disabled; testing the disabled path only");
     return;
   }
 
@@ -337,6 +337,24 @@ await check("the compose switch drives the footer warning in both directions", a
   assert(/nothing to hallucinate/i.test(back.footer),
     `the honest footer did not come back: ${back.footer}`);
 });
+
+/* The compose control and its output belong after the evidence: Laya's calibrated
+   passages are the primary result and generated prose must not be read first. */
+await check("the compose control sits after the evidence", async () => {
+  const order = await evaluate(`(() => {
+    const results = document.getElementById('results');
+    const area = document.getElementById('compose-area');
+    const sw = document.getElementById('compose-switch');
+    const slot = document.getElementById('answer-slot');
+    if (!results || !area || !sw || !slot) return null;
+    const after = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return { areaAfterResults: after(results, area), slotAfterSwitch: after(sw, slot) };
+  })()`);
+  assert(order, "the compose control or its output slot is missing");
+  assert(order.areaAfterResults, "the compose control must follow the evidence results");
+  assert(order.slotAfterSwitch, "the composed answer slot must follow the compose switch");
+});
+
 /* Panes must actually receive their elevation, and the primary action must be
    legible: wrapping a box-shadow shorthand in light-dark() silently voids it, and a
    pale accent with white text fails WCAG AA. Check both themes. */
@@ -412,6 +430,9 @@ if (indexed) {
         tick: !!card.querySelector('.meter-tick'),
         passages: document.querySelectorAll('#query-output .passage').length,
         highlights: document.querySelectorAll('#query-output .passage-text mark').length,
+        paths: Array.from(document.querySelectorAll('#query-output .passage-path'))
+          .map((node) => node.textContent.trim()),
+        head: (document.querySelector('#query-output .evidence-head h3') || {}).textContent || '',
       };
     })()`);
 
@@ -420,6 +441,13 @@ if (indexed) {
       assert(verdict.tick, "an answerable verdict drew no threshold marker");
       assert(verdict.passages > 0, "an answerable verdict returned no passages");
       assert(verdict.highlights > 0, "query terms were not highlighted in the evidence");
+      // Retrieval returns chunks, so one file can arrive several times; the evidence
+      // must still be grouped into one entry per document, or "[n]" and the composer's
+      // context disagree with what is on screen.
+      assert(new Set(verdict.paths).size === verdict.paths.length,
+        `a document was rendered more than once: ${verdict.paths.join(", ")}`);
+      assert(/document/.test(verdict.head),
+        `the evidence header should count documents: ${verdict.head}`);
     } else {
       // The corpus may legitimately not cover the probe; the honest path still has to
       // render, and must not dress a default 0.0 up as a measurement.
@@ -460,7 +488,7 @@ if (indexed) {
     await check("a composed answer streams in, badged as unverified, with evidence intact", async () => {
       const available = await evaluate(`!document.getElementById('compose-toggle').disabled`);
       if (!available) {
-        console.log("       (engine has no composition model configured; nothing to verify)");
+        console.log("       (composition is disabled on the engine; nothing to verify)");
         return;
       }
       await evaluate(`(() => {
@@ -513,6 +541,14 @@ if (indexed) {
       assert(answer.footerWarning && /may contain hallucinations/i.test(answer.footerText),
         "the footer was not warning about hallucination while composing");
       assert(answer.passages > 0, "evidence was dropped when composition was enabled");
+      // The answer is generated *from* the evidence, so it must follow it on screen.
+      const afterPassages = await evaluate(`(() => {
+        const panel = document.querySelector('.answer');
+        const lastPassage = document.querySelector('#query-output .passage:last-of-type');
+        if (!panel || !lastPassage) return null;
+        return !!(lastPassage.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING);
+      })()`);
+      assert(afterPassages, "the composed answer must render after the passages it was written from");
       // A truncation is a legitimate outcome reported in its own right; a real
       // failure is not.
       assert(answer.errors.length === 0,

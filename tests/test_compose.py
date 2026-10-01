@@ -64,9 +64,22 @@ def test_the_base_url_can_be_set_explicitly(configured):
     assert target.base_url == "http://elsewhere:1234/v1"
 
 
-def test_no_model_configured_means_unavailable_with_a_reason(tmp_path):
-    """A model name is never invented: guessing one would only fail later, worse."""
+def test_the_defaults_are_a_local_ollama_and_its_installed_model(tmp_path, monkeypatch):
+    """With no environment at all, composition targets the local Ollama and the model
+    this project's host has installed."""
+    monkeypatch.delenv("LAYA_RAG_COMPOSE_MODEL", raising=False)
+    monkeypatch.delenv("LAYA_RAG_COMPOSE_BASE_URL", raising=False)
     target, reason = resolve_target(make_config(tmp_path))
+    assert reason == ""
+    assert target.model == "ornith-1.5:35b"
+    assert target.base_url == compose.DEFAULT_BASE_URL == "http://localhost:11434/v1"
+    assert target.request_url == "http://localhost:11434/api/chat"
+
+
+def test_composition_can_be_turned_off_explicitly(tmp_path):
+    """A model name is defaulted, so turning composition off has to be explicit; the
+    reason still names the variable so the interface can say how to turn it back on."""
+    target, reason = resolve_target(make_config(tmp_path, compose_model="none"))
     assert target is None
     assert "COMPOSE_MODEL" in reason
 
@@ -106,6 +119,21 @@ def test_the_question_is_stated_at_both_ends_of_the_evidence():
 def test_messages_tolerate_a_passage_without_a_path():
     body = build_messages("q", [("", "bare text")])[1]["content"]
     assert "[1]\nbare text" in body
+
+
+def test_one_document_is_a_single_numbered_block():
+    """Several chunks of one file must not repeat the file or spend several numbers."""
+    body = build_messages("q", [
+        ("a.md", "first chunk"),
+        ("b.md", "other doc"),
+        ("a.md", "second chunk"),
+    ])[1]["content"]
+    assert "[1] a.md" in body
+    assert "[2] b.md" in body
+    assert "[3]" not in body
+    assert body.count("a.md") == 1
+    # The later chunk is still present, merged under the document's first number.
+    assert "first chunk" in body and "second chunk" in body
 
 
 # -- streaming ---------------------------------------------------------------
@@ -235,7 +263,7 @@ def test_a_drop_mid_answer_still_reports_the_text_it_produced(monkeypatch, confi
 
 
 def test_unavailable_composition_streams_a_single_error(tmp_path):
-    events = list(Composer(make_config(tmp_path)).stream("q", [("a.md", "t")]))
+    events = list(Composer(make_config(tmp_path, compose_model="none")).stream("q", [("a.md", "t")]))
     assert events[0]["type"] == "error"
     assert "COMPOSE_MODEL" in events[0]["message"]
 
@@ -289,9 +317,9 @@ def test_stats_report_the_compose_target(ctx):
 
 
 def test_stats_explain_why_composition_is_unavailable(tmp_path, monkeypatch):
-    engine = stub_engine(tmp_path)
+    engine = stub_engine(tmp_path, compose_model="none")
     monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
-    app = api.create_app(make_config(tmp_path, warmup=False))
+    app = api.create_app(make_config(tmp_path, warmup=False, compose_model="none"))
     body = TestClient(app).get("/v1/stats").json()["compose"]
     assert body["available"] is False
     assert "COMPOSE_MODEL" in body["reason"]
@@ -314,10 +342,41 @@ def test_compose_streams_newline_delimited_events(ctx, monkeypatch):
     assert "".join(e["text"] for e in events if e["type"] == "delta") == "Refunds take five days [1]."
 
 
-def test_compose_is_unavailable_without_a_model(tmp_path, monkeypatch):
-    engine = stub_engine(tmp_path)
+def test_the_composer_and_the_citation_check_agree_on_document_numbers(ctx, monkeypatch):
+    """The [n] a composed answer cites must name the same evidence in /v1/verify, which
+    groups the passages by document with the same rule."""
+    client, _engine, _corpus = ctx
+    captured = {}
+
+    def capture(request, *_a, **_k):
+        captured["body"] = json.loads(request.data.decode())
+        return FakeResponse(sse("Refunds take five business days [1]. Shipping is free [2]."))
+
+    monkeypatch.setattr(compose.urllib.request, "urlopen", capture)
+    passages = [
+        {"text": "Refunds take five business days.", "path": "refunds.md"},
+        {"text": "Shipping is free over fifty dollars.", "path": "shipping.md"},
+        {"text": "Partial refunds exist for annual plans.", "path": "refunds.md"},
+    ]
+    composed = client.post("/v1/compose", json={"query": "refunds?", "passages": passages})
+    assert composed.status_code == 200
+    events = [json.loads(line) for line in composed.text.splitlines() if line.strip()]
+    answer = "".join(e["text"] for e in events if e.get("type") == "delta")
+
+    evidence = captured["body"]["messages"][1]["content"]
+    assert "[1] refunds.md" in evidence and "[2] shipping.md" in evidence
+    assert "[3]" not in evidence
+
+    report = client.post("/v1/verify", json={"answer": answer, "passages": passages}).json()
+    assert report["passages"] == 2
+    assert report["invalid_citations"] == []
+    assert report["clean"] is True
+
+
+def test_compose_is_unavailable_when_disabled(tmp_path, monkeypatch):
+    engine = stub_engine(tmp_path, compose_model="none")
     monkeypatch.setattr(api, "RagEngine", lambda _config: engine)
-    app = api.create_app(make_config(tmp_path, warmup=False))
+    app = api.create_app(make_config(tmp_path, warmup=False, compose_model="none"))
     response = TestClient(app).post("/v1/compose", json={
         "query": "q", "passages": [{"text": "t"}],
     })

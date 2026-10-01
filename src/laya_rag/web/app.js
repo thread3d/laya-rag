@@ -473,6 +473,90 @@
     return card;
   }
 
+  /* ── evidence grouping ──────────────────────────────────────────────── */
+
+  /* Retrieval works in chunks, so one file can arrive as several passages. Every
+     consumer of that evidence — the composer's numbered context, the numbered cards
+     here, and the citation check — has to agree on what "[n]" means, or a citation
+     stops pointing at what it names. So the evidence is grouped once, here: one entry
+     per document, at the position of its first passage, with its chunks joined in rank
+     order and the chunker's overlap trimmed. Passages with no path stay separate,
+     since no document is known to contain them.
+
+     The engine applies the same rule in `laya_rag.evidence`, so a caller that speaks
+     to the API directly gets the same grouping. This copy exists so the page displays
+     and sends exactly the grouped evidence rather than a second opinion about it. */
+  const MIN_OVERLAP_CHARS = 40;
+
+  function joinWithoutOverlap(earlier, later) {
+    const limit = Math.min(earlier.length, later.length);
+    for (let size = limit; size >= MIN_OVERLAP_CHARS; size -= 1) {
+      if (earlier.endsWith(later.slice(0, size))) return earlier + later.slice(size);
+    }
+    return `${earlier}\n\n${later}`;
+  }
+
+  function mergeInto(group, passage) {
+    group.text = joinWithoutOverlap(group.text, passage.text || "");
+    group.chunks += 1;
+    if (typeof passage.relevance === "number") {
+      group.relevance = typeof group.relevance === "number"
+        ? Math.max(group.relevance, passage.relevance) : passage.relevance;
+    }
+    if (typeof passage.recall_score === "number") {
+      group.recall_score = typeof group.recall_score === "number"
+        ? Math.max(group.recall_score, passage.recall_score) : passage.recall_score;
+    }
+    if (typeof passage.start_char === "number") {
+      group.start_char = typeof group.start_char === "number"
+        ? Math.min(group.start_char, passage.start_char) : passage.start_char;
+    }
+    if (typeof passage.end_char === "number") {
+      group.end_char = typeof group.end_char === "number"
+        ? Math.max(group.end_char, passage.end_char) : passage.end_char;
+    }
+    const channels = Array.isArray(group.channels) ? group.channels.slice() : [];
+    (Array.isArray(passage.channels) ? passage.channels : []).forEach((name) => {
+      if (!channels.includes(name)) channels.push(name);
+    });
+    group.channels = channels;
+  }
+
+  function groupPassages(passages) {
+    const order = [];
+    const groups = new Map();
+    let pathless = 0;
+    (passages || []).forEach((passage) => {
+      const path = (passage.path || "").trim();
+      if (!path) {
+        pathless += 1;
+        const key = `\u0000pathless\u0000${pathless}`;
+        groups.set(key, { ...passage, path: "", text: passage.text || "", chunks: 1 });
+        order.push(key);
+        return;
+      }
+      const existing = groups.get(path);
+      if (existing) {
+        mergeInto(existing, passage);
+      } else {
+        groups.set(path, { ...passage, text: passage.text || "", chunks: 1 });
+        order.push(path);
+      }
+    });
+    return order.map((key) => groups.get(key));
+  }
+
+  /* Grouped once per result and kept off the result object, so "Copy JSON" stays
+     exactly the response the engine sent rather than a second, grouped payload. */
+  const groupedEvidence = new WeakMap();
+
+  function evidenceFor(result) {
+    if (!groupedEvidence.has(result)) {
+      groupedEvidence.set(result, groupPassages(result.passages || []));
+    }
+    return groupedEvidence.get(result);
+  }
+
   function passageCard(passage, rank, terms, lowConfidence) {
     const relevance = typeof passage.relevance === "number" ? passage.relevance : 0;
     const channels = Array.isArray(passage.channels) ? passage.channels : [];
@@ -515,6 +599,13 @@
         el("span", { text: `recall ${typeof passage.recall_score === "number" ? passage.recall_score.toFixed(4) : "—"}`,
           title: "fused recall score (reciprocal rank fusion) — a ranking key, not a probability" }),
         el("span", { text: `chars ${fmtInt(passage.start_char)}–${fmtInt(passage.end_char)}` }),
+        passage.chunks > 1
+          ? el("span", {
+              text: `${passage.chunks} chunks merged`,
+              title: "Several retrieved chunks of this document form one evidence entry, so this number, "
+                + "the composer's context and the citation check all agree",
+            })
+          : null,
         el("button", {
           class: "btn btn-ghost btn-sm copy",
           type: "button",
@@ -553,16 +644,17 @@
     lines.push(`Verdict: ${result.answerable ? "answerable" : "NOT answerable"}${suffix}`);
     if (result.note) lines.push(`Note: ${result.note}`);
     lines.push("");
-    (result.passages || []).forEach((passage, index) => {
+    evidenceFor(result).forEach((passage, index) => {
       const channels = (passage.channels || []).join("+") || "unknown";
+      const chunks = passage.chunks > 1 ? `, ${passage.chunks} chunks` : "";
       lines.push(
         `[${index + 1}] ${passage.path} (relevance ${fmtProb(passage.relevance)}, ` +
-        `recall ${typeof passage.recall_score === "number" ? passage.recall_score.toFixed(4) : "—"}, ${channels})`
+        `recall ${typeof passage.recall_score === "number" ? passage.recall_score.toFixed(4) : "—"}, ${channels}${chunks})`
       );
       lines.push(passage.text || "");
       lines.push("");
     });
-    if (!(result.passages || []).length) {
+    if (!evidenceFor(result).length) {
       lines.push(nothingRetrieved(result)
         ? "(no candidates were retrieved: the index is empty or nothing matched at recall)"
         : "(no passage cleared the relevance threshold)");
@@ -600,19 +692,18 @@
   }
 
   function renderResult() {
-    const output = ui.queryOutput;
+    // Results are rebuilt inside #results; the compose control and its output sit after
+    // it (see index.html), so a re-render never disturbs them and an unverified answer
+    // always follows the evidence it was written from.
+    const output = ui.results;
     clear(output);
+    clear(ui.answerSlot);
     const result = state.lastResult;
     if (!result) return;
 
     output.appendChild(verdictCard(result, state.lastRequest || {}));
 
-    // The composed answer goes here — below Laya's calibrated verdict, never above
-    // it, so generated prose is never framed as the trustworthy part of the result.
-    const answerSlot = el("div", { class: "answer-slot" });
-    output.appendChild(answerSlot);
-
-    const passages = result.passages || [];
+    const passages = evidenceFor(result);
     if (!passages.length) {
       // The verdict card above already rendered result.note, so printing it again
       // here would say the same thing twice; only add a remedy it does not contain.
@@ -628,17 +719,23 @@
     }
 
     if (state.compose && composeIsAvailable()) {
-      composeAnswer(result, answerSlot);
+      composeAnswer(result, ui.answerSlot);
     } else if (state.compose) {
-      answerSlot.appendChild(el("p", {
+      ui.answerSlot.appendChild(el("p", {
         class: "hint empty-hint",
         text: composeUnavailableReason(),
       }));
     }
 
     const terms = queryTerms(result.query);
+    const totalChunks = (result.passages || []).length;
+    const docLabel = `${passages.length} document${passages.length === 1 ? "" : "s"}`;
     const head = el("div", { class: "evidence-head" }, [
-      el("h3", { text: `${passages.length} passage${passages.length === 1 ? "" : "s"}` }),
+      el("h3", {
+        text: totalChunks > passages.length
+          ? `${docLabel} from ${totalChunks} passages`
+          : docLabel,
+      }),
       el("span", { class: "rule" }),
       el("span", { class: "actions" }, [
         el("button", {
@@ -665,8 +762,9 @@
   }
 
   function renderRunning(message, elapsedMs) {
-    clear(ui.queryOutput);
-    ui.queryOutput.appendChild(el("div", { class: "running" }, [
+    clear(ui.results);
+    clear(ui.answerSlot);
+    ui.results.appendChild(el("div", { class: "running" }, [
       el("span", { class: "spinner", "aria-hidden": "true" }),
       el("span", { class: "running-text" }, [
         el("b", { text: message }),
@@ -676,9 +774,10 @@
   }
 
   function renderQueryError(error) {
-    clear(ui.queryOutput);
+    clear(ui.results);
+    clear(ui.answerSlot);
     if (error.status === 409) {
-      ui.queryOutput.appendChild(el("div", { class: "empty-state" }, [
+      ui.results.appendChild(el("div", { class: "empty-state" }, [
         el("p", { class: "empty-title", text: "No index yet" }),
         el("p", { class: "empty-body", text: error.message }),
         el("button", {
@@ -697,7 +796,7 @@
       ]),
       el("p", { class: "verdict-why", text: error.message }),
     ]);
-    ui.queryOutput.appendChild(card);
+    ui.results.appendChild(card);
   }
 
   /* ── query: execution ───────────────────────────────────────────────── */
@@ -784,8 +883,9 @@
     } catch (error) {
       if (error && error.name === "AbortError") {
         // Replace the spinner, or the panel would sit on "Laya is judging…" forever.
-        clear(ui.queryOutput);
-        ui.queryOutput.appendChild(el("p", {
+        clear(ui.results);
+        clear(ui.answerSlot);
+        ui.results.appendChild(el("p", {
           class: "hint empty-hint",
           text: "Query cancelled. The engine keeps working on it in the background; run it again to see the evidence.",
         }));
@@ -814,7 +914,7 @@
 
   function composeUnavailableReason() {
     return (state.composeMeta || {}).reason
-      || "No composition model is configured on the engine, so answers cannot be composed.";
+      || "Composition is disabled on the engine, so answers cannot be composed.";
   }
 
   /**
@@ -960,8 +1060,9 @@
         body: JSON.stringify({
           query: result.query,
           // Exactly the evidence on screen: the answer is never written from
-          // passages the reader cannot see.
-          passages: result.passages.map((p) => ({ text: p.text, path: p.path })),
+          // passages the reader cannot see. Grouping by document here is what makes
+          // the numbering the model sees match the numbered cards below.
+          passages: evidenceFor(result).map((p) => ({ text: p.text, path: p.path })),
         }),
       });
 
@@ -1053,7 +1154,7 @@
           // Pass the question so an answer that quotes it back is not flagged as a
           // fabricated quote.
           query: result.query || "",
-          passages: result.passages.map((p) => ({ text: p.text, path: p.path })),
+          passages: evidenceFor(result).map((p) => ({ text: p.text, path: p.path })),
         },
       });
     } catch (error) {
@@ -1375,6 +1476,81 @@
     output.appendChild(box);
   }
 
+  /**
+   * Index over the streaming endpoint, painting running counts as they arrive.
+   *
+   * Indexing is one long request, so the plain JSON call can only show a spinner that
+   * says nothing while a large corpus embeds. The stream emits a counter event per file
+   * read, per document chunked and per embedding batch, so the wait is legible.
+   */
+  async function indexWithProgress(body, scores) {
+    const headers = { "Content-Type": "application/json" };
+    if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
+
+    let response;
+    try {
+      response = await fetch("/v1/index/stream", {
+        method: "POST", headers, cache: "no-store", body: JSON.stringify(body),
+      });
+    } catch (_) {
+      throw new ApiError("could not reach the engine — is `laya-rag-serve` running?", 0);
+    }
+    if (!response.ok) {
+      let detail = null;
+      try { detail = await response.json(); } catch (_) { detail = null; }
+      throw new ApiError(detailOf(detail, response.status), response.status);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let report = null;
+    let failure = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, cut).trim();
+        buffer = buffer.slice(cut + 1);
+        if (!line) continue;
+        let event;
+        try { event = JSON.parse(line); } catch (_) { continue; }
+        if (event.type === "progress") paintIndexProgress(scores, event);
+        else if (event.type === "done") report = event.report;
+        else if (event.type === "error") failure = event;
+      }
+    }
+    if (failure) throw new ApiError(failure.message || "indexing failed", failure.status || 0);
+    // A stream that closes without a report is a failure, not a silent success: the
+    // index may or may not have been written, and saying nothing would hide that.
+    if (!report) throw new ApiError("the index stream ended without a report", 0);
+    return report;
+  }
+
+  /** One line of running counters for the current indexing stage. */
+  function paintIndexProgress(node, event) {
+    const parts = [];
+    if (event.stage === "reading") {
+      parts.push(`${fmtInt(event.documents)} file${event.documents === 1 ? "" : "s"} read`);
+      if (event.skipped) parts.push(`${fmtInt(event.skipped)} skipped`);
+    } else if (event.stage === "chunking") {
+      if (event.documents_total) {
+        parts.push(`${fmtInt(event.documents)}/${fmtInt(event.documents_total)} documents chunked`);
+      }
+      parts.push(`${fmtInt(event.chunks)} chunks`);
+    } else if (event.stage === "embedding") {
+      const total = event.chunks || 0;
+      const pct = total ? Math.floor((event.embedded / total) * 100) : 0;
+      parts.push(`embedded ${fmtInt(event.embedded)}/${fmtInt(total)} chunks (${pct}%)`);
+    } else if (event.stage === "saving") {
+      parts.push(`${fmtInt(event.chunks)} chunks`);
+      parts.push("saving index…");
+    }
+    node.textContent = parts.join(" · ");
+  }
+
   async function runIndex(event) {
     event.preventDefault();
     if (state.busy) return;
@@ -1401,13 +1577,15 @@
     ui.indexBtn.textContent = "Indexing…";
     hideAlert();
     clear(ui.indexOutput);
+    const scores = el("span", { class: "running-scores" });
     ui.indexOutput.appendChild(el("div", { class: "running" }, [
       el("span", { class: "spinner", "aria-hidden": "true" }),
       el("span", { class: "running-text", text: "Reading, chunking and embedding…" }),
+      scores,
     ]));
 
     try {
-      const report = await api("/v1/index", { method: "POST", body });
+      const report = await indexWithProgress(body, scores);
       renderIndexReport(report);
       ui.srStatus.textContent = `Indexed ${report.documents} documents, ${report.total_chunks} chunks total`;
       await refreshPanels({ quiet: true });
@@ -1443,8 +1621,9 @@
       state.activeChunks = null;
       state.chunkError = null;
       state.lastResult = null;
-      clear(ui.queryOutput);
-      ui.queryOutput.appendChild(ui.queryEmpty);
+      clear(ui.results);
+      clear(ui.answerSlot);
+      ui.results.appendChild(ui.queryEmpty);
       ui.queryEmpty.hidden = false;
       await refreshPanels();
       ui.srStatus.textContent = "Index deleted";
@@ -1675,8 +1854,9 @@
       themeBtn: $("theme-btn"),
       queryForm: $("query-form"),
       queryInput: $("query-input"),
-      queryOutput: $("query-output"),
+      results: $("results"),
       queryEmpty: $("query-empty"),
+      answerSlot: $("answer-slot"),
       composeToggle: $("compose-toggle"),
       composeSwitch: $("compose-switch"),
       composeHint: $("compose-hint"),
@@ -1750,8 +1930,9 @@
       cancelCompose();
       ui.queryInput.value = "";
       state.lastResult = null;
-      clear(ui.queryOutput);
-      ui.queryOutput.appendChild(ui.queryEmpty);
+      clear(ui.results);
+      clear(ui.answerSlot);
+      ui.results.appendChild(ui.queryEmpty);
       ui.queryEmpty.hidden = false;
       ui.queryInput.focus();
     });

@@ -7,6 +7,7 @@ API routes registered before it.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,29 @@ def test_stylesheet_and_script_are_served(ctx):
     js = client.get("/app.js")
     assert js.status_code == 200
     assert "javascript" in js.headers["content-type"]
+
+
+def test_gui_assets_ask_the_browser_to_revalidate(ctx):
+    """There is no build step and no content hash in the filenames, so a heuristically
+    cached app.js could keep running an old UI against new markup. `no-cache` forces a
+    revalidation; the ETag still makes an unchanged asset a cheap 304."""
+    client, _engine, _corpus = ctx
+    for path in ("/", "/app.css", "/app.js"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.headers.get("cache-control") == "no-cache", path
+
+
+def test_the_page_stamps_its_asset_urls(ctx):
+    """Stamping the mtime means a changed app.js is fetched under a URL the browser has
+    never cached, so an old layout cannot survive a reload."""
+    client, _engine, _corpus = ctx
+    html = client.get("/").text
+    assert re.search(r'app\.css\?v=\d+', html), html[:400]
+    assert re.search(r'app\.js\?v=\d+', html), html[:400]
+    # The query string is not part of the path, so the mount still serves the asset.
+    assert client.get("/app.js?v=1").status_code == 200
+    assert client.get("/app.css?v=1").status_code == 200
 
 
 def test_index_html_references_its_assets(ctx):

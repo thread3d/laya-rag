@@ -67,15 +67,6 @@
         <textarea id="query-input" rows="2" placeholder="How do I run Laya in Docker?" autocomplete="off" spellcheck="false" required></textarea>
       </div>
 
-      <label class="switch" for="compose-toggle" id="compose-switch">
-        <input type="checkbox" id="compose-toggle">
-        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-        <span class="switch-text">
-          <b>Compose an answer</b>
-          <span class="hint" id="compose-hint">Checking whether a composition model is configured…</span>
-        </span>
-      </label>
-
       <details class="disclosure" id="controls">
         <summary>
           Retrieval controls
@@ -117,10 +108,27 @@
     </form>
 
     <div id="query-output" class="query-output">
-      <div class="empty-state" id="query-empty">
-        <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="16" cy="24" r="4" fill="var(--accent)" opacity=".9"/><circle cx="33" cy="15" r="3" fill="var(--ok)" opacity=".8"/><circle cx="33" cy="33" r="3" fill="var(--warn)" opacity=".8"/><path d="M19.5 22.2 30 16.5M19.8 25.8l9.7 5.6" stroke="var(--line-strong)" stroke-width="1.6" stroke-linecap="round"/></svg>
-        <p class="empty-title">Ask a question about the indexed corpus</p>
-        <p class="empty-body">The engine returns passages with Laya's calibrated probabilities attached. When the evidence does not answer the question, it says so instead of guessing.</p>
+      <!-- Everything a run produces is rebuilt inside #results. The compose control and
+           its output live outside it, after the evidence, so an unverified answer is
+           never the first thing read and cannot be wiped by a re-render. -->
+      <div id="results" class="results">
+        <div class="empty-state" id="query-empty">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="16" cy="24" r="4" fill="var(--accent)" opacity=".9"/><circle cx="33" cy="15" r="3" fill="var(--ok)" opacity=".8"/><circle cx="33" cy="33" r="3" fill="var(--warn)" opacity=".8"/><path d="M19.5 22.2 30 16.5M19.8 25.8l9.7 5.6" stroke="var(--line-strong)" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <p class="empty-title">Ask a question about the indexed corpus</p>
+          <p class="empty-body">The engine returns passages with Laya's calibrated probabilities attached. When the evidence does not answer the question, it says so instead of guessing.</p>
+        </div>
+      </div>
+
+      <div class="compose-area" id="compose-area">
+        <label class="switch" for="compose-toggle" id="compose-switch">
+          <input type="checkbox" id="compose-toggle">
+          <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+          <span class="switch-text">
+            <b>Compose an answer</b>
+            <span class="hint" id="compose-hint">Checking whether a composition model is configured…</span>
+          </span>
+        </label>
+        <div class="answer-slot" id="answer-slot"></div>
       </div>
     </div>
   </section>

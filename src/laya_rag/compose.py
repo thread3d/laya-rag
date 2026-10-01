@@ -9,9 +9,12 @@ Two consequences shape the design:
 
 * It is **opt-in per request**. Nothing here runs unless the caller asks, and the
   interface that exposes it is expected to say plainly that the prose is unverified.
-* The model is **configured here, explicitly**. ``LAYA_RAG_COMPOSE_MODEL`` names the
-  model and ``LAYA_RAG_COMPOSE_BASE_URL`` the endpoint; nothing is discovered from
-  elsewhere and no model name is ever invented.
+* The model is **configured, with a local default**. ``LAYA_RAG_COMPOSE_MODEL`` names
+  the model and ``LAYA_RAG_COMPOSE_BASE_URL`` the endpoint; both default to a local
+  Ollama, and setting the model to ``none`` (or ``off``/``disabled``) turns
+  composition off deliberately. Nothing is discovered at runtime and no model name is
+  ever invented: the default names a model this project's host has installed, and any
+  name that is not there fails loudly on first use.
 
 The transport is the OpenAI-compatible ``/chat/completions`` route that Ollama
 serves, using only the standard library: this project has no HTTP client dependency
@@ -27,10 +30,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
 
-from .config import EngineConfig
+from .config import (
+    COMPOSE_DISABLED_VALUES,
+    DEFAULT_COMPOSE_MODEL,
+    DEFAULT_OLLAMA_BASE_URL,
+    EngineConfig,
+)
+from .evidence import group_passages_by_document
 
-#: Where Ollama serves its OpenAI-compatible API when nothing overrides it.
-DEFAULT_BASE_URL = "http://localhost:11434/v1"
+#: Where Ollama serves its OpenAI-compatible API when nothing overrides it. Kept as an
+#: alias because the resolution code and its tests referred to it by this name.
+DEFAULT_BASE_URL = DEFAULT_OLLAMA_BASE_URL
 
 #: The instruction that keeps this step as close to the evidence as a generative
 #: model can be kept. It is a mitigation, never a guarantee.
@@ -105,17 +115,19 @@ class ComposeTarget:
 def resolve_target(config: EngineConfig) -> tuple[ComposeTarget | None, str]:
     """Resolve where and with what to compose. Returns ``(target, reason)``.
 
-    Both values come from this project's own configuration. A model name is never
-    invented: guessing one would only fail confusingly later, so an unset
-    ``LAYA_RAG_COMPOSE_MODEL`` simply means composition is unavailable and says so.
+    Both values come from this project's own configuration, which defaults to a local
+    Ollama and the model this host has installed. A model name is never invented beyond
+    that default: setting ``LAYA_RAG_COMPOSE_MODEL`` to ``none`` (or ``off`` /
+    ``disabled``) turns composition off, and the reason names the variable so the
+    interface can say how to turn it back on.
     """
     base_url = (config.compose_base_url or "").strip()
     model = (config.compose_model or "").strip()
 
-    if not model:
+    if not model or model.lower() in COMPOSE_DISABLED_VALUES:
         return None, (
-            "no composition model is configured: set LAYA_RAG_COMPOSE_MODEL to the model "
-            "the endpoint should use"
+            "composition is disabled: set LAYA_RAG_COMPOSE_MODEL to a model the local "
+            f"Ollama serves (the default is {DEFAULT_COMPOSE_MODEL}) to enable it"
         )
 
     return (
@@ -137,6 +149,12 @@ def build_messages(
 ) -> list[dict[str, str]]:
     """Build the chat messages: the question, the evidence, then the question again.
 
+    Passages are grouped by document first (see
+    :func:`laya_rag.evidence.group_passages_by_document`), so one document is a single
+    numbered block however many of its chunks were retrieved. That keeps the context
+    from repeating a file and makes ``[n]`` mean the same thing here, in the interface,
+    and in :func:`laya_rag.verify.verify_citations`.
+
     The question is stated at **both ends** of the evidence on purpose, and the
     measurements are why. On a short topical query ("Laya in docker"):
 
@@ -150,7 +168,7 @@ def build_messages(
     it anchors both ends. Do not "tidy" this into a single mention without re-measuring.
     """
     blocks: list[str] = []
-    for index, (path, text) in enumerate(passages, start=1):
+    for index, (path, text) in enumerate(group_passages_by_document(passages), start=1):
         header = f"[{index}] {path}" if path else f"[{index}]"
         blocks.append(f"{header}\n{text}")
     evidence = "\n\n".join(blocks)

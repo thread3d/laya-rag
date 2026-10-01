@@ -11,7 +11,7 @@ import hashlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Iterator, Sequence
+from typing import Callable, Iterable, Iterator, Sequence
 
 DEFAULT_EXTENSIONS: tuple[str, ...] = (
     ".md", ".markdown", ".mdx", ".txt", ".rst", ".org",
@@ -159,13 +159,21 @@ def load_documents(
     roots: Sequence[Path],
     extensions: Iterable[str] = DEFAULT_EXTENSIONS,
     max_file_bytes: int = MAX_FILE_BYTES,
+    on_document: Callable[[Document, int, int], None] | None = None,
 ) -> LoadReport:
-    """Load every readable text document under ``roots``."""
+    """Load every readable text document under ``roots``.
+
+    ``on_document`` is called after each file is read with the document and the running
+    ``(documents, skipped)`` counts, so a caller can report progress while a large load
+    is still running rather than only when it finishes.
+    """
     report = LoadReport()
     for path in iter_files(roots, extensions=extensions, max_file_bytes=max_file_bytes, report=report):
         document = read_document(path, report=report)
         if document is not None:
             report.documents.append(document)
+            if on_document is not None:
+                on_document(document, len(report.documents), len(report.skipped))
     return report
 
 
@@ -243,10 +251,16 @@ def chunk_documents(
     chunk_chars: int = 1200,
     overlap_chars: int = 200,
     min_chunk_chars: int = 80,
+    on_document: Callable[[int, int, int], None] | None = None,
 ) -> list[Chunk]:
-    """Chunk every document, preserving reading order per document."""
+    """Chunk every document, preserving reading order per document.
+
+    ``on_document`` is called after each document with ``(done, total, chunks)``: how
+    many documents have been chunked, how many there are, and the running chunk count.
+    """
     chunks: list[Chunk] = []
-    for document in documents:
+    total = len(documents)
+    for done, document in enumerate(documents, start=1):
         pieces = chunk_text(
             document.text,
             chunk_chars=chunk_chars,
@@ -263,4 +277,6 @@ def chunk_documents(
                 start_char=start,
                 end_char=end,
             ))
+        if on_document is not None:
+            on_document(done, total, len(chunks))
     return chunks

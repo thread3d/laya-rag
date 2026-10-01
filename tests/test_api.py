@@ -1,6 +1,8 @@
 """HTTP service tests, driven through the real FastAPI app with a stub engine."""
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -69,6 +71,49 @@ def test_index_reports_nothing_found_for_unreadable_paths(ctx, tmp_path):
 def test_index_requires_at_least_one_path(ctx):
     client, _engine, _corpus = ctx
     assert client.post("/v1/index", json={"paths": []}).status_code == 422
+
+
+def test_index_stream_reports_progress_then_the_report(ctx):
+    """The streaming variant exists so an interface can show running counts; it has to
+    emit them as they happen and finish with the same report the plain route returns."""
+    client, _engine, corpus = ctx
+    response = client.post("/v1/index/stream", json={"paths": [str(corpus)]})
+    assert response.status_code == 200
+    assert "ndjson" in response.headers["content-type"]
+
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    assert events[-1]["type"] == "done"
+    progress = [e for e in events if e["type"] == "progress"]
+    assert progress, "the stream emitted no progress at all"
+    assert progress[0]["stage"] == "reading"
+    assert progress[-1]["stage"] == "saving"
+    # Every progress event carries the full counter shape, not a stage-specific subset.
+    for event in progress:
+        assert {"documents", "documents_total", "skipped", "chunks", "embedded", "path"} <= set(event)
+
+    report = events[-1]["report"]
+    assert report["documents"] == 3
+    assert report["total_chunks"] > 0
+
+    plain = client.post("/v1/index", json={"paths": [str(corpus)]}).json()
+    assert report["documents"] == plain["documents"]
+    assert report["total_chunks"] == plain["total_chunks"]
+
+
+def test_index_stream_reports_a_failure_as_an_event(ctx, monkeypatch):
+    """An error after the stream has started cannot be an HTTP status, so it has to
+    arrive as an event the caller can read."""
+    client, engine, corpus = ctx
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(engine, "index_paths", boom)
+    response = client.post("/v1/index/stream", json={"paths": [str(corpus)]})
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    assert events[-1]["type"] == "error"
+    assert "disk on fire" in events[-1]["message"]
 
 
 def test_query_rejects_a_blank_query(ctx):

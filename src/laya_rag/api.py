@@ -12,18 +12,21 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from .compose import resolve_target
 from .config import EngineConfig
 from .engine import IndexNotBuiltError, RagEngine
+from .evidence import group_passages_by_document
 from .model import ModelUnavailableError
 from .rerank import DecisionError
 from .verify import split_claims, verify_citations
@@ -36,6 +39,41 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 def _web_dir() -> Path | None:
     """The bundled GUI directory, or ``None`` when its assets are not installed."""
     return WEB_DIR if (WEB_DIR / "index.html").is_file() else None
+
+
+def _index_html() -> str:
+    """The GUI document with its asset URLs stamped by modification time.
+
+    There is no build step and no content hash in the filenames, so a browser left to
+    heuristically cache ``app.js`` can pair an old script with new markup — the page
+    then keeps its previous layout and a shipped change looks like it never happened.
+    Appending the file's mtime gives each change a URL the browser has never seen, so
+    the new code is fetched instead of reused, while an unchanged file still answers a
+    conditional request from its ETag.
+    """
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    for asset in ("app.css", "app.js"):
+        path = WEB_DIR / asset
+        stamp = int(path.stat().st_mtime) if path.is_file() else 0
+        html = html.replace(f'"{asset}"', f'"{asset}?v={stamp}"')
+    return html
+
+
+class _GuiFiles(StaticFiles):
+    """Static GUI assets, served so a stale page cannot outlive the code.
+
+    The interface is plain HTML, CSS and JavaScript with no build step and no content
+    hash in its filenames, so a browser left to heuristically cache ``app.js`` can keep
+    running an old UI against new markup — which is how a change that has shipped looks
+    like it never happened. ``no-cache`` means "revalidate before reuse", not "do not
+    store": the ETag still makes an unchanged asset a cheap 304, while a changed one is
+    picked up by an ordinary refresh rather than a hard reload.
+    """
+
+    async def get_response(self, path: str, scope: Any) -> Any:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 class IndexRequest(BaseModel):
@@ -236,6 +274,69 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
             payload["note"] = "no readable text documents were found under the given paths"
         return payload
 
+    @app.post("/v1/index/stream")
+    def index_documents_stream(
+        request: IndexRequest, _: None = Depends(authorise)
+    ) -> StreamingResponse:
+        """Index the requested paths, streaming progress as newline-delimited JSON.
+
+        The same work as ``POST /v1/index``, reported while it happens: a ``progress``
+        event per file read, per document chunked and per embedding batch, then one
+        terminal ``done`` carrying the report ``/v1/index`` returns, or an ``error``.
+        Because indexing is synchronous and CPU-bound it runs on a worker thread, and
+        the stream reads its counter events off a queue.
+        """
+        engine = get_engine()
+        extensions: Iterable[str] | None = request.extensions
+
+        def events() -> Iterator[str]:
+            counters: queue.Queue[dict[str, Any] | None] = queue.Queue()
+            outcome: dict[str, Any] = {}
+
+            def work() -> None:
+                try:
+                    outcome["report"] = engine.index_paths(
+                        request.paths,
+                        rebuild=request.rebuild,
+                        progress=counters.put,
+                        **({"extensions": extensions} if extensions else {}),
+                    )
+                except ModelUnavailableError as exc:
+                    outcome["error"] = (503, str(exc))
+                except FileNotFoundError as exc:
+                    outcome["error"] = (404, str(exc))
+                except Exception as exc:  # noqa: BLE001 - reported as an event, never raised
+                    outcome["error"] = (500, str(exc))
+                finally:
+                    counters.put(None)
+
+            worker = threading.Thread(target=work, name="laya-index", daemon=True)
+            worker.start()
+
+            while True:
+                item = counters.get()
+                if item is None:
+                    break
+                yield json.dumps({"type": "progress", **item}, ensure_ascii=False) + "\n"
+
+            report = outcome.get("report")
+            if report is not None:
+                payload = report.as_dict()
+                if report.documents == 0:
+                    payload["note"] = "no readable text documents were found under the given paths"
+                yield json.dumps({"type": "done", "report": payload}, ensure_ascii=False) + "\n"
+                return
+            status, message = outcome.get("error", (500, "indexing failed"))
+            yield json.dumps(
+                {"type": "error", "status": status, "message": message}, ensure_ascii=False
+            ) + "\n"
+
+        return StreamingResponse(
+            events(),
+            media_type="application/x-ndjson",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+
     @app.post("/v1/query")
     def query(request: QueryRequest, _: None = Depends(authorise)) -> dict[str, Any]:
         """Return Laya-ranked, Laya-gated evidence for a query.
@@ -298,10 +399,16 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         evidence and whether each quoted span actually appears in the passages. It
         makes no claim about whether the answer is *true*, and nothing consuming this
         should present it as if it did.
+
+        The passages are grouped by document with the same rule the composer uses, so
+        the ``[n]`` in a composed answer means the same evidence here as it does there.
         """
+        grouped = group_passages_by_document(
+            (passage.path or "", passage.text) for passage in request.passages
+        )
         return verify_citations(
             request.answer,
-            [passage.text for passage in request.passages],
+            [text for _path, text in grouped],
             query=request.query or "",
         )
 
@@ -346,7 +453,14 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
     # /v1/* and FastAPI's generated /docs are registered first and therefore win.
     web_dir = _web_dir()
     if web_dir is not None:
-        app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
+        # Served through a route rather than the mount so the asset URLs can be stamped
+        # with their mtimes; that is what stops an old app.js being paired with new
+        # markup, which otherwise shows a previous layout indefinitely.
+        @app.get("/", include_in_schema=False)
+        def gui_index() -> HTMLResponse:
+            return HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache"})
+
+        app.mount("/", _GuiFiles(directory=web_dir, html=True), name="web")
     else:  # pragma: no cover - only if installed without package data
         log.warning("GUI assets are not installed; serving the JSON API only")
 

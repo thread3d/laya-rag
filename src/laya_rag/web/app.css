@@ -293,6 +293,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
 .check input { margin: 3px 0 0; accent-color: var(--accent); flex-shrink: 0; }
 .check span { color: var(--text); }
 
+/* The compose control and its output sit after the evidence in the results column, so
+   Laya's calibrated passages are read first and generated prose is never the headline. */
+.compose-area { margin-top: 18px; }
+
 /* Compose switch. Turning it on changes what the engine returns, so it is stated as
    a labelled control rather than buried among the retrieval tuning. */
 .switch {
@@ -537,7 +541,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
 .passage-foot .copy { margin-left: auto; font-family: var(--font); }
 
 /* Run progress */
-.running { display: flex; align-items: center; gap: 12px; padding: 26px 18px; justify-content: center; color: var(--text-dim); }
+.running { display: flex; align-items: center; gap: 12px; padding: 26px 18px; justify-content: center; color: var(--text-dim); flex-wrap: wrap; }
 .spinner {
   width: 18px; height: 18px; flex-shrink: 0;
   border: 2px solid var(--line-strong);
@@ -547,6 +551,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .running-text b { color: var(--text); }
+/* Running counters beside the spinner. Hidden until the first event arrives, so an
+   empty span does not leave a gap next to the text. */
+.running-scores { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.running-scores:empty { display: none; }
 
 /* ── Side pane: tabs ───────────────────────────────────────────────────── */
 

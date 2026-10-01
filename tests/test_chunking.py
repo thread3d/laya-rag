@@ -7,6 +7,8 @@ duplicated work.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from laya_rag.chunking import (
@@ -122,3 +124,36 @@ def test_read_document_rejects_binary(tmp_path):
 def test_skip_dirs_exclude_dependency_noise():
     for name in ("node_modules", ".git", "__pycache__", ".venv"):
         assert name in SKIP_DIRS
+
+
+# -- running counts ----------------------------------------------------------
+
+def test_load_documents_reports_each_file_as_it_is_read(tmp_path):
+    """The callback is what lets a long load show progress instead of a bare spinner,
+    so the counts have to be the real running ones."""
+    corpus = write_corpus(tmp_path / "corpus")
+    seen = []
+    report = load_documents(
+        [corpus],
+        on_document=lambda doc, documents, skipped: seen.append(
+            (Path(doc.path).name, documents, skipped)
+        ),
+    )
+    assert [documents for _, documents, _ in seen] == [1, 2, 3]
+    assert len(seen) == len(report.documents) == 3
+    # A file refused along the way is counted too, not hidden from the running total.
+    assert seen[-1][2] == len(report.skipped)
+
+
+def test_chunk_documents_reports_progress_per_document(tmp_path):
+    corpus = write_corpus(tmp_path / "corpus")
+    documents = load_documents([corpus]).documents
+    seen = []
+    chunks = chunk_documents(
+        documents,
+        on_document=lambda done, total, produced: seen.append((done, total, produced)),
+    )
+    assert [done for done, _, _ in seen] == [1, 2, 3]
+    assert all(total == 3 for _, total, _ in seen)
+    assert all(produced <= len(chunks) for _, _, produced in seen)
+    assert seen[-1][2] == len(chunks)

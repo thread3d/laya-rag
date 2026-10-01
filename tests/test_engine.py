@@ -30,6 +30,46 @@ def test_indexing_a_corpus_reports_what_it_did(tmp_path):
     assert all(path.endswith(".md") for path in engine.index.paths())
 
 
+def test_index_reports_running_progress(tmp_path):
+    """The progress callback is what lets the interface show counts instead of a
+    spinner that says nothing, so the stages and the numbers have to be real."""
+    corpus = write_corpus(tmp_path / "corpus")
+    engine = stub_engine(tmp_path)
+
+    events = []
+    report = engine.index_paths([corpus], progress=events.append)
+
+    shape = {"stage", "documents", "documents_total", "skipped", "chunks", "embedded", "path"}
+    for event in events:
+        assert shape <= set(event), f"an event is missing keys: {event}"
+
+    stages = [event["stage"] for event in events]
+    assert stages[0] == "reading"
+    assert "chunking" in stages
+    assert "embedding" in stages
+    assert stages[-1] == "saving"
+
+    read = [e for e in events if e["stage"] == "reading" and e["documents"]]
+    assert read[-1]["documents"] == report.documents == 3
+
+    chunked = [e for e in events if e["stage"] == "chunking" and e["chunks"]]
+    assert chunked[-1]["chunks"] == report.chunks == report.total_chunks
+    assert chunked[-1]["documents"] == chunked[-1]["documents_total"] == 3
+
+    embedded = [e for e in events if e["stage"] == "embedding"]
+    assert embedded[-1]["chunks"] == report.chunks
+    assert embedded[-1]["embedded"] == report.chunks
+    assert all(e["embedded"] <= e["chunks"] for e in embedded)
+
+
+def test_index_paths_without_progress_still_works(tmp_path):
+    """Progress is optional instrumentation and must not change the result."""
+    corpus = write_corpus(tmp_path / "corpus")
+    engine = stub_engine(tmp_path)
+    report = engine.index_paths([corpus])
+    assert report.documents == 3
+
+
 def test_index_writes_both_channels(tmp_path):
     corpus = write_corpus(tmp_path / "corpus")
     engine = stub_engine(tmp_path)
