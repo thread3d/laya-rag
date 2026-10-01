@@ -5,16 +5,23 @@ Everything else in this project is zero-shot. This intentionally is not: it fine
 `bge-small` on a dataset's **train** split and evaluates on its **test** split, so the
 number it produces must be labelled adapted, never compared as if it were zero-shot.
 
-NFCorpus ships 110k train pairs and is the standard demonstration for this, so:
+NFCorpus ships 110,575 train pairs and is the standard demonstration for this. The first
+run here used 20k pairs, one epoch, and in-batch negatives only, for +0.0085 — a floor.
+This version supports the whole split (`--max-pairs 0`), several epochs, and mined hard
+negatives: for each training query it retrieves the non-relevant documents the zero-shot
+model scores highest and adds them as explicit triplets, which is the part in-batch
+negatives cannot see.
 
-    .venv/bin/python tools/finetune.py --dataset nfcorpus --max-pairs 60000
+    .venv/bin/python tools/finetune.py --dataset nfcorpus --max-pairs 0 --epochs 2 \
+        --hard-negatives 1 --hard-negative-pairs 40000 --save-model eval/finetuned-full
 
-Uses sentence-transformers' `MultipleNegativesRankingLoss`, which treats the other
-positives in a batch as negatives and needs no explicit negative mining.
+Uses sentence-transformers' `MultipleNegativesRankingLoss` (in-batch negatives) plus a
+`TripletLoss` objective over the mined hard negatives.
 """
 from __future__ import annotations
 
 import argparse
+import random
 import sys
 import time
 from pathlib import Path
@@ -48,9 +55,56 @@ def training_pairs(
             if score <= 0 or doc_id not in corpus:
                 continue
             pairs.append((query, corpus[doc_id]))
-            if len(pairs) >= max_pairs:
+            if max_pairs and len(pairs) >= max_pairs:
                 return pairs
     return pairs
+
+
+def mine_hard_negatives(
+    encoder: Any,
+    corpus: dict[str, str],
+    queries: dict[str, str],
+    qrels: dict[str, dict[str, float]],
+    limit: int,
+    negatives_per_query: int,
+    batch_size: int = 64,
+) -> list[tuple[str, str, str]]:
+    """Triplets ``(query, positive, hard negative)`` mined with the current encoder.
+
+    One corpus embedding pass, then each training query's highest-scoring non-relevant
+    documents. Bounded by ``limit`` so the triplet objective stays a useful fraction of
+    the training time rather than doubling it.
+    """
+    doc_ids = list(corpus)
+    doc_vectors = np.asarray(
+        encoder.encode([corpus[d] for d in doc_ids], normalize_embeddings=True, batch_size=batch_size),
+        dtype=np.float32,
+    )
+    query_ids = [qid for qid in qrels if qid in queries]
+    query_vectors = np.asarray(
+        encoder.encode([queries[q] for q in query_ids], normalize_embeddings=True, batch_size=batch_size),
+        dtype=np.float32,
+    )
+    triplets: list[tuple[str, str, str]] = []
+    for qid, qvec in zip(query_ids, query_vectors):
+        relevant = {d for d, s in qrels[qid].items() if s > 0 and d in corpus}
+        if not relevant:
+            continue
+        positive = next(iter(relevant))
+        scores = doc_vectors @ qvec
+        order = np.argsort(-scores)
+        chosen = 0
+        for index in order:
+            doc_id = doc_ids[int(index)]
+            if doc_id in relevant:
+                continue
+            triplets.append((queries[qid], corpus[positive], corpus[doc_id]))
+            chosen += 1
+            if chosen >= negatives_per_query:
+                break
+        if len(triplets) >= limit:
+            break
+    return triplets
 
 
 def rank_with_encoder(
@@ -79,27 +133,37 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dataset", default="nfcorpus")
     parser.add_argument("--data-root", default=str(ROOT / "eval" / "beir"))
     parser.add_argument("--model", default="BAAI/bge-small-en-v1.5")
-    parser.add_argument("--max-pairs", type=int, default=60000)
+    parser.add_argument("--max-pairs", type=int, default=60000,
+                        help="0 means every training pair in the split")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--hard-negatives", type=int, default=0,
+                        help="mined hard negatives per training query (0 = in-batch only)")
+    parser.add_argument("--hard-negative-pairs", type=int, default=40000,
+                        help="cap on mined triplets")
+    parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--top-k", type=int, default=100)
     parser.add_argument("--out", default=str(ROOT / "eval" / "finetune"))
     parser.add_argument("--save-model", default=str(ROOT / "eval" / "finetuned-model"))
+    parser.add_argument("--resume", default=None, help="checkpoint to continue training from")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root))
     corpus = beir.load_corpus(dataset_dir)
     queries = beir.load_queries(dataset_dir)
     train_qrels = beir.load_qrels(dataset_dir, split="train")
     test_qrels = beir.load_qrels(dataset_dir, split="test")
     test_queries = {qid: text for qid, text in queries.items() if qid in test_qrels}
+    all_pairs = training_pairs(queries, train_qrels, corpus, 0)
     print(
-        f"{args.dataset}: {len(corpus)} documents, {len(training_pairs(queries, train_qrels, corpus, 10**9))} "
-        f"train pairs, {len(test_queries)} test queries",
+        f"{args.dataset}: {len(corpus)} documents, {len(all_pairs)} train pairs, "
+        f"{len(test_queries)} test queries",
         flush=True,
     )
 
@@ -108,50 +172,90 @@ def main(argv: Sequence[str] | None = None) -> int:
     from torch.utils.data import DataLoader
 
     device = args.device or ("mps" if torch.backends.mps.is_available() else "cpu")
-    report: dict[str, Any] = {"settings": vars(args), "dataset": args.dataset, "device": device}
+    report: dict[str, Any] = {
+        "settings": vars(args),
+        "dataset": args.dataset,
+        "device": device,
+        "available_train_pairs": len(all_pairs),
+    }
 
-    # Zero-shot baseline with the same encoder and evaluator, so the delta is the training.
-    zero_shot_model = SentenceTransformer(args.model, device=device)
-    zero_shot = rank_with_encoder(zero_shot_model, corpus, test_queries, args.top_k)
-    report["zero_shot"] = evalkit.evaluate_rankings(zero_shot, test_qrels, k_values=(10, 100))["summary"]
-    print(f"  zero-shot nDCG@10 {report['zero_shot']['nDCG@10']:.4f}", flush=True)
+    # If resuming, skip the zero-shot baseline (it is already in the previous report and
+    # re-embedding is the expensive part).
+    if args.resume:
+        model = SentenceTransformer(args.resume, device=device)
+        zero_shot_metrics = None
+    else:
+        model = SentenceTransformer(args.model, device=device)
+        zero_shot = rank_with_encoder(model, corpus, test_queries, args.top_k)
+        zero_shot_metrics = evalkit.evaluate_rankings(zero_shot, test_qrels, k_values=(10, 100))["summary"]
+        report["zero_shot"] = zero_shot_metrics
+        print(f"  zero-shot nDCG@10 {zero_shot_metrics['nDCG@10']:.4f}", flush=True)
 
     pairs = training_pairs(queries, train_qrels, corpus, args.max_pairs)
     examples = [InputExample(texts=[query, document]) for query, document in pairs]
     loader = DataLoader(examples, shuffle=True, batch_size=args.batch_size)
-    loss = losses.MultipleNegativesRankingLoss(zero_shot_model)
+    objectives: list[tuple[Any, Any]] = [(loader, losses.MultipleNegativesRankingLoss(model))]
+
+    triplets: list[tuple[str, str, str]] = []
+    if args.hard_negatives > 0:
+        started = time.perf_counter()
+        triplets = mine_hard_negatives(
+            model, corpus, queries, train_qrels,
+            limit=args.hard_negative_pairs,
+            negatives_per_query=args.hard_negatives,
+        )
+        print(f"  mined {len(triplets)} hard negatives in {time.perf_counter() - started:.1f}s", flush=True)
+        if triplets:
+            triplet_examples = [InputExample(texts=[q, p, n]) for q, p, n in triplets]
+            triplet_loader = DataLoader(triplet_examples, shuffle=True, batch_size=args.batch_size)
+            objectives.append((
+                triplet_loader,
+                losses.TripletLoss(
+                    model,
+                    distance_metric=losses.TripletDistanceMetric.COSINE,
+                    triplet_margin=0.3,
+                ),
+            ))
+    report["train_pairs"] = len(pairs)
+    report["hard_negatives"] = len(triplets)
+
     started = time.perf_counter()
-    zero_shot_model.fit(
-        train_objectives=[(loader, loss)],
+    model.fit(
+        train_objectives=objectives,
         epochs=args.epochs,
-        warmup_steps=max(1, len(loader) // 20),
+        warmup_steps=max(1, sum(len(loader) for loader, _ in objectives) // 20),
         show_progress_bar=False,
     )
     report["train_seconds"] = round(time.perf_counter() - started, 1)
-    report["train_pairs"] = len(pairs)
-    print(f"  trained on {len(pairs)} pairs in {report['train_seconds']}s", flush=True)
+    print(f"  trained on {len(pairs)} pairs + {len(triplets)} triplets, "
+          f"{args.epochs} epoch(s), in {report['train_seconds']}s", flush=True)
 
     Path(args.save_model).mkdir(parents=True, exist_ok=True)
-    zero_shot_model.save(args.save_model)
+    model.save(args.save_model)
 
-    adapted = rank_with_encoder(zero_shot_model, corpus, test_queries, args.top_k)
+    adapted = rank_with_encoder(model, corpus, test_queries, args.top_k)
     report["adapted"] = evalkit.evaluate_rankings(adapted, test_qrels, k_values=(10, 100))["summary"]
-    report["delta_nDCG@10"] = round(report["adapted"]["nDCG@10"] - report["zero_shot"]["nDCG@10"], 4)
-    print(
-        f"  adapted   nDCG@10 {report['adapted']['nDCG@10']:.4f} "
-        f"({report['delta_nDCG@10']:+.4f})",
-        flush=True,
-    )
+    if zero_shot_metrics is not None:
+        report["delta_nDCG@10"] = round(report["adapted"]["nDCG@10"] - zero_shot_metrics["nDCG@10"], 4)
+        print(
+            f"  adapted   nDCG@10 {report['adapted']['nDCG@10']:.4f} "
+            f"({report['delta_nDCG@10']:+.4f})",
+            flush=True,
+        )
+    else:
+        print(f"  adapted   nDCG@10 {report['adapted']['nDCG@10']:.4f}", flush=True)
 
     out = Path(args.out)
     evalkit.write_json(out.with_suffix(".json"), report)
+    rows = []
+    if zero_shot_metrics is not None:
+        rows.append({"stage": "zero-shot", **zero_shot_metrics})
+    rows.append({"stage": "adapted", **report["adapted"]})
     evalkit.write_text(
         out.with_suffix(".md"),
         f"# In-domain fine-tuning on {args.dataset} (adapted, not zero-shot)\n\n"
-        + evalkit.markdown_table([
-            {"stage": "zero-shot", **report["zero_shot"]},
-            {"stage": "adapted", **report["adapted"]},
-        ])
+        f"{len(pairs)} train pairs, {len(triplets)} mined hard negatives, {args.epochs} epoch(s).\n\n"
+        + evalkit.markdown_table(rows)
         + "\n",
     )
     print(f"\nwrote {out.with_suffix('.json')} and {out.with_suffix('.md')}")

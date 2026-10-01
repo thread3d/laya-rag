@@ -13,10 +13,17 @@ EVAL_ARGS ?=
 BENCH_ARGS ?=
 BEIR_ARGS ?=
 BEIR_ABLATE_ARGS ?=
+MULTIHOP_ARGS ?=
+COVERAGE_ARGS ?=
+GATE_ARGS ?=
+RECALIBRATE_ARGS ?=
+ROUTING_ARGS ?=
+FINETUNE_ARGS ?=
+ONDISK_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench beir beir-ablate charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench beir beir-ablate multihop multihop-gate multihop-coverage multihop-recalibrate beir-routing finetune ondisk charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -32,6 +39,13 @@ help:
 	@echo "bench        probe the engine's limits (evidence, batch, scale, ...)"
 	@echo "beir         standard IR metrics on BEIR (nDCG@10, MRR@10, ...)"
 	@echo "beir-ablate  sweep fusion weights and rerank depth on BEIR"
+	@echo "multihop     MultiHop-RAG under the benchmark's own protocol"
+	@echo "multihop-gate  answerability rejection on the null_query records"
+	@echo "multihop-coverage  does a coverage objective beat per-document rank on MAP@10?"
+	@echo "multihop-recalibrate  does a threshold fitted on one split transfer?"
+	@echo "beir-routing per-corpus channel selection, measured out of sample"
+	@echo "finetune     in-domain domain adaptation (adapted, not zero-shot)"
+	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "charts       cross-system tables, error bars and the README charts"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
@@ -97,6 +111,35 @@ beir:
 # The ablation that chose the defaults (`make beir-ablate BEIR_ABLATE_ARGS="--datasets scifact"`).
 beir-ablate:
 	OMP_NUM_THREADS=16 $(PY) tools/beir_ablate.py $(BEIR_ABLATE_ARGS)
+
+# MultiHop-RAG under the benchmark's own protocol. `MULTIHOP_ARGS="--models bge-small,bge-large
+# --rerank"` runs the published comparison row. Cached embeddings make the second run cheap.
+multihop:
+	OMP_NUM_THREADS=16 $(PY) tools/multihop_official.py $(MULTIHOP_ARGS)
+
+# Negative rejection on the 301 null_query records (`GATE_ARGS="--null-limit 50"` to sample).
+multihop-gate:
+	OMP_NUM_THREADS=16 $(PY) tools/multihop_gate.py $(GATE_ARGS)
+
+# Does a coverage objective beat per-document rank on MAP@10?
+multihop-coverage:
+	OMP_NUM_THREADS=16 $(PY) tools/multihop_coverage.py $(COVERAGE_ARGS)
+
+# Does an answerability threshold fitted on one split transfer to the other?
+multihop-recalibrate:
+	$(PY) tools/multihop_recalibrate.py $(RECALIBRATE_ARGS)
+
+# Per-corpus channel selection, measured out of sample.
+beir-routing:
+	$(PY) tools/beir_routing.py $(ROUTING_ARGS)
+
+# Domain-adapted fine-tuning; results are labelled adapted, never zero-shot.
+finetune:
+	OMP_NUM_THREADS=16 $(PY) tools/finetune.py $(FINETUNE_ARGS)
+
+# On-disk postings + streaming dense index, the route to the large BEIR corpora.
+ondisk:
+	OMP_NUM_THREADS=16 $(PY) tools/ondisk.py $(ONDISK_ARGS)
 
 # Cross-system tables, bootstrap error bars, and the charts embedded in the README.
 # It reads the reports `make beir` and the multihop tools already wrote, so run those first.

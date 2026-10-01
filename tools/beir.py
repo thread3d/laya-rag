@@ -273,13 +273,24 @@ class BiEncoder:
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModel.from_pretrained(model_id).to(device).eval()
 
-    def embed(self, texts: Sequence[str]) -> np.ndarray:
+    def embed(self, texts: Sequence[str], fixed_length: bool = False) -> np.ndarray:
+        """Embed documents. ``fixed_length`` pads every batch to ``max_length``.
+
+        Dynamic padding (the default) is faster but gives every batch a different tensor
+        shape, and torch's MPS backend caches a compiled graph per shape — over tens of
+        thousands of documents that cache grows without bound. Streaming construction
+        therefore pads to a fixed width so memory stays flat.
+        """
         rows = list(texts)
         out: list[np.ndarray] = []
         for start in range(0, len(rows), self.batch_size):
             batch = rows[start : start + self.batch_size]
             encoded = self.tokenizer(
-                batch, padding=True, truncation=True, max_length=self.max_length, return_tensors="pt"
+                batch,
+                padding="max_length" if fixed_length else True,
+                truncation=True,
+                max_length=self.max_length,
+                return_tensors="pt",
             ).to(self.device)
             with self.torch.no_grad():
                 hidden = self.model(**encoded).last_hidden_state
@@ -703,6 +714,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="apply the bi-encoder's retrieval instruction to queries")
     parser.add_argument("--ensemble-model", default=None,
                         help="second bi-encoder to fuse as a hybrid-ensemble row")
+    parser.add_argument("--ensemble-models", default=None,
+                        help="comma list of extra bi-encoders; adds dense-ensemble (dense models "
+                             "only) and hybrid-ensemble (dense models + lexical) rows")
     parser.add_argument("--splade-model", default=None,
                         help="learned-sparse encoder for a splade / hybrid-splade row")
     parser.add_argument("--keep-identical-ids", action="store_true",
@@ -748,6 +762,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "dense_text_only": args.dense_text_only,
             "query_instruction": args.query_instruction,
             "ensemble_model": args.ensemble_model,
+            "ensemble_models": args.ensemble_models,
             "splade_model": args.splade_model,
             "dense_weight": dense_weight,
             "lexical_weight": config.lexical_weight,
@@ -911,29 +926,51 @@ def main(argv: Sequence[str] | None = None) -> int:
                     if retriever in wanted:
                         results[retriever] = {"error": f"{type(exc).__name__}: {exc}"}
 
-        if args.ensemble_model and biencoder is not None:
+        ensemble_spec = args.ensemble_models or args.ensemble_model
+        if ensemble_spec:
             try:
-                second = BiEncoder(
-                    args.ensemble_model, device=args.device,
-                    query_instruction=args.query_instruction,
-                )
-                vectors_second = cached_embed(
-                    second,
-                    dense_corpus,
-                    cache_dir / f"{name}.{second.name}{dense_suffix}",
-                    use_cache=not args.no_cache,
-                )
+                extra_models = [m.strip() for m in str(ensemble_spec).split(",") if m.strip()]
+                if biencoder is None:
+                    biencoder = BiEncoder(
+                        args.biencoder_model, device=args.device,
+                        query_instruction=args.query_instruction,
+                    )
+                    vectors = cached_embed(
+                        biencoder, dense_corpus,
+                        cache_dir / f"{name}.{biencoder.name}{dense_suffix}",
+                        use_cache=not args.no_cache,
+                    )
+                    rankings["biencoder"] = dense_rankings(dense_corpus, queries, biencoder, vectors, args.top_k)
+                dense_channels = [rankings["biencoder"]]
+                for model_id in extra_models:
+                    extra = BiEncoder(
+                        model_id, device=args.device, query_instruction=args.query_instruction
+                    )
+                    extra_vectors = cached_embed(
+                        extra, dense_corpus,
+                        cache_dir / f"{name}.{extra.name}{dense_suffix}",
+                        use_cache=not args.no_cache,
+                    )
+                    dense_channels.append(
+                        dense_rankings(dense_corpus, queries, extra, extra_vectors, args.top_k)
+                    )
                 started = time.perf_counter()
-                bi_second = dense_rankings(dense_corpus, queries, second, vectors_second, args.top_k)
+                # Pure dense ensembling, and the same ensemble fused with the lexical channel:
+                # the first isolates the multi-model dense gain, the second is the deployable row.
+                rankings["dense-ensemble"] = multi_channel_fusion(
+                    dense_channels, [1.0] * len(dense_channels), args.top_k, args.rrf_k
+                )
                 rankings["hybrid-ensemble"] = multi_channel_fusion(
-                    [rankings.get("biencoder", bi_second), bi_second, lexical or {}],
-                    [1.0, 1.0, config.lexical_weight],
+                    dense_channels + [lexical or {}],
+                    [1.0] * len(dense_channels) + [config.lexical_weight],
                     args.top_k,
                     args.rrf_k,
                 )
+                note = f"RRF of {args.biencoder_model}, {', '.join(extra_models)} (dense only, and +bm25)"
+                results["dense-ensemble"] = {"note": note}
                 results["hybrid-ensemble"] = {
                     "seconds": round(time.perf_counter() - started, 2),
-                    "note": f"RRF of {args.biencoder_model}, {args.ensemble_model} and bm25",
+                    "note": note,
                 }
             except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
                 results["hybrid-ensemble"] = {"error": f"{type(exc).__name__}: {exc}"}

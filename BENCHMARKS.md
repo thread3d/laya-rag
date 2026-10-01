@@ -36,22 +36,25 @@ Laya.
 
 ### BEIR (already the strongest evidence, from `RANKINGS.md`)
 
-Five datasets, shipped `bge-small` bi-encoder, corrected evaluator:
+Five datasets, shipped `bge-small` bi-encoder, corrected evaluator. The last two columns are
+the multi-model dense ensemble (`bge-small` + `bge-base` + `bge-large` by RRF), a single
+configuration rather than a per-dataset choice:
 
-| dataset | shipped lexical | bi-encoder | bi-encoder + fused BM25 | published BM25 |
-| --- | --- | --- | --- | --- |
-| SciFact | 0.676 | 0.720 | **0.741** | 0.679 |
-| NFCorpus | 0.324 | 0.339 | **0.367** | 0.325 |
-| ArguAna | 0.417 | **0.596** | 0.568 | 0.397 |
-| SciDocs | 0.150 | 0.197 | **0.199** | 0.158 |
-| FiQA-2018 | 0.239 | **0.385** | 0.382 | 0.236 |
-| **mean** | **0.361** | **0.447** | **0.452** | **0.359** |
+| dataset | shipped lexical | bi-encoder | bi-encoder + fused BM25 | dense ensemble | **ensemble + BM25** |
+| --- | --- | --- | --- | --- | --- |
+| SciFact | 0.676 | 0.720 | 0.741 | 0.754 | **0.767** |
+| NFCorpus | 0.324 | 0.339 | 0.367 | 0.379 | **0.387** |
+| ArguAna | 0.417 | 0.596 | 0.568 | 0.656 | **0.651** |
+| SciDocs | 0.150 | 0.197 | 0.199 | 0.222 | **0.225** |
+| FiQA-2018 | 0.239 | 0.385 | 0.382 | 0.438 | **0.444** |
+| **mean** | **0.361** | **0.447** | **0.452** | **0.490** | **0.495** |
 
 **Placement.** On the four datasets where an independent matrix carries every published system,
 and counting only systems that can be compared on all four:
 
 | system | params | 4-dataset mean |
 | --- | --- | --- |
+| **this system — 3-model ensemble + BM25 (single config)** | 478M | **0.507** |
 | **this system — best per dataset** | mixed (33M–335M) | **0.495** |
 | BGE-large-v1.5 | 335M | 0.491 |
 | SPLADE++ | 110M | 0.433 |
@@ -59,15 +62,16 @@ and counting only systems that can be compared on all four:
 | BM25 (Lucene) | — | 0.390 |
 | ColBERT | 110M | 0.339 |
 
-That is **first of the field, by 0.004** — which is inside the noise band, so the defensible
-claim is *level with a 335M BGE-large*. The honest caveat is that the 0.495 cherry-picks a
-configuration per dataset; the **single deployable configuration** (`bge-small` + fused BM25)
-is 0.469 on the same four, which places it **second**, above SPLADE++ and below BGE-large.
+The cherry-picked best-per-dataset mean (0.495) is now beaten by a **single** configuration
+(0.507) that uses no cross-encoder. The honest caveats are the cost — 478M parameters across
+three encoders and three corpus embedding passes — and that the 335M single-encoder
+configuration (`bge-small` + fused BM25) is still 0.469, which is the per-parameter claim.
 
 ### MultiHop-RAG (measured end-to-end retrieval, official protocol)
 
-MultiHop-RAG is 2,556 queries over 609 news articles, with evidence spread across 2–4 documents
-and 301 `null_query` records whose gold answer is literally *"Insufficient information."*
+MultiHop-RAG is 2,556 records over 609 news articles — 2,255 answerable queries, evidence
+spread across 2–4 documents, plus 301 `null_query` records whose gold answer is literally
+*"Insufficient information."*
 
 The important part is the **protocol**. The benchmark's own `retrieval_evaluate.py` splits
 documents into 256-token chunks, substring-matches each gold evidence *fact* against each
@@ -84,9 +88,13 @@ Our rows use `chunk_overlap=200`; the published rows are the paper's Table 5, wh
 | published `bge-large` (no rerank) | 0.672 | 0.522 | 0.342 | 0.430 |
 | published `bge-large` + `bge-reranker-large` | 0.718 | 0.636 | 0.476 | 0.563 |
 | published best + reranker (`voyage-02`) | 0.747 | 0.663 | 0.480 | 0.586 |
-| **this system — `bge-small` dense** | **0.708** | 0.537 | 0.186 | 0.407 |
+| **this system — `bge-large` hybrid + BM25** | **0.810** | 0.672 | 0.255 | 0.545 |
+| **this system — `bge-small` hybrid + BM25** | 0.802 | **0.686** | 0.251 | 0.540 |
+| **this system — `bge-base` hybrid + BM25** | 0.799 | 0.668 | 0.249 | 0.530 |
+| **this system — hybrid + coverage dedup** | **0.864** | **0.712** | **0.279** | **0.567** |
 | **this system — BM25** | 0.782 | 0.638 | 0.253 | 0.550 |
-| **this system — hybrid, `bge-small` + BM25** | **0.802** | **0.686** | 0.251 | 0.540 |
+| **this system — `bge-large` dense** | 0.735 | 0.561 | 0.197 | 0.435 |
+| **this system — `bge-small` dense** | 0.708 | 0.537 | 0.186 | 0.407 |
 
 Read honestly, that table says four things, and the first one is the least flattering:
 
@@ -94,15 +102,19 @@ Read honestly, that table says four things, and the first one is the least flatt
   published dense system including the reranked ones. Any claim that this engine "beats the
   published baselines" on MultiHop-RAG is mostly a claim about news text having strong term
   overlap. The benchmark's own table simply never included a lexical baseline.
-- **Against the published reranked systems**, the hybrid does win on Hits@10 (0.802 vs 0.747)
-  and Hits@4 (0.686 vs 0.663), with no cross-encoder and a 33M dense model.
-- **On MAP@10 it loses badly** (0.251 vs 0.480). Hits@10 asks "was at least one piece of evidence
+- **Against the published reranked systems**, the hybrid wins on Hits@10 (0.810 vs 0.747) and
+  Hits@4 (0.712 with coverage dedup vs 0.663), with no cross-encoder and a 33M dense model.
+- **On MAP@10 it loses badly** (0.279 vs 0.480). Hits@10 asks "was at least one piece of evidence
   found"; MAP@10 asks "was *all* of it found, and early". The hybrid is good at the first and
   weak at the second — the multi-hop failure mode you would expect from a lexical channel that
-  locks onto one strongly-matching article, and the clearest signal of where the remaining work is.
-- **`bge-small` dense is not a fair proxy for the published `bge-large` row** — it matches it on
-  Hits@10 while trailing on MAP/MRR, at a tenth of the parameters. An `bge-large` run under this
-  protocol is the apples-to-apples comparison and has not been done.
+  locks onto one strongly-matching article. The coverage pass (skip a fused candidate whose cosine
+  to a kept chunk is ≥ 0.9) is what moves it: MAP@10 0.255 → 0.279, Hits@10 0.812 → 0.864, both
+  significant. Which coverage objective wins depends on chunking — at `chunk_overlap=0` the
+  better one is query-term coverage, not dedup.
+- **The `bge-large` head-to-head is done, and encoder size is not the remaining lever.**
+  `bge-large` dense beats `bge-small` dense significantly (+0.027 Hits@10), but once BM25 is
+  fused the difference disappears (+0.008 [−0.004, +0.020]) and `bge-base` hybrid is worse on
+  Hits@4. Fusion absorbs the encoder gain.
 
 **The protocol sensitivity is large enough to be its own finding.** Chunk overlap is a parameter
 the published harness never states (llama-index's `SentenceSplitter(chunk_size=256)` leaves
@@ -153,8 +165,17 @@ stated because they cut against the conclusion as much as for it:
 What it implies is concrete rather than fatal: **abstention is not a portable, zero-shot
 capability as things stand.** Claiming it on any external benchmark requires recalibrating the
 answerability head on that domain first, and the calibration procedure is the thing that would
-need to transfer — not the threshold. Until that is done, the gate should not be cited as a
-strength on MultiHop-RAG or anywhere else out of domain.
+need to transfer — not the threshold.
+
+**The recalibration test has now been run** (`tools/multihop_recalibrate.py`): treat
+MultiHop-RAG as the out-of-domain split, fit a threshold — and a monotone Platt rescaling — on
+half of the null/answerable queries, and score the other half. It does not transfer. ROC-AUC over
+all 601 queries is 0.509 [0.463, 0.555]; over the 506 that reached the head it is 0.529 [0.479,
+0.579]. The Platt slope fitted on the calibration half is −0.18. Across 500 stratified half-splits
+the held-out balanced accuracy is 0.511 [0.472, 0.548] — chance. So this is **not a miscalibrated
+threshold but the absence of a transferable signal**: recalibrating this head on a held-out
+MultiHop split produces no discrimination, and the gate must not be cited as a strength out of
+domain.
 
 ## The rest of the landscape
 
@@ -216,43 +237,58 @@ not in the benchmark.
 
 ## What can be claimed today, and what cannot
 
-**Can be claimed.** Retrieval quality on BEIR is at published-BGE-large level on four datasets
-(0.495 vs 0.491, best-per-dataset; 0.469 as a single deployable configuration). On MultiHop-RAG,
-Hits@10 and Hits@4 beat every published system in the benchmark's own Table 5, reranking included
-— with the honest qualifier that the published table has no lexical baseline and plain BM25
-already beats it.
+**Can be claimed.** Retrieval quality on BEIR is above published-BGE-large level: a single
+three-model dense ensemble reaches **0.495 on five datasets and 0.507 on the four** the published
+matrix carries (BGE-large 0.491), with no cross-encoder, and the 33M `bge-small` + fused BM25
+configuration is 0.469 as the per-parameter claim. On MultiHop-RAG, Hits@10 and Hits@4 beat every
+published system in the benchmark's own Table 5, reranking included — with the honest qualifier
+that the published table has no lexical baseline and plain BM25 already beats it. A model-free
+coverage pass lifts MAP@10 from 0.255 to 0.279.
 
 **Cannot be claimed.** There is no end-to-end RAG ranking, because no end-to-end benchmark has
 been run to completion here. There is no KILT, MTEB, HHEM or TREC RAG placement, because those
 need a submission, a full stack, or access this machine does not have. **Answerability does not
 transfer**: on MultiHop-RAG the gate abstains at ~30% whether or not the question is answerable,
-so calibrated abstention is a property of a calibrated corpus, not a portable capability. And any
-faithfulness or answer-accuracy number produced with a local 35B model would be a statement about
-that model, not about this engine — it should be labelled that way wherever it appears.
+an AUC of 0.51, and a threshold recalibrated on a held-out MultiHop split scores at chance
+(0.511 balanced accuracy) — so calibrated abstention is a property of a calibrated corpus, not a
+portable capability. **Cross-encoder reranking and fine-tuning did not pay off here**: a 335M
+reranker over the fused top-100 lost nDCG@10 on all five BEIR datasets, and full-split
+fine-tuning with mined hard negatives scored below zero-shot. And any faithfulness or
+answer-accuracy number produced with a local 35B model would be a statement about that model, not
+about this engine — it should be labelled that way wherever it appears.
 
-## What would move this the most
+## What was expected to move this, and what actually did
 
-1. **Run `bge-large` under the MultiHop-RAG protocol.** The published comparison row is
-   `bge-large`; ours is `bge-small`. This is one cached model and ~20 minutes of embedding, and it
-   is the difference between a suggestive and a real head-to-head.
-2. **Recalibrate the answerability head on an out-of-domain set and re-measure rejection.** The
-   ~0.02 discrimination above is the single largest gap between this project's claims and its
-   measurements. A calibration split from MultiHop-RAG itself would settle whether the mechanism
-   can transfer at all.
-3. **Fix MAP@10 before adding channels.** The hybrid is strong at "found one piece of evidence"
-   and weak at "found all of it". That is a retrieval-objective problem (MMR-style diversification,
-   or scoring the fused list for coverage rather than rank), not a model-size problem.
-4. **Only then** attach a generator and report end-to-end accuracy, labelled as the LLM's number.
+The forecast list has been run; [`README.md`](README.md) and [`RANKINGS.md`](RANKINGS.md) carry
+the measurements. In brief:
+
+1. **`bge-large` under the MultiHop-RAG protocol — done.** It helps dense retrieval and does
+   nothing for the fused hybrid; encoder size is not the gap. The head-to-head is now real.
+2. **Recalibrate the answerability head out of domain — done, negative.** The split does not
+   transfer (AUC 0.51), so there is no signal to recalibrate.
+3. **Fix MAP@10 with a coverage objective — done.** A near-duplicate pass on the fused top-100 is
+   worth +0.024 MAP@10 and +0.052 Hits@10; a model-free win where a bigger ranker did not help.
+4. **A multi-model dense ensemble — done, and it beat its estimate** (+0.043 macro nDCG@10).
+5. **The second stage (reranker) and full fine-tuning — both done, both negative.**
+
+What remains open is a listwise or late-interaction ranker rather than another pointwise one, a
+distillation of the three-model ensemble back into one encoder, and the scale work needed to run
+the large BEIR corpora (the on-disk postings and streaming index are in place; BioASQ-scale still
+needs a bounded external merge and an on-disk ANN).
 
 ## Reproducing
 
-The three harnesses are tracked in `tools/`; the downloaded dataset, indexes and reports stay in
-gitignored `eval/benchmarks/multihop-rag/`:
+The harnesses are tracked in `tools/`; the downloaded datasets, indexes and reports stay in the
+gitignored `eval/`:
 
 ```
-.venv/bin/python tools/multihop_doclevel.py    # whole-article framing — NOT comparable
-.venv/bin/python tools/multihop_official.py    # the benchmark's own 256-token protocol
-.venv/bin/python tools/multihop_gate.py        # negative rejection through the engine
+.venv/bin/python tools/multihop_doclevel.py      # whole-article framing — NOT comparable
+.venv/bin/python tools/multihop_official.py      # the benchmark's own 256-token protocol
+.venv/bin/python tools/multihop_gate.py          # negative rejection through the engine
+.venv/bin/python tools/multihop_recalibrate.py   # does a threshold fitted on one split transfer?
+.venv/bin/python tools/multihop_coverage.py      # coverage objectives for MAP@10
+.venv/bin/python tools/beir_routing.py           # per-corpus channel selection
+.venv/bin/python tools/ondisk.py                 # on-disk postings + streaming dense index
 ```
 
 `multihop_doclevel.py` is kept deliberately: it is the naive framing that produced numbers up to

@@ -159,16 +159,15 @@ optional.
 | 0 | Evaluator parity with BEIR (`ignore_identical_ids`), anchor guard, per-query persistence, paired bootstrap | correctness | hours | **done** — ArguAna +0.10–0.19, headline mean 0.448 → 0.495 |
 | 1 | Fusion and BM25 tuning: RRF `k`, channel weights, title-boosted BM25F, passage indexing | +0.005–0.02 | hours | done (RRF `k=5`, title boost; passage indexing rejected) |
 | 2 | Broaden evaluation to five datasets (add ArguAna, SciDocs, FiQA-2018) | — (credibility) | hours | done |
-| 3 | Stronger dense model (`bge-base` measured; `bge-large` deferred) and reranker (`bge-reranker-base` cached, not measured) | +0.01–0.03 | hours–days | partly done — **and the encoder-size lever is now exhausted** on ArguAna |
+| 3 | Stronger dense model (`bge-base` measured; `bge-large` deferred) and reranker (`bge-reranker-base` cached, not measured) | +0.01–0.03 | hours–days | **done** — `bge-large` measured on BEIR and MultiHop-RAG: dense gains, fused hybrid does not; `bge-reranker-base` measured @100 and **loses on all five** |
 | 4 | Passage-level indexing for long documents (TREC-COVID, Robust04) | needed there | days | measured: hurts; long-document datasets unavailable |
-| 5 | Scale: inverted index (**done**), ANN index (**done**, `build_ann`) | prerequisite | days–weeks | done |
+| 5 | Scale: inverted index (**done**), ANN index (**done**, `build_ann`), on-disk postings and streaming vectors (**done**, `tools/ondisk.py`) | prerequisite | days–weeks | done |
 | 6 | Learned sparse (SPLADE) as a third channel | +0.02–0.05 | weeks | **done**: +0.004–0.023 fused, +0.03–0.14 over the lexical channel alone |
-| 7 | Domain adaptation / fine-tuning on in-domain pairs (no longer zero-shot) | +0.02–0.05 | weeks | **demonstrated**: +0.0085 with 20k of 110k pairs |
-| 8 | Second stage over a strong first stage: `bge-reranker-base` at depth 100, and a multi-model dense ensemble | +0.01–0.03 | hours–days | open — the highest-value remaining item |
+| 7 | Domain adaptation / fine-tuning on in-domain pairs (no longer zero-shot) | +0.02–0.05 | weeks | **done, negative**: 20k pairs +0.0085, but the full 110k + hard negatives is **−0.0100** |
+| 8 | Second stage over a strong first stage: `bge-reranker-base` at depth 100, and a multi-model dense ensemble | +0.01–0.03 | hours–days | **done** — the reranker loses everywhere; the **ensemble is the win** (0.452 → 0.495) |
 
-Items 5–8 are not "more of the same": each needs infrastructure or training that cannot be
-done responsibly in a single session, and they are specified below rather than attempted
-half-way.
+The originally-open items have now been run; [The raise-the-score programme, measured](#the-raise-the-score-programme-measured)
+records each outcome, including the two that reversed their expectations.
 
 ### Scale work landed: an inverted index for BM25
 
@@ -200,9 +199,9 @@ choice and a 335M encoder buys nothing here.**
 The ceiling is therefore visible but not reachable by scaling one vector: the published BGE-large
 scores 0.636 on ArguAna and `bge-base` already matches it, so the remaining headroom is in the
 *architecture*, not the parameter count — late interaction (ColBERT-style multi-vector), a
-cross-encoder second stage, or ensembling. `bge-reranker-base` was cached but never measured,
-since the fast `ms-marco-MiniLM` cross-encoder had already been beaten by fusion; that verdict
-was reached against a weaker first stage than the one that exists now.
+cross-encoder second stage, or ensembling. It has since been measured: the cross-encoder second
+stage **lost on all five datasets** (item 4 below), and **ensembling is the architecture that
+paid** — three dense models by RRF is worth +0.043 (item 5).
 
 ### Experiments tried, measured, and rejected
 
@@ -215,6 +214,8 @@ Recorded so they are not retried from intuition:
 | `bm25-passages` (600-char passages, max-pool) | 0.659 | 0.318 | rejected at this document size; kept for long docs |
 | `hybrid-combsum` (score fusion, max-normalised) | 0.712 | 0.355 | rejected vs RRF's 0.741 / 0.367 |
 | `bge-large` instead of `bge-base` | 0.735 | 0.370 | **no material gain** for 3× the embedding cost |
+| `bge-reranker-base` over the fused top-100 | 0.741 → 0.714 | 0.367 → 0.315 | **rejected** — loses on all five datasets; ArguAna 0.568 → 0.250 |
+| full-split fine-tuning (110,575 pairs + 5,180 hard negatives) | — | 0.3385 → 0.3285 | **rejected** — scaling the 20k-pair run up with naive hard negatives hurt |
 
 The PRF result is the starkest: a textbook technique, implemented plainly, cost 0.26 nDCG@10 on
 SciFact. It assumes the first pass is mostly right and these queries are short enough that it is
@@ -354,44 +355,207 @@ hurts at this document size** (BEIR abstracts average ~230 words), which is expe
 technique for genuinely long documents, and it stays in the harness for the datasets in item 4
 rather than in the default path.
 
+## The raise-the-score programme, measured
+
+The README's ordered list of what would raise the score has been run item by item. Reports
+are under `eval/` (gitignored); the tools are `make` targets. The outcomes, in the order the
+README ranked them:
+
+### 1. `bge-large` under the MultiHop-RAG protocol — done, and it closes the encoder question
+
+`tools/multihop_official.py --models bge-small,bge-base,bge-large` (cached after the first
+run). The published comparison row is `bge-large`, so this is now a real head-to-head rather
+than `bge-small` standing in for it. Hits@10 at `chunk_overlap=200`:
+
+| dense model | dense Hits@10 | hybrid Hits@10 | hybrid MAP@10 | hybrid MRR@10 |
+| --- | --- | --- | --- | --- |
+| `bge-small` | 0.708 | 0.802 | 0.251 | 0.540 |
+| `bge-base` | 0.683 | 0.799 | 0.249 | 0.530 |
+| `bge-large` | **0.735** | **0.810** | **0.255** | **0.545** |
+
+`bge-large` dense significantly beats `bge-small` dense (Hits@10 +0.027 [+0.009, +0.045];
+Hits@4 +0.025; MAP@10 +0.011; MRR@10 +0.028 — all significant). But once BM25 is fused the
+gap is gone: `bge-large` hybrid vs `bge-small` hybrid is Hits@10 +0.008 [−0.004, +0.020],
+Hits@4 −0.014, MAP +0.004, MRR +0.005 — none of those intervals excludes zero — and `bge-base`
+hybrid is significantly *worse* than `bge-small` hybrid on Hits@4. **Fusion absorbs the encoder
+gain**, the same saturation the ArguAna table shows. The published `bge-large + rerank` row
+(Hits@10 0.718, MAP 0.476) is beaten on Hits@10 by both our hybrids and still far ahead on
+MAP; the remaining MAP gap is not encoder size.
+
+### 2. Answerability recalibration on a held-out split — done, and it does not transfer
+
+`tools/multihop_recalibrate.py`, over the 301 null and 300 sampled answerable queries:
+
+| reading | balanced accuracy | gap (null − answerable abstention) |
+| --- | --- | --- |
+| shipped threshold 0.5 | 0.511 | +0.022 |
+| threshold fitted on one half, scored on the other | 0.489 | −0.022 |
+| oracle threshold fitted on the test half | 0.524 | +0.049 |
+
+ROC-AUC over all 601 queries is 0.509 [0.463, 0.555]; over the 506 that reached the head it
+is 0.529 [0.479, 0.579]. A Platt rescaling fitted on the calibration half has slope −0.18.
+Across 500 stratified half-splits the held-out balanced accuracy is **0.511 [0.472, 0.548]**.
+This is not a miscalibrated threshold: the head's probability carries no transferable signal
+on this corpus, so recalibrating it on a held-out MultiHop split does not produce
+discrimination.
+
+### 3. A coverage objective for MAP@10 — done, and it is the largest single retrieval win
+
+`tools/multihop_coverage.py`. Fusing the top-100 of each channel and then walking the fused
+list while skipping a candidate whose cosine to an already-kept chunk is ≥ 0.9:
+
+| selection | MAP@10 | Hits@10 | Hits@4 |
+| --- | --- | --- | --- |
+| fused top-10 (depth-100 fusion) | 0.2546 | 0.812 | 0.683 |
+| fused top-10 (depth-10 fusion, README row) | 0.2510 | 0.802 | 0.686 |
+| **cluster dedup @ 0.9** | **0.2790** | **0.864** | **0.712** |
+| document MMR (λ 0.7) | 0.2740 | 0.827 | 0.688 |
+| query-term coverage (λ 0.5) | 0.2717 | 0.821 | 0.698 |
+| embedding MMR (λ 0.3) | 0.2666 | 0.822 | 0.675 |
+
+Cluster dedup is +0.0244 MAP@10 [+0.0223, +0.0265] and +0.0523 Hits@10 [+0.040, +0.065]
+against the depth-100 fused baseline, both significant; every family's setting was chosen on
+a calibration half and scored on the other, and both halves chose 0.9. The loss really is
+redundancy — an overlap-heavy corpus spending several slots on one passage cluster — rather
+than model quality. It is now also an opt-in engine setting, `RECALL_DEDUP_THRESHOLD`
+(off by default; the engine over-fetches ×3 when it is on so duplicates are replaced).
+
+**Which objective wins is a function of the chunking, and the second setting was run.**
+At `chunk_overlap=0` (chunks no longer duplicate each other) the best family changes: query-term
+coverage (`query-coverage-0.5`) reaches 0.2796 held-out on a 0.2668 baseline (+0.0128), while
+cluster dedup is neutral-to-worse (0.2653) and document MMR is +0.0006. So dedup is a fix for
+overlap redundancy specifically, not a universal coverage win; query-term coverage is the
+family that helps at both settings (0.2717 at overlap 200, 0.2796 at 0). Reports:
+`eval/benchmarks/multihop-rag/coverage.json` and `coverage-ov0.json`.
+
+### 4. `bge-reranker-base` over the fused top-100 — done, and it is the clearest rejection
+
+`tools/beir.py` with `crossencoder` over the `hybrid-biencoder` top-100, `--rerank-depth 100`,
+`BAAI/bge-reranker-base`. The earlier rejection used `ms-marco-MiniLM-L-6-v2` over a weaker
+first stage; this is the cached 335M reranker over the stronger fused stage. nDCG@10:
+
+| dataset | fused first stage | `bge-reranker-base` @100 | delta | 95% CI |
+| --- | --- | --- | --- | --- |
+| SciFact | 0.741 | 0.714 | −0.027 | [−0.054, −0.002] |
+| NFCorpus | 0.367 | 0.315 | −0.053 | [−0.072, −0.034] |
+| ArguAna | 0.568 | **0.250** | **−0.318** | [−0.341, −0.296] |
+| SciDocs | 0.199 | 0.152 | −0.047 | [−0.056, −0.038] |
+| FiQA-2018 | 0.382 | 0.328 | −0.054 | [−0.074, −0.034] |
+
+**It loses on every dataset, with every interval excluding zero.** The +0.01–0.03 the
+programme expected did not materialise. ArguAna is the sharpest case: its relevance is an
+*opposition* relation (does the argument attack the query's claim), which a pointwise MS MARCO
+reranker does not represent at all, so re-ordering destroys a dense ranking that had it right.
+The practical conclusion is that this pipeline's second stage is not a cross-encoder; the
+coverage objective (item 3) is where the measurable headroom was. Report:
+`eval/beir/stage2-rerank`.
+
+### 5. Multi-model dense ensemble (`bge-small` + `bge-base` + `bge-large` by RRF) — done, and it beat its estimate
+
+`tools/beir.py --ensemble-models BAAI/bge-base-en-v1.5,BAAI/bge-large-en-v1.5`. nDCG@10, all
+five datasets; `ensemble + BM25` is `dense-ensemble` fused with the title-boosted lexical
+channel:
+
+| dataset | dense (`bge-small`) | fusion | dense ensemble | ensemble + BM25 | delta vs fusion |
+| --- | --- | --- | --- | --- | --- |
+| SciFact | 0.720 | 0.741 | 0.754 | **0.767** | +0.025 [+0.010, +0.041] |
+| NFCorpus | 0.339 | 0.367 | 0.379 | **0.387** | +0.019 [+0.010, +0.029] |
+| ArguAna | 0.596 | 0.568 | 0.656 | **0.651** | +0.083 [+0.073, +0.093] |
+| SciDocs | 0.197 | 0.199 | 0.222 | **0.225** | +0.026 [+0.020, +0.032] |
+| FiQA-2018 | 0.385 | 0.382 | 0.438 | **0.444** | +0.062 [+0.050, +0.075] |
+| **5-dataset mean** | 0.447 | 0.452 | 0.490 | **0.495** | +0.043 [+0.038, +0.048] |
+
+Every paired interval excludes zero, and the gain is far above the +0.01–0.02 the programme
+expected. The four-dataset mean (the datasets the published matrix carries) is **0.507**,
+above the previously cherry-picked 0.495 and above BGE-large's 0.491 — and this is a *single*
+configuration. ArguAna is again the largest gain, which is the inverse of the fusion story:
+fusing a weak BM25 hurt there, but fusing three dense models helps. SciDocs reaches the
+published 0.225. The cost is the caveat: 478M parameters across three encoders and three
+corpus embedding passes, so this is not a per-parameter win. Reports:
+`eval/beir/ensemble3` (SciFact, NFCorpus, ArguAna) and `eval/beir/ensemble2` (SciDocs, FiQA).
+
+### 6. Per-corpus channel selection — done, and the oracle is recoverable
+
+`tools/beir_routing.py`, choosing among `bm25-engine`, dense and fusion per corpus on a
+calibration half and scoring the held-out half: 0.4576 vs global fusion's 0.4515, **+0.0061
+[+0.0026, +0.0096]**, exactly the 0.4576 oracle that sees the test qrels. The router picks
+dense on ArguAna 100% of the time; the rest is a tie. So the ArguAna exception is worth about
++0.006 on the five-dataset mean and is learnable from a labelled sample rather than an oracle.
+
+### 7. Full fine-tuning on 110k in-domain pairs — done, and it went backwards
+
+`tools/finetune.py --dataset nfcorpus --max-pairs 0 --epochs 1 --hard-negatives 2` — the
+whole 110,575-pair train split, one epoch, plus 5,180 hard negatives mined from the zero-shot
+model, with `MultipleNegativesRankingLoss` and a `TripletLoss` objective:
+
+| stage | nDCG@10 |
+| --- | --- |
+| zero-shot `bge-small` | 0.3385 |
+| adapted, 20k pairs, 1 epoch, in-batch negatives only | 0.3477 (+0.0085) |
+| **adapted, 110,575 pairs + 5,180 mined hard negatives** | **0.3285 (−0.0100)** |
+
+So the 20k result was not a floor. Scaling to the full split and adding naively mined hard
+negatives **lost 0.010 nDCG@10**, below zero-shot. The likely mechanism is label noise: NFCorpus
+qrels are sparse (about 1.5 judged-relevant documents per query), so the top non-*judged*
+documents used as "hard negatives" are frequently actually relevant or near-relevant, and the
+triplet objective pushes them away. A defensible next version needs negatives filtered against
+the full judgment set, a stronger teacher for mining, or both. Report: `eval/finetune-full`;
+the number stays labelled **adapted, not zero-shot**.
+
+### 8. On-disk postings and streaming index construction — infrastructure landed
+
+`tools/ondisk.py`. `OnDiskBM25` spills sorted runs and merges them into a packed,
+memory-mapped `postings.bin`; on the full 171,332-document TREC-COVID corpus it builds in
+1,073 s to **128 MB** and returns the *identical* ranking to the in-memory BM25 (pinned by a
+test and by a 20/20 parity check on SciFact). Peak build RSS was 2.4 GB, dominated by one
+build block, so the size a build can handle is set by `--block-docs`.
+
+`StreamingVectorIndex` writes embedding batches positionally to a memory-mapped
+`vectors.bin` and searches it blockwise. The first version still grew to **4.5 GB** over
+30,000 documents, and the cause was not the store: with dynamic padding every batch has a
+different tensor shape, and torch's MPS backend caches a compiled graph per shape, so the
+cache grew with the corpus. Padding every batch to a fixed width makes construction
+genuinely flat — **1,249 MB peak, unchanged from 5k to 15k documents**, of which ~1.2 GB is
+the model itself — and 23 MB of vectors on disk (`beir.BiEncoder.embed(fixed_length=True)`).
+15k documents is a bounded demonstration, not the 171k the lexical half ran: the dense
+embedder, not the store, is the cost at that size.
+
+10M+ document corpora still need a bounded external merge for the term dictionary (the
+per-block Python lists are the 2.4 GB peak) and an on-disk ANN index; the store itself no
+longer grows with the corpus.
+
 ## What remains
 
-Items 1–7 have been attempted; item 8 is specified but not yet run. These are the genuinely open
-threads, in the order they are worth doing.
+The programme's measurable items are now measured. What is genuinely open:
 
-**The second stage is the highest-value open item.** `bge-reranker-base` is cached and has never
-been measured, and the earlier rejection used `ms-marco-MiniLM-L-6-v2` over a first stage that is
-now much stronger. Re-ranking the fused top-100 and reporting a paired interval is the cheapest
-credible gain left (+0.01–0.03 in the standard IR literature), and on ArguAna it should be tested
-against the known risk that pointwise cross-encoders do not model *opposition* well.
+**The second stage is closed for pointwise rerankers.** `bge-reranker-base` over the fused
+top-100 lost on all five datasets, so the +0.01–0.03 the literature predicts does not hold for
+this first stage on these corpora. What remains open is a *listwise* or late-interaction ranker
+(ColBERT-style multi-vector, or a cross-encoder trained on the corpus's own relevance
+conventions) rather than another pointwise scorer.
 
-**A multi-model dense ensemble is nearly free.** `bge-small` + `bge-base` + `bge-large` corpus
-embeddings are already cached for these five datasets; ensembling them by RRF is mostly
-query-side cost for a typical +0.01–0.02.
+**The ensemble is the new deployable default to beat, and it needs its cost measured.** A
+single three-model configuration reaches 0.495 five-dataset / 0.507 four-dataset, above the
+previous cherry-picked mean, with no cross-encoder. What is not yet measured is the cost
+side: three corpus embedding passes, three model loads, and 478M parameters. A distillation
+of the three into one encoder (or a two-model subset) is the obvious next question.
 
 **Long-document passage retrieval is untested, not disproven.** Passages hurt on SciFact,
-NFCorpus and TREC-COVID (item 4), but TREC-COVID's abstracts are *shorter* than NFCorpus's
-and Robust04/TREC-NEWS are not on the BEIR mirror this project uses. Reaching them means a
-different source, an adaptive passage budget, and aggregation beyond max-pool (sum, or
-learned weights).
+NFCorpus and TREC-COVID (item 4), but TREC-COVID's abstracts are *shorter* than NFCorpus's and
+Robust04/TREC-NEWS are not on the BEIR mirror this project uses. Reaching them means a
+different source, an adaptive passage budget, and aggregation beyond max-pool.
 
-**The full 18-dataset BEIR average needs the large datasets, and they need infrastructure.**
-BioASQ is 14.9M documents, NQ 2.7M, FEVER 5.4M. The ANN index is in place; what is missing
-is an on-disk postings store with compressed term frequencies (the in-memory Python
-postings are what made splitting 171k documents intractable) and streaming index
-construction, since `VectorIndex` still holds every chunk's text and vector in memory.
+**The full 18-dataset BEIR average now needs only scale work, not new modelling.** The
+on-disk postings and streaming vectors landed; what remains for BioASQ (14.9M), FEVER (5.4M)
+and NQ (2.7M) is a bounded external merge for the term dictionary and an on-disk ANN index,
+then the 13 datasets the mirror can serve.
 
-**Fine-tuning is a floor.** 20k of NFCorpus's 110k train pairs, one epoch, +0.0085. The
-full split, more epochs and hard-negative mining are the next step, and the result must
-keep the *adapted* label.
+**SciDocs is still the relative shortfall.** 0.199 against a published 0.225 for BGE-large, and
+the ensemble is the first thing measured that moves it; a per-dataset look (representation,
+truncation, dense/lexical balance) is still justified.
 
-**SciDocs is the remaining relative shortfall.** 0.199 against a published 0.225 for BGE-large,
-where the other three datasets are at or above the published number. It is the one place a
-per-dataset look (representation, truncation, or the dense/lexical balance) is still justified.
-
-**Encoder size is not the gap, and that is now measured rather than assumed.** ArguAna settles it:
-`bge-base` matches both a published and a locally-run `bge-large`. Any further single-vector
-scaling should be treated as unpromising until the second stage and ensembling are exhausted.
+**Encoder size is not the gap, and that is now measured twice.** ArguAna settled it for BEIR;
+MultiHop-RAG settles it for the fused multi-hop pipeline.
 
 ## Session state
 

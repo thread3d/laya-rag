@@ -79,6 +79,18 @@ class VectorIndex:
         position = self._positions.get(chunk_id)
         return self._chunks[position] if position is not None else None
 
+    def vector(self, chunk_id: str) -> np.ndarray | None:
+        """The normalised embedding for one chunk, or ``None`` if it is not indexed.
+
+        Recall diversification needs this: the fused candidate list is ranked by channels
+        whose scores are not comparable, so redundancy has to be measured in the embedding
+        space instead.
+        """
+        position = self._positions.get(chunk_id)
+        if position is None or not self._vectors.size:
+            return None
+        return self._vectors[position]
+
     def document_count(self) -> int:
         return len({chunk.doc_id for chunk in self._chunks})
 

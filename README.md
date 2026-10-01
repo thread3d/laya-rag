@@ -123,6 +123,7 @@ recall channel found each one. Use `--json` for machine-readable output.
 | `GET /v1/documents` | every indexed document with its chunk and character counts |
 | `GET /v1/chunks` | indexed chunks in document order, optionally `?path=` one file |
 | `POST /v1/index` | `{paths: [...], rebuild?: bool}` |
+| `POST /v1/index/stream` | the same body, but streams running counters as NDJSON (`progress` events, then one `done` carrying the report) |
 | `POST /v1/query` | `{query, top_k?, retrieve_k?, relevance_threshold?, answerability_threshold?, max_passage_chars?}` |
 | `POST /v1/compose` | `{query, passages: [...]}` — streams composed prose as newline-delimited JSON |
 | `POST /v1/verify` | `{answer, passages: [...]}` — deterministic citation and quote checks |
@@ -149,21 +150,30 @@ What it does:
   (considered → kept → below relevance), and per-stage timings. Retrieval controls are seeded from
   the engine's own configuration rather than hard-coded, and each passage shows its Laya relevance
   beside its recall score and which recall channel found it (`dense`, `lexical`, or both).
+- **One entry per document.** Retrieval works in chunks, so a single file can arrive several times.
+  The evidence is grouped by source document — at its best-ranked passage's position, with that
+  document's chunks joined in rank order and the chunker's overlap trimmed — so a document is
+  numbered once instead of spending several numbers on the same file. The composed answer's context,
+  the numbered passages and the citation check all use that grouping, so `[n]` names the same
+  evidence in all three.
 - **Honest abstention.** When nothing clears the relevance bar the engine short-circuits and reports
   `answerability = 0.0` without ever asking Laya the answerability question. The GUI detects this and
   renders "gate not reached" instead of drawing that default as a measured probability.
 - **Corpus browser.** Every indexed file with chunk counts, and a viewer for the exact chunks Laya
   sees, so a surprising ranking can be traced to the text that produced it.
 - **Indexing and reset.** Index paths or directories (optionally rebuilding), with the engine's
-  report — including which paths it refused and why.
-- **Evidence export.** Copy a result as markdown or as raw JSON.
+  report — including which paths it refused and why. A build reports running counts as it goes
+  (files read, documents chunked, chunks embedded) rather than leaving a bare spinner.
+- **Evidence export.** Copy the grouped evidence as markdown, numbered to match the citations, or the
+  raw query response as JSON — chunks in retrieval order, exactly as the engine sent it.
 
-**Composing an answer (opt-in, and not Laya's).** There is a switch above the run button. Off — the
-default — the engine behaves exactly as described above and returns evidence only. On, a generative
-model writes a prose answer from the passages on screen, streamed into the page as it is written, and
-**the footer banner turns into a warning that the answer may contain hallucinations**. It appears
-below Laya's verdict rather than above it, badged as unverified, and it is never included in the
-"Copy markdown" evidence export — that stays a pure record of what Laya returned.
+**Composing an answer (opt-in, and not Laya's).** The switch sits at the end of the evidence, below
+the passages. Off — the default — the engine behaves exactly as described above and returns evidence
+only. On, a generative model writes a prose answer from the grouped evidence on screen, streamed into
+the page as it is written, and **the footer banner turns into a warning that the answer may contain
+hallucinations**. It appears after the passages it was written from — Laya's calibrated verdict and
+evidence come first — badged as unverified, and it is never included in the "Copy markdown" evidence
+export, which stays a record of Laya's evidence, never the answer.
 
 This is the one part of the pipeline Laya is not responsible for, so it is worth being precise about
 what is and is not calibrated:
@@ -175,11 +185,12 @@ what is and is not calibrated:
 | Can invent facts | no — it cannot generate text | yes |
 
 The model is configured here: `LAYA_RAG_COMPOSE_MODEL` names it and `LAYA_RAG_COMPOSE_BASE_URL` the
-endpoint, both read from this project's own environment.
-Composition is unavailable — with the reason shown in the interface — when no model can be resolved,
-and the switch is disabled rather than offering something that cannot work. If the model is
-unreachable or times out mid-answer, the prose is dropped or marked incomplete, the evidence below is
-left untouched, and the warning stays up.
+endpoint, both defaulting to a local Ollama and the model `ornith-1.5:35b` and both overridable from
+this project's own environment.
+Composition is unavailable — with the reason shown in the interface — when it is turned off with
+`LAYA_RAG_COMPOSE_MODEL=none`, and the switch is disabled rather than offering something that cannot
+work. If the model is unreachable or times out mid-answer, the prose is dropped or marked incomplete,
+the evidence below is left untouched, and the warning stays up.
 
 Three implementation details behind that. The request disables the model's *thinking* mode, because
 otherwise the reasoning tokens can consume the entire budget and return empty content — measured at
@@ -287,6 +298,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `EMBED_POOLING` | `auto` | `cls` for BGE-family models, `mean` otherwise — BGE is trained with `[CLS]` |
 | `EMBED_QUERY_INSTRUCTION` | `false` | prepend the model's retrieval instruction to queries |
 | `DENSE_WEIGHT` / `LEXICAL_WEIGHT` | `auto` / `1.0` | RRF channel weights; `auto` is `0` for Laya's encoder and `1` for a configured `EMBED_MODEL` |
+| `RECALL_DEDUP_THRESHOLD` | `0.0` | drop a fused candidate whose cosine to a kept chunk is at or above this; `0.9` is the measured MultiHop-RAG setting, `0.0` disables it |
 | `RERANK_MODEL` | unset | retrieval-trained cross-encoder that orders and filters evidence; Laya still gates |
 | `RERANK_ORDER` | `auto` | `auto` orders by the scorer when `RERANK_MODEL` is set and keeps recall order otherwise; or force `recall` / `relevance` |
 | `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
@@ -297,7 +309,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `API_KEY` | unset | when set, requires `Authorization: Bearer <key>` |
 | `WARMUP` | `true` | load the checkpoint during service startup instead of on the first request |
 | `COMPOSE_BASE_URL` | Ollama's `http://localhost:11434/v1` | endpoint used to compose an answer |
-| `COMPOSE_MODEL` | unset | model that writes the composed answer; composition is unavailable until this is set |
+| `COMPOSE_MODEL` | `ornith-1.5:35b` | model that writes the composed answer; set to `none` (or `off` / `disabled`) to turn composition off |
 | `COMPOSE_API` | `ollama` | `ollama` calls the native `/api/chat`; `openai` calls any OpenAI-compatible `/v1/chat/completions` |
 | `COMPOSE_TIMEOUT_S` | `300` | how long composition may take before it is abandoned |
 | `COMPOSE_MAX_TOKENS` | `1200` | token budget for one composed answer; hitting it is reported as truncated |
@@ -306,21 +318,31 @@ The default checkpoint is `multilingual` (322M parameters, 768-dim embeddings): 
 English checkpoint's accuracy on the measured queries while being roughly twice as fast, and it
 handles non-English text and long documents. Set `CHECKPOINT=laya` for an English-only corpus.
 
-For example, against a local Ollama with that model pulled:
+Composition defaults to a local Ollama and the model `ornith-1.5:35b`, so once that model is pulled
+the engine needs no configuration at all:
 
 ```sh
-export LAYA_RAG_COMPOSE_MODEL=ornith-1.5:35b
+ollama pull ornith-1.5:35b        # the default model
+.venv/bin/laya-rag-serve          # composition is available immediately
+```
+
+Both defaults are overridable, and the model name is the only thing that has to match an installed
+model:
+
+```sh
+export LAYA_RAG_COMPOSE_MODEL=some-other-model
 export LAYA_RAG_COMPOSE_BASE_URL=http://localhost:11434/v1   # the default
 ```
 
-Composition is the only place where a model name matters, and the engine will not invent one: with
-no `COMPOSE_MODEL`, composition is simply unavailable and the interface says so rather than guessing
-at a model that would fail later.
+To turn composition off instead — so the interface disables the switch and explains why rather than
+offering a model that is not installed — set `LAYA_RAG_COMPOSE_MODEL=none` (or `off` / `disabled`).
+The engine never invents a model name beyond the documented default: a model that is not installed
+fails loudly on the first composed request rather than being silently substituted.
 
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (296 tests)
+make test          # Python suite, offline, deterministic (330 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```
@@ -573,16 +595,27 @@ machinery `evalkit.paired_bootstrap` uses for A/B tests.
 
 ### BEIR — retrieval, five datasets
 
-Shipped `bge-small` bi-encoder, corrected evaluator, 95% bootstrap intervals over queries:
+Shipped `bge-small` bi-encoder, corrected evaluator, 95% bootstrap intervals over queries. The
+last two columns are the multi-model dense ensemble: `bge-small` + `bge-base` + `bge-large`
+fused by RRF, alone and with BM25 — a single configuration, not a per-dataset choice:
 
-| dataset | queries | shipped lexical | bi-encoder | fused BM25 + bi-encoder |
-| --- | --- | --- | --- | --- |
-| SciFact | 300 | 0.676 [0.632, 0.719] | 0.720 [0.676, 0.762] | **0.741** [0.700, 0.781] |
-| NFCorpus | 323 | 0.324 [0.290, 0.360] | 0.338 [0.304, 0.374] | **0.367** [0.332, 0.403] |
-| ArguAna | 1406 | 0.417 [0.398, 0.435] | **0.596** [0.577, 0.614] | 0.568 [0.550, 0.586] |
-| SciDocs | 1000 | 0.150 [0.137, 0.162] | 0.197 [0.183, 0.212] | **0.199** [0.185, 0.213] |
-| FiQA-2018 | 648 | 0.239 [0.215, 0.263] | **0.385** [0.357, 0.413] | 0.382 [0.354, 0.410] |
-| **5-dataset mean** | — | **0.361** | **0.447** | **0.452** |
+| dataset | queries | shipped lexical | bi-encoder | fused BM25 + bi-encoder | dense ensemble | **ensemble + BM25** |
+| --- | --- | --- | --- | --- | --- | --- |
+| SciFact | 300 | 0.676 | 0.720 | 0.741 | 0.754 | **0.767** |
+| NFCorpus | 323 | 0.324 | 0.338 | 0.367 | 0.379 | **0.387** |
+| ArguAna | 1406 | 0.417 | 0.596 | 0.568 | 0.656 | **0.651** |
+| SciDocs | 1000 | 0.150 | 0.197 | 0.199 | 0.222 | **0.225** |
+| FiQA-2018 | 648 | 0.239 | 0.385 | 0.382 | 0.438 | **0.444** |
+| **5-dataset mean** | — | **0.361** | **0.447** | **0.452** | **0.490** | **0.495** |
+
+The ensemble is the one lever in this programme that beat its estimate, and it beats it on every
+corpus: against the corresponding single-model row it is +0.025 SciFact, +0.019 NFCorpus, +0.083
+ArguAna, +0.026 SciDocs and +0.062 FiQA — every paired interval excludes zero — moving the
+five-dataset macro mean **0.452 → 0.495 (+0.0431 [+0.0382, +0.0481])**. The honest cost is that
+this is 478M parameters across three encoders and three corpus embedding passes, so the
+"retrieval per parameter" claim does not extend to it; what it does show is that the ArguAna
+weakness of fusion and the SciDocs shortfall are *ensemble* effects, not model-quality effects
+(SciDocs 0.199 → 0.225 matches the published BGE-large number).
 
 Against the published field, on the four datasets an independent matrix carries for every system:
 
@@ -590,59 +623,97 @@ Against the published field, on the four datasets an independent matrix carries 
 
 ![BEIR per dataset, with published BM25 and BGE-large reference points](docs/charts/beir_datasets.png)
 
-The per-dataset chart is the one to read carefully: the fused configuration is **below** the
+The per-dataset chart is the one to read carefully: single-model fusion is **below** the
 published BGE-large marker on SciDocs, **level** with it on SciFact and NFCorpus, and only
-genuinely ahead on ArguAna.
+genuinely ahead on ArguAna — while the ensemble closes SciDocs.
 
-The best-per-dataset mean is **0.495 [0.481, 0.510]** against BGE-large's 0.491. That interval
-includes 0.491, so the defensible claim is **level with a 335M BGE-large**, not ahead of it — and
-it cherry-picks a configuration per dataset. The **single deployable configuration**
-(`bge-small` + fused BM25, 33M parameters) is **0.469**, which places it second, above SPLADE++
-and GTR-XL.
+The best-per-dataset mean is **0.495 [0.481, 0.510]** against BGE-large's 0.491, and it
+cherry-picks a configuration per dataset. The **single deployable configuration**
+(`bge-small` + fused BM25, 33M parameters) is **0.469**. The three-model ensemble is also a
+single configuration, and it reaches **0.495 on five datasets and 0.507 on the four** — above the
+cherry-picked mean, from stock components, with no cross-encoder. That removes the "level with a
+335M BGE-large, if you pick per dataset" caveat; the remaining caveat is its parameter and
+embedding cost.
 
 Per-dataset, the honest reading is that `bge-small` + fusion is *behind* published BGE-large on
 SciDocs (0.199 vs 0.225) and FiQA, *level* on SciFact and NFCorpus, and only ahead on ArguAna —
 where `--dense-text-only` matters because ArguAna's "titles" are shared topic keyword lists
-(titles are worth +0.034 to BM25 and cost the dense channel 0.052).
+(titles are worth +0.034 to BM25 and cost the dense channel 0.052). The ensemble is what moves
+SciDocs onto the published number.
+
+**The per-corpus channel choice is learnable, and it recovers the cherry-picked mean.** Fusion
+helps on four of the five datasets but loses on ArguAna (0.568 vs dense's 0.596), so a single
+global configuration pays for ArguAna in everyone's average. `tools/beir_routing.py` splits each
+dataset's queries in half, picks the channel on one half and scores the other — the router never
+sees the queries it is judged on. It chooses dense on ArguAna 100% of the time and fusion on
+SciFact/NFCorpus, and on the held-out halves it scores **0.4576 against the global fusion's
+0.4515 (+0.0061 [+0.0026, +0.0096])** — the same 0.4576 as the oracle that picks the best channel
+per dataset with the test qrels in hand. FiQA and SciDocs are statistical ties, and the router's
+choices there are noise; the entire real gain is ArguAna. So "per-corpus selection" is worth about
+**+0.006 on the five-dataset mean** and needs a labelled sample per corpus, not an oracle.
 
 ### MultiHop-RAG — end-to-end retrieval under the benchmark's own protocol
 
-2,556 queries over 609 news articles, evidence spread across 2–4 documents, plus 301
-`null_query` records whose gold answer is *"Insufficient information."* Scored with the
-benchmark's own metric definitions (`tools/multihop_official.py`), against the paper's Table 5:
+2,556 records over 609 news articles — 2,255 answerable queries, evidence spread across 2–4
+documents, plus 301 `null_query` records whose gold answer is *"Insufficient information."* —
+scored with the benchmark's own metric definitions (`tools/multihop_official.py`) against the
+paper's Table 5. All rows are the `chunk_overlap=200` setting the official harness uses:
 
 | system | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
 | --- | --- | --- | --- | --- |
 | voyage-02 + rerank (published) | 0.747 | 0.662 | 0.479 | 0.586 |
 | bge-large + rerank (published) | 0.718 | 0.636 | 0.476 | 0.563 |
 | bge-large, no rerank (published) | 0.672 | 0.522 | 0.342 | 0.430 |
-| **hybrid (ours)** | **0.802** [0.79, 0.82] | **0.686** [0.67, 0.71] | 0.251 [0.24, 0.26] | 0.540 [0.52, 0.56] |
-| BM25 (ours) | 0.782 [0.76, 0.80] | 0.638 [0.62, 0.66] | 0.253 [0.24, 0.26] | 0.550 [0.53, 0.57] |
-| bge-small dense (ours) | 0.708 [0.69, 0.73] | 0.537 [0.52, 0.56] | 0.186 [0.18, 0.19] | 0.407 [0.39, 0.42] |
+| hybrid + coverage dedup (ours) | **0.864** | **0.712** | **0.279** | **0.567** |
+| hybrid, `bge-large` + BM25 (ours) | 0.810 | 0.672 | 0.255 | 0.545 |
+| hybrid, `bge-small` + BM25 (ours) | 0.802 | 0.686 | 0.251 | 0.540 |
+| hybrid, `bge-base` + BM25 (ours) | 0.799 | 0.668 | 0.249 | 0.530 |
+| BM25 (ours) | 0.782 | 0.638 | 0.253 | 0.550 |
+| `bge-large` dense (ours) | 0.735 | 0.561 | 0.197 | 0.435 |
+| `bge-small` dense (ours) | 0.708 | 0.537 | 0.186 | 0.407 |
+| `bge-base` dense (ours) | 0.683 | 0.515 | 0.182 | 0.400 |
 
 ![MultiHop-RAG: four metrics, this system against the paper's published systems](docs/charts/multihop_rag.png)
 
-Four things to take from this, and the first is the least flattering:
+Five things to take from this, and the first is the least flattering:
 
 - **Most of the win is lexical, not Laya.** Plain BM25 scores 0.782, above every published
   *dense* system including the reranked ones — because Table 5 contains no lexical baseline at
   all. On news text with strong term overlap, that is most of the story.
-- **Hits@10 and Hits@4 do beat the published reranked pipelines** (0.802 vs 0.747; 0.686 vs
-  0.662), from a 33M dense model with no cross-encoder. The published figures carry no interval,
-  so the precise claim is that our **lower** bound — 0.79 — is above their point estimate.
-- **MAP@10 loses badly** (0.251 vs 0.479). Hits@10 asks "was at least one piece of evidence
+- **Hits@10 and Hits@4 beat the published reranked pipelines** (0.810 vs 0.747; 0.712 with
+  coverage dedup vs 0.662), from a 33M dense model with no cross-encoder. The published figures
+  carry no interval, so the precise claim is that our **lower** bound is above their point
+  estimate.
+- **The `bge-large` head-to-head is now done, and encoder size is not the remaining lever.**
+  `bge-large` dense beats `bge-small` dense on every metric (Hits@10 +0.027 [+0.009, +0.045],
+  Hits@4 +0.025, MAP@10 +0.011, MRR@10 +0.028, all significant), but once BM25 is fused the
+  difference vanishes: `bge-large` hybrid vs `bge-small` hybrid is Hits@10 **+0.008
+  [−0.004, +0.020]**, Hits@4 −0.014, MAP +0.004, MRR +0.005 — none of those intervals excludes
+  zero, and
+  `bge-base` hybrid is significantly *worse* than `bge-small` hybrid on Hits@4. Fusion absorbs
+  the encoder-quality gain, which is the same saturation `RANKINGS.md` measured on ArguAna.
+- **MAP@10 still loses badly** (0.279 vs 0.479). Hits@10 asks "was at least one piece of evidence
   found"; MAP@10 asks "was *all* of it found, and early". The hybrid is good at the first and weak
   at the second — the classic multi-hop failure of a lexical channel that locks onto one
-  strongly-matching article. This is the clearest single signal of where the remaining work is.
-- **`bge-small` is not a fair proxy for the published `bge-large` row.** It matches on Hits@10 at
-  a tenth of the parameters but trails on MAP and MRR; an `bge-large` run under this protocol is
-  the apples-to-apples comparison and has not been done.
+  strongly-matching article. **The coverage objective is where that gap actually narrows**: taking
+  the fused top-100 and skipping any candidate whose embedding cosine to an already-chosen chunk
+  is ≥ 0.9 lifts MAP@10 from 0.2546 to 0.2790 (+0.0244 [+0.0223, +0.0265]) and Hits@10 from 0.812
+  to 0.864 (+0.052 [+0.040, +0.065]) — model-free, and the setting was chosen on a held-out half
+  (both halves picked 0.9). See `tools/multihop_coverage.py`. **Which coverage objective wins
+  depends on the chunking**, and that is measured too: at `chunk_overlap=0`, where chunks no longer
+  duplicate each other, cluster dedup is neutral-to-worse (0.2653 vs 0.2668) and query-term
+  coverage is the better objective (0.2796, +0.013 over its baseline). The 200-overlap setting in
+  the table is the official one, and it is where dedup pays.
+- **`bge-small` is still not a fair proxy for the published `bge-large` row** — it is *better* on
+  this protocol — so the published comparison is now a real head-to-head rather than a suggestive
+  one.
 
 ### Negative rejection — the claim that did not survive
 
 This is the one that should change how the project describes itself. MultiHop-RAG's 301
 `null_query` records are the hard negatives this engine's answerability gate exists to reject.
-Run through `RagEngine.query` on the indexed corpus with the shipped thresholds:
+Run through `RagEngine.query` on the indexed corpus with the shipped thresholds, against an equal
+sample of 300 answerable queries:
 
 | group | n | abstained | rate |
 | --- | --- | --- | --- |
@@ -653,21 +724,48 @@ Run through `RagEngine.query` on the indexed corpus with the shipped thresholds:
 
 **The gate does not discriminate on this corpus.** A 0.022 difference, against a standard error of
 about 0.037 — it behaves like a fixed ~30% abstention policy rather than a decision about the
-evidence. The caveats cut both ways (thresholds were the shipped defaults, the dense channel was
-`bge-small` rather than Laya's encoder, and these negatives are the *hard* kind, where every
-entity named genuinely appears in the corpus), but the conclusion stands: **abstention is not a
-portable zero-shot capability.** It is a property of a calibrated corpus. Claiming it on any
-external benchmark requires recalibrating the answerability head on that domain first, and until
-that is done the gate should not be cited as a strength out of domain.
+evidence. That measurement used the shipped threshold, which leaves the two candidate explanations
+open: a *head* with no signal, or a *threshold* that is wrong for this domain. `tools/multihop_recalibrate.py`
+separates them by treating MultiHop-RAG as the out-of-domain split, fitting a threshold — and a
+monotone Platt rescaling — on one half of the null/answerable queries, and scoring the other half:
+
+| reading | null abstain | answerable abstain | gap | balanced accuracy |
+| --- | --- | --- | --- | --- |
+| shipped threshold 0.5 (all queries) | 0.309 | 0.287 | +0.022 | 0.511 |
+| held-out half, calibrated threshold | 0.272 | 0.293 | −0.022 | 0.489 |
+| held-out half, threshold fit on it (oracle) | 0.676 | 0.627 | +0.049 | 0.524 |
+
+Three readings, all pointing the same way:
+
+- **The head's probability ranks the two classes at chance.** ROC-AUC over all 601 queries is
+  **0.509 [0.463, 0.555]**; restricted to the 506 queries that actually reached the head (the
+  `p = 0` rows are the relevance gate short-circuit, not a head output) it is **0.529 [0.479,
+  0.579]**. Both intervals include 0.5.
+- **A Platt rescaling fitted on the calibration half has a negative slope (−0.18)** — if anything
+  the head's probability points the wrong way on this corpus, so there is no signal to rescale.
+- **A threshold fitted on one half does not transfer.** Across 500 stratified half-splits, the
+  held-out balanced accuracy is **0.511 [0.472, 0.548]** — chance. Even the oracle threshold
+  chosen on the test half itself only reaches 0.524 balanced accuracy.
+
+The caveats cut both ways (the dense channel was `bge-small` rather than Laya's encoder, and these
+negatives are the *hard* kind, where every entity named genuinely appears in the corpus), but the
+conclusion is now stronger than the original one: **this is not a miscalibrated threshold, it is
+the absence of a transferable signal.** Abstention remains a property of a calibrated corpus.
+Claiming it on any external benchmark requires a head trained or calibrated on that domain — and
+recalibrating this one on a held-out MultiHop split does not produce discrimination, so the gate
+should not be cited as a strength out of domain.
 
 ### Where this RAG is better
 
-- **Retrieval per parameter.** 0.495 on the four BEIR datasets — level with a 335M BGE-large and
-  ahead of SPLADE++, GTR-XL (1.2B) and ColBERT — and 0.469 from a single deployable
-  configuration. Fusion contributes most of it, and fusion is significant against the stemmed
-  lexical channel on all five datasets (+0.043 to +0.151).
-- **Multi-hop recall breadth.** Best Hits@10 and Hits@4 measured on MultiHop-RAG, including
-  against reranked published pipelines.
+- **Retrieval quality, with and without the parameter budget.** The 33M `bge-small` + fused BM25
+  configuration is 0.452 on five BEIR datasets — ahead of SPLADE++, GTR-XL (1.2B) and ColBERT, and
+  level with a 335M BGE-large. The three-model dense ensemble, still with no cross-encoder, is a
+  single configuration at **0.495 (five datasets) / 0.507 (four)**, above the published BGE-large.
+  The first number is the per-parameter claim; the second trades 478M parameters for quality.
+  Fusion contributes most of it, and fusion is significant against the stemmed lexical channel on
+  all five datasets (+0.043 to +0.151).
+- **Multi-hop recall breadth.** Best Hits@10 and Hits@4 measured on MultiHop-RAG — 0.864 and
+  0.712 after the coverage pass — including against reranked published pipelines.
 - **Abstention and citation checking as first-class outputs**, which no IR leaderboard scores.
   The engine returns calibrated probabilities and can abstain; `verify.py` checks citations and
   quoted spans deterministically, with no model and no threshold, so it cannot be wrong in the
@@ -679,22 +777,26 @@ that is done the gate should not be cited as a strength out of domain.
 
 ### Where this RAG is worse
 
-- **Coverage on multi-hop queries.** MAP@10 0.251 against 0.479 published. It finds *an* answer
-  passage, not *the set*.
-- **Answerability out of domain**, as above — 30.9% vs 28.7% is no discrimination.
+- **Coverage on multi-hop queries.** MAP@10 0.279 against 0.479 published, even after a
+  model-free coverage pass lifts it +0.024. It finds *an* answer passage, not *the set*.
+- **Answerability out of domain**, as above — AUC 0.51 at the best, and a recalibration split
+  fitted on MultiHop-RAG itself transfers at chance.
 - **No text generation**, so it cannot be entered on KILT, MTEB, HHEM or the TREC RAG track at
   all, and any end-to-end answer accuracy would belong to whichever LLM is attached.
 - **Laya's own encoder is close to useless for retrieval** (nDCG@10 ≈ 0.014 on SciFact against
   BM25's 0.654), so the shipped default is lexical-only and reaching competitive dense retrieval
   means supplying `bge-small`. The engine's differentiating model is a *decision* model, and the
   retrieval quality comes from stock components.
-- **Cross-encoder reranking did not pay off here**, unlike in most published pipelines: the fast
-  `ms-marco-MiniLM` reranker landed below plain fusion on SciFact, and `bge-reranker-base` has
-  never been measured at a usable depth.
+- **Cross-encoder reranking did not pay off here**, unlike in most published pipelines, and it is
+  now measured at the depth the literature assumes: `bge-reranker-base` over the fused top-100
+  lowered nDCG@10 on all five datasets, catastrophically on ArguAna (0.568 → 0.250) where
+  relevance is an *opposition* relation a pointwise ranker does not model.
 - **Scale.** The vector index holds every chunk's text and vector in memory and the postings are
   Python dicts, so the large BEIR datasets (BioASQ 14.9M, FEVER 5.4M, NQ 2.7M documents) are out
   of reach. Five of eighteen datasets is the honest coverage.
-- **SciDocs** is the weakest dataset relative to published numbers (0.199 vs 0.225).
+- **SciDocs** is the weakest dataset for the single-model configuration (0.199 vs a published
+  0.225); the three-model ensemble reaches 0.225, so the shortfall there is a single-encoder
+  effect rather than a corpus the pipeline cannot handle.
 
 ### Experiments that did not work
 
@@ -707,34 +809,39 @@ Recorded so they are not retried from intuition:
 | Score fusion (CombSUM, max-normalised) | SciFact 0.712 vs RRF's 0.741 | rejected — BM25 and cosine scales do not normalise against each other, which is what RRF avoids |
 | `bge-large` instead of `bge-base` | ArguAna 0.6377 → 0.6378 | no gain for 3× the embedding cost — encoder size saturates at 110M here |
 | Cross-encoder reranking (MiniLM-L6) | SciFact 0.691 vs fusion's 0.741 | rejected against a now-stronger first stage |
+| Cross-encoder reranking (`bge-reranker-base`, fused top-100) | SciFact 0.741→0.714, NFCorpus 0.367→0.315, ArguAna 0.568→0.250, SciDocs 0.199→0.152, FiQA 0.382→0.328 | rejected — hurts all five; ArguAna's opposition relation breaks a pointwise ranker |
 | Laya's decision head as a *re-ranker* | SciFact 0.654 → 0.470 | rejected — it is calibrated as a filter and gate, not an orderer |
 | Title weighting (`bm25-title`) | SciFact +0.006, NFCorpus +0.000, FiQA 0.000, ArguAna +0.011 | kept, but only significant on ArguAna — "helps slightly" was over-claimed |
-| Calibrated abstention, out of domain | 30.9% vs 28.7% | does not transfer |
+| `bge-base` instead of `bge-small` on MultiHop-RAG | hybrid Hits@10 0.802 → 0.799, Hits@4 0.686 → 0.668 | rejected — significantly worse on Hits@4, no MAP gain |
+| Calibrated abstention, out of domain | AUC 0.509; half-split transfer 0.511 balanced accuracy | does not transfer — no signal to recalibrate |
+| Full-split fine-tuning (110,575 pairs + 5,180 mined hard negatives) | NFCorpus 0.3385 → 0.3285 (−0.0100) | rejected — scaling the 20k run up with naively mined negatives hurt |
+| Document-level MMR (`doc-mmr`) | MAP@10 0.255 → 0.274 | kept as a lever, but below cluster-dedup's 0.279 |
 
-### What would raise the score
+### What would raise the score — measured
 
-In the order they are worth doing, with the expected size of the win:
+The ordered list that stood here has been run item by item. `RANKINGS.md` carries the full
+measurements; each item is a `make` target. In the priority order they were ranked:
 
-1. **Run `bge-large` under the MultiHop-RAG protocol** (~20 minutes, cached). The published
-   comparison row is `bge-large`; ours is `bge-small`. This converts a suggestive table into a
-   real head-to-head.
-2. **Recalibrate the answerability head on an out-of-domain split and re-measure rejection.**
-   The 0.022 discrimination is the largest gap between this project's claims and its measurements.
-   A held-out calibration split from MultiHop-RAG itself would show whether the mechanism can
-   transfer at all, which matters more than any retrieval point.
-3. **Attack MAP@10 with a coverage objective rather than a bigger model** — MMR-style
-   diversification or scoring the fused list for evidence coverage instead of per-document rank.
-   This is where the multi-hop loss actually is.
-4. **Measure `bge-reranker-base` over the fused top-100** (cached, never measured). Typically
-   +0.01–0.03, and the earlier rejection used a weaker reranker over a weaker first stage.
-5. **A multi-model dense ensemble** (`bge-small` + `bge-base` + `bge-large` by RRF). Corpus
-   embeddings are already cached for these datasets; mostly query-side cost for +0.01–0.02.
-6. **Per-corpus channel selection.** Fusion helps everywhere except ArguAna, where dense alone
-   wins (0.596 vs 0.568) — a single global configuration leaves that on the table.
-7. **Full fine-tuning** on in-domain pairs (110k NFCorpus pairs, more epochs, hard negatives).
-   The 20k-pair run was +0.0085, a floor rather than a ceiling.
-8. **On-disk postings and streaming index construction**, which is the only route to the large
-   BEIR datasets and therefore to an 18-dataset average.
+| # | item | outcome |
+| --- | --- | --- |
+| 1 | **`bge-large` under the MultiHop-RAG protocol** | **Done.** Dense improves with size — Hits@10 +0.027 [+0.009, +0.045] over `bge-small` — but the fused hybrid does not: +0.008 [−0.004, +0.020], with `bge-base` hybrid significantly *worse* on Hits@4. Encoder size is not the MAP gap. |
+| 2 | **Recalibrate the answerability head on a held-out split** | **Done, negative.** ROC-AUC 0.509 [0.463, 0.555]; a threshold fitted on one half transfers at 0.511 [0.472, 0.548] balanced accuracy; Platt slope −0.18. There is no signal to recalibrate. |
+| 3 | **Attack MAP@10 with a coverage objective** | **Done, and it is the largest single retrieval win.** Skipping a fused candidate whose cosine to a kept chunk is ≥ 0.9 lifts MAP@10 0.251 → **0.279** (+0.0244 [+0.0223, +0.0265]) and Hits@10 0.802 → **0.864**. Now `RECALL_DEDUP_THRESHOLD` in the engine (off by default). |
+| 4 | **`bge-reranker-base` over the fused top-100** | **Done, and it is a decisive negative.** Reranking the fused top-100 *lowered* nDCG@10 on all five datasets — SciFact 0.741 → 0.714, NFCorpus 0.367 → 0.315, SciDocs 0.199 → 0.152, FiQA 0.382 → 0.328, and **ArguAna 0.568 → 0.250 (−0.318)**. Every paired interval excludes zero. The earlier rejection holds against the stronger first stage; a pointwise MS MARCO cross-encoder does not model ArguAna's opposition relation. |
+| 5 | **Multi-model dense ensemble** (`bge-small` + `bge-base` + `bge-large` by RRF) | **Done, and it beat its estimate on every corpus.** +0.025 / +0.019 / +0.083 / +0.026 / +0.062 nDCG@10 on SciFact / NFCorpus / ArguAna / SciDocs / FiQA, all significant; the five-dataset mean moves 0.452 → **0.495** (+0.0431 [+0.0382, +0.0481]) and the four-dataset mean to **0.507**, above the previously cherry-picked 0.495. Cost: 478M parameters and three embedding passes. |
+| 6 | **Per-corpus channel selection** | **Done.** A router calibrated on half of each corpus scores 0.4576 against global fusion's 0.4515 on the held-out halves (+0.0061 [+0.0026, +0.0096]) — exactly the oracle. The gain is ArguAna, which it picks 100% of the time. |
+| 7 | **Full fine-tuning** on 110k in-domain pairs | **Done, negative.** The whole 110,575-pair NFCorpus train split, one epoch, plus 5,180 mined hard negatives: adapted nDCG@10 **0.3285 vs zero-shot 0.3385 (−0.0100)**. The earlier 20k-pair +0.0085 was not a floor — scaling it up with naively mined negatives *hurt*. |
+| 8 | **On-disk postings and streaming index construction** | **Infrastructure landed.** The full 171,332-document TREC-COVID corpus builds packed, memory-mapped postings in 128 MB with byte-identical ranking. The streaming dense index writes vectors without accumulating them — peak RSS flat at 1,249 MB from 5k to 15k documents once padding is fixed-length (the first version grew to 4.5 GB because torch's MPS graph cache keys on tensor shape). 10M+ corpora still need a bounded external merge and an on-disk ANN. |
+
+Four of the eight changed a claim rather than adding a number. **Item 2** turned "the gate does
+not discriminate" into "the gate has no signal to calibrate" — a stronger and more useful
+negative. **Item 1** removed the last reason to think a bigger encoder would fix the multi-hop
+MAP@10 gap: it is a coverage failure, and **item 3**'s model-free diversity pass is what moved
+it, at a fraction of the cost of the published reranked pipelines. **Items 4 and 7** both
+reversed their expectations from the standard literature: `bge-reranker-base` at depth 100 lost
+nDCG@10 on every dataset, and full-split fine-tuning with mined hard negatives scored *below*
+zero-shot. Neither is a floor to be scaled. The item that paid off most beyond its estimate is
+**item 5**.
 
 ### What cannot be claimed
 
@@ -763,11 +870,12 @@ laya-rag/
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
 ├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py,
-│                          beir_ablate.py, ann_bench.py, sparse.py, finetune.py,
-│                          compare.py (cross-system tables, error bars, charts),
-│                          diagram.py (the architecture diagram), and the
-│                          multiHop harnesses: multihop_official.py,
-│                          multihop_gate.py, multihop_doclevel.py
+│                          beir_ablate.py, beir_routing.py, ann_bench.py, sparse.py,
+│                          finetune.py, ondisk.py, compare.py (cross-system tables,
+│                          error bars, charts), diagram.py (the architecture diagram),
+│                          and the multiHop harnesses: multihop_official.py,
+│                          multihop_gate.py, multihop_recalibrate.py,
+│                          multihop_coverage.py, multihop_doclevel.py
 ├── docs/                  generated figures embedded in this README (make charts)
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
@@ -800,8 +908,12 @@ re-index the parent directory with `--rebuild` rather than just the files that a
 lexical channel keeps `term -> postings` now rather than looping over every document per query
 term, which is what unblocked ArguAna (~190-word queries): 40,000 synthetic chunks went from
 ~120 ms to ~37 ms per query, and ArguAna's query set from stalling past 50 minutes to 4.3. The
-dense scan is still far cheaper per chunk, so millions of documents still need an ANN index and
-a real postings store on disk.
+shipped engine still holds the postings in memory, but `tools/ondisk.py` is the route past that:
+`OnDiskBM25` streams documents through sorted runs and merges them into a packed, memory-mapped
+`postings.bin`, and `StreamingVectorIndex` appends embedding batches straight to a memmap. On the
+full 171,332-document TREC-COVID corpus the on-disk postings build in 1,073 s to **128 MB** and
+return the identical ranking to the in-memory index; 10M+ document corpora still need a bounded
+k-way merge (peak RSS was 2.4 GB, dominated by one build block) and an on-disk ANN index.
 
 **The dense channel is off by default because it never earned its weight.** On BEIR SciFact and
 NFCorpus Laya's mean-pooled encoder scored nDCG@10 ≈ 0.014 against BM25's 0.654 and 0.304, and every

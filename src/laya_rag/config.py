@@ -21,6 +21,22 @@ ENV_PREFIX = "LAYA_RAG_"
 # log line. Report that one is configured without disclosing it.
 REDACTED_FIELDS: frozenset[str] = frozenset({"api_key"})
 
+# Where a stock Ollama serves its OpenAI-compatible API. This is the default endpoint
+# for answer composition, so a local Ollama is used without any environment at all.
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
+
+# The composition model this repository defaults to. Composition is the one step that
+# needs a generative model, and the default names the one installed in the local
+# Ollama on this project's development host; ``COMPOSE_MODEL`` overrides it. A name
+# that is not actually installed fails loudly on first use, which is why the default
+# is a model that is known to be present rather than a guess.
+DEFAULT_COMPOSE_MODEL = "ornith-1.5:35b"
+
+# Values of ``COMPOSE_MODEL`` that mean "do not compose". They let the switch be turned
+# off explicitly now that a model name is defaulted, instead of requiring the variable
+# to stay unset.
+COMPOSE_DISABLED_VALUES: frozenset[str] = frozenset({"none", "off", "disabled", "false"})
+
 
 def _env(name: str) -> str | None:
     value = os.environ.get(ENV_PREFIX + name)
@@ -144,6 +160,16 @@ class EngineConfig:
     ann: bool = field(default_factory=lambda: _env_bool("ANN", False))
     ann_nprobe: int = field(default_factory=lambda: _env_int("ANN_NPROBE", 16))
     lexical_weight: float = field(default_factory=lambda: _env_float("LEXICAL_WEIGHT", 1.0))
+    # Near-duplicate suppression on the fused candidate list. Chunk overlap makes a
+    # strongly-matching passage arrive several times and spend several recall slots, which
+    # measured on MultiHop-RAG is where the multi-hop MAP@10 loss lives: skipping a fused
+    # candidate whose cosine to an already-kept chunk is >= this threshold lifted MAP@10
+    # +0.024 (0.2546 -> 0.2790) and Hits@10 +0.052. 0.0 disables it; 0.9 is the measured
+    # setting, and it is opt-in because it needs the dense index and only pays off when the
+    # corpus has heavy chunk overlap or near-duplicate documents.
+    recall_dedup_threshold: float = field(
+        default_factory=lambda: _env_float("RECALL_DEDUP_THRESHOLD", 0.0)
+    )
 
     @property
     def resolved_dense_weight(self) -> float:
@@ -183,10 +209,17 @@ class EngineConfig:
     # returned. Laya cannot generate text, so everything above is calibrated and
     # nothing here is. Off unless the caller explicitly asks for it.
     #
-    # Both are this project's own settings. COMPOSE_MODEL is required for composition
-    # to be available at all; COMPOSE_BASE_URL defaults to Ollama's endpoint.
-    compose_base_url: str = field(default_factory=lambda: _env("COMPOSE_BASE_URL") or "")
-    compose_model: str = field(default_factory=lambda: _env("COMPOSE_MODEL") or "")
+    # Both are this project's own settings and both default to a local Ollama: the
+    # endpoint below is the one Ollama installs with, and the model is the one this
+    # host has pulled. Set COMPOSE_MODEL to another model, or to "none" / "off" /
+    # "disabled" to turn composition off so the interface disables the switch and says
+    # why rather than offering a model that is not there.
+    compose_base_url: str = field(
+        default_factory=lambda: _env("COMPOSE_BASE_URL") or DEFAULT_OLLAMA_BASE_URL
+    )
+    compose_model: str = field(
+        default_factory=lambda: _env("COMPOSE_MODEL") or DEFAULT_COMPOSE_MODEL
+    )
     # Which route to call. Ollama's native /api/chat honours `think: false`; its
     # OpenAI-compatible /v1 route silently ignores it, which measured 561-614 chars of
     # reasoning on every call, roughly 3x the latency, and once a whole token budget
