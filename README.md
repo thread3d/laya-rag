@@ -5,18 +5,7 @@ retrieval and decision engine, with a command line, an HTTP API and a web interf
 
 Clients meet the engine over a local HTTP service:
 
-```
-┌──────────────────────────────┐            ┌───────────────────────────────┐
-│  clients                     │            │  Laya RAG engine (Python)     │
-│                              │            │                               │
-│  browser ── the GUI at /     │─────► 8077 │  chunk → embed → index        │
-│  curl ───── the HTTP API     │   ◄─────   │  hybrid recall (dense + BM25) │
-│  cli ────── laya-rag         │            │  Laya re-rank + gate          │
-│                              │            │  evidence bundle              │
-│  the caller composes         │            │                               │
-│  the answer, or not          │            │  Laya checkpoint (torch)      │
-└──────────────────────────────┘            └───────────────────────────────┘
-```
+![Architecture: browser, curl and CLI clients call the local Python engine over HTTP on port 8077; the engine chunks, embeds and indexes, recalls with dense + BM25, re-ranks and gates answerability with Laya, and returns an evidence bundle with calibrated probabilities. It loads a Laya torch checkpoint, and the caller composes the answer, or not.](docs/architecture.png)
 
 ## Why the split is shaped this way
 
@@ -776,7 +765,10 @@ laya-rag/
 ├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py,
 │                          beir_ablate.py, ann_bench.py, sparse.py, finetune.py,
 │                          compare.py (cross-system tables, error bars, charts),
-│                          multihop_official.py / multihop_gate.py / multihop_doclevel.py
+│                          diagram.py (the architecture diagram), and the
+│                          multiHop harnesses: multihop_official.py,
+│                          multihop_gate.py, multihop_doclevel.py
+├── docs/                  generated figures embedded in this README (make charts)
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)

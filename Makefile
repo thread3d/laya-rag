@@ -14,6 +14,7 @@ BENCH_ARGS ?=
 BEIR_ARGS ?=
 BEIR_ABLATE_ARGS ?=
 CHARTS_DIR ?= docs/charts
+DIAGRAM ?= docs/architecture.png
 
 .PHONY: help setup doctor index serve query gui test test-real test-gui eval bench beir beir-ablate charts lint clean
 
@@ -101,6 +102,7 @@ beir-ablate:
 # It reads the reports `make beir` and the multihop tools already wrote, so run those first.
 charts:
 	OMP_NUM_THREADS=16 $(PY) tools/compare.py --charts $(CHARTS_DIR)
+	$(PY) tools/diagram.py --out $(DIAGRAM)
 
 lint:
 	$(PY) -m compileall -q src/ tests/
