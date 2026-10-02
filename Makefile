@@ -28,10 +28,11 @@ RERANK_EXPERIMENT_ARGS ?=
 ATOM_ARGS ?=
 LEXICAL_BENCH_ARGS ?=
 ADVERSARIAL_ARGS ?=
+ANSWERABILITY_FEATURES_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability beir-routing finetune ondisk bench-lexical adversarial-audit charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features beir-routing finetune ondisk bench-lexical adversarial-audit charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -64,6 +65,7 @@ help:
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
+	@echo "answerability-features  raw gate features vs engineered features"
 	@echo "charts       cross-system tables, error bars and the README charts"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
@@ -180,6 +182,10 @@ multihop-recalibrate:
 # Fit the feature gate on the gate run's recorded signals and score it out of sample.
 multihop-answerability:
 	$(PY) tools/answerability_train.py $(ANSWERABILITY_ARGS)
+
+# Does feature engineering improve the gate? Offline comparison on the same splits.
+answerability-features:
+	$(PY) tools/answerability_features.py $(ANSWERABILITY_FEATURES_ARGS)
 
 # Per-corpus channel selection, measured out of sample.
 beir-routing:
