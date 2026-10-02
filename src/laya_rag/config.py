@@ -242,19 +242,22 @@ class EngineConfig:
     # Coverage selection over the cross-encoder-scored pool. When a cross-encoder is
     # configured and this is > 0, the candidate pool is reordered by sentence-atom
     # max-coverage using the cross-encoder score as the relevance term, before the
-    # relevance filter and the top-k cut. Measured on the deterministic 400-query
-    # MultiHop subset against a full cross-encoder re-sort: MAP@10 0.2986 -> 0.3206
-    # (lam 0.7, +0.0220 [+0.0165, +0.0286], p=0.001) and Hits@4 0.7225 -> 0.7600
-    # (+0.0375 [+0.0125, +0.0650]). 0.0 disables it, so the shipped order is unchanged
-    # unless a CE is configured and this is set.
+    # relevance filter and the top-k cut. Measured against a full cross-encoder re-sort,
+    # first on the deterministic 400-query subset (MAP@10 0.2986 -> 0.3206 at lam 0.7)
+    # and then confirmed on the full 2,255-query protocol: MAP@10 0.2948 -> 0.3165
+    # (+0.0217 [+0.0190, +0.0242], p=0.0005) and Hits@4 0.7348 -> 0.7694
+    # (+0.0346 [+0.0235, +0.0457]). 0.0 disables it, so the shipped order is unchanged
+    # unless a CE is configured and this is set. Recommended setting: 0.7.
     rerank_coverage_lambda: float = field(
         default_factory=lambda: _env_float("RERANK_COVERAGE_LAMBDA", 0.0)
     )
     # Document quota for the coverage pass above: the first N selections are the best
     # cross-encoder candidate of distinct documents, then coverage fills the rest. This
     # stops one article occupying the top-k with overlapping chunks, which is the
-    # multi-hop failure mode. Measured with lambda 0.7 on the 400-query subset: MAP@10
-    # 0.3206 (coverage alone) -> 0.3280, Hits@4 0.7550. 0 keeps the plain coverage rule.
+    # multi-hop failure mode. Full-protocol (2,255 queries) with lambda 0.7, against
+    # coverage alone: MAP@10 0.3165 -> 0.3192 (+0.0027 [+0.0002, +0.0052], p=0.037) but
+    # Hits@4 0.7694 -> 0.7588 (-0.0106). It is a real trade, not a free win, so it is
+    # off by default; set 3 when MAP@10 matters more than Hits@4.
     rerank_coverage_min_docs: int = field(
         default_factory=lambda: _env_int("RERANK_COVERAGE_MIN_DOCS", 0)
     )

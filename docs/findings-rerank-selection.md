@@ -122,11 +122,53 @@ on a validated grounding signal cannot be ported as raw term overlap.
 `rescue_order` and its three strategies stay in the experiment tool as a recorded negative,
 not in the engine.
 
+## Full-protocol confirmation (2,255 queries)
+
+The subset results were re-run over the **full** MultiHop-RAG answerable set by caching
+cross-encoder scores for all 2,255 queries (`--limit-queries 2255`, ~53 minutes on this
+host). The control reproduces the repo's known fused baseline exactly (MAP@10 0.2546).
+
+| strategy | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | --- | --- | --- | --- |
+| fused | 0.8120 | 0.6825 | 0.2546 | 0.5482 |
+| ce | 0.8576 | 0.7348 | 0.2948 | 0.6106 |
+| coverage-0.5 | 0.8914 | 0.7619 | 0.3138 | 0.6193 |
+| **coverage-0.7** | **0.8971** | **0.7694** | 0.3165 | 0.6255 |
+| docquota-3 | 0.8639 | 0.7472 | 0.3099 | 0.6127 |
+| covquota-3-0.7 | 0.8958 | 0.7588 | **0.3192** | 0.6193 |
+
+Paired over 2,255 queries:
+
+| comparison | delta | 95% CI | permutation p |
+| --- | --- | --- | --- |
+| coverage-0.7 vs ce MAP@10 | **+0.0217** | [+0.0190, +0.0242] | 0.0005 |
+| coverage-0.7 vs ce Hits@4 | **+0.0346** | [+0.0235, +0.0457] | 0.0005 |
+| covquota-3-0.7 vs ce MAP@10 | **+0.0244** | [+0.0219, +0.0270] | 0.0005 |
+| covquota-3-0.7 vs ce Hits@4 | **+0.0239** | [+0.0124, +0.0355] | 0.0005 |
+| covquota-3-0.7 vs coverage-0.7 MAP@10 | +0.0027 | [+0.0002, +0.0052] | 0.0370 |
+| covquota-3-0.7 vs coverage-0.7 Hits@4 | −0.0106 | [−0.0195, −0.0018] | 0.0265 |
+
+The coverage win is **robust**: on the full protocol it is a significant MAP@10 and Hits@4
+gain over the cross-encoder re-sort, at both lambda 0.5 and 0.7. The document quota is
+real but small, and it is a genuine trade — **+0.0027 MAP@10 for −0.0106 Hits@4** against
+coverage alone.
+
+**Choose-on-half, report-on-half** (seed 17, 1,127 / 1,128 queries): selection on half A
+picks `covquota-3-0.7`; on the untouched half B it scores MAP@10 **0.3302**, against `ce`
+0.3046 and `coverage-0.7` 0.3262. So the combined rule's held-out MAP beats both
+baselines, and the small MAP edge over coverage alone survives out of sample.
+
+**Recommended shipped setting:** `RERANK_COVERAGE_LAMBDA=0.7` (robust MAP and Hits@4).
+`RERANK_COVERAGE_MIN_DOCS=3` is the MAP-priority option — it adds a small significant
+MAP@10 and costs Hits@4, so it is left off by default while the project's headline
+strength is its Hits@4/Hits@10.
+
 ## Honest limits
 
-- This is the **400-query subset**, not the full 2,255-query protocol, and lambda was
-  chosen on it. Coverage at 0.3/0.5/0.7 is positive-to-neutral against CE, so the choice
-  is not knife-edge, but a held-out confirmation on the full set is still owed.
+- The subset experiment was confirmed on the **full 2,255-query protocol** (above), and the
+  document-quota's small edge also survives the held-out half. The lambda value itself was
+  chosen on the 400-query subset, but coverage at 0.5 and 0.7 is positive on the full set,
+  so the choice is not knife-edge.
 - It **requires a cross-encoder**: there is no CE score to select on otherwise, so it
   does not help the shipped lexical-only default.
 - It cannot reach the diagnostic's 0.73 oracle ceiling; coverage-0.7 closes roughly a
