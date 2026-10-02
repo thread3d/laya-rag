@@ -387,6 +387,9 @@ def main(argv=None) -> int:
     names += [f"facility-nored-{lam}" for lam in FACILITY_LAMBDAS]
     rankings: dict[str, dict[str, list[str]]] = {name: {} for name in names}
     pool_ceiling: dict[str, float] = {}
+    # candidate id -> gold-fact ids it contains, per query, so a family's top-10 can be
+    # scored for partial credit (how many distinct facts it covers) as well as MAP.
+    pool_matches: dict[str, dict[str, set]] = {}
 
     total = len(queries)
     for n, (q, text) in enumerate(queries.items()):
@@ -432,6 +435,7 @@ def main(argv=None) -> int:
         for d in cand:
             text_norm = corpus[d].replace(" ", "").replace("\n", "")
             gold_matches.append({j for j, g in enumerate(norm_gold[q]) if g in text_norm})
+        pool_matches[q] = dict(zip(cand, gold_matches))
         pool_ceiling[q] = pool_ceiling_map(rel, gold_matches, args.top_k)
         if n and n % 500 == 0:
             print(f"  {n}/{total}", flush=True)
@@ -439,16 +443,23 @@ def main(argv=None) -> int:
     per_query: dict[str, dict[str, dict[str, float]]] = {}
     summary: dict[str, dict[str, float]] = {}
     for name, ranking in rankings.items():
-        rows: dict[str, dict[str, float]] = {k: {} for k in ("Hits@10", "Hits@4", "MAP@10", "MRR@10")}
+        rows: dict[str, dict[str, float]] = {
+            k: {} for k in ("Hits@10", "Hits@4", "MAP@10", "MRR@10", "fact_recall@10")
+        }
         for i, gold in zip((i for i, _ in items), golds):
             qid = str(i)
             row = official_metrics_one([corpus[d] for d in ranking[qid]], gold)
             for key, value in row.items():
                 rows[key][qid] = value
+            covered: set = set()
+            for chunk_id in ranking[qid]:
+                covered |= pool_matches[qid].get(chunk_id, set())
+            rows["fact_recall@10"][qid] = (len(covered) / len(gold)) if gold else 0.0
         per_query[name] = rows
         summary[name] = summarize(rows)
 
     base_map = per_query["fused-baseline"]["MAP@10"]
+    base_fact = per_query["fused-baseline"]["fact_recall@10"]
     comparisons = {}
     for name in names:
         if name == "fused-baseline":
@@ -457,6 +468,9 @@ def main(argv=None) -> int:
             "MAP@10": evalkit.paired_bootstrap(base_map, per_query[name]["MAP@10"], samples=args.bootstrap_samples),
             "Hits@10": evalkit.paired_bootstrap(
                 per_query["fused-baseline"]["Hits@10"], per_query[name]["Hits@10"], samples=args.bootstrap_samples
+            ),
+            "fact_recall@10": evalkit.paired_bootstrap(
+                base_fact, per_query[name]["fact_recall@10"], samples=args.bootstrap_samples
             ),
         }
 

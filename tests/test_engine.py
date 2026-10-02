@@ -321,3 +321,52 @@ def test_embedding_batches_cover_every_chunk(tmp_path):
 
     assert report.chunks > 12
     assert report.total_chunks == report.chunks
+
+
+# -- query-embedding cache ---------------------------------------------------
+
+class _CountingEmbedder(StubModel):
+    """A stub embedder that counts single-string query embeddings."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.one_calls = 0
+
+    def embed_one(self, text: str) -> np.ndarray:
+        self.one_calls += 1
+        return super().embed_one(text)
+
+
+def _cached_engine(tmp_path, **overrides):
+    embedder = _CountingEmbedder()
+    config = make_config(tmp_path, dense_weight=1.0, rerank_k=3, **overrides)
+    engine = RagEngine(config, model=StubModel(), embedder=embedder)
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    return engine, embedder
+
+
+def test_repeated_query_embeds_once(tmp_path):
+    engine, embedder = _cached_engine(tmp_path)
+    before = embedder.one_calls
+    engine.query("How long does a refund take?")
+    engine.query("How long does a refund take?")
+    assert embedder.one_calls - before == 1
+    engine.query("What are the shipping rates?")
+    assert embedder.one_calls - before == 2
+
+
+def test_query_cache_can_be_disabled(tmp_path):
+    engine, embedder = _cached_engine(tmp_path, query_cache_size=0)
+    before = embedder.one_calls
+    engine.query("How long does a refund take?")
+    engine.query("How long does a refund take?")
+    assert embedder.one_calls - before == 2
+
+
+def test_query_cache_is_bounded(tmp_path):
+    engine, embedder = _cached_engine(tmp_path, query_cache_size=1)
+    before = embedder.one_calls
+    engine.query("alpha question about refunds")
+    engine.query("beta question about shipping")
+    engine.query("alpha question about refunds")  # evicted by the second query
+    assert embedder.one_calls - before == 3

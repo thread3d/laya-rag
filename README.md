@@ -297,6 +297,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `LEXICAL_STEM` | `true` | English stemming for the lexical channel; `false` keeps exact terms only |
 | `LEXICAL_BACKEND` | `bm25` | `bm25` or `eager`; `eager` precomputes posting weights and scores with NumPy, with byte-identical rankings — measured 11–13× faster queries and ~5× smaller index at 20k docs |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
+| `QUERY_CACHE_SIZE` | `128` | recent query embeddings cached in memory, so a repeated question skips its one dense cost; `0` disables it (vectors only, never results) |
 | `EMBED_MODEL` | unset | retrieval-trained bi-encoder for the dense channel; unset uses Laya's own encoder |
 | `EMBED_POOLING` | `auto` | `cls` for BGE-family models, `mean` otherwise — BGE is trained with `[CLS]` |
 | `EMBED_QUERY_INSTRUCTION` | `false` | prepend the model's retrieval instruction to queries |

@@ -162,6 +162,11 @@ class EngineConfig:
     # Retrieval funnel: dense candidates -> Laya re-ranked -> evidence passages.
     retrieve_k: int = field(default_factory=lambda: _env_int("RETRIEVE_K", 20))
     rerank_k: int = field(default_factory=lambda: _env_int("RERANK_K", 5))
+    # Bounded cache of recent query embeddings. A service sees the same question
+    # repeatedly (retries, refreshes, shared links) and the query embedding is the one
+    # dense cost on an otherwise lexical path; 0 disables the cache. It holds vectors, not
+    # results, so a re-index can never be hidden by it.
+    query_cache_size: int = field(default_factory=lambda: _env_int("QUERY_CACHE_SIZE", 128))
 
     # English stemming for the lexical channel. Measured on BEIR it closes most of the gap
     # to the published, stemmed Lucene BM25 baseline: SciFact nDCG@10 0.654 -> 0.677,

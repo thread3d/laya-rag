@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import shutil
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
@@ -419,6 +420,11 @@ class RagEngine:
         self._nli_loaded = False
         self._trust_manifest: TrustManifest | None = None
         self._trust_loaded = False
+        # Bounded cache of query embeddings. A service sees the same question repeatedly
+        # (retries, UI refreshes, shared links), and the query embedding is the one dense
+        # cost on an otherwise lexical path. Keyed by the exact query string, so it can
+        # never return a stale *result* — only a recomputed vector.
+        self._query_cache: OrderedDict[str, np.ndarray] = OrderedDict()
 
     # -- index state -----------------------------------------------------
     @property
@@ -737,6 +743,25 @@ class RagEngine:
         report.paths = len({chunk.path for chunk in chunks})
 
     # -- querying --------------------------------------------------------
+    def _query_vector(self, query: str) -> np.ndarray:
+        """Embed one query, reusing a bounded cache of recent query vectors.
+
+        ``QUERY_CACHE_SIZE`` of 0 disables the cache. The cache holds vectors, not results,
+        so an index change can never be hidden by it.
+        """
+        size = self.config.query_cache_size
+        if size <= 0:
+            return np.asarray(self.embedder.embed_one(query), dtype=np.float32)
+        cached = self._query_cache.get(query)
+        if cached is not None:
+            self._query_cache.move_to_end(query)
+            return cached
+        vector = np.asarray(self.embedder.embed_one(query), dtype=np.float32)
+        self._query_cache[query] = vector
+        if len(self._query_cache) > size:
+            self._query_cache.popitem(last=False)
+        return vector
+
     def query(
         self,
         query: str,
@@ -800,7 +825,7 @@ class RagEngine:
         if dense_weight == 0.0:
             dense_hits: list[Hit] = []
         else:
-            dense_hits = index.search(self.embedder.embed_one(query), k=recall_k)
+            dense_hits = index.search(self._query_vector(query), k=recall_k)
         lexical_hits = lexical.search(query, k=recall_k) if lexical else []
         candidates = self._fuse(
             index,

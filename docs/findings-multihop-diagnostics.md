@@ -64,6 +64,26 @@ rank budget discards.
    (`make multihop-ce-cache && make multihop-rerank-experiment`) test whether blending,
    a rank-1 guardrail, or CE-plus-coverage closes more of it.
 
+## Partial credit: fact recall, which MAP hides
+
+MAP@10 punishes a set that found two of three facts at `2/3`; a caller cares more about *how
+much* of the answer set arrived. The coverage harness now reports `fact_recall@10` — the
+fraction of a query's gold facts present in the returned top-10 — alongside MAP. On the full
+2,255 queries:
+
+| strategy | fact recall@10 | MAP@10 | Hits@4 |
+| --- | --- | --- | --- |
+| fused baseline | 0.4644 | 0.2546 | 0.6825 |
+| cluster-dedup-0.9 | 0.5458 | 0.2790 | 0.7118 |
+| facility-0.5 | 0.5314 | 0.2835 | 0.7197 |
+| **facility-nored-0.5** (shipped) | **0.5524** | **0.2850** | **0.7326** |
+
+The shipped coverage configuration covers **55.2%** of gold facts against the fused
+baseline's 46.4% — **+0.0880 [+0.0797, +0.0964], p < 0.0001** — which is a larger relative
+statement than MAP's +0.0304 and is the one that matches what a reader experiences: the
+evidence set is more complete, not merely better ordered. It also shows the coverage pass
+beats plain near-duplicate suppression on partial credit too (0.5524 vs 0.5458).
+
 ## Method note
 
 Grounding and hop labels use lexical query-term overlap, not embeddings, so a second hop
