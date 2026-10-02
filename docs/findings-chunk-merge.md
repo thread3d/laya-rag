@@ -97,6 +97,13 @@ new default even though its feature names still load. **Retrain it**
 (`tools/answerability_train.py`) after changing `CHUNK_CHARS_AUTO` or `CHUNK_CHARS`; nothing in
 the loader can detect the drift, which is why it is written down here.
 
+That prediction was then **measured** (see
+[findings-gate-shape-features.md](findings-gate-shape-features.md)): re-collecting the gate's
+300 labelled queries through a corpus-aware index drops the nine-score-feature gate from AUC
+0.8146 to 0.7862 and raises its risk@80 from 0.4069 to 0.4295, while the shipped twelve-feature
+gate holds (0.8290 → 0.8323). The evidence-shape features are what carries it across the
+change.
+
 ### The percentile is not critical (but p90 is the best of those tried)
 
 SciFact's derivation by quantile, and the engine score each produces:

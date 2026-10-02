@@ -36,6 +36,36 @@ Five of six improve significantly, and the one regression (calibration) is not s
 This is the opposite of the derived-feature result, which supports the reading that the gain
 is from genuinely new information rather than from giving the linear model more freedom.
 
+## Robustness: the shape features survive a chunking change, the nine do not
+
+Round 35 made `CHUNK_CHARS_AUTO` the engine's default, which changes passage lengths and
+therefore every evidence-shape feature. Re-collecting the same 300 MultiHop queries through a
+fresh corpus-aware index (`tools/multihop_gate.py --index-dir .../index-auto`) and repeating
+the comparison quantifies exactly what the compatibility note predicted:
+
+| feature set | fixed 1200/400 | corpus-aware | change |
+| --- | --- | --- | --- |
+| nine score features — AUC | 0.8146 | 0.7862 | **−0.0284** |
+| nine score features — risk@80 | 0.4069 | 0.4295 | **+0.0226** |
+| **twelve (with shape)** — AUC | 0.8290 | **0.8323** | +0.0033 |
+| **twelve (with shape)** — risk@80 | 0.4009 | **0.4065** | +0.0056 |
+| shape-feature delta — AUC | +0.0144 | **+0.0461** [+0.0437, +0.0486] | — |
+| shape-feature delta — risk@80 | −0.0060 | **−0.0230** [−0.0246, −0.0214] | — |
+
+Two readings, both worth having:
+
+1. **A persisted nine-feature gate is genuinely out of distribution after the chunking
+   change** — AUC falls 0.028 and selective risk rises 0.023. This is the caveat from the
+   chunking finding, now measured rather than asserted.
+2. **The shape features are what carries the gate across it.** Their contribution grows from
+   +0.0144 to **+0.0461** AUC (and from −0.0060 to **−0.0230** risk@80) on the new index, all
+   p<0.0001, and they leave the twelve-feature gate's own AUC slightly *better* than it was
+   under fixed chunking. The features that describe evidence shape are exactly the ones that
+   absorb a change in evidence shape.
+
+Operationally: retraining is required either way, but a retrained gate now tolerates the
+chunking default, and the measurement says which features do that work.
+
 ## Honest limits
 
 - **The paired interval resamples *splits*, not queries.** Both arms share the same 300

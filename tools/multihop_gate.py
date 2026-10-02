@@ -10,7 +10,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 B = ROOT / 'eval' / 'benchmarks' / 'multihop-rag'
-os.environ['LAYA_RAG_INDEX_DIR'] = str(B / 'index')
+# The index directory is fixed before the config is read; --index-dir overrides it at
+# parse time below so an alternative chunking can be collected without touching the
+# canonical index other MultiHop tools read.
+os.environ.setdefault('LAYA_RAG_INDEX_DIR', str(B / 'index'))
 os.environ.setdefault('LAYA_RAG_EMBED_MODEL', 'BAAI/bge-small-en-v1.5')
 # Models live in the workspace cache, not ~/.cache, which the sandbox will not write to.
 os.environ.setdefault('HF_HOME', str(ROOT / 'eval' / 'beir' / 'hf-cache'))
@@ -26,7 +29,11 @@ ap.add_argument('--pos-limit', type=int, default=None)
 ap.add_argument('--out', default=str(B / 'gate.json'),
                 help='where to write the per-query report (use a different path to keep '
                      'the canonical gate.json that tools/multihop_recalibrate.py reads)')
+ap.add_argument('--index-dir', default=None,
+                help='index directory to use or build; defaults to the canonical one')
 args = ap.parse_args()
+if args.index_dir:
+    os.environ['LAYA_RAG_INDEX_DIR'] = str(Path(args.index_dir))
 
 items = json.load(open(B / 'MultiHopRAG.json'))
 raw = json.load(open(B / 'corpus.json'))
