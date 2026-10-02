@@ -27,10 +27,11 @@ CE_CACHE_ARGS ?=
 RERANK_EXPERIMENT_ARGS ?=
 ATOM_ARGS ?=
 LEXICAL_BENCH_ARGS ?=
+ADVERSARIAL_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability beir-routing finetune ondisk bench-lexical charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability beir-routing finetune ondisk bench-lexical adversarial-audit charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -62,6 +63,7 @@ help:
 	@echo "finetune     in-domain domain adaptation (adapted, not zero-shot)"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
+	@echo "adversarial-audit  poison/trust/verification regression checks"
 	@echo "charts       cross-system tables, error bars and the README charts"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
@@ -194,6 +196,10 @@ ondisk:
 # Ranking parity, index size and query latency for the two BM25 backends.
 bench-lexical:
 	OMP_NUM_THREADS=16 $(PY) tools/bench_lexical.py $(LEXICAL_BENCH_ARGS)
+
+# Deterministic adversarial retrieval regression suite; `--check` gates a change.
+adversarial-audit:
+	$(PY) tools/adversarial_audit.py $(ADVERSARIAL_ARGS)
 
 # Cross-system tables, bootstrap error bars, and the charts embedded in the README.
 # It reads the reports `make beir` and the multihop tools already wrote, so run those first.
