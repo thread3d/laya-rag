@@ -355,6 +355,177 @@ def threshold_sweep(
     return out
 
 
+# ── selective prediction ─────────────────────────────────────────────────
+#
+# AUC and one-threshold balanced accuracy say nothing about the risk actually accepted
+# at a deployable coverage. These treat the gate as a selective predictor: sort by score,
+# accept a fraction, and measure the error rate among the accepted. `aurc` is the area
+# under that curve, and `augrc` its generalization (NeurIPS 2024), which is the expected
+# risk of undetected failures and does not credit coverage that is never taken.
+
+def _positive_label(labels: Sequence[int]) -> int:
+    return max(int(label) for label in labels) if labels else 1
+
+
+def risk_coverage_curve(
+    probabilities: Sequence[float], labels: Sequence[int]
+) -> dict[str, list[float]]:
+    """Risk (error rate among accepted) at every achievable coverage level.
+
+    One point per query, from accepting only the highest-scored item to accepting all.
+    ``risk`` is the fraction of accepted items whose label is *not* the positive class,
+    so for the answerability gate it is the false-accept rate at that coverage.
+    """
+    if not probabilities:
+        return {"coverage": [], "risk": []}
+    positive = _positive_label(labels)
+    order = sorted(range(len(probabilities)), key=lambda i: -float(probabilities[i]))
+    ordered = [int(labels[i]) for i in order]
+    n = len(ordered)
+    negative = 0
+    coverage: list[float] = []
+    risk: list[float] = []
+    for accepted, label in enumerate(ordered, start=1):
+        if label != positive:
+            negative += 1
+        coverage.append(accepted / n)
+        risk.append(negative / accepted)
+    return {"coverage": [round(c, 6) for c in coverage], "risk": [round(r, 6) for r in risk]}
+
+
+def _trapezoid(xs: Sequence[float], ys: Sequence[float]) -> float:
+    return sum(
+        (xs[i + 1] - xs[i]) * (ys[i + 1] + ys[i]) / 2.0 for i in range(len(xs) - 1)
+    )
+
+
+def aurc(probabilities: Sequence[float], labels: Sequence[int]) -> float:
+    """Area under the risk-coverage curve; lower is better. 0.0 for an empty input."""
+    curve = risk_coverage_curve(probabilities, labels)
+    if len(curve["coverage"]) < 2:
+        return 0.0
+    return round(_trapezoid(curve["coverage"], curve["risk"]), 4)
+
+
+def augrc(probabilities: Sequence[float], labels: Sequence[int]) -> float:
+    """Area under the generalized risk-coverage curve (NeurIPS 2024); lower is better.
+
+    ``GRC(c) = c * risk(c) + (1 - c)`` is the probability of an *undetected* failure at
+    coverage ``c``, so unlike AURC it accounts for the cost of the coverage not taken.
+    """
+    curve = risk_coverage_curve(probabilities, labels)
+    if len(curve["coverage"]) < 2:
+        return 0.0
+    grc = [
+        risk_value * coverage + (1.0 - coverage)
+        for coverage, risk_value in zip(curve["coverage"], curve["risk"])
+    ]
+    return round(_trapezoid(curve["coverage"], grc), 4)
+
+
+def risk_at_coverage(
+    probabilities: Sequence[float], labels: Sequence[int], coverage: float
+) -> float:
+    """False-accept rate when the top ``coverage`` fraction by score is accepted."""
+    if not probabilities:
+        return 0.0
+    if not 0.0 < coverage <= 1.0:
+        raise ValueError(f"coverage must be in (0, 1], got {coverage!r}")
+    positive = _positive_label(labels)
+    order = sorted(range(len(probabilities)), key=lambda i: -float(probabilities[i]))
+    accepted = max(1, min(len(order), int(math.ceil(coverage * len(order)))))
+    chosen = [int(labels[i]) for i in order[:accepted]]
+    return round(sum(1 for label in chosen if label != positive) / accepted, 4)
+
+
+def brier_score(probabilities: Sequence[float], labels: Sequence[int]) -> float:
+    if not probabilities:
+        return 0.0
+    return round(
+        sum((float(p) - float(y)) ** 2 for p, y in zip(probabilities, labels)) / len(probabilities),
+        4,
+    )
+
+
+def negative_log_likelihood(probabilities: Sequence[float], labels: Sequence[int]) -> float:
+    """Mean log loss, with the probability clipped away from the two poles."""
+    if not probabilities:
+        return 0.0
+    total = 0.0
+    for probability, label in zip(probabilities, labels):
+        p = min(1.0 - 1e-12, max(1e-12, float(probability)))
+        total += -(float(label) * math.log(p) + (1.0 - float(label)) * math.log(1.0 - p))
+    return round(total / len(probabilities), 4)
+
+
+def reliability_curve_equal_mass(
+    probabilities: Sequence[float], labels: Sequence[int], n_bins: int
+) -> list[dict[str, Any]]:
+    """Equal-count bins (rather than equal-width), which are more stable on small sets."""
+    if not probabilities or n_bins < 1:
+        return []
+    order = sorted(range(len(probabilities)), key=lambda i: float(probabilities[i]))
+    total = len(order)
+    out: list[dict[str, Any]] = []
+    for b in range(n_bins):
+        start = b * total // n_bins
+        end = (b + 1) * total // n_bins
+        if start >= end:
+            continue
+        chunk = order[start:end]
+        confidence = sum(float(probabilities[i]) for i in chunk) / len(chunk)
+        accuracy = sum(float(labels[i]) for i in chunk) / len(chunk)
+        out.append({
+            "count": len(chunk),
+            "confidence": _round(confidence),
+            "accuracy": _round(accuracy),
+            "gap": _round(abs(accuracy - confidence)),
+        })
+    return out
+
+
+def ece_sweep(
+    probabilities: Sequence[float],
+    labels: Sequence[int],
+    *,
+    min_bins: int = 2,
+    max_bins: int = 30,
+) -> dict[str, Any]:
+    """ECE over a range of equal-mass bin counts, preferring a monotone curve.
+
+    The bin count is a free parameter that changes the number, so reporting one value
+    understates the uncertainty. This reports the whole curve and selects the largest
+    bin count whose reliability curve is still non-decreasing in confidence — the finest
+    resolution that has not started fitting noise.
+    """
+    curve: list[dict[str, Any]] = []
+    chosen: dict[str, Any] | None = None
+    total = len(probabilities)
+    for n_bins in range(max(1, min_bins), max_bins + 1):
+        if n_bins > total:
+            break
+        bins = reliability_curve_equal_mass(probabilities, labels, n_bins)
+        if not bins:
+            continue
+        ece = sum(b["count"] / total * b["gap"] for b in bins)
+        accuracies = [b["accuracy"] for b in bins]
+        monotone = all(
+            accuracies[i + 1] >= accuracies[i] - 1e-9 for i in range(len(accuracies) - 1)
+        )
+        entry = {"bins": n_bins, "ece": _round(ece), "monotone": monotone}
+        curve.append(entry)
+        if monotone:
+            chosen = entry
+    if chosen is None and curve:
+        chosen = curve[-1]
+    return {
+        "ece": chosen["ece"] if chosen else 0.0,
+        "bins": chosen["bins"] if chosen else 0,
+        "monotone": bool(chosen and chosen["monotone"]),
+        "curve": curve,
+    }
+
+
 # ── standard IR metrics (TREC / BEIR) ────────────────────────────────────
 #
 # These are the metrics an IR leaderboard reports, so a number computed here can be
@@ -529,6 +700,117 @@ def paired_bootstrap(
         "p_value": round(min(1.0, 2.0 * min(below, above)), 4),
         "samples": samples,
         "significant": bool(low > 0.0 or high < 0.0),
+    }
+
+
+def permutation_test(
+    baseline: Mapping[str, float],
+    candidate: Mapping[str, float],
+    *,
+    samples: int = 10_000,
+    seed: int = 20210617,
+    alpha: float = 0.05,
+    exact_max_n: int = 12,
+) -> dict[str, Any]:
+    """Paired randomization (sign-flip) test over per-query deltas.
+
+    The bootstrap in :func:`paired_bootstrap` estimates an interval; this asks the
+    complementary question — under the null that the two systems are interchangeable,
+    how often would a mean delta this large arise? Each query's delta is exchangeable in
+    sign, so the null distribution is the mean of randomly sign-flipped deltas.
+
+    ``n <= exact_max_n`` enumerates all ``2**n`` sign assignments exactly (4096 at the
+    default cut); larger sets draw ``samples`` random flips. The reported ``p_value``
+    includes the observed assignment (``+1`` for every query), so it is never zero, and
+    the exact variant carries no Monte-Carlo error.
+
+    Both this and the bootstrap need *exchangeable* paired deltas: they are invalid if
+    the same queries were used to choose the configuration being tested.
+    """
+    shared = sorted(set(baseline) & set(candidate))
+    if not shared:
+        raise ValueError("permutation_test needs at least one query scored by both systems")
+    deltas = [float(candidate[q]) - float(baseline[q]) for q in shared]
+    n = len(deltas)
+    observed = sum(deltas) / n
+    tolerance = 1e-12 * max(1.0, abs(observed))
+
+    if n <= exact_max_n:
+        from itertools import product
+
+        extreme = 0
+        total = 0
+        for signs in product((-1.0, 1.0), repeat=n):
+            mean = sum(s * d for s, d in zip(signs, deltas)) / n
+            if abs(mean) >= abs(observed) - tolerance:
+                extreme += 1
+            total += 1
+        p_value = extreme / total
+        method = "exact"
+        effective = total
+    else:
+        import numpy as np
+
+        values = np.asarray(deltas, dtype=np.float64)
+        rng = np.random.default_rng(seed)
+        extreme = 0
+        remaining = samples
+        while remaining > 0:
+            chunk = min(2048, remaining)
+            signs = rng.choice(np.array([-1.0, 1.0]), size=(chunk, n))
+            means = (signs * values).mean(axis=1)
+            extreme += int(np.count_nonzero(np.abs(means) >= abs(observed) - tolerance))
+            remaining -= chunk
+        # A finite draw cannot evidence a p below 1/(samples+1); report that floor.
+        p_value = (extreme + 1) / (samples + 1)
+        method = "approximate"
+        effective = samples
+
+    return {
+        "queries": n,
+        "delta": round(observed, 4),
+        "p_value": round(min(1.0, p_value), 4),
+        "method": method,
+        "draws": effective,
+        "significant": bool(p_value <= alpha),
+        "alpha": alpha,
+    }
+
+
+def benjamini_hochberg(
+    pvalues: Mapping[str, float],
+    *,
+    q: float = 0.05,
+) -> dict[str, Any]:
+    """Step-up FDR control over a named family of p-values.
+
+    A comparison grid tests dozens of (retriever x dataset x metric) cells at once, so
+    a per-cell 5% level is not a 5% family error rate. Benjamini-Hochberg controls the
+    expected *proportion* of false discoveries instead: sort p ascending, set the
+    adjusted value of the i-th to ``min over k >= i of (m/k * p_(k))``, and reject every
+    cell whose adjusted value is at or below ``q``. The family must be declared before
+    looking at the results, or the denominator m is whatever the analyst chose after the
+    fact.
+    """
+    names = list(pvalues)
+    m = len(names)
+    if m == 0:
+        return {"q": q, "tests": 0, "adjusted": {}, "rejected": [], "any": False}
+    order = sorted(names, key=lambda name: float(pvalues[name]))
+    adjusted: dict[str, float] = {}
+    running = 1.0
+    for index in range(m - 1, -1, -1):
+        name = order[index]
+        value = float(pvalues[name]) * m / (index + 1)
+        running = min(running, value)
+        adjusted[name] = min(1.0, running)
+    rejected = [name for name in names if adjusted[name] <= q]
+    return {
+        "q": q,
+        "tests": m,
+        "adjusted": {name: round(value, 4) for name, value in adjusted.items()},
+        "rejected": rejected,
+        "any": bool(rejected),
     }
 
 

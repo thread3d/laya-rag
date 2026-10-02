@@ -28,7 +28,9 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tools"))
 
+import evalkit  # noqa: E402
 from laya_rag.answerability import (  # noqa: E402
     FEATURE_NAMES,
     LogisticGate,
@@ -96,6 +98,30 @@ def stratified_split(y: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
     return np.asarray(sorted(halves[0])), np.asarray(sorted(halves[1]))
 
 
+def selective_metrics(labels: np.ndarray, scores: np.ndarray, threshold: float) -> dict[str, float]:
+    """Selective-prediction view of one scorer at its operating point.
+
+    AUC and balanced accuracy hide the operating point; these report the risk actually
+    accepted at deployable coverage. ``aurc``/``augrc`` summarise the whole curve,
+    ``risk@80``/``risk@90`` read it at the coverages a deployment might choose, and
+    ``coverage`` is how much of the query stream the threshold really accepts. Lower is
+    better for risk/aurc/augrc/brier/nll/ece; higher is better for coverage.
+    """
+    probabilities = [float(v) for v in scores]
+    outcomes = [int(v) for v in labels]
+    sweep = evalkit.ece_sweep(probabilities, outcomes)
+    return {
+        "aurc": evalkit.aurc(probabilities, outcomes),
+        "augrc": evalkit.augrc(probabilities, outcomes),
+        "risk@80": evalkit.risk_at_coverage(probabilities, outcomes, 0.80),
+        "risk@90": evalkit.risk_at_coverage(probabilities, outcomes, 0.90),
+        "brier": evalkit.brier_score(probabilities, outcomes),
+        "nll": evalkit.negative_log_likelihood(probabilities, outcomes),
+        "ece": sweep["ece"],
+        "coverage": round(float(np.mean(np.asarray(scores) >= threshold)), 4),
+    }
+
+
 def evaluate_split(
     X: np.ndarray, y: np.ndarray, head: np.ndarray, seed: int
 ) -> dict[str, float]:
@@ -108,13 +134,20 @@ def evaluate_split(
     threshold, _ = best_threshold(y[train], gate.predict_proba(X[train]))
     gate_report = evaluate_gate(y[test], gate_scores, threshold=threshold)
     head_report = evaluate_gate(y[test], head[test], threshold=0.5)
-    return {
+    metrics = {
         "gate_auc": float(gate_report["auc"]),
         "gate_balanced_accuracy": float(gate_report["balanced_accuracy"]),
         "head_auc": float(head_report["auc"]),
         "head_balanced_accuracy": float(head_report["balanced_accuracy"]),
         "threshold": float(threshold),
     }
+    for prefix, scores, cut in (
+        ("gate", gate_scores, threshold),
+        ("head", head[test], 0.5),
+    ):
+        for name, value in selective_metrics(y[test], scores, cut).items():
+            metrics[f"{prefix}_{name}"] = value
+    return metrics
 
 
 def summarize(values: Sequence[float]) -> dict[str, float]:
@@ -153,20 +186,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ]
     readings = [reading for reading in readings if reading]
     reached = ~np.isclose(head, 0.0)
+    keys = sorted(readings[0]) if readings else []
     report = {
         "n": len(records),
         "class_counts": {str(int(label)): int((y == label).sum()) for label in np.unique(y)},
         "features": list(FEATURE_NAMES),
-        "held_out": {
-            key: summarize([reading[key] for reading in readings])
-            for key in (
-                "gate_auc",
-                "gate_balanced_accuracy",
-                "head_auc",
-                "head_balanced_accuracy",
-                "threshold",
-            )
-        },
+        "held_out": {key: summarize([reading[key] for reading in readings]) for key in keys},
         "full_data": {
             "head_auc": round(float(roc_auc(y, head)), 4),
             "head_auc_reached": round(

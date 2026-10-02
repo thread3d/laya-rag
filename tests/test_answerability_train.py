@@ -97,6 +97,29 @@ def test_summarize_reports_mean_and_interval():
     assert summary["lo"] <= summary["mean"] <= summary["hi"]
 
 
+def test_selective_metrics_reports_the_operating_point():
+    labels = np.array([1, 1, 0, 0])
+    scores = np.array([0.9, 0.8, 0.2, 0.1])
+    metrics = train.selective_metrics(labels, scores, threshold=0.5)
+    assert set(metrics) == {
+        "aurc", "augrc", "risk@80", "risk@90", "brier", "nll", "ece", "coverage"
+    }
+    assert metrics["coverage"] == 0.5
+    assert metrics["risk@80"] == 0.5
+    assert metrics["aurc"] == pytest.approx(0.1458, abs=1e-4)
+    assert 0.0 <= metrics["ece"] <= 1.0
+
+
+def test_evaluate_split_carries_the_selective_metrics_for_both_scorers():
+    X, y, head = train.build_matrix(_synthetic(30))
+    reading = train.evaluate_split(X, y, head, seed=5)
+    for prefix in ("gate", "head"):
+        for name in ("aurc", "augrc", "risk@80", "brier", "nll", "ece", "coverage"):
+            assert f"{prefix}_{name}" in reading
+    assert 0.0 <= reading["gate_coverage"] <= 1.0
+    assert 0.0 <= reading["head_risk@80"] <= 1.0
+
+
 def test_main_writes_a_report_and_a_loadable_gate(tmp_path):
     rows = _synthetic(25)
     gate_file = _write_gate_file(tmp_path, rows)

@@ -21,10 +21,12 @@ ROUTING_ARGS ?=
 FINETUNE_ARGS ?=
 ONDISK_ARGS ?=
 ANSWERABILITY_ARGS ?=
+DIAGNOSTICS_ARGS ?=
+SIGNIFICANCE_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-recalibrate multihop-answerability beir-routing finetune ondisk charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-recalibrate multihop-answerability beir-routing finetune ondisk charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -45,6 +47,8 @@ help:
 	@echo "multihop     MultiHop-RAG under the benchmark's own protocol"
 	@echo "multihop-gate  answerability rejection on the null_query records"
 	@echo "multihop-coverage  does a coverage objective beat per-document rank on MAP@10?"
+	@echo "multihop-diagnostics  depth-stratified ceiling and second-hop retention"
+	@echo "multihop-significance  permutation tests + FDR over a saved comparison grid"
 	@echo "multihop-recalibrate  does a threshold fitted on one split transfer?"
 	@echo "multihop-answerability  fit and score the feature-based answerability gate"
 	@echo "beir-routing per-corpus channel selection, measured out of sample"
@@ -136,6 +140,16 @@ multihop-gate:
 # Does a coverage objective beat per-document rank on MAP@10?
 multihop-coverage:
 	OMP_NUM_THREADS=16 $(PY) tools/multihop_coverage.py $(COVERAGE_ARGS)
+
+# Depth-stratified pool ceiling and second-hop retention (RESEARCH.md §3.1).
+# `make multihop-diagnostics DIAGNOSTICS_ARGS="--limit-queries 200"` for a smoke run.
+multihop-diagnostics:
+	OMP_NUM_THREADS=16 $(PY) tools/multihop_diagnostics.py $(DIAGNOSTICS_ARGS)
+
+# Permutation tests + Benjamini-Hochberg FDR over a saved report's comparison grid.
+# Defaults to eval/benchmarks/multihop-rag/official.json; `SIGNIFICANCE_ARGS="--report ..."`.
+multihop-significance:
+	$(PY) tools/eval_significance.py $(SIGNIFICANCE_ARGS)
 
 # Does an answerability threshold fitted on one split transfer to the other?
 multihop-recalibrate:
