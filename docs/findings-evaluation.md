@@ -48,6 +48,27 @@ family-wise artifacts. The interesting movement is at the boundary:
 The family must be declared before looking; `eval_significance.py` takes `--family`
 explicitly and records it in the report.
 
+### What the grid can resolve (minimum detectable effect)
+
+"Not significant" is not "no effect" unless the query set could have seen one. The same
+report now carries `MDE@80%` per cell — the smallest paired mean difference resolvable at
+80% power from the observed per-query difference SD, `(z_(1-α/2) + z_0.8) · sd / √n`.
+
+On these **2,255** queries the MAP@10 MDE is **0.0076–0.0112**, and the Hits@10 MDE is
+~0.027. So the insignificant cells are quantified rather than left ambiguous:
+
+| cell | delta | p | MDE@80% | reading |
+| --- | --- | --- | --- | --- |
+| `bge-large hybrid` MAP@10 | +0.0035 | 0.30 | 0.0076 | underpowered, not proven absent |
+| `bm25` MAP@10 | +0.0024 | 0.59 | 0.0100 | underpowered |
+| `bge-base hybrid` MAP@10 | −0.0024 | 0.49 | 0.0076 | underpowered |
+
+This is a design statement as much as a result: a MAP@10 difference below roughly 0.01 is
+not resolvable at this query count, so the programme should not chase or fear effects of that
+size on this set — and any future comparison should state which side of the MDE it sits on.
+The MDE is computed from the observed difference SD, so it is **post-hoc guidance** for the
+next run, not a pre-registered power calculation.
+
 ## 2. Selective prediction for the answerability gate (`tools/answerability_train.py`)
 
 AUC and one-threshold balanced accuracy say nothing about the risk accepted at a coverage

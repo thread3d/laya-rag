@@ -98,4 +98,15 @@ def test_render_markdown_lists_every_cell_and_the_summary():
     })
     assert "bge-small dense@ov200" in text
     assert "BH p" in text
+    assert "MDE@80%" in text
     assert "significant after BH-FDR: **1**" in text
+
+
+def test_cells_carry_the_minimum_detectable_effect():
+    report = _report()
+    cells = sig.comparison_cells(
+        report, "bge-small hybrid@ov200", ["bge-small dense@ov200"], ["MAP@10"],
+        samples=200, seed=1,
+    )
+    # Every delta is identical (+0.2), so the difference SD is zero and the MDE is 0.0.
+    assert cells[0]["mde"] == 0.0

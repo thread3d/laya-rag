@@ -354,3 +354,27 @@ def test_ece_sweep_is_large_for_confidently_wrong_probabilities():
     labels = [0, 0, 0, 0]
     result = evalkit.ece_sweep(probabilities, labels, min_bins=2, max_bins=4)
     assert result["ece"] > 0.8
+
+
+# ── minimum detectable effect ────────────────────────────────────────────
+
+def test_paired_mde_matches_the_normal_approximation():
+    import statistics
+
+    deltas = [0.1, 0.2] * 50
+    sd = statistics.stdev(deltas)
+    z = statistics.NormalDist().inv_cdf(0.975) + statistics.NormalDist().inv_cdf(0.8)
+    expected = round(z * sd / (len(deltas) ** 0.5), 4)
+    assert evalkit.paired_mde(deltas) == expected
+
+
+def test_paired_mde_is_undefined_below_two_queries():
+    assert evalkit.paired_mde([0.1]) is None
+    assert evalkit.paired_mde([]) is None
+
+
+def test_paired_mde_shrinks_with_more_queries_and_grows_with_power():
+    small = [0.1, 0.2] * 10
+    large = [0.1, 0.2] * 40
+    assert evalkit.paired_mde(large) < evalkit.paired_mde(small)
+    assert evalkit.paired_mde(small, power=0.9) > evalkit.paired_mde(small, power=0.8)

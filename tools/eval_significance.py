@@ -99,6 +99,8 @@ def comparison_cells(
             candidate = per_query_series(report, row, metric)
             permutation = evalkit.permutation_test(base_series[metric], candidate, samples=samples, seed=seed)
             bootstrap = evalkit.paired_bootstrap(base_series[metric], candidate, samples=samples, seed=seed)
+            shared = sorted(set(base_series[metric]) & set(candidate))
+            deltas = [candidate[q] - base_series[metric][q] for q in shared]
             cells.append({
                 "row": row,
                 "metric": metric,
@@ -109,6 +111,9 @@ def comparison_cells(
                 "ci_high": bootstrap["ci_high"],
                 "bootstrap_significant": bootstrap["significant"],
                 "queries": permutation["queries"],
+                # What this query set could have resolved at 80% power, so an
+                # insignificant cell is not read as "no effect" when it is underpowered.
+                "mde": evalkit.paired_mde(deltas),
             })
     return cells
 
@@ -148,21 +153,25 @@ def render_markdown(result: Mapping[str, Any]) -> str:
         f"**{result['summary']['significant_uncorrected']}**",
         f"- significant after BH-FDR: **{result['summary']['significant_fdr']}**",
         "",
-        "| row | metric | delta | 95% CI | perm p | BH p | FDR |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| row | metric | delta | 95% CI | perm p | BH p | MDE@80% | FDR |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for cell in sorted(result["cells"], key=lambda c: (c["p_adjusted"], c["row"], c["metric"])):
+        mde = "—" if cell.get("mde") is None else f"{cell['mde']:.4f}"
         lines.append(
             f"| {cell['row']} | {cell['metric']} | {cell['delta']:+.4f} | "
             f"[{cell['ci_low']:+.4f}, {cell['ci_high']:+.4f}] | {cell['p_value']:.4f} | "
-            f"{cell['p_adjusted']:.4f} | {'yes' if cell['rejected_fdr'] else 'no'} |"
+            f"{cell['p_adjusted']:.4f} | {mde} | {'yes' if cell['rejected_fdr'] else 'no'} |"
         )
     lines += [
         "",
         "`perm p` is the paired sign-flip permutation test; `BH p` is the Benjamini-Hochberg",
         "adjusted value across the declared family; `FDR` is rejected at the stated q.",
         "The CI is the paired bootstrap over queries, reported beside the permutation test",
-        "because the two answer complementary questions.",
+        "because the two answer complementary questions. `MDE@80%` is the smallest paired",
+        "mean difference this query set could detect at 80% power from the observed per-query",
+        "difference SD, so a non-significant delta smaller than it is underpowered rather",
+        "than proven absent.",
         "",
     ]
     return "\n".join(lines)

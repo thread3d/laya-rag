@@ -777,6 +777,29 @@ def permutation_test(
     }
 
 
+def paired_mde(
+    deltas: Sequence[float], *, alpha: float = 0.05, power: float = 0.8
+) -> float | None:
+    """Smallest paired mean difference an n-query set can detect, at the given power.
+
+    Two-sided normal approximation, ``(z_(1-alpha/2) + z_power) * sd(deltas) / sqrt(n)``.
+    The SD is the *observed* per-query difference SD, so this answers "what could this
+    comparison have resolved?" rather than "how many queries should I have run?" — report
+    it as design guidance for the next run, and note it is post-hoc once the effect is
+    known. ``None`` below two queries, where no SD exists.
+    """
+    values = [float(delta) for delta in deltas]
+    n = len(values)
+    if n < 2:
+        return None
+    from statistics import NormalDist, stdev
+
+    sd = stdev(values)
+    z_alpha = NormalDist().inv_cdf(1.0 - alpha / 2.0)
+    z_power = NormalDist().inv_cdf(power)
+    return _round((z_alpha + z_power) * sd / math.sqrt(n))
+
+
 def benjamini_hochberg(
     pvalues: Mapping[str, float],
     *,
