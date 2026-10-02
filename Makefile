@@ -25,10 +25,11 @@ DIAGNOSTICS_ARGS ?=
 SIGNIFICANCE_ARGS ?=
 CE_CACHE_ARGS ?=
 RERANK_EXPERIMENT_ARGS ?=
+ATOM_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-recalibrate multihop-answerability beir-routing finetune ondisk charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability beir-routing finetune ondisk charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -53,6 +54,7 @@ help:
 	@echo "multihop-significance  permutation tests + FDR over a saved comparison grid"
 	@echo "multihop-ce-cache    cache cross-encoder scores for the MultiHop subset"
 	@echo "multihop-rerank-experiment  sweep second-stage selection rules over that cache"
+	@echo "multihop-atom-index  atomic-unit lexical retrieval with parent-window return"
 	@echo "multihop-recalibrate  does a threshold fitted on one split transfer?"
 	@echo "multihop-answerability  fit and score the feature-based answerability gate"
 	@echo "beir-routing per-corpus channel selection, measured out of sample"
@@ -162,6 +164,10 @@ multihop-ce-cache:
 
 multihop-rerank-experiment:
 	$(PY) tools/multihop_rerank_experiment.py $(RERANK_EXPERIMENT_ARGS)
+
+# Atomic-unit lexical retrieval with parent-window return (RESEARCH.md Tier 1.5).
+multihop-atom-index:
+	OMP_NUM_THREADS=16 $(PY) tools/multihop_atom_index.py $(ATOM_ARGS)
 
 # Does an answerability threshold fitted on one split transfer to the other?
 multihop-recalibrate:
