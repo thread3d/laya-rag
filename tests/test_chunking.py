@@ -171,6 +171,60 @@ def test_read_document_rejects_binary(tmp_path):
     assert read_document(target) is None
 
 
+# -- ingest sanitisation -----------------------------------------------------
+
+def test_sanitize_text_strips_invisible_control_characters():
+    from laya_rag.chunking import sanitize_text
+
+    hidden = "refund\u200bpolicy\u200e is\u202e simple\ufeff"
+    assert sanitize_text(hidden) == "refundpolicy is simple"
+
+
+def test_sanitize_text_folds_compatibility_forms():
+    from laya_rag.chunking import sanitize_text
+
+    # Full-width digits must not let a term evade a lexical match.
+    assert sanitize_text("Ｒｅｆｕｎｄ １２") == "Refund 12"
+
+
+def test_sanitize_text_can_preserve_source_exactly_but_for_invisibles():
+    from laya_rag.chunking import sanitize_text
+
+    text = "ｆｉｌｅ\u200b"
+    assert sanitize_text(text, normalize_unicode=False) == "ｆｉｌｅ"
+
+
+def test_invisible_payload_flags_detects_the_classes():
+    from laya_rag.chunking import invisible_payload_flags
+
+    assert invisible_payload_flags("plain prose") == []
+    assert "invisible_control_characters" in invisible_payload_flags("a\u200bb")
+    assert "long_encoded_blob" in invisible_payload_flags("A" * 220)
+    assert "long_hex_blob" in invisible_payload_flags("a" * 220)
+
+
+def test_read_document_sanitizes_and_records_the_flag(tmp_path):
+    from laya_rag.chunking import LoadReport
+
+    target = tmp_path / "doc.md"
+    target.write_text("Refunds\u200b are processed in five days.", encoding="utf-8")
+    report = LoadReport()
+    doc = read_document(target, report)
+    assert doc is not None
+    assert "\u200b" not in doc.text
+    assert report.sanitized == [(str(target), ["invisible_control_characters"])]
+
+
+def test_read_document_leaves_clean_files_unflagged(tmp_path):
+    from laya_rag.chunking import LoadReport
+
+    target = tmp_path / "clean.md"
+    target.write_text("Refunds are processed in five days.", encoding="utf-8")
+    report = LoadReport()
+    read_document(target, report)
+    assert report.sanitized == []
+
+
 def test_skip_dirs_exclude_dependency_noise():
     for name in ("node_modules", ".git", "__pycache__", ".venv"):
         assert name in SKIP_DIRS

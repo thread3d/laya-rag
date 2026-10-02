@@ -11,6 +11,7 @@ free without any hand-rolled thread management.
 from __future__ import annotations
 
 import json
+import hmac
 import logging
 import queue
 import threading
@@ -211,7 +212,9 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         if not config.api_key:
             return
         expected = f"Bearer {config.api_key}"
-        if authorization != expected:
+        # Constant-time comparison: a plain != leaks the position of the first
+        # mismatching byte through timing, which is enough to recover a token.
+        if not hmac.compare_digest(authorization or "", expected):
             raise HTTPException(status_code=401, detail="invalid or missing bearer token")
 
     @app.get("/health")

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Sequence
@@ -64,9 +66,16 @@ class LoadReport:
 
     documents: list[Document] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
+    #: Paths whose text carried invisible payloads, with the flag kinds found. Advisory:
+    #: the text is still indexed after sanitisation, but the caller can surface it.
+    sanitized: list[tuple[str, list[str]]] = field(default_factory=list)
 
     def skip(self, path: str, reason: str) -> None:
         self.skipped.append((path, reason))
+
+    def note_sanitized(self, path: str, flags: Sequence[str]) -> None:
+        if flags:
+            self.sanitized.append((str(path), list(flags)))
 
 
 def _looks_binary(blob: bytes) -> bool:
@@ -78,6 +87,48 @@ def _looks_binary(blob: bytes) -> bool:
         return False
     control = sum(1 for byte in sample if byte < 9 or (13 < byte < 32))
     return control / len(sample) > 0.10
+
+
+#: Characters used to smuggle instructions past a human reviewer: zero-width joiners and
+#: spaces, bidi overrides, word-joiners, and the byte-order mark. They are removed rather
+#: than escaped, because no indexed prose or source file needs them.
+_INVISIBLE = re.compile(
+    "[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]"
+)
+
+#: A long run of base64/hex-looking characters. Legitimate in a lockfile or a hash, so it
+#: is *flagged*, never removed.
+_LONG_ENCODED_BLOB = re.compile(r"[A-Za-z0-9+/]{200,}={0,2}")
+_LONG_HEX_BLOB = re.compile(r"\b[0-9a-fA-F]{200,}\b")
+
+
+def sanitize_text(text: str, *, normalize_unicode: bool = True) -> str:
+    """Fold text to a canonical form and strip invisible control characters.
+
+    NFKC folds compatibility forms (full-width digits, ligatures) so a term cannot be
+    hidden by spelling it in a different width, and the invisible-character strip removes
+    the zero-width/bidi payload class outright. Both change bytes, so a caller that must
+    preserve source exactly can pass ``normalize_unicode=False`` and lose only the
+    invisible-character removal.
+    """
+    folded = unicodedata.normalize("NFKC", str(text)) if normalize_unicode else str(text)
+    return _INVISIBLE.sub("", folded)
+
+
+def invisible_payload_flags(text: str) -> list[str]:
+    """Advisory flags for the invisible/encoded payload class.
+
+    Deterministic and near-zero false positive on the invisible class; the encoded-blob
+    class is advisory because hashes and lockfiles legitimately contain long blobs.
+    """
+    flags: list[str] = []
+    if _INVISIBLE.search(str(text)):
+        flags.append("invisible_control_characters")
+    if _LONG_ENCODED_BLOB.search(str(text)):
+        flags.append("long_encoded_blob")
+    if _LONG_HEX_BLOB.search(str(text)):
+        flags.append("long_hex_blob")
+    return flags
 
 
 def _doc_id(path: Path) -> str:
@@ -152,6 +203,11 @@ def read_document(path: Path, report: LoadReport | None = None) -> Document | No
         if report is not None:
             report.skip(str(path), "no non-whitespace content")
         return None
+    # Detect payloads before sanitising: the strip is what removes the invisible ones.
+    flags = invisible_payload_flags(text)
+    if flags and report is not None:
+        report.note_sanitized(str(path), flags)
+    text = sanitize_text(text)
     return Document(doc_id=_doc_id(Path(path)), path=str(Path(path)), text=text)
 
 

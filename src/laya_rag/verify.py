@@ -407,6 +407,11 @@ def verify_citations(
     totals["invalid_citations"] = len(invalid_citations)
 
     content_clean = not any(content_totals.values())
+    injection = [
+        {"passage": index, "kinds": kinds}
+        for index, text in enumerate(texts, start=1)
+        if (kinds := injection_flags(text))
+    ]
     return {
         "claims": claims,
         "quotes": quotes,
@@ -416,6 +421,11 @@ def verify_citations(
             "counts": content_totals,
             "clean": content_clean,
             "summary": _summarise_content(content_totals),
+        },
+        "injection": {
+            "flagged": injection,
+            "count": len(injection),
+            "summary": _summarise_injection(injection, passage_count),
         },
         "passages": passage_count,
         "clean": (
@@ -489,3 +499,48 @@ def _summarise_content(counts: dict[str, int]) -> str:
             "in the evidence it cites."
         )
     return "Content check (advisory): " + "; ".join(parts) + "."
+
+
+# ── injection markers (advisory) ─────────────────────────────────────────
+#
+# Retrieved text is spliced into the composer's prompt verbatim, so a passage can carry
+# instructions the user never wrote. These patterns are deliberately narrow — they need an
+# instruction object ("ignore ... instructions"), not just the verb, because a code
+# comment legitimately says "ignore the previous value". Detecting a marker is not proof
+# the model obeyed it, and not detecting one is not proof it did not; this is a flag for a
+# human, never a block.
+
+_INJECTION_MARKERS = (
+    ("ignore_instructions", re.compile(
+        r"\bignore\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier)\s+"
+        r"(?:instructions?|prompts?|rules?|directions?)",
+        re.I,
+    )),
+    ("disregard_instructions", re.compile(
+        r"\bdisregard\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier|these)\s+"
+        r"(?:instructions?|prompts?|rules?|directions?)",
+        re.I,
+    )),
+    ("role_reassignment", re.compile(r"\byou\s+are\s+now\s+(?:a|an|the)\b", re.I)),
+    ("chat_role_marker", re.compile(r"<\|?(?:im_start|im_end|system|assistant)\|?>", re.I)),
+    ("new_instructions", re.compile(r"\bnew\s+instructions?\s*:", re.I)),
+    ("secrecy_directive", re.compile(
+        r"\bdo\s+not\s+(?:tell|inform|mention|reveal|disclose)\s+(?:the\s+user|anyone|them)",
+        re.I,
+    )),
+)
+
+
+def injection_flags(text: str) -> list[str]:
+    """Names of instruction-like markers present in ``text`` (advisory, narrow)."""
+    return [name for name, pattern in _INJECTION_MARKERS if pattern.search(str(text))]
+
+
+def _summarise_injection(flagged: Sequence[dict[str, Any]], passages: int) -> str:
+    if not flagged:
+        return "Injection check: no instruction-like markers were found in the evidence."
+    noun = "passage" if len(flagged) == 1 else "passages"
+    return (
+        f"Injection check (advisory): {len(flagged)} of {passages} {noun} contain "
+        "instruction-like text; this is a prompt-injection signal, not proof the model obeyed it."
+    )
