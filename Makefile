@@ -13,6 +13,7 @@ EVAL_ARGS ?=
 BENCH_ARGS ?=
 BEIR_ARGS ?=
 BEIR_ABLATE_ARGS ?=
+BEIR_ATOM_ARGS ?=
 MULTIHOP_ARGS ?=
 COVERAGE_ARGS ?=
 GATE_ARGS ?=
@@ -32,7 +33,7 @@ ANSWERABILITY_FEATURES_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features beir-routing finetune ondisk bench-lexical adversarial-audit charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features beir-routing finetune ondisk bench-lexical adversarial-audit charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -50,6 +51,7 @@ help:
 	@echo "bench-biencoder-parallel  the same for a retrieval-trained bi-encoder"
 	@echo "beir         standard IR metrics on BEIR (nDCG@10, MRR@10, ...)"
 	@echo "beir-ablate  sweep fusion weights and rerank depth on BEIR"
+	@echo "beir-atom-channel  does an atomic lexical channel help BEIR fusion?"
 	@echo "multihop     MultiHop-RAG under the benchmark's own protocol"
 	@echo "multihop-gate  answerability rejection on the null_query records"
 	@echo "multihop-coverage  does a coverage objective beat per-document rank on MAP@10?"
@@ -139,6 +141,10 @@ beir:
 # The ablation that chose the defaults (`make beir-ablate BEIR_ABLATE_ARGS="--datasets scifact"`).
 beir-ablate:
 	OMP_NUM_THREADS=16 $(PY) tools/beir_ablate.py $(BEIR_ABLATE_ARGS)
+
+# Does an atomic lexical channel help BEIR fusion? (uses cached document embeddings)
+beir-atom-channel:
+	OMP_NUM_THREADS=16 $(PY) tools/beir_atom_channel.py $(BEIR_ATOM_ARGS)
 
 # MultiHop-RAG under the benchmark's own protocol. `MULTIHOP_ARGS="--models bge-small,bge-large
 # --rerank"` runs the published comparison row. Cached embeddings make the second run cheap.
