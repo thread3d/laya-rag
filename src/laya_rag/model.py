@@ -14,6 +14,7 @@ rest of the engine can be tested against a stand-in.
 """
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -198,6 +199,30 @@ class LayaModel:
         return payload
 
 
+def saved_pooling(model_id: str) -> str | None:
+    """The pooling a saved SentenceTransformer directory was trained with, if it says.
+
+    Returns ``"cls"`` or ``"mean"`` from ``1_Pooling/config.json``, or ``None`` for a Hub
+    id (nothing local to read) or an unrecognised config. Exposed so the benchmark tools
+    resolve pooling the same way the engine does.
+    """
+    if not model_id:
+        return None
+    path = Path(model_id)
+    config = path / "1_Pooling" / "config.json"
+    if not path.is_dir() or not config.is_file():
+        return None
+    try:
+        data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if data.get("pooling_mode_cls_token"):
+        return "cls"
+    if data.get("pooling_mode_mean_tokens"):
+        return "mean"
+    return None
+
+
 class BiEncoderModel:
     """A retrieval-trained bi-encoder, used as the dense channel instead of Laya's encoder.
 
@@ -235,9 +260,17 @@ class BiEncoderModel:
         (BAAI's model card uses ``model_output[0][:, 0]``), so mean pooling — the obvious
         transformer default — is a mismatch with how the model was trained. Measured on
         BEIR SciFact, correcting it is worth ~0.014 nDCG@10.
+
+        A **local directory** is read from its own saved ``1_Pooling/config.json`` first:
+        a fine-tuned or distilled model keeps its training pooling, and a name heuristic
+        cannot see that a path like ``eval/distill-nfcorpus-model`` is BGE-derived. Getting
+        this wrong is silent — it just embeds worse.
         """
         value = (value or "auto").strip().lower()
         if value == "auto":
+            saved = saved_pooling(self.model_id)
+            if saved:
+                return saved
             return "cls" if "bge" in self.model_id.lower() else "mean"
         if value not in {"cls", "mean"}:
             raise ModelUnavailableError(

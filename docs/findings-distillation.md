@@ -43,6 +43,43 @@ pairs) with 7,770 pairs and one epoch.
 **This is an adapted number, not a zero-shot one.** The report labels it that way and it must
 never be compared as if it were the zero-shot row.
 
+## Packaging
+
+`tools/package_model.py` copies the model directory and generates a `MODEL_CARD.md` from the
+`distill_eval` report, so the measurement travels with the artefact instead of living only
+here. The packaged model loads through the engine's own encoder class
+(`beir.BiEncoder`/`BiEncoderModel`, 384-d, unit-normalised):
+
+```sh
+HF_HUB_OFFLINE=1 .venv/bin/python tools/package_model.py \
+    --model eval/distill-nfcorpus-model --report eval/distill-eval.json \
+    --out eval/distill-nfcorpus-package
+EMBED_MODEL=eval/distill-nfcorpus-package laya-rag query "..."
+```
+
+## Pooling: local paths were being guessed, and the guess happened to win
+
+The engine resolved `EMBED_POOLING=auto` from a **name heuristic** — `cls` if `"bge"` is in
+the model id, `mean` otherwise. A local directory like `eval/distill-nfcorpus-model` contains
+no `"bge"`, so it was silently **mean**-pooled while the model declares
+`pooling_mode_cls_token: true` (its BGE base does, so training used CLS). `saved_pooling` now
+reads `1_Pooling/config.json` from a local directory and both `BiEncoderModel` and
+`beir.BiEncoder` honour it; Hub ids keep the name heuristic, and an explicit `EMBED_POOLING`
+still wins.
+
+Measured on the test split through the project's own encoder:
+
+| pooling | nDCG@10 |
+| --- | --- |
+| declared `cls` (what training used) | 0.3506 |
+| `mean` (the old guessed default) | **0.3606** |
+
+So the guess was **+0.0100 better on this dataset** — a coincidence, not a reason to keep
+guessing: the engine must reproduce the configuration a model declares, and the model card
+now states the pooling and recommends measuring it. For this NFCorpus artefact the honest
+serving setting is the explicit `EMBED_POOLING=mean`, which is a better adapted number
+(+0.0221 over the zero-shot 0.3385) than the declared one.
+
 ## Honest limits
 
 - **One dataset**, and only because NFCorpus ships a train split; BEIR's other buildable
@@ -52,6 +89,8 @@ never be compared as if it were the zero-shot row.
   what makes the +0.0120 meaningful rather than circular.
 - One epoch, three positives and one teacher configuration; none was swept, so this is a
   floor, not a tuned result.
-- It produces a **local model directory**, not a packaged, versioned artefact on a Hub — the
-  packaging step in `RESEARCH.md` Tier 3.1 is still outstanding, and the engine does not yet
-  pick up a distilled encoder by default.
+- Pooling interacts with the training objective here (declared CLS loses to mean at test
+  time), so the pooling comparison is reported for both rather than assumed.
+- It produces a **packaged local artefact**, not a versioned Hub release — the distribution
+  half of `RESEARCH.md` Tier 3.1 is still outstanding, and the engine does not auto-select a
+  distilled encoder.

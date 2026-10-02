@@ -256,7 +256,11 @@ class BiEncoder:
         if device in (None, "auto"):
             device = "mps" if torch.backends.mps.is_available() else "cpu"
         if pooling == "auto":
-            pooling = "cls" if "bge" in model_id.lower() else "mean"
+            # A local directory carries its own pooling; a name heuristic cannot tell that
+            # eval/distill-nfcorpus-model is BGE-derived and would silently mean-pool it.
+            from laya_rag.model import saved_pooling
+
+            pooling = saved_pooling(model_id) or ("cls" if "bge" in model_id.lower() else "mean")
         if pooling not in {"cls", "mean"}:
             raise ValueError(f"pooling must be cls, mean or auto, got {pooling!r}")
 

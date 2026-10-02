@@ -231,6 +231,45 @@ def test_an_unknown_pooling_is_rejected(tmp_path):
         )
 
 
+def _saved_model(tmp_path, name, pooling):
+    import json
+
+    model = tmp_path / name
+    (model / "1_Pooling").mkdir(parents=True)
+    (model / "1_Pooling" / "config.json").write_text(
+        json.dumps({"pooling_mode_cls_token": pooling == "cls",
+                    "pooling_mode_mean_tokens": pooling == "mean"}),
+        encoding="utf-8",
+    )
+    return str(model)
+
+
+def test_a_local_model_directory_uses_its_own_saved_pooling(tmp_path):
+    """A distilled model keeps its training pooling; its path says nothing about bge."""
+    from laya_rag.model import BiEncoderModel, saved_pooling
+
+    path = _saved_model(tmp_path, "distill-nfcorpus-model", "cls")
+    assert saved_pooling(path) == "cls"
+    assert BiEncoderModel(make_config(tmp_path, embed_model=path)).pooling == "cls"
+
+
+def test_saved_pooling_is_none_for_a_hub_id_or_unknown_config(tmp_path):
+    from laya_rag.model import saved_pooling
+
+    assert saved_pooling("BAAI/bge-small-en-v1.5") is None
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert saved_pooling(str(empty)) is None
+
+
+def test_explicit_pooling_still_wins_over_a_saved_config(tmp_path):
+    from laya_rag.model import BiEncoderModel
+
+    path = _saved_model(tmp_path, "distill-model", "cls")
+    config = make_config(tmp_path, embed_model=path, embed_pooling="mean")
+    assert BiEncoderModel(config).pooling == "mean"
+
+
 def test_the_query_instruction_is_off_by_default_and_can_be_turned_on(tmp_path):
     from laya_rag.model import BiEncoderModel
 
