@@ -12,6 +12,13 @@ this cannot itself be wrong in the way a model can. Whether a correctly-cited
 sentence is a *fair reading* of its source is a different question, and it is left to
 Laya (:meth:`laya_rag.engine.RagEngine.adjudicate_claims`).
 
+A second, **advisory** layer checks whether a cited claim's numbers, dates and units
+actually occur in the evidence it cites, and flags a negation that the evidence lacks.
+Those checks are still deterministic, but unlike the citation check they have legitimate
+exceptions (rounding, "five" for "5", a range endpoint), so they are reported in a
+separate ``content`` block and never change the ``clean`` verdict. A noisy check is one
+a reader learns to ignore.
+
 Because these checks are deterministic they need no calibration, which is what makes
 them safe to show immediately: there is no probability to misread.
 """
@@ -135,6 +142,172 @@ def split_claims(answer: str) -> list[str]:
     return claims
 
 
+# ── content consistency (advisory, still deterministic) ──────────────────
+#
+# Citation mechanics prove a cited span *exists*; they say nothing about whether the
+# claim's numbers, dates and units agree with it. These checks are still mechanical and
+# model-free, but unlike the citation check they are **advisory**: a numeric mismatch has
+# legitimate exceptions (rounding, "five" vs "5", a range's endpoints), so they are
+# reported beside the verdict, never folded into ``clean``. A noisy check is one a reader
+# learns to ignore, which is worse than no check.
+
+_NUMBER = re.compile(r"(?<![\w.])\d[\d,]*(?:\.\d+)?%?")
+_DATE_ISO = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_DATE_SLASH = re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b")
+_MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+_DATE_MONTH_FIRST = re.compile(rf"\b{_MONTH}\.?\s+\d{{1,2}},?\s+\d{{4}}\b", re.I)
+_DATE_DAY_FIRST = re.compile(rf"\b\d{{1,2}}\s+{_MONTH}\.?,?\s+\d{{4}}\b", re.I)
+_MEASUREMENT = re.compile(
+    r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)\s*"
+    r"(%|percent|business\s+days?|days?|hours?|minutes?|seconds?|weeks?|months?|years?|[kmgt]i?b|bytes?)\b",
+    re.I,
+)
+_NEGATION = re.compile(
+    r"\b(?:not|no|never|cannot|can't|won't|doesn't|don't|isn't|aren't|without|none|nor)\b",
+    re.I,
+)
+_CONTENT_WORD = re.compile(r"[a-z][a-z0-9]{2,}")
+#: Words that carry no topical meaning for the negation heuristic.
+_CONTENT_STOPWORDS = frozenset({
+    "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "has",
+    "have", "had", "its", "into", "than", "then", "but", "not", "you", "your", "per",
+})
+
+#: Unit family -> the canonical spellings that belong together. A claim is only flagged
+#: when its own unit is absent from the evidence *and* the evidence uses a sibling unit,
+#: which is the "days" vs "business days" case rather than a mention of two different
+#: quantities.
+_UNIT_CANON = {
+    "day": ("time", "day"), "days": ("time", "day"),
+    "business day": ("time", "business day"), "business days": ("time", "business day"),
+    "hour": ("time", "hour"), "hours": ("time", "hour"),
+    "minute": ("time", "minute"), "minutes": ("time", "minute"),
+    "second": ("time", "second"), "seconds": ("time", "second"),
+    "week": ("time", "week"), "weeks": ("time", "week"),
+    "month": ("time", "month"), "months": ("time", "month"),
+    "year": ("time", "year"), "years": ("time", "year"),
+    "byte": ("size", "byte"), "bytes": ("size", "byte"),
+    "kb": ("size", "kb"), "kib": ("size", "kb"),
+    "mb": ("size", "mb"), "mib": ("size", "mb"),
+    "gb": ("size", "gb"), "gib": ("size", "gb"),
+    "tb": ("size", "tb"), "tib": ("size", "tb"),
+    "%": ("rate", "percent"), "percent": ("rate", "percent"),
+}
+
+
+def _canonical_number(token: str) -> str:
+    """Fold a numeric literal so ``1,200`` and ``1200`` compare equal."""
+    body = token.rstrip("%").replace(",", "")
+    if "." in body:
+        body = body.rstrip("0").rstrip(".")
+    return (body or "0") + ("%" if token.endswith("%") else "")
+
+
+def extract_numbers(text: str, *, distinctive: bool = True) -> list[str]:
+    """Numeric literals, optionally only the ones worth checking.
+
+    ``distinctive`` keeps multi-digit, decimal or percent values and drops bare single
+    digits, which are mostly list counts ("3 steps") and would generate false alarms.
+    """
+    out: list[str] = []
+    for match in _NUMBER.finditer(str(text)):
+        token = match.group(0)
+        digits = token.rstrip("%").replace(",", "").replace(".", "")
+        if distinctive and len(digits) < 2 and "." not in token and not token.endswith("%"):
+            continue
+        canonical = _canonical_number(token)
+        if canonical not in out:
+            out.append(canonical)
+    return out
+
+
+def extract_dates(text: str) -> list[str]:
+    """Date literals in ISO, slash, or month/day/year form, normalised for comparison."""
+    found: list[str] = []
+    for pattern in (_DATE_ISO, _DATE_SLASH, _DATE_MONTH_FIRST, _DATE_DAY_FIRST):
+        for match in pattern.finditer(str(text)):
+            value = _WHITESPACE.sub(" ", match.group(0)).strip().rstrip(",").casefold()
+            value = value.replace(".", "")
+            if value not in found:
+                found.append(value)
+    return found
+
+
+def extract_units(text: str) -> list[tuple[str, str]]:
+    """``(family, canonical)`` for every measured unit in the text."""
+    out: list[tuple[str, str]] = []
+    for match in _MEASUREMENT.finditer(str(text)):
+        unit = _WHITESPACE.sub(" ", match.group(2)).strip().casefold().rstrip(".")
+        canonical = _UNIT_CANON.get(unit)
+        if canonical and canonical not in out:
+            out.append(canonical)
+    return out
+
+
+def _content_words(text: str) -> set[str]:
+    return {
+        word for word in _CONTENT_WORD.findall(normalize(text))
+        if word not in _CONTENT_STOPWORDS
+    }
+
+
+def content_issues(claim: str, cited_texts: Sequence[str]) -> list[dict[str, Any]]:
+    """Advisory mismatches between a claim and the passages it cites.
+
+    Each issue is ``{"kind", "detail", "severity"}`` with severity ``"advisory"``: the
+    kinds are a number or date absent from the cited evidence, a unit that disagrees with
+    the evidence's unit of the same family, and a possible negation flip. None of them
+    changes the ``clean`` verdict.
+    """
+    evidence = " \n ".join(str(text) for text in cited_texts)
+    if not evidence.strip():
+        return []
+
+    issues: list[dict[str, Any]] = []
+    evidence_numbers = set(extract_numbers(evidence))
+    for number in extract_numbers(claim):
+        if number not in evidence_numbers:
+            issues.append({
+                "kind": "number_not_in_evidence",
+                "detail": number,
+                "severity": "advisory",
+            })
+
+    evidence_dates = set(extract_dates(evidence))
+    for date in extract_dates(claim):
+        if date not in evidence_dates:
+            issues.append({
+                "kind": "date_not_in_evidence",
+                "detail": date,
+                "severity": "advisory",
+            })
+
+    evidence_units = extract_units(evidence)
+    for family, canonical in extract_units(claim):
+        if (family, canonical) in evidence_units:
+            continue
+        siblings = sorted({unit for fam, unit in evidence_units if fam == family})
+        if siblings:
+            issues.append({
+                "kind": "unit_mismatch",
+                "detail": f"claim says {canonical}, evidence says {', '.join(siblings)}",
+                "severity": "advisory",
+            })
+
+    # A negation in the claim but none in the evidence, with enough shared vocabulary to
+    # be about the same thing. Two content tokens is a deliberately high bar: below it the
+    # two sentences are usually not comparable at all.
+    if _NEGATION.search(claim) and not _NEGATION.search(evidence):
+        shared = _content_words(claim) & _content_words(evidence)
+        if len(shared) >= 2:
+            issues.append({
+                "kind": "possible_negation_flip",
+                "detail": ", ".join(sorted(shared)[:4]),
+                "severity": "advisory",
+            })
+    return issues
+
+
 def verify_citations(
     answer: str,
     passages: Sequence[str],
@@ -154,6 +327,8 @@ def verify_citations(
 
     Returns a JSON-ready report. ``clean`` means every claim cites in-range evidence
     and every quoted span was found; it does **not** mean the answer is correct.
+    ``content`` carries the advisory number/date/unit/negation checks separately and
+    never changes ``clean``.
     """
     texts = list(passages)
     passage_count = len(texts)
@@ -165,10 +340,17 @@ def verify_citations(
         "quotes_checked": 0, "quotes_found": 0, "quotes_not_found": 0,
         "quotes_from_question": 0,
     }
+    content_totals = {
+        "number_not_in_evidence": 0,
+        "date_not_in_evidence": 0,
+        "unit_mismatch": 0,
+        "possible_negation_flip": 0,
+    }
 
     for claim in split_claims(answer):
         cited = extract_citations(claim)
         invalid = [index for index in cited if index < 1 or index > passage_count]
+        valid = [index for index in cited if index not in invalid]
 
         issues: list[str] = []
         if not cited:
@@ -180,12 +362,17 @@ def verify_citations(
         totals["cited"] += 1 if cited and not invalid else 0
         totals["uncited"] += 0 if cited else 1
 
+        advisory = content_issues(claim, [texts[index - 1] for index in valid])
+        for issue in advisory:
+            content_totals[issue["kind"]] += 1
+
         claims.append({
             "text": claim,
             "citations": cited,
             "invalid_citations": invalid,
             "uncited": not cited,
             "issues": issues,
+            "content_issues": advisory,
         })
 
     quotes: list[dict[str, Any]] = []
@@ -219,11 +406,17 @@ def verify_citations(
     ]
     totals["invalid_citations"] = len(invalid_citations)
 
+    content_clean = not any(content_totals.values())
     return {
         "claims": claims,
         "quotes": quotes,
         "invalid_citations": invalid_citations,
         "counts": totals,
+        "content": {
+            "counts": content_totals,
+            "clean": content_clean,
+            "summary": _summarise_content(content_totals),
+        },
         "passages": passage_count,
         "clean": (
             totals["claims"] > 0
@@ -273,3 +466,26 @@ def _summarise(totals: dict[str, int], passage_count: int) -> str:
         parts.append(f"{missing} of {checked} {noun} {'is' if missing == 1 else 'are'} not in the evidence")
 
     return "Citation check: " + "; ".join(parts) + "."
+
+
+def _summarise_content(counts: dict[str, int]) -> str:
+    """One advisory line; never phrased as a correctness verdict."""
+    parts: list[str] = []
+    if counts["number_not_in_evidence"]:
+        noun = "number" if counts["number_not_in_evidence"] == 1 else "numbers"
+        parts.append(f"{counts['number_not_in_evidence']} cited {noun} not in the cited evidence")
+    if counts["date_not_in_evidence"]:
+        noun = "date" if counts["date_not_in_evidence"] == 1 else "dates"
+        parts.append(f"{counts['date_not_in_evidence']} cited {noun} not in the cited evidence")
+    if counts["unit_mismatch"]:
+        parts.append(f"{_plural(counts['unit_mismatch'], 'unit mismatch', 'unit mismatches')}")
+    if counts["possible_negation_flip"]:
+        parts.append(
+            f"{_plural(counts['possible_negation_flip'], 'possible negation flip')}"
+        )
+    if not parts:
+        return (
+            "Content check: the numbers, dates and units of every cited claim were found "
+            "in the evidence it cites."
+        )
+    return "Content check (advisory): " + "; ".join(parts) + "."

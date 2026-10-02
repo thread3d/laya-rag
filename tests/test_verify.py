@@ -358,3 +358,81 @@ def test_a_fabrication_that_merely_extends_a_real_span_is_caught():
         'It says "processed within five business days and never otherwise" [1].', EVIDENCE
     )
     assert report["counts"]["quotes_not_found"] == 1
+
+
+# ── advisory content consistency ─────────────────────────────────────────
+
+def test_a_number_absent_from_the_cited_evidence_is_reported():
+    report = verify_citations("Refunds take 30 days to process [1].", [REFUND])
+    kinds = [issue["kind"] for issue in report["claims"][0]["content_issues"]]
+    assert "number_not_in_evidence" in kinds
+    assert report["content"]["counts"]["number_not_in_evidence"] == 1
+    # Advisory: the citation mechanics are still clean.
+    assert report["clean"] is True
+
+
+def test_a_number_present_in_the_cited_evidence_is_not_reported():
+    passage = "Refunds are processed within 5 days."
+    report = verify_citations("Refunds take 5 days [1].", [passage])
+    assert report["content"]["counts"]["number_not_in_evidence"] == 0
+    assert report["content"]["clean"] is True
+
+
+def test_small_single_digit_counts_are_not_checked():
+    # "3 steps" is a list count, not a checkable quantity; flagging it would be noise.
+    report = verify_citations("Follow the 3 steps in order [1].", [REFUND])
+    assert report["content"]["counts"]["number_not_in_evidence"] == 0
+
+
+def test_a_date_absent_from_the_evidence_is_reported():
+    passage = "The policy changed on 2024-01-05 and was announced publicly."
+    report = verify_citations("It changed on 2025-06-30 [1].", [passage])
+    assert report["content"]["counts"]["date_not_in_evidence"] == 1
+
+
+def test_a_date_present_in_the_evidence_is_not_reported():
+    passage = "The policy changed on 2024-01-05 and was announced publicly."
+    report = verify_citations("It changed on 2024-01-05 [1].", [passage])
+    assert report["content"]["counts"]["date_not_in_evidence"] == 0
+
+
+def test_a_unit_that_disagrees_with_the_evidence_is_reported():
+    passage = "Refunds are processed within 5 business days."
+    report = verify_citations("Refunds are processed within 5 days [1].", [passage])
+    assert report["content"]["counts"]["unit_mismatch"] == 1
+    detail = report["claims"][0]["content_issues"][0]["detail"]
+    assert "business day" in detail
+
+
+def test_a_matching_unit_is_not_reported():
+    passage = "Refunds are processed within 5 business days."
+    report = verify_citations("Refunds are processed within 5 business days [1].", [passage])
+    assert report["content"]["counts"]["unit_mismatch"] == 0
+
+
+def test_a_negation_absent_from_the_evidence_is_reported_advisories_only():
+    passage = "The service supports refunds for all customers."
+    report = verify_citations("The service does not support refunds for customers [1].", [passage])
+    assert report["content"]["counts"]["possible_negation_flip"] == 1
+    assert report["clean"] is True  # still advisory
+
+
+def test_a_negation_present_in_the_evidence_is_not_reported():
+    passage = "The service does not support refunds for all customers."
+    report = verify_citations("The service does not support refunds for customers [1].", [passage])
+    assert report["content"]["counts"]["possible_negation_flip"] == 0
+
+
+def test_content_checks_need_a_cited_span():
+    # An uncited claim is already flagged; there is no cited evidence to compare against.
+    report = verify_citations("Refunds take 30 days to process by default.", [REFUND])
+    assert report["claims"][0]["content_issues"] == []
+    assert report["content"]["clean"] is True
+
+
+def test_content_summary_is_never_a_correctness_claim():
+    report = verify_citations("Refunds take 30 days to process [1].", [REFUND])
+    summary = report["content"]["summary"]
+    assert summary.startswith("Content check")
+    assert "advisory" in summary
+    assert "true" not in summary.casefold()

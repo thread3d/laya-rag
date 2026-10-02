@@ -406,6 +406,10 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         makes no claim about whether the answer is *true*, and nothing consuming this
         should present it as if it did.
 
+        A separate ``content`` block adds *advisory* checks — numbers, dates and units
+        that do not appear in the cited evidence, and a possible negation flip. Those
+        never change ``clean``; they are flagged for a reader to weigh.
+
         The passages are grouped by document with the same rule the composer uses, so
         the ``[n]`` in a composed answer means the same evidence here as it does there.
         """
