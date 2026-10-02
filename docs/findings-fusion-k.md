@@ -51,6 +51,18 @@ significantly worse (the MultiHop Hits@10 cost is −0.0053, p=0.10). The change
 it is the same fusion, one constant — and it removes an inconsistency where the shipped
 engine would not have reproduced the numbers in its own documentation.
 
+## Follow-up: the first fix reached only half the engine
+
+The `rrf_k` wiring above was added to `adjudicate_claims` and **missed the primary `query()`
+call site**, which still called `_fuse` without it and therefore fused at 60 — the same
+inconsistency, still live on the path that actually serves requests. The same applied to the
+coverage-redundancy flag. A spy on `_fuse` now asserts that `query()` forwards
+`rrf_k=config.fusion_k` and `coverage_redundancy=config.recall_coverage_redundancy`, so the
+wiring is tested where it is used rather than only on the callee.
+
+That is the lesson worth carrying: a fix to the constant was verified on `_fuse` and on the
+config, not on the caller, and a caller-level test would have caught it two rounds earlier.
+
 ## Honest limits
 
 - BEIR's per-dataset deltas are positive but each interval crosses zero at n=300–1,406; the

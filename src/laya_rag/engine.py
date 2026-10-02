@@ -55,6 +55,7 @@ class IndexReport:
     paths: int = 0
     embed_seconds: float = 0.0
     save_seconds: float = 0.0
+    sparse_seconds: float = 0.0
     total_seconds: float = 0.0
     skipped: list[tuple[str, str]] = field(default_factory=list)
 
@@ -67,6 +68,7 @@ class IndexReport:
             "paths": self.paths,
             "embed_seconds": round(self.embed_seconds, 3),
             "save_seconds": round(self.save_seconds, 3),
+            "sparse_seconds": round(self.sparse_seconds, 3),
             "total_seconds": round(self.total_seconds, 3),
             "skipped": [{"path": path, "reason": reason} for path, reason in self.skipped],
         }
@@ -411,6 +413,11 @@ class RagEngine:
         self.embed_batch_texts = embed_batch_texts
         self._index: Any | None = None
         self._lexical: Any | None = None
+        # The learned-sparse channel (config.sparse_model). Loaded/encoded lazily so a
+        # default engine never pays for it.
+        self._sparse: Any | None = None
+        self._sparse_encoder: Any | None = None
+        self._sparse_query_cache: dict[str, Any] = {}
         # Optional persisted feature gate for answerability (see config). Loaded lazily:
         # a missing or damaged file must not stop the engine from answering, it only
         # falls back to Laya's own decision.
@@ -487,11 +494,77 @@ class RagEngine:
                         self._lexical = None
         return self._lexical
 
+    @property
+    def sparse_encoder(self) -> Any | None:
+        """The learned-sparse encoder, or None when no ``SPARSE_MODEL`` is configured."""
+        if not self.config.sparse_enabled:
+            return None
+        if self._sparse_encoder is None:
+            from .sparse import SparseEncoder
+
+            self._sparse_encoder = SparseEncoder(
+                self.config.sparse_model, top_k=self.config.sparse_top_k
+            )
+        return self._sparse_encoder
+
+    @property
+    def sparse(self) -> Any | None:
+        """The persisted learned-sparse index, or None when it was never built."""
+        if not self.config.sparse_enabled:
+            return None
+        if self._sparse is None:
+            from .sparse import SPARSE_FILE, SparseIndex
+
+            path = self.config.index_dir / SPARSE_FILE
+            if path.is_file():
+                try:
+                    self._sparse = SparseIndex.load(path)
+                except (OSError, ValueError, KeyError):
+                    # A stale or damaged sparse index must not break retrieval; the engine
+                    # simply falls back to dense + lexical.
+                    self._sparse = None
+        return self._sparse
+
+    def _sparse_hits(self, query: str, k: int) -> list[tuple[str, float]]:
+        """Rank chunks for ``query`` with the sparse channel, or ``[]`` when absent."""
+        index = self.sparse
+        encoder = self.sparse_encoder
+        if index is None or encoder is None or not len(index):
+            return []
+        vector = self._sparse_query_cache.get(query)
+        if vector is None:
+            vector = encoder.embed_one(query)
+            size = self.config.query_cache_size
+            if size > 0:
+                self._sparse_query_cache[query] = vector
+                if len(self._sparse_query_cache) > size:
+                    self._sparse_query_cache.pop(next(iter(self._sparse_query_cache)))
+        return index.search(vector, k=k)
+
+    def _build_sparse(self, chunks: Sequence[Any]) -> float:
+        """Encode every chunk with the sparse model, persist the inverted index."""
+        from .sparse import SPARSE_FILE, SparseIndex
+
+        encoder = self.sparse_encoder
+        if encoder is None:
+            return 0.0
+        started = time.perf_counter()
+        vectors: list[Any] = []
+        for batch in _batched(chunks, max(1, self.config.sparse_batch_texts)):
+            vectors.extend(encoder.encode([chunk.index_text for chunk in batch]))
+        index = SparseIndex()
+        index.build([chunk.chunk_id for chunk in chunks], vectors)
+        index.save(self.config.index_dir / SPARSE_FILE)
+        self._sparse = index
+        return time.perf_counter() - started
+
     def reset(self) -> None:
         """Delete the on-disk index and drop the in-memory copies."""
         wipe(self.config.index_dir)
         self._index = None
         self._lexical = None
+        self._sparse = None
+        self._sparse_query_cache = {}
 
     @property
     def trust_manifest(self) -> TrustManifest | None:
@@ -574,6 +647,12 @@ class RagEngine:
         """
         started = time.perf_counter()
         report = IndexReport()
+
+        if self.config.sparse_enabled and self.config.resolved_index_backend == "ondisk":
+            raise ValueError(
+                "SPARSE_MODEL is not supported with the ondisk index backend; index in "
+                "memory or unset SPARSE_MODEL"
+            )
 
         if rebuild:
             self.reset()
@@ -676,6 +755,8 @@ class RagEngine:
             lexical.build(index.chunks)
             lexical.save(self.config.index_dir / LEXICAL_FILE)
         self._lexical = lexical
+        if self.config.sparse_enabled:
+            report.sparse_seconds = self._build_sparse(index.chunks)
         report.save_seconds = time.perf_counter() - save_started
 
         report.total_chunks = len(index)
@@ -827,6 +908,7 @@ class RagEngine:
         else:
             dense_hits = index.search(self._query_vector(query), k=recall_k)
         lexical_hits = lexical.search(query, k=recall_k) if lexical else []
+        sparse_hits = self._sparse_hits(query, recall_k)
         candidates = self._fuse(
             index,
             dense_hits,
@@ -836,6 +918,10 @@ class RagEngine:
             lexical_weight=self.config.lexical_weight,
             dedup_threshold=self.config.recall_dedup_threshold,
             coverage_lambda=self.config.recall_coverage_lambda,
+            coverage_redundancy=self.config.recall_coverage_redundancy,
+            rrf_k=self.config.fusion_k,
+            sparse_hits=sparse_hits,
+            sparse_weight=self.config.sparse_weight,
         )
         trust_filtered = 0
         acl_filtered = 0
@@ -958,8 +1044,10 @@ class RagEngine:
         coverage_lambda: float = 0.0,
         coverage_redundancy: bool = True,
         rrf_k: int = 60,
+        sparse_hits: Sequence[tuple[str, float]] | None = None,
+        sparse_weight: float = 1.0,
     ) -> list[Hit]:
-        """Fuse dense and lexical rankings into one candidate list.
+        """Fuse dense, lexical and optional sparse rankings into one candidate list.
 
         The fused ``Hit.score`` is the RRF score, not a cosine similarity; the
         channels that produced each candidate travel with it so the evidence bundle
@@ -969,6 +1057,10 @@ class RagEngine:
         with a strong lexical one lowers BM25's nDCG@10 by roughly 43% on BEIR. A weight
         of 0 removes that channel from the fusion without disabling it elsewhere.
 
+        ``sparse_hits`` is the learned-sparse channel's ``(chunk_id, score)`` list, which
+        only its rank contributes to the fusion — measured, it is the first additional
+        channel that improves the fused ranking consistently (+0.004 to +0.023 nDCG@10).
+
         ``dedup_threshold`` > 0 walks the fused list and drops a candidate whose cosine to
         an already-kept chunk is at or above it, until ``limit`` are kept or the list ends.
         ``coverage_lambda`` > 0 instead runs the evidence-set coverage selection
@@ -977,11 +1069,16 @@ class RagEngine:
         """
         dense_ids = [hit.chunk.chunk_id for hit in dense_hits]
         lexical_ids = [hit.chunk_id for hit in lexical_hits]
+        sparse_pairs = list(sparse_hits or [])
+        sparse_ids = [chunk_id for chunk_id, _score in sparse_pairs]
         # Over-fetch when diversifying: the duplicates have to be *replaced* by deeper
         # candidates, so the fused pool is wider than the returned candidate list.
         pool = limit * 3 if (dedup_threshold > 0.0 or coverage_lambda > 0.0) else limit
         fused = reciprocal_rank_fusion(
-            [dense_ids, lexical_ids], k=rrf_k, limit=pool, weights=[dense_weight, lexical_weight]
+            [dense_ids, lexical_ids, sparse_ids],
+            k=rrf_k,
+            limit=pool,
+            weights=[dense_weight, lexical_weight, sparse_weight],
         )
         if coverage_lambda > 0.0:
             fused = _coverage_select(index, fused, limit, coverage_lambda,
@@ -990,6 +1087,7 @@ class RagEngine:
             fused = _suppress_near_duplicates(index, fused, limit, dedup_threshold)
         dense_set = set(dense_ids)
         lexical_set = set(lexical_ids)
+        sparse_set = set(sparse_ids)
         candidates: list[Hit] = []
         for chunk_id, rrf_score in fused:
             chunk = index.get(chunk_id)
@@ -997,7 +1095,11 @@ class RagEngine:
                 continue
             channels = tuple(
                 name
-                for name, present in (("dense", chunk_id in dense_set), ("lexical", chunk_id in lexical_set))
+                for name, present in (
+                    ("dense", chunk_id in dense_set),
+                    ("lexical", chunk_id in lexical_set),
+                    ("sparse", chunk_id in sparse_set),
+                )
                 if present
             )
             candidates.append(Hit(chunk=chunk, score=rrf_score, channels=channels))
@@ -1170,6 +1272,8 @@ class RagEngine:
                 coverage_lambda=self.config.recall_coverage_lambda,
                 coverage_redundancy=self.config.recall_coverage_redundancy,
                 rrf_k=self.config.fusion_k,
+                sparse_hits=self._sparse_hits(claim, recall_k),
+                sparse_weight=self.config.sparse_weight,
             )
             if trust_active:
                 before = len(hits)
@@ -1286,6 +1390,15 @@ class RagEngine:
             "index_backend": self.config.resolved_index_backend,
             "index_present": self.has_index(),
             "lexical_present": self.lexical is not None,
+            "sparse": {
+                "configured": self.config.sparse_enabled,
+                "present": self.sparse is not None,
+                "encoder": (
+                    self._sparse_encoder.info()
+                    if self._sparse_encoder is not None and hasattr(self._sparse_encoder, "info")
+                    else None
+                ),
+            },
             "compose": self.composer.describe(),
         }
         if payload["index_present"]:

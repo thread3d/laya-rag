@@ -384,6 +384,93 @@ def test_adjudicate_claims_reuses_the_embedding_cache(tmp_path):
 
 # -- fusion constant ---------------------------------------------------------
 
+class _StubSparseEncoder:
+    """A sparse encoder stand-in: every text carries term 1 plus one rotating term."""
+
+    def encode(self, texts):
+        return [{1: 1.0, (index % 7) + 2: 1.0} for index, _ in enumerate(texts)]
+
+    def embed_one(self, text):
+        return self.encode([text])[0]
+
+    def info(self):
+        return {"model": "stub", "top_k": 128, "loaded": True}
+
+
+def _spy_on_fuse(engine):
+    captured: dict = {}
+    original = engine._fuse
+
+    def spy(*args, **kwargs):
+        captured.update(kwargs)
+        return original(*args, **kwargs)
+
+    engine._fuse = spy
+    return captured
+
+
+def _engine_with_sparse(tmp_path):
+    config = make_config(tmp_path, dense_weight=1.0, rerank_k=3)
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    config.sparse_model = "stub/sparse"
+    engine._sparse_encoder = _StubSparseEncoder()
+    engine._build_sparse(engine.index.chunks)
+    return engine
+
+
+def test_query_passes_the_configured_fusion_constant_and_redundancy(tmp_path):
+    """The primary path, not just adjudicate, must honour FUSION_K and the redundancy flag."""
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3, fusion_k=7,
+        recall_coverage_lambda=0.5, recall_coverage_redundancy=False,
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    captured = _spy_on_fuse(engine)
+    engine.query("How long does a refund take?")
+    assert captured["rrf_k"] == 7
+    assert captured["coverage_redundancy"] is False
+
+
+def test_query_sends_no_sparse_channel_by_default(tmp_path):
+    engine = RagEngine(make_config(tmp_path, dense_weight=1.0, rerank_k=3), model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    captured = _spy_on_fuse(engine)
+    result = engine.query("How long does a refund take?")
+    assert captured["sparse_hits"] == []
+    assert all("sparse" not in passage["channels"] for passage in result.passages)
+
+
+def test_sparse_channel_is_built_and_fused_into_the_query(tmp_path):
+    engine = _engine_with_sparse(tmp_path)
+    assert engine.sparse is not None
+    assert len(engine.sparse) == len(engine.index)
+    assert (engine.config.index_dir / "sparse.json").is_file()
+
+    captured = _spy_on_fuse(engine)
+    result = engine.query("How long does a refund take?")
+    assert captured["sparse_hits"], "the sparse channel must contribute candidates"
+    assert captured["sparse_weight"] == 1.0
+    assert any("sparse" in passage["channels"] for passage in result.passages)
+
+
+def test_stats_report_the_sparse_channel(tmp_path):
+    engine = _engine_with_sparse(tmp_path)
+    payload = engine.stats()["sparse"]
+    assert payload["configured"] is True
+    assert payload["present"] is True
+    assert payload["encoder"]["model"] == "stub"
+
+
+def test_sparse_model_is_rejected_with_the_ondisk_backend(tmp_path):
+    config = make_config(
+        tmp_path, dense_weight=1.0, sparse_model="stub/sparse", index_backend="ondisk"
+    )
+    engine = RagEngine(config, model=StubModel())
+    with pytest.raises(ValueError, match="ondisk"):
+        engine.index_paths([write_corpus(tmp_path / "corpus")])
+
 class _FakeIndex:
     def __init__(self, ids):
         self._ids = set(ids)

@@ -213,6 +213,19 @@ class EngineConfig:
     ann: bool = field(default_factory=lambda: _env_bool("ANN", False))
     ann_nprobe: int = field(default_factory=lambda: _env_int("ANN_NPROBE", 16))
     lexical_weight: float = field(default_factory=lambda: _env_float("LEXICAL_WEIGHT", 1.0))
+    # A learned-sparse (SPLADE-style) third channel. Unset means the engine indexes and
+    # searches exactly as before. Measured on the BEIR harness it beats the stemmed lexical
+    # channel by +0.03 to +0.14 and is the first channel addition that lifts the fusion
+    # consistently (+0.004 to +0.023), at the cost of one extra model at index and query
+    # time. Indexing encodes every chunk with it, so it is opt-in and rebuilds are slower.
+    sparse_model: str = field(default_factory=lambda: _env("SPARSE_MODEL") or "")
+    sparse_weight: float = field(default_factory=lambda: _env_float("SPARSE_WEIGHT", 1.0))
+    sparse_top_k: int = field(default_factory=lambda: _env_int("SPARSE_TOP_K", 128))
+    sparse_batch_texts: int = field(default_factory=lambda: _env_int("SPARSE_BATCH_TEXTS", 16))
+
+    @property
+    def sparse_enabled(self) -> bool:
+        return bool((self.sparse_model or "").strip())
     # Near-duplicate suppression on the fused candidate list. Chunk overlap makes a
     # strongly-matching passage arrive several times and spend several recall slots, which
     # measured on MultiHop-RAG is where the multi-hop MAP@10 loss lives: skipping a fused

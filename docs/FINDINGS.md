@@ -17,6 +17,7 @@ are what stops the next pass from re-trying them.
 | Cross-encoder × coverage | Coverage over the CE-scored pool beats a full CE re-sort on the full protocol: MAP@10 **0.2948 → 0.3165**, Hits@4 0.7348 → 0.7694; `auto` enables 0.7 when a CE is configured | [findings-rerank-selection.md](findings-rerank-selection.md) |
 | Fused coverage objective | Dropping the dense-gram redundancy term at λ=0.5: MAP@10 0.2835 → **0.2850**, Hits@4 0.7197 → 0.7326 | [findings-rerank-selection.md](findings-rerank-selection.md) |
 | Fusion constant | The engine fused at `k=60` while every documented MultiHop number used `k=5`; `FUSION_K` now defaults to 5 (MAP@10 +0.0040 [+0.0012, +0.0069], p=0.008; BEIR +0.004–0.009) | [findings-fusion-k.md](findings-fusion-k.md) |
+| Learned-sparse channel | SPLADE-style sparse now ships as a third engine channel: measured +0.03–0.14 over BM25 alone and +0.004–0.023 over two-channel fusion on BEIR (SciFact 0.741 → **0.745**, NFCorpus 0.367 → **0.372**, ArguAna 0.568 → **0.591**); opt-in via `SPARSE_MODEL` | [findings-sparse-channel.md](findings-sparse-channel.md) |
 | Second-stage threshold | The engine cut a substituted cross-encoder at Laya's 0.5; `RERANK_THRESHOLD` now keeps the pool, worth **+0.0801 MAP@10** [+0.0674, +0.0936] (p=0.0002) and +0.30 Hits@10 | [findings-rerank-threshold.md](findings-rerank-threshold.md) |
 | Semantic cache | Bounded LRU of query embeddings (`QUERY_CACHE_SIZE`); repeated questions skip their one dense cost, and it caches vectors, never results | [findings-lexical-backend.md](findings-lexical-backend.md) |
 | Lexical backend | Eager BM25 has **identical ranking** (200/200 and 300/300 parity) at **11–13×** the query speed and **~5×** smaller index | [findings-lexical-backend.md](findings-lexical-backend.md) |
@@ -46,6 +47,9 @@ are what stops the next pass from re-trying them.
 ## Method notes worth carrying forward
 
 - **Pin the chunking constant.** Up to +0.067 Hits@10 comes from an undeclared overlap.
+- **Test the caller, not just the callee.** `FUSION_K` was fixed in `_fuse` and the config
+  while the primary `query()` call site kept not passing it; a spy on `_fuse` from `query()`
+  is what proves the wiring. The same miss hit the coverage-redundancy flag.
 - **Report the pool-reorder ceiling and fact recall** beside any reranking result, so a
   selection gain is never confused with a recall gain.
 - **Use grouped splits** for transfer claims; a random half reuses the same question types.
