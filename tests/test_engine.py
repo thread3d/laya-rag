@@ -547,3 +547,11 @@ def test_fuse_respects_the_rrf_constant():
 
     assert order0[0] == "a"
     assert order5[0] == "m"
+
+
+def test_engine_builds_the_lexical_channel_with_the_configured_bm25_parameters(tmp_path):
+    config = make_config(tmp_path, bm25_k1=0.9, bm25_b=0.4)
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    assert engine.lexical.k1 == 0.9
+    assert engine.lexical.b == 0.4

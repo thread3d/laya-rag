@@ -71,6 +71,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                     help="cross-encoder used as the second stage")
     ap.add_argument("--rerank-coverage-lambda", type=float, default=None,
                     help="explicit coverage weight; omit to use the engine's auto default")
+    ap.add_argument("--k1", type=float, default=None, help="BM25 k1 (harness baseline 0.9)")
+    ap.add_argument("--b", type=float, default=None, dest="b_bm25",
+                    help="BM25 b (harness baseline 0.4)")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None, help="cap the number of test queries")
     ap.add_argument("--out", default=str(ROOT / "eval" / "engine-beir"))
@@ -99,6 +102,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ["LAYA_RAG_RERANK_COVERAGE_LAMBDA"] = str(args.rerank_coverage_lambda)
     else:
         os.environ.pop("LAYA_RAG_RERANK_COVERAGE_LAMBDA", None)
+    if args.k1 is not None:
+        os.environ["LAYA_RAG_BM25_K1"] = str(args.k1)
+    else:
+        os.environ.pop("LAYA_RAG_BM25_K1", None)
+    if args.b_bm25 is not None:
+        os.environ["LAYA_RAG_BM25_B"] = str(args.b_bm25)
+    else:
+        os.environ.pop("LAYA_RAG_BM25_B", None)
     if args.sparse:
         os.environ["LAYA_RAG_SPARSE_MODEL"] = args.sparse_model
     else:

@@ -357,3 +357,13 @@ def test_the_engine_orders_evidence_by_an_injected_cross_encoder(tmp_path):
     assert "refund" in result.passages[0]["path"]
     # Only the cross-encoder's above-threshold passages survive.
     assert all("refund" in passage["path"] for passage in result.passages)
+
+
+def test_bm25_parameters_default_and_serialise():
+    from laya_rag.config import EngineConfig
+
+    config = EngineConfig()
+    assert config.bm25_k1 == 1.2
+    assert config.bm25_b == 0.75
+    assert config.as_dict()["bm25_k1"] == 1.2
+    assert config.as_dict()["bm25_b"] == 0.75

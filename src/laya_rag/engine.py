@@ -747,11 +747,15 @@ class RagEngine:
         # The lexical channel is rebuilt from the full chunk set so it always
         # matches the vector index exactly.
         if self.config.resolved_lexical_backend == "eager":
-            lexical = EagerBM25Index(stem=self.config.lexical_stem)
+            lexical = EagerBM25Index(
+                stem=self.config.lexical_stem, k1=self.config.bm25_k1, b=self.config.bm25_b
+            )
             lexical.build(index.chunks)
             lexical.save(self.config.index_dir / EAGER_LEXICAL_FILE)
         else:
-            lexical = BM25Index(stem=self.config.lexical_stem)
+            lexical = BM25Index(
+                stem=self.config.lexical_stem, k1=self.config.bm25_k1, b=self.config.bm25_b
+            )
             lexical.build(index.chunks)
             lexical.save(self.config.index_dir / LEXICAL_FILE)
         self._lexical = lexical
@@ -813,7 +817,10 @@ class RagEngine:
 
         save_started = time.perf_counter()
         _progress(progress, "saving", chunks=len(chunks), embedded=len(chunks))
-        lexical = OnDiskBM25(bm25_dir, stem=self.config.lexical_stem)
+        lexical = OnDiskBM25(
+            bm25_dir, stem=self.config.lexical_stem,
+            k1=self.config.bm25_k1, b=self.config.bm25_b,
+        )
         lexical.build((chunk.chunk_id, chunk.index_text) for chunk in chunks)
         report.save_seconds = time.perf_counter() - save_started
 

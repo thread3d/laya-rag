@@ -304,6 +304,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `CONTEXT_PREFIX` | `false` | attach a structural breadcrumb (file name, first heading, first line) that the lexical and dense channels index but the returned evidence does not contain; requires a re-index. Measured MRR 0.64 → 0.83 on the vendored docs |
 | `LEXICAL_STEM` | `true` | English stemming for the lexical channel; `false` keeps exact terms only |
 | `LEXICAL_BACKEND` | `bm25` | `bm25` or `eager`; `eager` precomputes posting weights and scores with NumPy, with byte-identical rankings — measured 11–13× faster queries and ~5× smaller index at 20k docs |
+| `BM25_K1` / `BM25_B` | `1.2` / `0.75` | BM25 saturation and length normalisation (Lucene's defaults). The published BEIR/Anserini baseline is `0.9` / `0.4`; at the engine level the two are indistinguishable on SciFact (p=0.45), so the default stands and these exist to reproduce a baseline exactly or tune per corpus |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
 | `RERANK_MIN_DOCS` | `0` | guarantee that the first N kept passages are N distinct documents (prefix diversity for an evidence bundle). It left document-level nDCG exactly unchanged on 300 SciFact queries and can add documents a shorter `top_k` would cut; `0` keeps the pure passage order |
 | `QUERY_CACHE_SIZE` | `128` | recent query embeddings cached in memory, so a repeated question skips its one dense cost; `0` disables it (vectors only, never results) |

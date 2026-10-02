@@ -45,6 +45,7 @@ are what stops the next pass from re-trying them.
 | Coverage and dedup as defaults | Both fused-pool rewriters are **corpus-shape instruments**: coverage costs 0.02–0.08 nDCG@10 and dedup 0.002–0.51 on every BEIR dataset measured (all significant; ArguAna 0.560 → 0.087), so both stay off by default | [findings-coverage-scope.md](findings-coverage-scope.md) |
 | Gate threshold and calibration | A threshold learned per split averages 0.470 but buys **+0.0004** balanced accuracy (the optimum is flat), and temperature scaling makes ECE/Brier/NLL worse — so `0.5` and the raw probability stay | [findings-gate-calibration.md](findings-gate-calibration.md) |
 | Document quota as a ranking gain | `RERANK_MIN_DOCS` is **exactly neutral** on document-level nDCG (identical per-query series over 300 SciFact queries) — it guarantees prefix diversity, not a better ranking; it stays off by default | [findings-document-quota.md](findings-document-quota.md) |
+| BM25 parameters | The engine ran Lucene `k1=1.2, b=0.75` while every BEIR row used Anserini `0.9/0.4`, and could not be configured; at the engine level the two are **indistinguishable** (0.7264 vs 0.7238, p=0.45), so the default stays and `BM25_K1`/`BM25_B` now exist to reproduce the baseline exactly | [findings-bm25-parameters.md](findings-bm25-parameters.md) |
 | RGB negative rejection | Not adapted: no clean no-answer label in the English files and a judge-based official metric | [../BENCHMARKS.md](../BENCHMARKS.md) |
 
 ## Method notes worth carrying forward

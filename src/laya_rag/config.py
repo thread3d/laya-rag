@@ -223,6 +223,13 @@ class EngineConfig:
     ann: bool = field(default_factory=lambda: _env_bool("ANN", False))
     ann_nprobe: int = field(default_factory=lambda: _env_int("ANN_NPROBE", 16))
     lexical_weight: float = field(default_factory=lambda: _env_float("LEXICAL_WEIGHT", 1.0))
+    # BM25's term-frequency saturation and length normalisation. The defaults are Lucene's
+    # (and match ``laya_rag.lexical.K1/B``); the published BM25 baselines on BEIR/Anserini
+    # use 0.9/0.4, which is what tools/beir.py ran — so the engine's lexical channel could
+    # not previously reproduce the harness rows it was compared against. Exposed to measure
+    # and, if warranted, align.
+    bm25_k1: float = field(default_factory=lambda: _env_float("BM25_K1", 1.2))
+    bm25_b: float = field(default_factory=lambda: _env_float("BM25_B", 0.75))
     # A learned-sparse (SPLADE-style) third channel. Unset means the engine indexes and
     # searches exactly as before. Measured on the BEIR harness it beats the stemmed lexical
     # channel by +0.03 to +0.14 and is the first channel addition that lifts the fusion
