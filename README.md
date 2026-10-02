@@ -925,7 +925,7 @@ laya-rag/
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
 ├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py,
-│                          beir_ablate.py, beir_routing.py, ann_bench.py, sparse.py,
+│                          beir_ablate.py, beir_routing.py, engine_beir.py, ann_bench.py, sparse.py,
 │                          finetune.py, ondisk.py, compare.py (cross-system tables,
 │                          error bars, charts), diagram.py (the architecture diagram),
 │                          the multiHop harnesses (multihop_official.py,

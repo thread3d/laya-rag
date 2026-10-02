@@ -18,6 +18,7 @@ are what stops the next pass from re-trying them.
 | Fused coverage objective | Dropping the dense-gram redundancy term at λ=0.5: MAP@10 0.2835 → **0.2850**, Hits@4 0.7197 → 0.7326 | [findings-rerank-selection.md](findings-rerank-selection.md) |
 | Fusion constant | The engine fused at `k=60` while every documented MultiHop number used `k=5`; `FUSION_K` now defaults to 5 (MAP@10 +0.0040 [+0.0012, +0.0069], p=0.008; BEIR +0.004–0.009) | [findings-fusion-k.md](findings-fusion-k.md) |
 | Learned-sparse channel | SPLADE-style sparse now ships as a third engine channel: measured +0.03–0.14 over BM25 alone and +0.004–0.023 over two-channel fusion on BEIR (SciFact 0.741 → **0.745**, NFCorpus 0.367 → **0.372**, ArguAna 0.568 → **0.591**); opt-in via `SPARSE_MODEL` | [findings-sparse-channel.md](findings-sparse-channel.md) |
+| Engine-level BEIR | The engine itself scores SciFact nDCG@10 **0.7264** and **0.7443** with sparse (**+0.0179 [+0.0028, +0.0337]**, p=0.025) — the channel's gain transfers and is larger than the replica's, while the `tools/beir.py` replica **overstates the engine by 0.0144** | [findings-engine-parity.md](findings-engine-parity.md) |
 | Second-stage threshold | The engine cut a substituted cross-encoder at Laya's 0.5; `RERANK_THRESHOLD` now keeps the pool, worth **+0.0801 MAP@10** [+0.0674, +0.0936] (p=0.0002) and +0.30 Hits@10 | [findings-rerank-threshold.md](findings-rerank-threshold.md) |
 | Semantic cache | Bounded LRU of query embeddings (`QUERY_CACHE_SIZE`); repeated questions skip their one dense cost, and it caches vectors, never results | [findings-lexical-backend.md](findings-lexical-backend.md) |
 | Lexical backend | Eager BM25 has **identical ranking** (200/200 and 300/300 parity) at **11–13×** the query speed and **~5×** smaller index | [findings-lexical-backend.md](findings-lexical-backend.md) |
@@ -50,6 +51,9 @@ are what stops the next pass from re-trying them.
 - **Test the caller, not just the callee.** `FUSION_K` was fixed in `_fuse` and the config
   while the primary `query()` call site kept not passing it; a spy on `_fuse` from `query()`
   is what proves the wiring. The same miss hit the coverage-redundancy flag.
+- **A replica is not the system.** `tools/beir.py` reimplements the channels and scores whole
+  documents, overstating the real engine by **0.0144** on SciFact; `tools/engine_beir.py`
+  runs the engine itself when a claim is about the engine.
 - **Report the pool-reorder ceiling and fact recall** beside any reranking result, so a
   selection gain is never confused with a recall gain.
 - **Use grouped splits** for transfer claims; a random half reuses the same question types.
