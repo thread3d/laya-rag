@@ -38,6 +38,22 @@ about direction and safety rather than a new win:
    used only to gate the handful of kept passages. Configuring a 33M second stage therefore
    buys a large latency reduction as well as a ranking control.
 
+## Re-verified under the corpus-aware chunking default
+
+Round 35 made `CHUNK_CHARS_AUTO` the default, which changes passage lengths and therefore the
+work the decision model does — so the safety claim was re-checked on the new index:
+
+| configuration | nDCG@10 | wall time |
+| --- | --- | --- |
+| corpus-aware chunking, no cross-encoder | 0.7417 | 709 s |
+| **corpus-aware chunking + cross-encoder (coverage auto)** | **0.7417** | **167 s** |
+
+Paired: **−0.0000 [−0.0050, +0.0051]**, p=0.99 — identical quality, and **4.3× faster**. The
+speed ratio grew from ~3× (fixed chunking: 204 s against 616 s) because longer passages make
+the model-every-candidate path slower while the cross-encoder path still only gates the kept
+passages. Both conclusions stand on the current default: the auto coverage resolution is safe,
+and a cross-encoder is a large latency option at equal quality.
+
 ## Honest limits
 
 - One dataset, one cross-encoder (`ms-marco-MiniLM-L-6-v2`), 300 queries, and every paired

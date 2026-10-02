@@ -87,6 +87,16 @@ one long-document, both improve, and the derived value can never be smaller than
 default. `CHUNK_CHARS` remains the floor and setting `CHUNK_CHARS_AUTO=false` restores the
 fixed behaviour exactly.
 
+### Compatibility: retrain a persisted answerability gate
+
+The gate reads evidence *shape* — `passage_count`, `log_evidence_chars`,
+`max_passage_coverage`, `coverage_spread`, `pairwise_redundancy` — and all five move when
+chunking does: larger chunks mean fewer, longer passages with different redundancy and
+coverage. A gate trained against a fixed-1200 index is therefore out of distribution under the
+new default even though its feature names still load. **Retrain it**
+(`tools/answerability_train.py`) after changing `CHUNK_CHARS_AUTO` or `CHUNK_CHARS`; nothing in
+the loader can detect the drift, which is why it is written down here.
+
 ### The percentile is not critical (but p90 is the best of those tried)
 
 SciFact's derivation by quantile, and the engine score each produces:
