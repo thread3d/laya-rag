@@ -59,6 +59,10 @@ are what stops the next pass from re-trying them.
 - **A replica is not the system.** `tools/beir.py` reimplements the channels and scores whole
   documents, overstating the real engine by **0.0144** on SciFact; `tools/engine_beir.py`
   runs the engine itself when a claim is about the engine.
+- **Improvements do not compose additively.** The sparse channel is worth **+0.0179** (p=0.025)
+  under fixed chunking but only **+0.0048** (ns) once corpus-aware chunking is the default —
+  both recover the same chunked-representation loss. Report each increment against the current
+  default, never as a sum.
 - **Report the pool-reorder ceiling and fact recall** beside any reranking result, so a
   selection gain is never confused with a recall gain.
 - **Use grouped splits** for transfer claims; a random half reuses the same question types.

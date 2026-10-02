@@ -150,6 +150,12 @@ class EngineConfig:
     chunk_chars_auto_max: int = field(
         default_factory=lambda: _env_int("CHUNK_CHARS_AUTO_MAX", 2000)
     )
+    # Which quantile of the document lengths to derive from. The clamp makes p90 and p95
+    # identical on short documents, while p75 chunks more; the value is heuristic and
+    # swept in docs/findings-chunk-merge.md.
+    chunk_chars_auto_percentile: float = field(
+        default_factory=lambda: _env_float("CHUNK_CHARS_AUTO_PERCENTILE", 0.9)
+    )
     chunk_overlap_chars: int = field(default_factory=lambda: _env_int("CHUNK_OVERLAP_CHARS", 400))
     min_chunk_chars: int = field(default_factory=lambda: _env_int("MIN_CHUNK_CHARS", 80))
     # Keep a document of at most chunk_chars + overlap_chars whole instead of splitting it

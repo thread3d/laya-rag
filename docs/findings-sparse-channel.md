@@ -43,6 +43,30 @@ rejected with a clear error rather than silently ignored.
   passage ranked first for "how long does a refund take" (17.17 vs 4.20 and 0.08) — the
   production encoder, not a stub.
 
+## Interaction with the corpus-aware chunking default
+
+The +0.0179 above was measured under the **fixed 1200/400** chunking that shipped at the
+time. Round 35 made `CHUNK_CHARS_AUTO` the default (SciFact derives 2,000), and the two
+improvements turn out to overlap — both recover part of the same chunked-representation loss:
+
+| configuration | nDCG@10 | sparse's marginal gain |
+| --- | --- | --- |
+| fixed chunking, no sparse | 0.7264 | — |
+| fixed chunking, sparse | 0.7443 | **+0.0179 [+0.0028, +0.0337]**, p=0.025 |
+| corpus-aware chunking, no sparse | 0.7417 | — |
+| **corpus-aware chunking + sparse** | **0.7465** | **+0.0048 [−0.0115, +0.0213]**, p=0.57 |
+
+Both orders help and the combination is the best score measured on this dataset (0.7465), but
+the increments do **not** compose: the sparse channel's marginal contribution falls from a
+significant +0.0179 to a non-significant +0.0048 once documents are no longer split. That is
+the expected shape — a channel that helps by supplying whole-document context has less left to
+supply when the chunking already preserves it.
+
+It does not change the shipping decision: the sparse channel is opt-in and never harmful, and
+corpus-aware chunking is a default that helps whether or not sparse is installed. It does
+change the *claim*: "sparse is worth +0.0179" should be read as "worth up to +0.0179, on a
+fixed-chunking index".
+
 ## Honest limits
 
 - The retrieval numbers above are the **harness's**, measured over whole documents with

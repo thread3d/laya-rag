@@ -376,3 +376,11 @@ def test_chunk_chars_auto_defaults_on_and_serialises():
     assert config.chunk_chars_auto is True
     assert config.chunk_chars_auto_max == 2000
     assert config.as_dict()["chunk_chars_auto"] is True
+
+
+def test_chunk_auto_percentile_defaults_and_serialises():
+    from laya_rag.config import EngineConfig
+
+    config = EngineConfig()
+    assert config.chunk_chars_auto_percentile == 0.9
+    assert config.as_dict()["chunk_chars_auto_percentile"] == 0.9

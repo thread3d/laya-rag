@@ -314,7 +314,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `EMBED_POOLING` | `auto` | `cls` for BGE-family models, `mean` otherwise — BGE is trained with `[CLS]` |
 | `EMBED_QUERY_INSTRUCTION` | `false` | prepend the model's retrieval instruction to queries |
 | `DENSE_WEIGHT` / `LEXICAL_WEIGHT` | `auto` / `1.0` | RRF channel weights; `auto` is `0` for Laya's encoder and `1` for a configured `EMBED_MODEL` |
-| `SPARSE_MODEL` | unset | learned-sparse (SPLADE-style) third channel; measured on BEIR at **+0.03–0.14** over BM25 alone and **+0.004–0.023** over two-channel fusion. Indexing encodes every chunk with it, so it is opt-in and rebuilds are slower |
+| `SPARSE_MODEL` | unset | learned-sparse (SPLADE-style) third channel; measured on BEIR at **+0.03–0.14** over BM25 alone. At the engine level on SciFact it is **+0.0179** (p=0.025) under fixed chunking and **+0.0048** (ns) under the now-default corpus-aware chunking — the two recover overlapping loss, and the combination scores best (0.7465). Indexing encodes every chunk with it, so it is opt-in |
 | `SPARSE_WEIGHT` / `SPARSE_TOP_K` | `1.0` / `128` | its RRF weight and the terms kept per vector |
 | `SPARSE_BATCH_TEXTS` | `16` | texts per encoder batch |
 | `FUSION_K` | `5` | reciprocal-rank-fusion constant for the dense+lexical first stage; lower weights each channel's top hit more heavily. `5` is the measured setting (MultiHop MAP@10 +0.0040 over the historical `60`, BEIR +0.004–0.009) and is what the benchmark harnesses already used |

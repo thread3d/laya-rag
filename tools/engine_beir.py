@@ -89,6 +89,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                          "so later chunks keep the document's context")
     ap.add_argument("--chunk-auto", action="store_true",
                     help="derive the chunk size from the corpus document lengths (p90)")
+    ap.add_argument("--chunk-auto-percentile", type=float, default=None,
+                    help="quantile used by --chunk-auto (default 0.9)")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None, help="cap the number of test queries")
     ap.add_argument("--out", default=str(ROOT / "eval" / "engine-beir"))
@@ -141,6 +143,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ.pop("LAYA_RAG_RETRIEVE_K", None)
     os.environ["LAYA_RAG_CONTEXT_PREFIX"] = "1" if args.context_prefix else "0"
     os.environ["LAYA_RAG_CHUNK_CHARS_AUTO"] = "1" if args.chunk_auto else "0"
+    if args.chunk_auto_percentile is not None:
+        os.environ["LAYA_RAG_CHUNK_CHARS_AUTO_PERCENTILE"] = str(args.chunk_auto_percentile)
+    else:
+        os.environ.pop("LAYA_RAG_CHUNK_CHARS_AUTO_PERCENTILE", None)
     if args.sparse:
         os.environ["LAYA_RAG_SPARSE_MODEL"] = args.sparse_model
     else:

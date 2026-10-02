@@ -692,6 +692,7 @@ class RagEngine:
             chunk_chars = derive_chunk_chars(
                 [len(document.text) for document in loaded.documents],
                 maximum=self.config.chunk_chars_auto_max,
+                percentile=self.config.chunk_chars_auto_percentile,
             )
             report.derived_chunk_chars = chunk_chars
         chunks = chunk_documents(
