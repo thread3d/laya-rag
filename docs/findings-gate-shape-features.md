@@ -48,7 +48,24 @@ is from genuinely new information rather than from giving the linear model more 
   coverage feature would be a different experiment.
 - One hypothesis was tested here after one earlier negative, so no multiplicity correction is
   claimed beyond that.
-- **Not yet shipped.** Promoting them means appending to
-  `laya_rag.answerability.FEATURE_NAMES`, computing them in `extract_features`, and keeping
-  existing nine-feature gate artefacts loadable (name-subset selection) before retraining.
-  Until that lands, no production path changes.
+
+## Shipped
+
+The three features are appended to `laya_rag.answerability.FEATURE_NAMES`,
+`extract_features` computes them, and `LogisticGate` now **selects its columns by name**: a
+persisted nine-feature artefact keeps loading (the names are a prefix of the current vector)
+while a file naming a column this build does not define still fails loudly. A fresh harness
+run against the real checkpoint, re-recorded with all twelve columns, reproduced the table
+above **exactly** — AUC 0.8146 → 0.8290, risk@80 0.4069 → 0.4009 — so the shipped
+implementation is the one that was measured, not a re-derivation.
+
+```sh
+# Record all twelve columns, then compare the nine score features with the full vector
+HF_HUB_OFFLINE=1 .venv/bin/python tools/multihop_gate.py --null-limit 150 --pos-limit 150 \
+    --out eval/benchmarks/multihop-rag/gate-shape.json
+.venv/bin/python tools/answerability_features.py \
+    --features eval/benchmarks/multihop-rag/gate-shape.json --prefix 9 --splits 200
+```
+
+Retraining a deployed gate is the operator's step (`tools/answerability_train.py`); until it
+is retrained, an existing nine-feature artefact simply keeps its old behaviour.

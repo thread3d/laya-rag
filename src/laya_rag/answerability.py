@@ -21,14 +21,17 @@ frequency, so a gate trained on a mostly-answerable or mostly-unanswerable split
 is not dominated by the majority class. Because the intercept is weighted for
 that rebalanced distribution, threshold selection should be done on held-out
 data (see :func:`evaluate_gate`) rather than assumed to be 0.5. The learned
-parameters are stored alongside the feature names, and ``load`` refuses a file
-whose feature list does not match this build, so a stale artefact fails loudly
-instead of silently scoring the wrong columns.
+parameters are stored alongside the feature names, and ``load`` selects those
+columns **by name** from the current vector: a gate trained before the
+evidence-shape features were appended keeps working, while a file naming a
+feature this build does not define fails loudly instead of scoring the wrong
+columns.
 """
 from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -38,8 +41,9 @@ from .lexical import STOPWORDS, tokenize
 
 GATE_VERSION = 1
 
-# The exact column order every vector in this module uses. Changing this list is a
-# breaking change to the persisted artefact, which is why ``load`` checks it.
+# The exact column order every vector in this module uses. Appending is safe: a persisted
+# artefact names its own columns and the gate selects them by name, so a nine-feature gate
+# keeps loading against the longer vector. Removing or reordering is a breaking change.
 FEATURE_NAMES: tuple[str, ...] = (
     "max_relevance",
     "mean_relevance",
@@ -50,7 +54,93 @@ FEATURE_NAMES: tuple[str, ...] = (
     "passage_count",
     "log_evidence_chars",
     "query_term_coverage",
+    # Evidence *shape* signals, appended after the nine score features. Measured on 300
+    # labelled MultiHop queries over 200 stratified splits, adding these three raised the
+    # gate's ROC-AUC 0.8146 -> 0.8290 (+0.0144 [+0.0123, +0.0163], p<0.0001), cut risk@80
+    # 0.4069 -> 0.4009, and lowered AURC/AUGRC, at a non-significant calibration cost
+    # (ECE 0.0650 -> 0.0683, p=0.085). An earlier experiment with *derived* columns of the
+    # nine moved every metric the wrong way, so these are new information, not more
+    # freedom for the linear model.
+    "max_passage_coverage",
+    "coverage_spread",
+    "pairwise_redundancy",
 )
+
+#: Names of the appended evidence-shape features, in :data:`FEATURE_NAMES` order.
+SHAPE_FEATURE_NAMES: tuple[str, ...] = FEATURE_NAMES[-3:]
+
+_SHAPE_TOKEN = re.compile(r"[a-z0-9]+")
+
+
+def _tokens(text: Any) -> set[str]:
+    """Lowercase alphanumeric tokens of length >= 3, the unit the shape features use."""
+    return {token for token in _SHAPE_TOKEN.findall(str(text).lower()) if len(token) >= 3}
+
+
+def _text_of(passage: Any) -> str:
+    """The text of a passage given as an object, a mapping, or a bare string."""
+    if isinstance(passage, str):
+        return passage
+    for attribute in ("text", "passage", "content"):
+        value = getattr(passage, attribute, None)
+        if isinstance(value, str):
+            return value
+    if isinstance(passage, Mapping):
+        for key in ("text", "passage", "content"):
+            if isinstance(passage.get(key), str):
+                return passage[key]
+    return ""
+
+
+def max_passage_coverage(query: str, passages: Sequence[Any]) -> float:
+    """The best single passage's fraction of the query's content terms (0 when empty)."""
+    wanted = _tokens(query)
+    if not wanted:
+        return 0.0
+    best = 0.0
+    for passage in passages or []:
+        best = max(best, len(wanted & _tokens(_text_of(passage))) / len(wanted))
+    return best
+
+
+def coverage_spread(query: str, passages: Sequence[Any]) -> float:
+    """Passages a greedy set cover needs to cover every query term.
+
+    ``0.0`` when the query has no content terms or the evidence covers none of them; a
+    larger value means the answer is spread thin across passages. Deterministic.
+    """
+    remaining = _tokens(query)
+    if not remaining:
+        return 0.0
+    texts = list(passages or [])
+    used = 0
+    while remaining and texts:
+        best_index, best_gain = None, 0
+        for index, passage in enumerate(texts):
+            gain = len(remaining & _tokens(_text_of(passage)))
+            if gain > best_gain:
+                best_index, best_gain = index, gain
+        if best_index is None:
+            break
+        remaining -= _tokens(_text_of(texts[best_index]))
+        texts.pop(best_index)
+        used += 1
+    return float(used)
+
+
+def pairwise_redundancy(passages: Sequence[Any]) -> float:
+    """Mean Jaccard overlap between every pair of passages (0 below two passages)."""
+    texts = [_tokens(_text_of(passage)) for passage in passages or []]
+    if len(texts) < 2:
+        return 0.0
+    total, pairs = 0.0, 0
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+            union = texts[i] | texts[j]
+            if union:
+                total += len(texts[i] & texts[j]) / len(union)
+            pairs += 1
+    return total / pairs if pairs else 0.0
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -146,6 +236,9 @@ def extract_features(query: str, passages: Sequence[Any]) -> np.ndarray:
             float(count),
             math.log1p(total_chars),
             _query_term_coverage(query, evidence),
+            max_passage_coverage(query, texts),
+            coverage_spread(query, texts),
+            pairwise_redundancy(texts),
         ],
         dtype=np.float64,
     )
@@ -175,11 +268,19 @@ class LogisticGate:
         scale: Any = None,
         coef: Any = None,
         intercept: float = 0.0,
+        *,
+        feature_names: Sequence[str] | None = None,
     ) -> None:
         self._mean = None if mean is None else np.asarray(mean, dtype=np.float64)
         self._scale = None if scale is None else np.asarray(scale, dtype=np.float64)
         self._coef = None if coef is None else np.asarray(coef, dtype=np.float64)
         self._intercept = float(intercept)
+        # The columns this gate actually uses, in its own order. A persisted artefact from
+        # an earlier build names fewer columns; keeping the names lets it select them from
+        # the current vector instead of failing or silently scoring the wrong ones.
+        self.feature_names: tuple[str, ...] = (
+            tuple(feature_names) if feature_names is not None else FEATURE_NAMES
+        )
 
     # -- training --------------------------------------------------------
     def fit(
@@ -218,6 +319,15 @@ class LogisticGate:
             )
 
         n_samples, n_features = X.shape
+        # A matrix whose width matches a prefix of FEATURE_NAMES is named accordingly (so
+        # it persists and reloads); anything wider — an experiment over derived columns —
+        # gets placeholder names it cannot persist, which is what the load-time name check
+        # is for.
+        self.feature_names = (
+            FEATURE_NAMES[:n_features]
+            if n_features <= len(FEATURE_NAMES)
+            else tuple(f"feature_{index}" for index in range(n_features))
+        )
         mean = X.mean(axis=0)
         std = X.std(axis=0)
         # A constant column has no scale to divide by; leaving it at 1 means it
@@ -260,11 +370,23 @@ class LogisticGate:
             X = X.reshape(1, -1)
         if X.ndim != 2:
             raise ValueError(f"X must be 1-D or 2-D, got shape {X.shape}")
-        if X.shape[1] != self._coef.shape[0]:
+        if X.shape[1] == len(self.feature_names):
+            selected = X
+        elif X.shape[1] == len(FEATURE_NAMES):
+            # A full-width vector from ``extract_features``: take the columns this gate
+            # named, in the gate's order.
+            indices = [FEATURE_NAMES.index(name) for name in self.feature_names]
+            selected = X[:, indices]
+        else:
             raise ValueError(
-                f"X has {X.shape[1]} features but the gate expects {self._coef.shape[0]}"
+                f"X has {X.shape[1]} features but the gate expects "
+                f"{len(self.feature_names)} (or the full {len(FEATURE_NAMES)})"
             )
-        return (X - self._mean) / self._scale
+        if selected.shape[1] != self._coef.shape[0]:
+            raise ValueError(
+                f"X has {selected.shape[1]} features but the gate expects {self._coef.shape[0]}"
+            )
+        return (selected - self._mean) / self._scale
 
     def predict_proba(self, X: Any) -> np.ndarray:
         """Return ``P(answerable)`` for each row of ``X`` as a 1-D array."""
@@ -288,7 +410,7 @@ class LogisticGate:
         target.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "version": GATE_VERSION,
-            "feature_names": list(self.FEATURE_NAMES),
+            "feature_names": list(self.feature_names),
             "mean": self._mean.tolist(),
             "scale": self._scale.tolist(),
             "coef": self._coef.tolist(),
@@ -310,18 +432,23 @@ class LogisticGate:
                 f"(expected {GATE_VERSION}); retrain the gate"
             )
         names = payload.get("feature_names")
-        if list(names or []) != list(FEATURE_NAMES):
+        known = set(FEATURE_NAMES)
+        if names is None or not names or any(name not in known for name in names):
+            unknown = [name for name in (names or []) if name not in known]
             raise ValueError(
-                "answerability gate feature names do not match this build; "
-                "retrain the gate"
+                "answerability gate feature names are not known to this build "
+                f"({unknown or names!r}); retrain the gate"
             )
+        if len(set(names)) != len(names):
+            raise ValueError("answerability gate feature names contain duplicates; retrain")
         gate = cls(
             mean=payload["mean"],
             scale=payload["scale"],
             coef=payload["coef"],
             intercept=payload.get("intercept", 0.0),
+            feature_names=names,
         )
-        width = len(FEATURE_NAMES)
+        width = len(names)
         if any(array.shape != (width,) for array in (gate._mean, gate._scale, gate._coef)):
             raise ValueError(
                 f"answerability gate parameters are not {width}-dimensional; "
@@ -331,7 +458,7 @@ class LogisticGate:
 
     def __repr__(self) -> str:
         fitted = "fitted" if self._coef is not None else "unfitted"
-        return f"LogisticGate(features={len(self.FEATURE_NAMES)}, {fitted})"
+        return f"LogisticGate(features={len(self.feature_names)}, {fitted})"
 
 
 def roc_auc(y_true: Any, scores: Any) -> float:

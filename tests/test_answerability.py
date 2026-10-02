@@ -26,7 +26,14 @@ EXPECTED_FEATURES = (
     "passage_count",
     "log_evidence_chars",
     "query_term_coverage",
+    "max_passage_coverage",
+    "coverage_spread",
+    "pairwise_redundancy",
 )
+
+#: The nine score features every earlier artefact names, and the shape features appended
+#: after them.
+SCORE_FEATURES = EXPECTED_FEATURES[:9]
 
 
 @dataclass
@@ -59,7 +66,7 @@ def _separable_dataset(seed: int = 7, noise: float = 0.15) -> tuple[np.ndarray, 
 
 def test_feature_names_are_documented_and_ordered():
     assert FEATURE_NAMES == EXPECTED_FEATURES
-    assert len(FEATURE_NAMES) == 9
+    assert len(FEATURE_NAMES) == 12
     assert LogisticGate.FEATURE_NAMES is FEATURE_NAMES
     assert len(set(FEATURE_NAMES)) == len(FEATURE_NAMES)
 
@@ -87,6 +94,34 @@ def test_extract_features_length_and_ordering():
     assert features[_feature("passage_count")] == pytest.approx(3.0)
     assert features[_feature("log_evidence_chars")] == pytest.approx(math.log1p(14))
     assert features[_feature("query_term_coverage")] == pytest.approx(1.0)
+
+    # Evidence-shape features, appended after the nine score features. No single passage
+    # holds both query terms, so coverage spreads across two of them.
+    assert features[_feature("max_passage_coverage")] == pytest.approx(0.5)
+    assert features[_feature("coverage_spread")] == pytest.approx(2.0)
+    assert features[_feature("pairwise_redundancy")] == pytest.approx(0.0)
+
+
+def test_shape_features_measure_a_distributed_answer():
+    passages = [
+        _Passage("alpha only", relevance=0.5, recall_score=1.0, path="/a.md"),
+        _Passage("beta only", relevance=0.5, recall_score=1.0, path="/b.md"),
+    ]
+    features = extract_features("alpha beta gamma", passages)
+    assert features[_feature("max_passage_coverage")] == pytest.approx(1 / 3)
+    # Two passages cover two of three terms; the third is absent from the evidence. They
+    # share only the word "only", so Jaccard is 1/3 rather than 0.
+    assert features[_feature("coverage_spread")] == pytest.approx(2.0)
+    assert features[_feature("pairwise_redundancy")] == pytest.approx(1 / 3)
+
+
+def test_shape_features_report_redundant_evidence():
+    passages = [
+        _Passage("refund policy details", relevance=0.5, recall_score=1.0, path="/a.md"),
+        _Passage("refund policy details", relevance=0.5, recall_score=1.0, path="/b.md"),
+    ]
+    features = extract_features("refund policy details", passages)
+    assert features[_feature("pairwise_redundancy")] == pytest.approx(1.0)
 
 
 def test_extract_features_uses_chunk_id_when_path_missing():
@@ -259,6 +294,36 @@ def test_load_rejects_unknown_version(tmp_path):
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError):
         LogisticGate.load(path)
+
+
+def test_a_nine_feature_gate_still_loads_and_selects_by_name(tmp_path):
+    """An artefact trained before the shape features existed must keep predicting."""
+    X, y = _separable_dataset()
+    X9 = X[:, :9]
+    gate = LogisticGate().fit(X9, y)
+    assert gate.feature_names == SCORE_FEATURES
+
+    path = tmp_path / "gate9.json"
+    gate.save(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["feature_names"] == list(SCORE_FEATURES)
+
+    loaded = LogisticGate.load(path)
+    assert loaded.feature_names == SCORE_FEATURES
+    # The full-width vector selects the same nine columns, in the gate's order.
+    np.testing.assert_allclose(
+        loaded.predict_proba(X), gate.predict_proba(X9), rtol=1e-9, atol=1e-12
+    )
+    np.testing.assert_allclose(
+        loaded.predict_proba(X9), gate.predict_proba(X9), rtol=1e-9, atol=1e-12
+    )
+
+
+def test_a_gate_rejects_a_vector_of_the_wrong_width(tmp_path):
+    X, y = _separable_dataset()
+    gate = LogisticGate().fit(X, y)
+    with pytest.raises(ValueError, match="features"):
+        gate.predict_proba(X[:, :5])
 
 
 # -- metrics ---------------------------------------------------------------

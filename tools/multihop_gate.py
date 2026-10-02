@@ -19,7 +19,6 @@ sys.path.insert(0, str(ROOT / 'src')); sys.path.insert(0, str(ROOT / 'tools'))
 from laya_rag.answerability import FEATURE_NAMES, extract_features  # noqa: E402
 from laya_rag.config import EngineConfig          # noqa: E402
 from laya_rag.engine import RagEngine             # noqa: E402
-from gate_extra_features import EXTRA_NAMES, extra_features  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--null-limit', type=int, default=None)
@@ -65,11 +64,9 @@ def run(group, label, answerable_label):
             'measured': r.answerability_measured,
             'label': answerable_label,
             'question_type': x.get('question_type'),
+            # All twelve columns, including the evidence-shape features appended to
+            # FEATURE_NAMES, so the trainer and any comparison see one vector.
             'features': dict(zip(FEATURE_NAMES, features.tolist())),
-            # Experimental evidence-shape signals, recorded beside the shipped nine so a
-            # later comparison can decide whether they earn a production change. Additive:
-            # the trainer ignores keys it does not know.
-            'extra': dict(zip(EXTRA_NAMES, extra_features(x['query'], r.passages).tolist())),
         })
         if n == 4:
             print(f'  ~{ (time.perf_counter()-t)/(n+1):.2f}s per query', flush=True)

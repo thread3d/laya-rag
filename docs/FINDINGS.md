@@ -22,6 +22,7 @@ are what stops the next pass from re-trying them.
 | Lexical backend | Eager BM25 has **identical ranking** (200/200 and 300/300 parity) at **11–13×** the query speed and **~5×** smaller index | [findings-lexical-backend.md](findings-lexical-backend.md) |
 | Evaluation rigor | Paired permutation + BH-FDR (16/32 cells survive), a minimum-detectable-effect column (MAP@10 MDE ≈ 0.008–0.011 on 2,255 queries), and a selective-prediction suite: the gate's false-accept rate is 40.7% at 80% coverage vs the scalar's 51.0% | [findings-evaluation.md](findings-evaluation.md) |
 | Answerability transfer | The 0.815 AUC is **within-question-type**; leave-one-type-out gives **0.7666** [0.6712, 0.8267], worst on comparison questions (0.6640) | [findings-evaluation.md](findings-evaluation.md) |
+| Evidence-shape gate features | Three appended raw signals (max single-passage coverage, coverage spread, pairwise redundancy) improve the gate significantly on five of six metrics: AUC 0.8146 → **0.8290**, risk@80 0.4069 → **0.4009**; old nine-feature artefacts still load by name | [findings-gate-shape-features.md](findings-gate-shape-features.md) |
 | Trust tiers + tenant ACL | Deterministic path tiers and a per-tenant allow-list enforce isolation fail-closed; `adjudicate_claims` applies the same filter as `query` | [findings-trust.md](findings-trust.md) |
 | Adversarial audit | Nine deterministic checks (poison exclusion, gold retention, negative rejection, injection flags, tenant isolation) run in `make adversarial-audit --check` | [findings-adversarial-audit.md](findings-adversarial-audit.md) |
 | Structural context prefix | Indexing a breadcrumb lifts MRR **0.6429 → 0.8333** on the vendored docs, with no query worse | [findings-context-prefix.md](findings-context-prefix.md) |
@@ -40,12 +41,6 @@ are what stops the next pass from re-trying them.
 | Widening `RETRIEVE_K` for the CE path | A depth-100 pool is not significantly better than depth 20 for CE or coverage (all MAP deltas p>0.3), so the 5× scoring cost was not taken | [findings-rerank-selection.md](findings-rerank-selection.md) |
 | Coverage and dedup as defaults | Both fused-pool rewriters are **corpus-shape instruments**: coverage costs 0.02–0.08 nDCG@10 and dedup 0.002–0.51 on every BEIR dataset measured (all significant; ArguAna 0.560 → 0.087), so both stay off by default | [findings-coverage-scope.md](findings-coverage-scope.md) |
 | RGB negative rejection | Not adapted: no clean no-answer label in the English files and a judge-based official metric | [../BENCHMARKS.md](../BENCHMARKS.md) |
-
-## Positive candidates not yet shipped
-
-| idea | evidence | document |
-| --- | --- | --- |
-| Evidence-shape gate features | Three new raw signals (max single-passage coverage, coverage spread, pairwise redundancy) improve the gate significantly on five of six metrics: AUC 0.8146 → **0.8290**, risk@80 0.4069 → **0.4009**, at a non-significant calibration cost. Needs a `FEATURE_NAMES` format change and a retrain | [findings-gate-shape-features.md](findings-gate-shape-features.md) |
 
 ## Method notes worth carrying forward
 

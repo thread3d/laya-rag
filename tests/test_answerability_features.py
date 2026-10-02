@@ -119,3 +119,28 @@ def test_paired_across_splits_reports_a_positive_paired_delta():
     paired = feat.paired_across_splits(base, augmented, samples=500)
     assert paired["auc"]["delta"] == pytest.approx(0.1, abs=1e-9)
     assert paired["auc"]["ci_low"] > 0.0
+
+
+def test_prefix_mode_compares_the_first_n_columns_with_the_full_vector(tmp_path):
+    import json
+
+    from laya_rag.answerability import FEATURE_NAMES
+
+    rng = np.random.default_rng(0)
+    rows = {"null": [], "positive": []}
+    for group, label in (("null", 0), ("positive", 1)):
+        for _ in range(20):
+            values = {name: float(rng.normal(label, 0.4)) for name in FEATURE_NAMES}
+            rows[group].append({"features": values, "label": label})
+    path = tmp_path / "gate12.json"
+    path.write_text(json.dumps(rows), encoding="utf-8")
+
+    code = feat.main([
+        "--features", str(path), "--prefix", "9", "--splits", "3",
+        "--out", str(tmp_path / "prefix-out"),
+    ])
+
+    assert code == 0
+    payload = json.loads((tmp_path / "prefix-out.json").read_text(encoding="utf-8"))
+    assert payload["derived_names"] == list(FEATURE_NAMES[9:])
+    assert "paired" in payload and "auc" in payload["paired"]

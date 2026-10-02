@@ -46,9 +46,15 @@ DERIVED: dict[str, Any] = {
 
 
 def augment(base: np.ndarray) -> np.ndarray:
-    """Append the :data:`DERIVED` columns to a base matrix in ``FEATURE_NAMES`` order."""
+    """Append the :data:`DERIVED` columns to a base matrix in ``FEATURE_NAMES`` order.
+
+    The derived columns are functions of the **nine score features**, so only those are
+    named; a 12-wide base (with the evidence-shape features) still derives from its first
+    nine columns.
+    """
     base = np.asarray(base, dtype=np.float64)
-    columns = {name: base[:, index] for index, name in enumerate(FEATURE_NAMES)}
+    score_names = FEATURE_NAMES[:9]
+    columns = {name: base[:, index] for index, name in enumerate(score_names)}
     extra = np.column_stack([function(columns) for function in DERIVED.values()])
     return np.column_stack([base, extra])
 
@@ -137,6 +143,10 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--extras", action="store_true",
                     help="compare against the recorded evidence-shape extras from "
                          "gate_extra_features.py instead of the derived columns")
+    ap.add_argument("--prefix", type=int, default=None,
+                    help="base arm is the first N columns and augmented is every column; "
+                         "use 9 to compare the nine score features against the full "
+                         "production vector")
     ap.add_argument("--splits", type=int, default=200)
     ap.add_argument("--seed", type=int, default=17)
     ap.add_argument("--out", default=str(ROOT / "eval" / "answerability-features"))
@@ -147,19 +157,27 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     records = train.load_records(Path(args.features))
     X, y, _head = train.build_matrix(records)
-    if args.extras:
+    if args.prefix:
+        if not 0 < args.prefix < X.shape[1]:
+            raise SystemExit(f"--prefix must be inside 1..{X.shape[1] - 1}, got {args.prefix}")
+        X_base = X[:, : args.prefix]
+        X_aug = X
+        column_names = list(FEATURE_NAMES[args.prefix :])
+    elif args.extras:
         from gate_extra_features import EXTRA_NAMES
 
+        X_base = X
         extras = load_extras(Path(args.features))
         X_aug = np.column_stack([X, extras])
         column_names = list(EXTRA_NAMES)
     else:
+        X_base = X
         X_aug = augment(X)
         column_names = list(DERIVED)
-    print(f"{len(records)} queries; {X.shape[1]} base features, {X_aug.shape[1]} augmented",
+    print(f"{len(records)} queries; {X_base.shape[1]} base features, {X_aug.shape[1]} augmented",
           flush=True)
 
-    base_readings = evaluate_splits(X, y, args.splits, args.seed)
+    base_readings = evaluate_splits(X_base, y, args.splits, args.seed)
     augmented_readings = evaluate_splits(X_aug, y, args.splits, args.seed)
     keys = sorted(base_readings[0]) if base_readings else []
     base = {key: train.summarize([row[key] for row in base_readings]) for key in keys}

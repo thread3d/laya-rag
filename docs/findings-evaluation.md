@@ -91,6 +91,11 @@ stratified held-out splits (mean [2.5%, 97.5%]).
 | ECE (lower better) | **0.0650** [0.0278, 0.1107] | 0.2714 [0.1849, 0.3856] |
 | coverage at the deployed threshold | 0.5409 [0.3531, 0.6600] | 0.6807 [0.6267, 0.7333] |
 
+*(This table is the nine-feature gate. The three appended evidence-shape features raise its
+AUC to 0.8290 and lower risk@80 to 0.4009 — see
+[findings-gate-shape-features.md](findings-gate-shape-features.md); the comparison with the
+scalar is unchanged in direction.)*
+
 **The decision-relevant statement the project could not make before:** at 80% coverage
 the feature gate's selective risk (false-accept rate among accepted queries) is **40.7%**,
 against the scalar's **51.0%**; at 90% coverage the gap is 45.4% vs 54.7%. The gate is also

@@ -37,6 +37,13 @@ feature-*representation* problem that hand-built interactions fix. That is a use
 it closes the "add more signals to the gate" idea and points the effort back at the
 retrieval features themselves (which the gate already reads) rather than at their algebra.
 
+**Later superseded in one direction.** That verdict concerns *derived* columns of the nine.
+A follow-up tested three genuinely **new raw** signals — evidence-shape features (max
+single-passage coverage, coverage spread, pairwise redundancy) — and they improve the gate
+significantly on five of six metrics; see
+[findings-gate-shape-features.md](findings-gate-shape-features.md). The distinction is the
+point: more freedom for the linear model did not help, new information did.
+
 ## Honest limits
 
 - One domain, 300 queries, nine hand-chosen interactions. A nonlinear model (gradient
