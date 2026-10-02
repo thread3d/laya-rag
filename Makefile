@@ -34,11 +34,12 @@ ATOM_ARGS ?=
 LEXICAL_BENCH_ARGS ?=
 ADVERSARIAL_ARGS ?=
 ANSWERABILITY_FEATURES_ARGS ?=
+GATE_CALIBRATION_ARGS ?=
 ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval ondisk bench-lexical adversarial-audit charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration ondisk bench-lexical adversarial-audit charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -73,6 +74,7 @@ help:
 	@echo "beir-routing per-corpus channel selection, measured out of sample"
 	@echo "finetune     in-domain domain adaptation (adapted, not zero-shot)"
 	@echo "distill-eval  distilled student vs zero-shot vs teacher ensemble"
+	@echo "gate-calibration  learned threshold / temperature vs fixed 0.5 and raw"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -214,6 +216,10 @@ multihop-answerability:
 # Does feature engineering improve the gate? Offline comparison on the same splits.
 answerability-features:
 	$(PY) tools/answerability_features.py $(ANSWERABILITY_FEATURES_ARGS)
+
+# Does a learned gate threshold or a fitted temperature beat the fixed 0.5 and raw score?
+gate-calibration:
+	$(PY) tools/gate_calibration.py $(GATE_CALIBRATION_ARGS)
 
 # Leave-one-question-type-out answerability transfer: the strongest split available here.
 multihop-answerability-grouped:

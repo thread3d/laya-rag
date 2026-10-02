@@ -343,6 +343,13 @@ class EngineConfig:
     # 0.0 (keep the pool, let the ordering and top-k decide). Laya's own path still uses
     # RELEVANCE_THRESHOLD.
     rerank_threshold: float = field(default_factory=lambda: _env_float("RERANK_THRESHOLD", 0.0))
+    # The answerability decision boundary. The gate module warns that its class-weighted
+    # intercept makes 0.5 non-optimal and that a threshold should be chosen on held-out
+    # data — but measured on 300 labelled MultiHop queries over 200 stratified splits, a
+    # threshold learned on each training half averaged 0.470 (sd 0.060) and changed
+    # held-out balanced accuracy by +0.0004 (0.7424 -> 0.7428); the optimum is flat. So
+    # 0.5 stays, and no artifact-threshold plumbing was added. See
+    # docs/findings-gate-calibration.md.
     answerability_threshold: float = field(default_factory=lambda: _env_float("ANSWERABILITY_THRESHOLD", 0.5))
     # Optional persisted multi-feature answerability gate (src/laya_rag/answerability.py).
     # The shipped decision is a single scalar that measured at chance out of domain

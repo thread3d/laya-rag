@@ -40,6 +40,7 @@ are what stops the next pass from re-trying them.
 | Atom-level lexical retrieval (MultiHop alone) | Worse than chunk BM25 on every metric; only useful fused, and only for Hits@4 | [findings-atom-index.md](findings-atom-index.md) |
 | Widening `RETRIEVE_K` for the CE path | A depth-100 pool is not significantly better than depth 20 for CE or coverage (all MAP deltas p>0.3), so the 5× scoring cost was not taken | [findings-rerank-selection.md](findings-rerank-selection.md) |
 | Coverage and dedup as defaults | Both fused-pool rewriters are **corpus-shape instruments**: coverage costs 0.02–0.08 nDCG@10 and dedup 0.002–0.51 on every BEIR dataset measured (all significant; ArguAna 0.560 → 0.087), so both stay off by default | [findings-coverage-scope.md](findings-coverage-scope.md) |
+| Gate threshold and calibration | A threshold learned per split averages 0.470 but buys **+0.0004** balanced accuracy (the optimum is flat), and temperature scaling makes ECE/Brier/NLL worse — so `0.5` and the raw probability stay | [findings-gate-calibration.md](findings-gate-calibration.md) |
 | RGB negative rejection | Not adapted: no clean no-answer label in the English files and a judge-based official metric | [../BENCHMARKS.md](../BENCHMARKS.md) |
 
 ## Method notes worth carrying forward
