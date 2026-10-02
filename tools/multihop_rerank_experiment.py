@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import evalkit  # noqa: E402
 from multihop_official import chunk_text  # noqa: E402
 
-from laya_rag.lexical import reciprocal_rank_fusion  # noqa: E402
+from laya_rag.lexical import STOPWORDS, reciprocal_rank_fusion, tokenize  # noqa: E402
 
 ROOT_BENCH = ROOT / "eval" / "benchmarks" / "multihop-rag"
 DEFAULT_CACHE = ROOT_BENCH / "ce-scores"
@@ -128,6 +128,75 @@ def coverage_order(
     return selected
 
 
+def rescue_order(
+    scores: Sequence[float],
+    tokens: Sequence[set],
+    top_k: int,
+    seed_k: int = 3,
+    beta: float = 0.5,
+) -> list[int]:
+    """Bridge-linked second-hop rescue (RESEARCH.md §3.1).
+
+    Keep the strongest ``seed_k`` cross-encoder candidates, then fill the remaining slots
+    with candidates that share *rare* terms with an already-selected seed — the bridge
+    entity — trading some relevance for the low-relevance hop the relevance order would
+    discard. A term's weight is ``1 / df`` within the pool, so a shared generic term
+    counts for almost nothing and a shared name or number counts a lot.
+
+    At each step the score is ``beta * normalized_bridge + (1 - beta) * normalized_ce``,
+    both normalised over the candidates still available. ``beta=0`` is the CE order and
+    ``beta=1`` is pure bridge linkage.
+    """
+    from collections import Counter
+
+    n = len(scores)
+    if n == 0 or top_k <= 0:
+        return []
+    seed_k = max(1, min(seed_k, top_k, n))
+    ce = [i for i in sorted(range(n), key=lambda i: (-float(scores[i]), i))]
+    selected = list(ce[:seed_k])
+    df: Counter = Counter()
+    for candidate_tokens in tokens:
+        df.update(candidate_tokens)
+    seed_tokens: set = set().union(*(tokens[i] for i in selected))
+    remaining = [i for i in range(n) if i not in selected]
+    while len(selected) < top_k and remaining:
+        values = [float(scores[i]) for i in remaining]
+        lo, hi = min(values), max(values)
+        bridges = {
+            i: sum(1.0 / df[term] for term in tokens[i] if term in seed_tokens and df[term] > 0)
+            for i in remaining
+        }
+        bridge_max = max(bridges.values()) if bridges else 0.0
+        best_index, best_score = None, -1e18
+        for i in remaining:
+            ce_norm = (float(scores[i]) - lo) / (hi - lo) if hi > lo else 0.0
+            bridge_norm = bridges[i] / bridge_max if bridge_max > 0.0 else 0.0
+            score = beta * bridge_norm + (1.0 - beta) * ce_norm
+            if score > best_score:
+                best_index, best_score = i, score
+        selected.append(best_index)
+        remaining.remove(best_index)
+        seed_tokens |= tokens[best_index]
+    return selected
+
+
+def rescue_rankings(
+    cache: Mapping[str, Any],
+    tokens_by_query: Mapping[str, Sequence[set]],
+    top_k: int,
+    seed_k: int = 3,
+) -> dict[str, dict[str, list[int]]]:
+    """Rescue strategies at three bridge weights, keyed by strategy then query id."""
+    names = [f"rescue-{beta}" for beta in (0.3, 0.5, 0.7)]
+    out: dict[str, dict[str, list[int]]] = {name: {} for name in names}
+    for q, payload in cache["queries"].items():
+        tokens = tokens_by_query.get(q, [])
+        for beta in (0.3, 0.5, 0.7):
+            out[f"rescue-{beta}"][q] = rescue_order(payload["ce"], tokens, top_k, seed_k, beta)
+    return out
+
+
 def strategy_rankings(cache: Mapping[str, Any], top_k: int, rrf_k: int) -> dict[str, dict[str, list[int]]]:
     """Every strategy's top-k **pool indices**, keyed by strategy then query id.
 
@@ -212,6 +281,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--cache", default=str(DEFAULT_CACHE))
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--rrf-k", type=int, default=60)
+    ap.add_argument("--seed-k", type=int, default=3, help="CE seeds kept before rescue fills")
     ap.add_argument("--samples", type=int, default=1000)
     ap.add_argument("--out", default=str(ROOT_BENCH / "rerank-experiment"))
     return ap.parse_args(argv)
@@ -240,8 +310,18 @@ def main(argv=None) -> int:
         q: gold_matches_for_pool(corpus, payload["pool"], golds[q])
         for q, payload in cache["queries"].items()
     }
+    # Bridge tokens are per chunk, so stem each chunk once and reuse across queries.
+    tokens_of = {
+        doc_id: {t for t in tokenize(text, stem=True) if t not in STOPWORDS}
+        for doc_id, text in corpus.items()
+    }
+    tokens_by_query = {
+        q: [tokens_of[cid] for cid in payload["pool"]]
+        for q, payload in cache["queries"].items()
+    }
 
     rankings = strategy_rankings(cache, args.top_k, args.rrf_k)
+    rankings.update(rescue_rankings(cache, tokens_by_query, args.top_k, args.seed_k))
     per_query: dict[str, dict[str, dict[str, float]]] = {}
     summary: dict[str, dict[str, float]] = {}
     for name, ranking in rankings.items():

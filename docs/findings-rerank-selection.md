@@ -66,6 +66,32 @@ relevance, and the reranker preserves that order (`order="recall"`) instead of r
 by the score. It is off by default, so nothing changes unless it is set; the measured
 setting is **0.7**.
 
+## A negative: the lexical bridge-linked rescue
+
+The diagnostic (§3.1 of `RESEARCH.md`) predicted that the second hop is what the top-10
+discards, and the research proposed a "reasoning-preserving" rescue: keep relevance seeds,
+then readmit low-relevance chunks lexically linked to a seed through the bridge entity.
+The same cache makes that measurable, and on MultiHop-RAG **it does not work**:
+
+| strategy | Hits@10 | Hits@4 | MAP@10 |
+| --- | --- | --- | --- |
+| ce | 0.8600 | 0.7225 | 0.2986 |
+| rescue-0.3 | 0.8025 | 0.7025 | 0.2786 |
+| rescue-0.5 | 0.7725 | 0.6975 | 0.2714 |
+| rescue-0.7 | 0.7550 | 0.6925 | 0.2682 |
+
+Every weight is **significantly worse than the plain cross-encoder** on MAP@10
+(rescue-0.3 −0.0200 [−0.0231, −0.0168], p=0.001; rescue-0.5 and 0.7 larger), and well
+below coverage-0.7 (0.3206). The mechanism is plausible — a candidate sharing a rare term
+with a selected seed is a proxy for the bridge — but on news text the proxy is too noisy:
+shared rare terms are usually topic words, so the rescue spends slots on off-topic
+candidates and drops real evidence. redhop's own caveat (lexical linkage misses paraphrase
+bridges, and retention is not answer quality) is the right reading; a rescue that depends
+on a validated grounding signal cannot be ported as raw term overlap.
+
+`rescue_order` and its three strategies stay in the experiment tool as a recorded negative,
+not in the engine.
+
 ## Honest limits
 
 - This is the **400-query subset**, not the full 2,255-query protocol, and lambda was

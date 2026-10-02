@@ -134,3 +134,47 @@ def test_gold_matches_for_pool_uses_the_benchmark_normalization():
     corpus = {"a": "The quick brown fox", "b": "a slow turtle"}
     matches = exp.gold_matches_for_pool(corpus, ["a", "b"], ["quick brown", "turtle"])
     assert matches == [{0}, {1}]
+
+
+# ── bridge-linked rescue ─────────────────────────────────────────────────
+
+def test_rescue_keeps_ce_seeds_then_readmits_a_bridge_linked_candidate():
+    scores = [0.9, 0.8, 0.2, 0.1, 0.6]
+    tokens = [
+        {"refund", "policy"},
+        {"shipping", "rates"},
+        {"company", "news"},
+        {"policy", "deadline"},   # shares the rare bridge term "policy" with seed 0
+        {"generic", "filler"},
+    ]
+    order = exp.rescue_order(scores, tokens, top_k=3, seed_k=2, beta=0.7)
+    # Seeds are the CE top two; slot 3 goes to the bridge-linked candidate 3, not the
+    # higher-scoring but unrelated candidate 4.
+    assert order[:2] == [0, 1]
+    assert order[2] == 3
+
+
+def test_rescue_with_beta_zero_is_the_ce_order():
+    scores = [0.1, 0.9, 0.5]
+    tokens = [{"a"}, {"b"}, {"c"}]
+    assert exp.rescue_order(scores, tokens, top_k=3, seed_k=1, beta=0.0) == [1, 2, 0]
+
+
+def test_rescue_respects_top_k_and_handles_empty_input():
+    assert exp.rescue_order([], [], top_k=5) == []
+    scores = [0.9, 0.5, 0.1]
+    tokens = [{"a"}, {"b"}, {"c"}]
+    order = exp.rescue_order(scores, tokens, top_k=2, seed_k=1)
+    assert len(order) == 2
+    assert order[0] == 0
+
+
+def test_rescue_rankings_returns_the_three_bridge_weights():
+    cache = {
+        "queries": {"0": {"pool": ["a", "b"], "ce": [0.9, 0.1], "atoms": [[0], [1]]}},
+    }
+    tokens = {"0": [{"refund"}, {"shipping"}]}
+    rankings = exp.rescue_rankings(cache, tokens, top_k=2, seed_k=1)
+    assert set(rankings) == {"rescue-0.3", "rescue-0.5", "rescue-0.7"}
+    for name in rankings:
+        assert len(rankings[name]["0"]) == 2
