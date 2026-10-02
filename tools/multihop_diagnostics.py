@@ -335,11 +335,18 @@ def main(argv=None) -> int:
     vectors = beir.cached_embed(
         enc, corpus, ROOT_BENCH / "cache" / f"multihop-chunks{args.overlap}.{enc.name}"
     )
+    print("  lexical ranking...", flush=True)
     lexical = beir.bm25_rankings(
         corpus, queries, args.max_depth, stem=True, drop_stopwords=True,
         titles=titles, title_boost=2,
     )
-    dense = beir.dense_rankings(corpus, queries, enc, vectors, args.max_depth)
+    print("  dense ranking...", flush=True)
+    # Fixed-length padding: dynamic padding gives every batch a different tensor shape and
+    # the MPS backend recompiles per shape, which dominates the run on a few thousand queries.
+    dense = beir.dense_rankings(
+        corpus, queries, enc, vectors, args.max_depth, fixed_length=True
+    )
+    print("  retrieval done; scoring candidates...", flush=True)
     from multihop_official import official_metrics  # noqa: E402  (circular-safe import)
 
     started = time.perf_counter()

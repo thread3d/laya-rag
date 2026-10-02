@@ -303,10 +303,10 @@ class BiEncoder:
             out.append(pooled.cpu().numpy().astype(np.float32))
         return np.vstack(out) if out else np.zeros((0, 0), dtype=np.float32)
 
-    def embed_queries(self, texts: Sequence[str]) -> np.ndarray:
+    def embed_queries(self, texts: Sequence[str], fixed_length: bool = False) -> np.ndarray:
         if not self.query_instruction:
-            return self.embed(texts)
-        return self.embed([self.QUERY_PREFIX + text for text in texts])
+            return self.embed(texts, fixed_length=fixed_length)
+        return self.embed([self.QUERY_PREFIX + text for text in texts], fixed_length=fixed_length)
 
 
 class CrossEncoder:
@@ -532,10 +532,15 @@ def dense_rankings(
     embedder: Any,
     vectors: np.ndarray,
     top_k: int,
+    *,
+    fixed_length: bool = False,
 ) -> dict[str, list[str]]:
     index = VectorIndex()
     index.add(make_chunks(corpus), vectors)
-    query_vectors = np.asarray(embedder.embed_queries(list(queries.values())), dtype=np.float32)
+    query_vectors = np.asarray(
+        embedder.embed_queries(list(queries.values()), fixed_length=fixed_length),
+        dtype=np.float32,
+    )
     rankings: dict[str, list[str]] = {}
     for (query_id, _), vector in zip(queries.items(), query_vectors):
         rankings[query_id] = [hit.chunk.chunk_id for hit in index.search(vector, k=top_k)]

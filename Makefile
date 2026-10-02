@@ -23,10 +23,12 @@ ONDISK_ARGS ?=
 ANSWERABILITY_ARGS ?=
 DIAGNOSTICS_ARGS ?=
 SIGNIFICANCE_ARGS ?=
+CE_CACHE_ARGS ?=
+RERANK_EXPERIMENT_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-recalibrate multihop-answerability beir-routing finetune ondisk charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-recalibrate multihop-answerability beir-routing finetune ondisk charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -49,6 +51,8 @@ help:
 	@echo "multihop-coverage  does a coverage objective beat per-document rank on MAP@10?"
 	@echo "multihop-diagnostics  depth-stratified ceiling and second-hop retention"
 	@echo "multihop-significance  permutation tests + FDR over a saved comparison grid"
+	@echo "multihop-ce-cache    cache cross-encoder scores for the MultiHop subset"
+	@echo "multihop-rerank-experiment  sweep second-stage selection rules over that cache"
 	@echo "multihop-recalibrate  does a threshold fitted on one split transfer?"
 	@echo "multihop-answerability  fit and score the feature-based answerability gate"
 	@echo "beir-routing per-corpus channel selection, measured out of sample"
@@ -150,6 +154,14 @@ multihop-diagnostics:
 # Defaults to eval/benchmarks/multihop-rag/official.json; `SIGNIFICANCE_ARGS="--report ..."`.
 multihop-significance:
 	$(PY) tools/eval_significance.py $(SIGNIFICANCE_ARGS)
+
+# Cache cross-encoder scores for the MultiHop subset, then sweep second-stage rules.
+# The first is the expensive model run; the second is pure NumPy over the cache.
+multihop-ce-cache:
+	OMP_NUM_THREADS=16 $(PY) tools/multihop_ce_cache.py $(CE_CACHE_ARGS)
+
+multihop-rerank-experiment:
+	$(PY) tools/multihop_rerank_experiment.py $(RERANK_EXPERIMENT_ARGS)
 
 # Does an answerability threshold fitted on one split transfer to the other?
 multihop-recalibrate:
