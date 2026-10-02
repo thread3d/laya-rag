@@ -307,6 +307,7 @@ def chunk_text(
     chunk_chars: int = 1200,
     overlap_chars: int = 400,
     min_chunk_chars: int = 80,
+    merge_short: bool = False,
 ) -> list[tuple[str, int, int]]:
     """Split ``text`` into ``(chunk_text, start_char, end_char)`` triples.
 
@@ -319,6 +320,12 @@ def chunk_text(
     than ``overlap_chars`` (as long as it still fits in one chunk). The guarantee is
     therefore "a fact up to ``overlap_chars`` survives any split, and a whole
     sentence up to ``chunk_chars`` survives too" rather than the overlap alone.
+
+    ``merge_short`` keeps a document of at most ``chunk_chars + overlap_chars`` as a
+    single chunk instead of splitting it into two heavily overlapping ones. Measured at
+    the engine level on SciFact it did **not** help (0.7236 against 0.7264 for the
+    default, and 0.7396 for whole-document chunking), so it is a knob rather than a
+    default; see ``docs/findings-chunk-merge.md``.
     """
     if chunk_chars < 1:
         raise ValueError(f"chunk_chars must be positive, got {chunk_chars}")
@@ -335,6 +342,8 @@ def chunk_text(
     # chunk text came from.
     body = text.strip()
     total = len(body)
+    if merge_short and total <= chunk_chars + overlap_chars:
+        return [(body, 0, total)]
     out: list[tuple[str, int, int]] = []
 
     start = 0
@@ -400,6 +409,7 @@ def chunk_documents(
     min_chunk_chars: int = 80,
     on_document: Callable[[int, int, int], None] | None = None,
     context_prefix: bool = False,
+    merge_short: bool = False,
 ) -> list[Chunk]:
     """Chunk every document, preserving reading order per document.
 
@@ -409,6 +419,9 @@ def chunk_documents(
     ``context_prefix`` attaches a structural breadcrumb (:func:`document_context`) to each
     chunk's ``context``, which the retrieval channels index but the evidence text does not
     contain. It is off by default so existing indexes and their rankings are unchanged.
+
+    ``merge_short`` keeps documents of at most ``chunk_chars + overlap_chars`` whole; see
+    :func:`chunk_text`.
     """
     chunks: list[Chunk] = []
     total = len(documents)
@@ -418,6 +431,7 @@ def chunk_documents(
             chunk_chars=chunk_chars,
             overlap_chars=overlap_chars,
             min_chunk_chars=min_chunk_chars,
+            merge_short=merge_short,
         )
         context = document_context(document) if context_prefix else ""
         for index, (snippet, start, end) in enumerate(pieces):

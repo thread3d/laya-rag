@@ -320,3 +320,40 @@ def test_chunk_documents_attaches_context_when_asked(tmp_path):
     assert all(len(contexts) == 1 for contexts in by_doc.values())
     first = documents[0]
     assert next(c.context for c in prefixed if c.doc_id == first.doc_id) == document_context(first)
+
+
+def test_merge_short_keeps_a_two_chunk_document_whole():
+    from laya_rag.chunking import chunk_text
+
+    # 1300 chars splits into two overlapping chunks at the defaults; merged it stays one.
+    text = ("refund policy details. " * 55).strip()  # ~1375 chars
+    assert len(text) <= 1200 + 400
+    split = chunk_text(text, chunk_chars=1200, overlap_chars=400, min_chunk_chars=80)
+    merged = chunk_text(
+        text, chunk_chars=1200, overlap_chars=400, min_chunk_chars=80, merge_short=True
+    )
+    assert len(split) == 2
+    assert len(merged) == 1
+    assert merged[0][0] == text
+    assert merged[0][1] == 0 and merged[0][2] == len(text)
+
+
+def test_merge_short_leaves_long_documents_alone():
+    from laya_rag.chunking import chunk_text
+
+    text = ("refund policy details. " * 200).strip()  # ~5000 chars
+    split = chunk_text(text, chunk_chars=1200, overlap_chars=400, min_chunk_chars=80)
+    merged = chunk_text(
+        text, chunk_chars=1200, overlap_chars=400, min_chunk_chars=80, merge_short=True
+    )
+    assert len(merged) == len(split)
+
+
+def test_chunk_documents_passes_merge_short_through(tmp_path):
+    from laya_rag.chunking import Document, chunk_documents
+
+    document = Document(path=tmp_path / "d.md", doc_id="d", text=("alpha beta gamma. " * 80).strip())
+    plain = chunk_documents([document], chunk_chars=1200, overlap_chars=400)
+    merged = chunk_documents([document], chunk_chars=1200, overlap_chars=400, merge_short=True)
+    assert len(plain) == 2
+    assert len(merged) == 1

@@ -684,6 +684,7 @@ class RagEngine:
             min_chunk_chars=self.config.min_chunk_chars,
             on_document=chunking,
             context_prefix=self.config.context_prefix,
+            merge_short=self.config.chunk_merge_short,
         )
         report.documents = len(loaded.documents)
         report.chunks = len(chunks)

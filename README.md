@@ -301,6 +301,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `INDEX_BACKEND` | `memory` | `memory` or `ondisk`; `ondisk` streams vectors to a memory-mapped file and packs BM25 postings into one mmap so query-time memory stops scaling with corpus size (append-only; rebuild on change) |
 | `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `400` | chunking budget; a fact up to the overlap survives any split, a cut inside a sentence backs up to the sentence start, and the overlap is clamped below `CHUNK_CHARS` |
 | `MIN_CHUNK_CHARS` | `80` | a shorter trailing chunk is folded into the previous one |
+| `CHUNK_MERGE_SHORT` | `false` | keep a document of at most `CHUNK_CHARS + CHUNK_OVERLAP_CHARS` whole instead of splitting it into two overlapping chunks. Measured **not to help** at the engine level (0.7236 vs 0.7264 on SciFact, while whole-document chunking reached 0.7396); kept as a knob, not a default |
 | `CONTEXT_PREFIX` | `false` | attach a structural breadcrumb (file name, first heading, first line) that the lexical and dense channels index but the returned evidence does not contain; requires a re-index. Measured MRR 0.64 → 0.83 on the vendored docs |
 | `LEXICAL_STEM` | `true` | English stemming for the lexical channel; `false` keeps exact terms only |
 | `LEXICAL_BACKEND` | `bm25` | `bm25` or `eager`; `eager` precomputes posting weights and scores with NumPy, with byte-identical rankings — measured 11–13× faster queries and ~5× smaller index at 20k docs |

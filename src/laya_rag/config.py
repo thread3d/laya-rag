@@ -142,6 +142,16 @@ class EngineConfig:
     chunk_chars: int = field(default_factory=lambda: _env_int("CHUNK_CHARS", 1200))
     chunk_overlap_chars: int = field(default_factory=lambda: _env_int("CHUNK_OVERLAP_CHARS", 400))
     min_chunk_chars: int = field(default_factory=lambda: _env_int("MIN_CHUNK_CHARS", 80))
+    # Keep a document of at most chunk_chars + overlap_chars whole instead of splitting it
+    # into two heavily overlapping chunks. Measured at the engine level on SciFact
+    # (median document 1,426 chars) this did **not** recover the whole-document gain:
+    # 0.7236 against 0.7264 for the default chunking and 0.7396 for whole-document
+    # chunking, and whole-document beat this rule significantly (+0.0160, p=0.016). The
+    # loss therefore lives in documents longer than the merge window, or in candidate
+    # diversity, not in short ones. Off by default; see docs/findings-chunk-merge.md.
+    chunk_merge_short: bool = field(
+        default_factory=lambda: _env_bool("CHUNK_MERGE_SHORT", False)
+    )
 
     # Structural context prefix (RESEARCH.md Tier 1.6). When true, every chunk carries a
     # breadcrumb (document path and first heading) that the lexical and dense channels

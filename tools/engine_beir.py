@@ -74,6 +74,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--k1", type=float, default=None, help="BM25 k1 (harness baseline 0.9)")
     ap.add_argument("--b", type=float, default=None, dest="b_bm25",
                     help="BM25 b (harness baseline 0.4)")
+    ap.add_argument("--chunk-chars", type=int, default=None,
+                    help="chunk size; the default 1200 splits short abstracts the replica "
+                         "embeds whole")
+    ap.add_argument("--chunk-overlap", type=int, default=None)
+    ap.add_argument("--min-chunk-chars", type=int, default=None)
+    ap.add_argument("--chunk-merge-short", action="store_true",
+                    help="keep documents of at most chunk_chars+overlap as one chunk")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None, help="cap the number of test queries")
     ap.add_argument("--out", default=str(ROOT / "eval" / "engine-beir"))
@@ -110,6 +117,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ["LAYA_RAG_BM25_B"] = str(args.b_bm25)
     else:
         os.environ.pop("LAYA_RAG_BM25_B", None)
+    for name, value in (
+        ("CHUNK_CHARS", args.chunk_chars),
+        ("CHUNK_OVERLAP_CHARS", args.chunk_overlap),
+        ("MIN_CHUNK_CHARS", args.min_chunk_chars),
+    ):
+        if value is not None:
+            os.environ[f"LAYA_RAG_{name}"] = str(value)
+        else:
+            os.environ.pop(f"LAYA_RAG_{name}", None)
+    os.environ["LAYA_RAG_CHUNK_MERGE_SHORT"] = "1" if args.chunk_merge_short else "0"
     if args.sparse:
         os.environ["LAYA_RAG_SPARSE_MODEL"] = args.sparse_model
     else:
