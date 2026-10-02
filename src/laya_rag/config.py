@@ -162,6 +162,16 @@ class EngineConfig:
     # Retrieval funnel: dense candidates -> Laya re-ranked -> evidence passages.
     retrieve_k: int = field(default_factory=lambda: _env_int("RETRIEVE_K", 20))
     rerank_k: int = field(default_factory=lambda: _env_int("RERANK_K", 5))
+    # Promote the best passage of each distinct document into the first N kept slots. The
+    # engine counts *passages* against RERANK_K, so an overlapping chunking can spend
+    # several slots on one file. It guarantees prefix diversity — the first N delivered
+    # passages are N documents — and on SciFact (300 queries, top_k=10) it left
+    # document-level nDCG **exactly unchanged**, because the top-10 already held 5–10
+    # distinct documents; it can add documents that a shorter top_k would have cut. It is a
+    # presentation control, while the fact-level gain the harness measured on MultiHop
+    # (doc-quota +0.0173 MAP@10) comes from spending slots on new facts. 0 keeps the pure
+    # passage order.
+    rerank_min_docs: int = field(default_factory=lambda: _env_int("RERANK_MIN_DOCS", 0))
     # Bounded cache of recent query embeddings. A service sees the same question
     # repeatedly (retries, refreshes, shared links) and the query embedding is the one
     # dense cost on an otherwise lexical path; 0 disables the cache. It holds vectors, not

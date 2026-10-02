@@ -258,3 +258,39 @@ def test_parse_pairs_rejects_a_missing_equals():
 def test_parse_args_exposes_a_biencoder_pooling_override():
     assert beir.parse_args([]).biencoder_pooling == "auto"
     assert beir.parse_args(["--biencoder-pooling", "cls"]).biencoder_pooling == "cls"
+
+
+# -- document quota ----------------------------------------------------------
+
+def _four_hits():
+    return [
+        _hit("a", "alpha", 0.9, "/d1.md"),
+        _hit("b", "beta", 0.8, "/d1.md"),   # same document as "a"
+        _hit("c", "gamma", 0.7, "/d2.md"),
+        _hit("d", "delta", 0.6, "/d3.md"),
+    ]
+
+
+def _keep(hits, min_docs):
+    return LayaReranker(StubModel()).rerank(
+        "query", hits, top_k=4, relevance_threshold=0.0,
+        scores=[0.9, 0.8, 0.7, 0.6],
+        answerability_fn=lambda query, passages: 1.0,
+        min_docs=min_docs,
+    )
+
+
+def test_min_docs_promotes_distinct_documents_before_the_cut():
+    kept = [passage.chunk_id for passage in _keep(_four_hits(), min_docs=2).passages]
+    # The best passage of d1, then the best of d2, then the remaining passages in order.
+    assert kept == ["a", "c", "b", "d"]
+
+
+def test_min_docs_zero_keeps_the_pure_passage_order():
+    kept = [passage.chunk_id for passage in _keep(_four_hits(), min_docs=0).passages]
+    assert kept == ["a", "b", "c", "d"]
+
+
+def test_min_docs_never_drops_a_passage():
+    kept = _keep(_four_hits(), min_docs=4).passages
+    assert sorted(passage.chunk_id for passage in kept) == ["a", "b", "c", "d"]

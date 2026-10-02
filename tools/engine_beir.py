@@ -65,6 +65,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--sparse", action="store_true", help="also index the sparse channel")
     ap.add_argument("--sparse-model", default=DEFAULT_SPARSE)
     ap.add_argument("--tag", default="base", help="names the index directory and outputs")
+    ap.add_argument("--min-docs", type=int, default=0,
+                    help="promote the best passage of this many distinct documents first")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None, help="cap the number of test queries")
     ap.add_argument("--out", default=str(ROOT / "eval" / "engine-beir"))
@@ -81,6 +83,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Nothing may be filtered, so the returned order is the engine's retrieval order.
     os.environ["LAYA_RAG_RELEVANCE_THRESHOLD"] = "0.0"
     os.environ["LAYA_RAG_ANSWERABILITY_THRESHOLD"] = "0.0"
+    if args.min_docs:
+        os.environ["LAYA_RAG_RERANK_MIN_DOCS"] = str(args.min_docs)
+    else:
+        os.environ.pop("LAYA_RAG_RERANK_MIN_DOCS", None)
     if args.sparse:
         os.environ["LAYA_RAG_SPARSE_MODEL"] = args.sparse_model
     else:

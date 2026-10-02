@@ -245,6 +245,7 @@ class LayaReranker:
         blend: float = 1.0,
         gate: Any | None = None,
         answerability_fn: Any | None = None,
+        min_docs: int = 0,
     ) -> RerankResult:
         """Apply a relevance decision to the candidates and gate on answerability.
 
@@ -263,6 +264,10 @@ class LayaReranker:
         ordering (see :func:`blend_scores`). ``1.0`` keeps the historical behaviour of
         ordering fully by the decision; values below it bound how far a second stage can
         move the list.
+
+        ``min_docs`` > 0 promotes the best passage of each distinct document into the first
+        that many slots before the ``top_k`` cut, so a passage-level list spreads across
+        documents instead of filling with one file's overlapping chunks.
 
         ``gate`` is an optional answerability model (anything with ``predict_proba``)
         that replaces Laya's single-scalar decision with a multi-feature one. ``None``
@@ -323,6 +328,23 @@ class LayaReranker:
         else:
             # Laya's probability is the ranking key; the recall score only breaks ties.
             above.sort(key=lambda passage: (-passage.relevance, -passage.recall_score))
+        if min_docs > 0 and above:
+            # A file's chunks are near-duplicates of each other, so a passage-level top-k
+            # can return several chunks of one document and fewer documents overall. Keep
+            # the best passage of each distinct document for the first `min_docs` slots,
+            # then let the rest follow in rank order. Document identity is the path, with
+            # the chunk id as the fallback the gate already uses.
+            head: list[Any] = []
+            seen: set[str] = set()
+            rest: list[Any] = []
+            for passage in above:
+                document = str(passage.path or passage.chunk_id)
+                if len(head) < min_docs and document not in seen:
+                    seen.add(document)
+                    head.append(passage)
+                else:
+                    rest.append(passage)
+            above = head + rest
         kept = above[:top_k]
         result = RerankResult(
             passages=kept,

@@ -1010,6 +1010,7 @@ class RagEngine:
             blend=blend,
             gate=self.answerability_gate,
             answerability_fn=nli.score if nli is not None else None,
+            min_docs=self.config.rerank_min_docs,
         )
         rerank_seconds = time.perf_counter() - rerank_started
 

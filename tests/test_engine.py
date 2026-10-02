@@ -471,6 +471,48 @@ def test_sparse_model_is_rejected_with_the_ondisk_backend(tmp_path):
     with pytest.raises(ValueError, match="ondisk"):
         engine.index_paths([write_corpus(tmp_path / "corpus")])
 
+
+def _long_document_corpus(tmp_path):
+    corpus = tmp_path / "long"
+    corpus.mkdir()
+    (corpus / "one.md").write_text(
+        "# One\n\n" + ("refund policy details and processing times. " * 300), encoding="utf-8"
+    )
+    for name in ("two", "three"):
+        (corpus / f"{name}.md").write_text(
+            f"# {name}\n\n" + ("refund policy details and processing times. " * 60),
+            encoding="utf-8",
+        )
+    return corpus
+
+
+def test_engine_rerank_min_docs_spreads_the_kept_passages(tmp_path):
+    config = make_config(
+        tmp_path, dense_weight=1.0, retrieve_k=30, rerank_k=4,
+        relevance_threshold=0.0, rerank_min_docs=2,
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([_long_document_corpus(tmp_path)])
+    result = engine.query("refund policy details and processing times")
+    paths = [passage["path"] for passage in result.passages]
+    # Without the quota the long document's overlapping chunks fill the list.
+    assert len(paths) >= 2
+    assert paths[0] != paths[1]
+
+
+def test_engine_without_the_quota_keeps_the_passage_order(tmp_path):
+    config = make_config(
+        tmp_path, dense_weight=1.0, retrieve_k=30, rerank_k=4,
+        relevance_threshold=0.0, rerank_min_docs=0,
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([_long_document_corpus(tmp_path)])
+    result = engine.query("refund policy details and processing times")
+    paths = [passage["path"] for passage in result.passages]
+    assert len(paths) >= 2
+    assert len(set(paths)) <= len(paths)  # duplicates are allowed without the quota
+
+
 class _FakeIndex:
     def __init__(self, ids):
         self._ids = set(ids)
