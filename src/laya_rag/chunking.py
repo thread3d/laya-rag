@@ -177,10 +177,38 @@ def load_documents(
     return report
 
 
+_SENTENCE_MARKERS: tuple[str, ...] = ("\n\n", ". ", "! ", "? ")
+
+
+def _sentence_start(body: str, start: int, end: int) -> int:
+    """Index just after the last sentence break in ``body[start:end]``, or -1."""
+    best = -1
+    for marker in _SENTENCE_MARKERS:
+        index = body.rfind(marker, start, end)
+        if index != -1:
+            best = max(best, index + len(marker))
+    return best
+
+
+def _sentence_end(body: str, end: int, limit: int) -> int | None:
+    """Index just after the next sentence break in ``body[end:limit]``, or ``None``.
+
+    The search is bounded by ``limit`` so a document with no sentence punctuation costs
+    one bounded scan per chunk rather than scanning to the end of the file each time.
+    """
+    best: int | None = None
+    for marker in _SENTENCE_MARKERS:
+        index = body.find(marker, end, limit)
+        if index != -1:
+            candidate = index + len(marker)
+            best = candidate if best is None else min(best, candidate)
+    return best
+
+
 def chunk_text(
     text: str,
     chunk_chars: int = 1200,
-    overlap_chars: int = 200,
+    overlap_chars: int = 400,
     min_chunk_chars: int = 80,
 ) -> list[tuple[str, int, int]]:
     """Split ``text`` into ``(chunk_text, start_char, end_char)`` triples.
@@ -188,6 +216,12 @@ def chunk_text(
     Paragraph breaks are preferred split points. A paragraph longer than
     ``chunk_chars`` is split on whitespace, and the trailing ``overlap_chars`` of
     each chunk seed the next one so a fact spanning a boundary stays retrievable.
+
+    A cut that lands *inside* a sentence backs the next chunk up to that sentence's
+    start, so the sentence is wholly contained in one chunk even when it is longer
+    than ``overlap_chars`` (as long as it still fits in one chunk). The guarantee is
+    therefore "a fact up to ``overlap_chars`` survives any split, and a whole
+    sentence up to ``chunk_chars`` survives too" rather than the overlap alone.
     """
     if chunk_chars < 1:
         raise ValueError(f"chunk_chars must be positive, got {chunk_chars}")
@@ -209,16 +243,21 @@ def chunk_text(
     start = 0
     while start < total:
         end = min(start + chunk_chars, total)
+        clean = False
         if end < total:
             # Prefer a paragraph break, then a sentence end, then any space, but
             # never cut before the half-way point or the chunk would be a stub.
             floor = start + chunk_chars // 2
             cut = body.rfind("\n\n", floor, end)
-            if cut == -1:
+            if cut != -1:
+                clean = True
+            else:
                 sentence = body.rfind(". ", floor, end)
-                cut = sentence + 1 if sentence != -1 else -1
-            if cut == -1:
-                cut = body.rfind(" ", floor, end)
+                if sentence != -1:
+                    cut = sentence + 1
+                    clean = True
+                else:
+                    cut = body.rfind(" ", floor, end)
             if cut != -1 and cut > start:
                 end = cut
 
@@ -232,6 +271,17 @@ def chunk_text(
         # always move forward: an overlap wider than the chunk itself would
         # otherwise re-emit the same region forever.
         advanced = end - overlap_chars
+        if not clean and overlap_chars > 0:
+            # The cut fell inside a sentence. Extend the overlap to that sentence's
+            # start when it fits in one chunk, so the sentence is not split.
+            sentence_start = _sentence_start(body, start, end)
+            sentence_end = _sentence_end(body, end, start + chunk_chars + 2)
+            if (
+                sentence_start > start
+                and sentence_end is not None
+                and sentence_end - sentence_start <= chunk_chars
+            ):
+                advanced = min(advanced, sentence_start)
         start = advanced if advanced > start else start + 1
 
     # Fold a short trailing fragment into the previous chunk rather than dropping it.
@@ -249,7 +299,7 @@ def chunk_text(
 def chunk_documents(
     documents: Sequence[Document],
     chunk_chars: int = 1200,
-    overlap_chars: int = 200,
+    overlap_chars: int = 400,
     min_chunk_chars: int = 80,
     on_document: Callable[[int, int, int], None] | None = None,
 ) -> list[Chunk]:

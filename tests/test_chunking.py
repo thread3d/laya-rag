@@ -7,6 +7,7 @@ duplicated work.
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -63,6 +64,55 @@ def test_long_single_paragraph_is_split_on_whitespace():
     pieces = chunk_text(text, chunk_chars=300, overlap_chars=50)
     assert len(pieces) > 1
     assert all(len(piece) <= 300 for piece, _, _ in pieces)
+
+
+def test_a_fact_up_to_the_overlap_survives_any_split():
+    """The containment guarantee: a fact no longer than the overlap is never lost."""
+    chunk_chars, overlap = 300, 120
+    fact = "The secret rotation interval is forty two days and every rotation is logged."
+    assert len(fact) <= overlap
+    for shift in range(0, chunk_chars, 11):
+        prefix = "filler " * ((chunk_chars - shift) // len("filler "))
+        text = f"{prefix}{fact} {' '.join(['tail'] * 120)}\n"
+        pieces = chunk_text(text, chunk_chars=chunk_chars, overlap_chars=overlap, min_chunk_chars=20)
+        assert any(fact in piece for piece, _, _ in pieces), f"lost at shift {shift}"
+
+
+def test_a_sentence_longer_than_the_overlap_is_not_split():
+    """A cut inside a sentence backs the next chunk up to the sentence start."""
+    chunk_chars, overlap = 400, 50
+    sentence = (
+        "The break glass procedure requires two approvers from the platform team "
+        "before any credential is rotated."
+    )
+    assert len(sentence) > overlap
+    text = ("background context words. " * 30) + sentence + (" trailing words." * 40)
+    pieces = chunk_text(text, chunk_chars=chunk_chars, overlap_chars=overlap, min_chunk_chars=20)
+
+    assert any(sentence in piece for piece, _, _ in pieces)
+    assert max(len(piece) for piece, _, _ in pieces) <= chunk_chars
+
+
+def test_a_sentence_longer_than_a_chunk_still_progresses():
+    """The sentence-safety pass must not stall when the sentence does not fit a chunk."""
+    text = ("word " * 500) + "end."
+    pieces = chunk_text(text, chunk_chars=300, overlap_chars=50, min_chunk_chars=20)
+    starts = [start for _, start, _ in pieces]
+    assert len(pieces) > 1
+    assert all(b > a for a, b in zip(starts, starts[1:]))
+    assert max(len(piece) for piece, _, _ in pieces) <= 300
+
+
+def test_punctuation_free_document_does_not_scan_quadratically():
+    """A file with no sentence terminators must cost one bounded scan per chunk, not a
+    scan to the end of the file each time (a 1 MB file would otherwise take minutes)."""
+    text = "word " * 200_000
+    started = time.perf_counter()
+    pieces = chunk_text(text, chunk_chars=1200, overlap_chars=400)
+    elapsed = time.perf_counter() - started
+    assert pieces
+    assert max(len(piece) for piece, _, _ in pieces) <= 1200
+    assert elapsed < 10.0, f"chunking 1 MB of unpunctuated text took {elapsed:.1f}s"
 
 
 def test_offsets_index_the_original_text():

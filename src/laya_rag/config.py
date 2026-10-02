@@ -91,6 +91,11 @@ class EngineConfig:
         default_factory=lambda: Path(_env("MODELS") or REPO_ROOT / "models")
     )
     index_dir: Path = field(default_factory=lambda: Path(_env("INDEX_DIR") or REPO_ROOT / "indexes" / "default"))
+    # Retrieval storage backend. "memory" is the default vector index + Python-postings
+    # BM25. "ondisk" streams vectors to a memory-mapped file and packs BM25 postings into
+    # one mmap, so query-time residency no longer scales with corpus size (the route to
+    # the large BEIR corpora). The on-disk backend is append-only and rebuilds on change.
+    index_backend: str = field(default_factory=lambda: _env("INDEX_BACKEND") or "memory")
     checkpoint: str = field(default_factory=lambda: _env("CHECKPOINT") or "multilingual")
     # "auto" defers to Laya's CUDA -> MPS -> CPU selection. On this host that picks
     # MPS (Metal), which measured 1.6-3x faster than CPU in the Laya checkout.
@@ -129,10 +134,24 @@ class EngineConfig:
     torch_threads: int = field(default_factory=lambda: _env_int("TORCH_THREADS", 16))
 
     # Chunking. Character-based with paragraph preference; sized to sit well inside
-    # max_len so a rerank call sees the whole chunk plus the query.
+    # max_len so a rerank call sees the whole chunk plus the query. The overlap is the
+    # containment guarantee: a fact no longer than `chunk_overlap_chars` is intact in at
+    # least one chunk whatever the split distance (a 290-character fact measured lost at
+    # 200, which is why the default is 400). `chunk_text` additionally never splits a
+    # sentence that fits in one chunk, so prose facts longer than the overlap survive too.
     chunk_chars: int = field(default_factory=lambda: _env_int("CHUNK_CHARS", 1200))
-    chunk_overlap_chars: int = field(default_factory=lambda: _env_int("CHUNK_OVERLAP_CHARS", 200))
+    chunk_overlap_chars: int = field(default_factory=lambda: _env_int("CHUNK_OVERLAP_CHARS", 400))
     min_chunk_chars: int = field(default_factory=lambda: _env_int("MIN_CHUNK_CHARS", 80))
+
+    @property
+    def resolved_chunk_overlap(self) -> int:
+        """The overlap actually used, never wider than the chunk.
+
+        The default 400 is larger than a deliberately small ``CHUNK_CHARS``; a user who
+        sets only the chunk size should get a valid split rather than a `ValueError`
+        from the chunker, so the overlap is clamped to ``chunk_chars - 1``.
+        """
+        return max(0, min(self.chunk_overlap_chars, self.chunk_chars - 1))
 
     # Retrieval funnel: dense candidates -> Laya re-ranked -> evidence passages.
     retrieve_k: int = field(default_factory=lambda: _env_int("RETRIEVE_K", 20))
@@ -170,6 +189,16 @@ class EngineConfig:
     recall_dedup_threshold: float = field(
         default_factory=lambda: _env_float("RECALL_DEDUP_THRESHOLD", 0.0)
     )
+    # Evidence-set coverage selection on the fused candidate list: a sentence-atom
+    # submodular max-coverage pass that spends the recall budget on *new facts* rather
+    # than on a second near-duplicate of one already-kept passage. Measured on
+    # MultiHop-RAG it is the best coverage pass (MAP@10 0.2546 -> 0.2835, held-out
+    # +0.0288), ahead of near-duplicate suppression (0.2790). 0.0 disables it; the
+    # lambda balances fused relevance against marginal atom coverage (0.5 is the
+    # measured setting). Opt-in because it only pays off on multi-fact corpora.
+    recall_coverage_lambda: float = field(
+        default_factory=lambda: _env_float("RECALL_COVERAGE_LAMBDA", 0.0)
+    )
 
     @property
     def resolved_dense_weight(self) -> float:
@@ -177,6 +206,16 @@ class EngineConfig:
         if self.dense_weight >= 0.0:
             return self.dense_weight
         return 1.0 if (self.embed_model or "").strip() else 0.0
+
+    @property
+    def resolved_index_backend(self) -> str:
+        """``memory`` or ``ondisk``; anything else is a configuration error."""
+        value = (self.index_backend or "").strip().lower()
+        if value in {"memory", "ondisk"}:
+            return value
+        raise ValueError(
+            f"{ENV_PREFIX}INDEX_BACKEND must be 'memory' or 'ondisk', got {self.index_backend!r}"
+        )
 
     # What the returned evidence is ranked by. "recall" keeps the retrieval order and
     # uses the relevance score only to filter and gate; "relevance" orders by that score;
@@ -193,6 +232,13 @@ class EngineConfig:
             return value
         return "relevance" if (self.rerank_model or "").strip() else "recall"
 
+    # How far a supplied second-stage score may move the first-stage order, in [0, 1].
+    # 1.0 orders entirely by the decision (the historical behaviour); 0.0 keeps the
+    # recall order. Measured, a pointwise cross-encoder trusted fully lost nDCG@10 on
+    # all five BEIR corpora (ArguAna 0.568 -> 0.250); blending bounds that damage, so a
+    # second stage can be used as a nudge rather than a replacement.
+    rerank_blend: float = field(default_factory=lambda: _env_float("RERANK_BLEND", 1.0))
+
     # Claim adjudication is linear in claims x candidates. Measured warm on five
     # claims: 21.6s at retrieve_k=20 against 8.7s at 10, for the same verdicts on the
     # sample. Claims are short, so a smaller pool is the better default here even
@@ -203,6 +249,20 @@ class EngineConfig:
     # Laya emits calibrated probabilities, so these are real thresholds, not scores.
     relevance_threshold: float = field(default_factory=lambda: _env_float("RELEVANCE_THRESHOLD", 0.5))
     answerability_threshold: float = field(default_factory=lambda: _env_float("ANSWERABILITY_THRESHOLD", 0.5))
+    # Optional persisted multi-feature answerability gate (src/laya_rag/answerability.py).
+    # The shipped decision is a single scalar that measured at chance out of domain
+    # (ROC-AUC 0.51 on MultiHop-RAG) and cannot be fixed by rescaling one number. A gate
+    # trained on a domain's own null/answerable split over the retrieval signals the
+    # engine already has is the portable replacement. Empty disables it.
+    answerability_gate_path: str = field(
+        default_factory=lambda: _env("ANSWERABILITY_GATE_PATH") or ""
+    )
+    # Optional NLI cross-encoder used as an answerability scorer, e.g.
+    # "cross-encoder/nli-deberta-v3-base". Empty keeps Laya's decision (or the gate).
+    # This is a different model with its own calibration, so it is explicit, not default.
+    answerability_nli_model: str = field(
+        default_factory=lambda: _env("ANSWERABILITY_NLI_MODEL") or ""
+    )
 
     # Answer composition. This is the one optional step in the pipeline that is not
     # Laya's: a generative model writes prose from evidence the engine already
@@ -250,6 +310,8 @@ class EngineConfig:
         # `dense_weight` is -1 to mean "auto"; report what auto resolved to as well, so a
         # status endpoint never shows a negative weight as if it were in use.
         out["dense_weight_resolved"] = self.resolved_dense_weight
+        # The overlap is clamped below `chunk_chars`; report the value actually used.
+        out["chunk_overlap_resolved"] = self.resolved_chunk_overlap
         return out
 
     def ensure_dirs(self) -> None:

@@ -24,7 +24,7 @@ def _cmd_index(args: argparse.Namespace, config: EngineConfig) -> int:
     if args.ext:
         extensions = [e if e.startswith(".") else f".{e}" for e in args.ext.split(",")]
     try:
-        report = engine.index_paths(args.paths, rebuild=args.rebuild, **(
+        report = engine.index_paths(args.paths, rebuild=args.rebuild, prune=args.prune, **(
             {"extensions": extensions} if extensions else {}
         ))
     except ModelUnavailableError as exc:
@@ -163,6 +163,13 @@ def build_parser() -> argparse.ArgumentParser:
     index = sub.add_parser("index", help="index files or directories")
     index.add_argument("paths", nargs="+")
     index.add_argument("--rebuild", action="store_true", help="discard the existing index first")
+    index.add_argument(
+        "--no-prune",
+        action="store_false",
+        dest="prune",
+        default=True,
+        help="keep chunks of files deleted since the last run (default: prune them)",
+    )
     index.add_argument("--ext", help="comma-separated extension allowlist, e.g. .md,.py")
     index.add_argument("--json", action="store_true")
     index.set_defaults(func=_cmd_index)

@@ -549,12 +549,24 @@ def crossencoder_rankings(
     cross_encoder: "CrossEncoder",
     depth: int,
     top_k: int,
+    blend: float = 1.0,
+    rrf_k: int = 60,
 ) -> tuple[dict[str, list[str]], float]:
     """Re-rank each query's top ``depth`` candidates with a cross-encoder.
 
     Returns the new ranking and the seconds spent scoring, so the cost of the stage can
     be reported separately from the recall that fed it.
+
+    ``blend`` controls how far the cross-encoder may move the first stage. ``1.0``
+    (default) replaces the order with the cross-encoder's, the historical behaviour.
+    Below that, the first-stage order and the cross-encoder order are fused by RRF with
+    weights ``[1 - blend, blend]``, so a second stage nudges rather than replaces. That
+    matters here: a fully trusted pointwise cross-encoder lost nDCG@10 on all five BEIR
+    corpora and catastrophically on ArguAna, where relevance is an opposition relation
+    it does not model.
     """
+    if not 0.0 <= blend <= 1.0:
+        raise ValueError(f"blend must be in [0, 1], got {blend!r}")
     spans: list[tuple[str, list[str]]] = []
     pairs: list[tuple[str, str]] = []
     for query_id, text in queries.items():
@@ -571,7 +583,21 @@ def crossencoder_rankings(
     for query_id, docs in spans:
         block = scores[cursor : cursor + len(docs)]
         cursor += len(docs)
-        order = sorted(range(len(docs)), key=lambda index: -block[index])
+        if blend >= 1.0:
+            order = sorted(range(len(docs)), key=lambda index: -block[index])
+        elif blend <= 0.0:
+            order = list(range(len(docs)))
+        else:
+            position = {doc_id: index for index, doc_id in enumerate(docs)}
+            ce_order = sorted(range(len(docs)), key=lambda index: -block[index])
+            ce_ranked = [docs[index] for index in ce_order]
+            merged = reciprocal_rank_fusion(
+                [list(docs), ce_ranked],
+                k=rrf_k,
+                limit=len(docs),
+                weights=[1.0 - blend, blend],
+            )
+            order = [position[doc_id] for doc_id, _ in merged]
         reranked[query_id] = [docs[index] for index in order[:top_k]]
     return reranked, elapsed
 
@@ -680,6 +706,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--k1", type=float, default=BEIR_K1)
     parser.add_argument("--b", type=float, default=BEIR_B)
     parser.add_argument("--biencoder-model", default="BAAI/bge-small-en-v1.5")
+    parser.add_argument("--biencoder-pooling", default="auto",
+                        help="pooling for the bi-encoder: auto (CLS for bge-family, mean "
+                             "otherwise), cls, or mean — SPECTER-family checkpoints are CLS")
+    parser.add_argument("--dataset-models", default="",
+                        help="per-dataset bi-encoder overrides, 'name=model,...' — e.g. "
+                             "scidocs=allenai/specter2_base. Lets a domain encoder be routed "
+                             "to the corpus whose relevance relation it was trained on")
+    parser.add_argument("--dense-text-only-datasets", default="",
+                        help="comma list of datasets whose dense channel embeds text without "
+                             "titles (the global --dense-text-only applies to every dataset)")
     parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     parser.add_argument("--out", default=str(ROOT / "eval" / "beir" / "report"))
     parser.add_argument("--no-download", action="store_true", help="fail instead of fetching a dataset")
@@ -693,6 +729,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="cross-encoder used by the crossencoder row")
     parser.add_argument("--rerank-depth", type=int, default=50,
                         help="how many candidates the cross-encoder re-ranks")
+    parser.add_argument("--rerank-blend", type=float, default=1.0,
+                        help="how far the cross-encoder may move the first stage, in [0, 1]; "
+                             "1.0 replaces the order (historical), below it is RRF-fused with the base")
     parser.add_argument("--no-stem", dest="stem", action="store_false",
                         help="disable the engine's English stemming for its lexical path")
     parser.add_argument("--rrf-k", type=int, default=60, help="RRF constant for fusion rows")
@@ -730,11 +769,29 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _parse_pairs(spec: str) -> dict[str, str]:
+    """Parse a ``name=value,name=value`` CLI spec into a dict."""
+    out: dict[str, str] = {}
+    for item in str(spec or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            raise ValueError(f"expected name=value, got {item!r}")
+        key, value = item.split("=", 1)
+        out[key.strip()] = value.strip()
+    return out
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     data_root = Path(args.data_root)
     dataset_names = [name.strip() for name in args.datasets.split(",") if name.strip()]
     wanted = [name.strip() for name in args.retrievers.split(",") if name.strip()]
+    dataset_models = _parse_pairs(args.dataset_models)
+    dense_text_only_names = {
+        name.strip() for name in args.dense_text_only_datasets.split(",") if name.strip()
+    }
     config = EngineConfig()
     if args.device:
         config.device = args.device
@@ -743,7 +800,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     laya: LayaEmbedder | None = None
-    biencoder: BiEncoder | None = None
+    biencoders: dict[str, BiEncoder] = {}
+
+    def active_biencoder(dataset: str) -> BiEncoder:
+        """The bi-encoder for this dataset: a per-dataset override, else the global one."""
+        model_id = dataset_models.get(dataset, args.biencoder_model)
+        if model_id not in biencoders:
+            biencoders[model_id] = BiEncoder(
+                model_id, device=args.device, query_instruction=args.query_instruction,
+                pooling=args.biencoder_pooling,
+            )
+        return biencoders[model_id]
     report: dict[str, Any] = {
         "settings": {
             "top_k": args.top_k,
@@ -768,6 +835,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "lexical_weight": config.lexical_weight,
             "checkpoint": config.checkpoint,
             "biencoder_model": args.biencoder_model if "biencoder" in wanted else None,
+            "biencoder_pooling": args.biencoder_pooling,
+            "dataset_models": dataset_models,
+            "dense_text_only_datasets": sorted(dense_text_only_names),
             "rerank_model": args.rerank_model if "crossencoder" in wanted else None,
             "rerank_depth": args.rerank_depth,
             "limit_docs": args.limit_docs,
@@ -785,13 +855,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         dataset_dir = ensure_dataset(name, data_root, download=not args.no_download)
         corpus = load_corpus(dataset_dir, include_titles=not args.no_titles)
         # The two channels can see different document text: titles are strong lexical
-        # signal but generic topic keywords (ArguAna) flatten an embedding.
+        # signal but generic topic keywords (ArguAna) flatten an embedding. The choice can
+        # be global or per dataset, because the effect is corpus-specific.
+        per_dataset_text_only = args.dense_text_only or name in dense_text_only_names
         dense_corpus = (
             load_corpus(dataset_dir, include_titles=False)
-            if args.dense_text_only
+            if per_dataset_text_only
             else corpus
         )
-        dense_suffix = ".notitles" if (args.no_titles or args.dense_text_only) else ""
+        dense_suffix = ".notitles" if (args.no_titles or per_dataset_text_only) else ""
         if args.limit_docs:
             corpus = dict(list(corpus.items())[: args.limit_docs])
         all_queries = load_queries(dataset_dir)
@@ -884,26 +956,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if "biencoder" in wanted or "hybrid-biencoder" in wanted:
             try:
-                if biencoder is None:
-                    biencoder = BiEncoder(
-                        args.biencoder_model, device=args.device,
-                        query_instruction=args.query_instruction,
-                    )
+                encoder = active_biencoder(name)
                 vectors = cached_embed(
-                    biencoder,
+                    encoder,
                     dense_corpus,
-                    cache_dir / f"{name}.{biencoder.name}{dense_suffix}",
+                    cache_dir / f"{name}.{encoder.name}{dense_suffix}",
                     use_cache=not args.no_cache,
                 )
                 started = time.perf_counter()
-                bi = dense_rankings(dense_corpus, queries, biencoder, vectors, args.top_k)
+                bi = dense_rankings(dense_corpus, queries, encoder, vectors, args.top_k)
                 seconds = round(time.perf_counter() - started, 2)
                 if "biencoder" in wanted:
                     rankings["biencoder"] = bi
-                    results["biencoder"] = {"seconds": seconds, "model": biencoder.name}
+                    results["biencoder"] = {"seconds": seconds, "model": encoder.name}
                 if args.combsum:
                     rankings["hybrid-combsum"] = score_fusion_rankings(
-                        corpus, queries, biencoder, vectors, args.top_k,
+                        corpus, queries, encoder, vectors, args.top_k,
                         dense_weight=args.biencoder_weight,
                         lexical_weight=config.lexical_weight,
                         k1=args.k1, b=args.b, stem=args.stem,
@@ -930,21 +998,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         if ensemble_spec:
             try:
                 extra_models = [m.strip() for m in str(ensemble_spec).split(",") if m.strip()]
-                if biencoder is None:
-                    biencoder = BiEncoder(
-                        args.biencoder_model, device=args.device,
-                        query_instruction=args.query_instruction,
-                    )
-                    vectors = cached_embed(
-                        biencoder, dense_corpus,
-                        cache_dir / f"{name}.{biencoder.name}{dense_suffix}",
+                base_encoder = active_biencoder(name)
+                if "biencoder" not in rankings:
+                    base_vectors = cached_embed(
+                        base_encoder, dense_corpus,
+                        cache_dir / f"{name}.{base_encoder.name}{dense_suffix}",
                         use_cache=not args.no_cache,
                     )
-                    rankings["biencoder"] = dense_rankings(dense_corpus, queries, biencoder, vectors, args.top_k)
+                    rankings["biencoder"] = dense_rankings(
+                        dense_corpus, queries, base_encoder, base_vectors, args.top_k
+                    )
                 dense_channels = [rankings["biencoder"]]
                 for model_id in extra_models:
                     extra = BiEncoder(
-                        model_id, device=args.device, query_instruction=args.query_instruction
+                        model_id, device=args.device, query_instruction=args.query_instruction,
+                        pooling=args.biencoder_pooling,
                     )
                     extra_vectors = cached_embed(
                         extra, dense_corpus,
@@ -966,7 +1034,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.top_k,
                     args.rrf_k,
                 )
-                note = f"RRF of {args.biencoder_model}, {', '.join(extra_models)} (dense only, and +bm25)"
+                note = f"RRF of {base_encoder.name}, {', '.join(extra_models)} (dense only, and +bm25)"
                 results["dense-ensemble"] = {"note": note}
                 results["hybrid-ensemble"] = {
                     "seconds": round(time.perf_counter() - started, 2),
@@ -1015,14 +1083,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                     or bm25_rankings(corpus, queries, args.top_k, k1=args.k1, b=args.b)
                 )
                 reranked, seconds = crossencoder_rankings(
-                    corpus, queries, base, cross_encoder, args.rerank_depth, args.top_k
+                    corpus, queries, base, cross_encoder, args.rerank_depth, args.top_k,
+                    blend=args.rerank_blend,
                 )
                 rankings["crossencoder"] = reranked
                 results["crossencoder"] = {
                     "seconds": round(seconds, 2),
                     "model": cross_encoder.name,
+                    "blend": args.rerank_blend,
                     "note": f"{args.rerank_model} over the best available first stage "
-                            f"top-{args.rerank_depth}",
+                            f"top-{args.rerank_depth}"
+                            + ("" if args.rerank_blend >= 1.0
+                               else f", blended with the first stage at {args.rerank_blend}"),
                 }
             except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
                 results["crossencoder"] = {"error": f"{type(exc).__name__}: {exc}"}

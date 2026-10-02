@@ -478,8 +478,9 @@ def test_the_query_response_carries_no_generated_text(ctx):
     client.post("/v1/index", json={"paths": [str(corpus)]})
     body = client.post("/v1/query", json={"query": "refunds"}).json()
     allowed = {
-        "query", "answerable", "answerability", "passages", "considered", "kept",
-        "dropped_below_threshold", "checkpoint", "timings", "usage", "note",
+        "query", "answerable", "answerability", "answerability_measured", "passages",
+        "considered", "kept", "dropped_below_threshold", "checkpoint", "timings",
+        "usage", "note",
     }
     assert set(body) <= allowed, f"unexpected keys: {set(body) - allowed}"
     # The point of the guarantee: no field of /v1/query is ever model-generated.

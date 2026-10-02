@@ -253,41 +253,52 @@ def probe_batch(model: Any) -> dict[str, Any]:
 
 
 def probe_boundary(model: Any) -> dict[str, Any]:
-    """Does the 200-character overlap keep a fact that straddles a chunk boundary?
+    """Where does the chunk overlap's containment guarantee actually end?
 
-    The fact is placed at a controlled distance before the first cut point, so a shift
-    of 0 is a clean chunk and larger shifts push the cut further into the sentence.
+    A fact no longer than ``overlap_chars`` is provably intact in at least one chunk at
+    any split distance; the probe places it at a controlled distance before the first cut
+    point and checks. The chunker also backs a cut inside a sentence up to that sentence's
+    start, so a whole sentence up to ``chunk_chars`` survives even when it is longer than
+    the overlap. A fact longer than the overlap *and* spanning more than one sentence is
+    the residual limit: no single chunk contains it.
     """
     files = dict(evalkit.planted_corpus())
     filler = "word "
-    rows: list[dict[str, Any]] = []
-    for shift in (0, 25, 50, 75, 100, 150, 200, 250, 300):
-        prefix = filler * ((1200 - shift) // len(filler))
-        body = f"{prefix}{BOUNDARY_FACT} {' '.join(['tail'] * 400)}\n"
-        pieces = chunk_text(body, chunk_chars=1200, overlap_chars=200, min_chunk_chars=80)
-        intact = any(BOUNDARY_FACT in piece for piece, _, _ in pieces)
+    # The engine that will answer uses the configured defaults, so measure the same
+    # chunk size and overlap it actually indexes with rather than hard-coded values.
+    _base, config = build_engine(model, "boundary", files)
+    chunk_chars = config.chunk_chars
+    overlap = config.chunk_overlap_chars
 
+    def chunked(body: str) -> list[tuple[str, int, int]]:
+        return chunk_text(body, chunk_chars=chunk_chars, overlap_chars=overlap, min_chunk_chars=80)
+
+    def answer(name: str, body: str) -> dict[str, Any]:
         probe_files = dict(files)
         probe_files["misc/rotation.md"] = body
-        engine, _ = build_engine(model, "boundary", probe_files)
+        engine, _ = build_engine(model, name, probe_files)
         result = engine.query(BOUNDARY_QUERY, top_k=5, retrieve_k=20, max_passage_chars=None)
-        best = next(
-            (p for p in result.passages if "rotation.md" in p["path"]),
-            None,
-        )
-        rows.append({
-            "shift_chars": shift,
-            "fact_intact_in_a_chunk": intact,
+        best = next((p for p in result.passages if "rotation.md" in p["path"]), None)
+        return {
             "found_in_top_k": best is not None,
             "relevance": None if best is None else best["relevance"],
             "answerability": result.answerability,
             "answerable": result.answerable,
+        }
+
+    rows: list[dict[str, Any]] = []
+    for shift in (0, 25, 50, 75, 100, 150, 200, 250, 300, 350, 400):
+        prefix = filler * ((chunk_chars - shift) // len(filler))
+        body = f"{prefix}{BOUNDARY_FACT} {' '.join(['tail'] * 400)}\n"
+        intact = any(BOUNDARY_FACT in piece for piece, _, _ in chunked(body))
+        rows.append({
+            "shift_chars": shift,
+            "fact_intact_in_a_chunk": intact,
+            **answer("boundary", body),
         })
 
-    # The fact above is shorter than the 200-character overlap, so it survives any split
-    # by construction. A fact longer than the overlap is where the guarantee actually
-    # ends: once the cut lands more than `overlap` characters into the fact, the next
-    # chunk starts after the fact began and the whole sentence exists in neither.
+    # A fact longer than the overlap, placed so a cut lands inside it at several
+    # distances. This is what the larger overlap is for: below it the fact must survive.
     long_fact = (
         "The secret rotation interval is forty two days and the break glass procedure "
         "requires two approvers from the platform team before any credential is rotated, "
@@ -295,30 +306,51 @@ def probe_boundary(model: Any) -> dict[str, Any]:
         "within one business day of the rotation completing."
     )
     long_rows: list[dict[str, Any]] = []
-    for shift in (250, 300):
-        prefix = filler * ((1200 - shift) // len(filler))
+    for shift in (250, 300, overlap - 50, overlap + 50):
+        prefix = filler * ((chunk_chars - shift) // len(filler))
         body = f"{prefix}{long_fact} {' '.join(['tail'] * 400)}\n"
-        pieces = chunk_text(body, chunk_chars=1200, overlap_chars=200, min_chunk_chars=80)
-        intact = any(long_fact in piece for piece, _, _ in pieces)
-        probe_files = dict(files)
-        probe_files["misc/rotation.md"] = body
-        engine, _ = build_engine(model, "boundary-long", probe_files)
-        result = engine.query(BOUNDARY_QUERY, top_k=5, retrieve_k=20, max_passage_chars=None)
-        best = next((p for p in result.passages if "rotation.md" in p["path"]), None)
+        intact = any(long_fact in piece for piece, _, _ in chunked(body))
         long_rows.append({
             "fact_chars": len(long_fact),
             "shift_chars": shift,
             "fact_intact_in_a_chunk": intact,
-            "found_in_top_k": best is not None,
-            "relevance": None if best is None else best["relevance"],
-            "answerability": result.answerability,
+            **answer("boundary-long", body),
+        })
+
+    # A single sentence longer than the overlap, in normal prose, must survive because
+    # the chunker will not split it: the sentence-aware pass, not the overlap, is what
+    # keeps it whole. The shifts reach past the overlap into the sentence's interior.
+    sentence = (
+        "The secret rotation interval is forty two days and the break glass procedure "
+        "requires two approvers from the platform team before any credential is rotated, "
+        "and every request is written to the audit channel with the requesting service, "
+        "the two approvers, and the on-call security engineer recorded before the "
+        "rotation is allowed to proceed, with the rotation blocked automatically if "
+        "either approver is unavailable or the audit channel is not writable at the "
+        "moment the request is made and the failure written to the same channel for "
+        "the next business day's review."
+    )
+    unit = "Earlier background context. "
+    sentence_rows: list[dict[str, Any]] = []
+    for shift in (0, 250, 500, len(sentence)):
+        prefix = (unit * (chunk_chars // len(unit) + 2))[: max(0, chunk_chars - shift)]
+        body = f"{prefix} {sentence} {' '.join(['tail'] * 400)}\n"
+        intact = any(sentence in piece for piece, _, _ in chunked(body))
+        sentence_rows.append({
+            "sentence_chars": len(sentence),
+            "shift_chars": shift,
+            "sentence_intact_in_a_chunk": intact,
+            **answer("boundary-sentence", body),
         })
 
     return {
         "fact_chars": len(BOUNDARY_FACT),
-        "overlap_chars": 200,
+        "sentence_chars": len(sentence),
+        "chunk_chars": chunk_chars,
+        "overlap_chars": overlap,
         "rows": rows,
         "long_fact": long_rows,
+        "sentence": sentence_rows,
     }
 
 
@@ -507,7 +539,17 @@ def probe_adjudication(model: Any) -> dict[str, Any]:
 # ── reporting ────────────────────────────────────────────────────────────
 
 def render_markdown(results: dict[str, Any]) -> str:
+    failed = {
+        name: block["error"]
+        for name, block in results.items()
+        if isinstance(block, dict) and "error" in block
+    }
+    results = {name: block for name, block in results.items() if name not in failed}
     parts: list[str] = ["# Limit probes", ""]
+    if failed:
+        parts += ["## Probes that failed", ""]
+        parts += [f"- **{name}**: {message}" for name, message in failed.items()]
+        parts += [""]
     if "evidence" in results:
         block = results["evidence"]
         parts += [
@@ -548,14 +590,22 @@ def render_markdown(results: dict[str, Any]) -> str:
         parts += [
             "## Chunk-boundary survival",
             "",
-            f"Fact is {block['fact_chars']} chars, overlap is {block['overlap_chars']} chars. "
-            "`shift_chars` is how far the first cut point is pushed into the sentence.",
+            f"Fact is {block['fact_chars']} chars, chunk is {block['chunk_chars']} chars, "
+            f"overlap is {block['overlap_chars']} chars. `shift_chars` is how far the first "
+            "cut point is pushed into the fact.",
             "",
             evalkit.markdown_table(block["rows"]),
             "",
             "### A fact longer than the overlap",
             "",
             evalkit.markdown_table(block["long_fact"]),
+            "",
+            "### A sentence longer than the overlap",
+            "",
+            f"Sentence is {block['sentence_chars']} chars; the chunker backs a cut inside it "
+            "up to the sentence start, so it survives without a wider overlap.",
+            "",
+            evalkit.markdown_table(block["sentence"]),
             "",
         ]
     if "scale" in results:
@@ -600,7 +650,15 @@ def render_markdown(results: dict[str, Any]) -> str:
 
 
 def render_console(results: dict[str, Any]) -> str:
+    failed = {
+        name: block["error"]
+        for name, block in results.items()
+        if isinstance(block, dict) and "error" in block
+    }
+    results = {name: block for name, block in results.items() if name not in failed}
     lines: list[str] = []
+    if failed:
+        lines.append("probes that failed: " + ", ".join(f"{name} ({msg})" for name, msg in failed.items()))
     if "evidence" in results:
         rows = results["evidence"]["by_top_k"]
         lines.append("evidence gate:")
@@ -643,6 +701,12 @@ def render_console(results: dict[str, Any]) -> str:
             lines.append(
                 f"  long fact {row['fact_chars']} chars at shift={row['shift_chars']:<4} "
                 f"intact={row['fact_intact_in_a_chunk']!s:<5} found={row['found_in_top_k']!s:<5} "
+                f"relevance={row['relevance']}"
+            )
+        for row in results["boundary"]["sentence"]:
+            lines.append(
+                f"  sentence {row['sentence_chars']} chars at shift={row['shift_chars']:<4} "
+                f"intact={row['sentence_intact_in_a_chunk']!s:<5} found={row['found_in_top_k']!s:<5} "
                 f"relevance={row['relevance']}"
             )
     if "scale" in results:

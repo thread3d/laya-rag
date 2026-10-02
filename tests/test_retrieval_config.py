@@ -23,6 +23,13 @@ def test_dense_weight_defaults_to_off_for_layas_own_encoder():
     assert EngineConfig().resolved_dense_weight == 0.0
 
 
+def test_the_chunk_overlap_is_clamped_below_the_chunk_size():
+    """The default overlap (400) must not make a deliberately small CHUNK_CHARS fatal."""
+    assert EngineConfig(chunk_chars=300).resolved_chunk_overlap == 299
+    assert EngineConfig(chunk_chars=1200).resolved_chunk_overlap == 400
+    assert EngineConfig(chunk_chars=1200, chunk_overlap_chars=0).resolved_chunk_overlap == 0
+
+
 def test_dense_weight_turns_on_for_a_retrieval_trained_embedder():
     config = EngineConfig(embed_model="BAAI/bge-small-en-v1.5")
     assert config.resolved_dense_weight == 1.0

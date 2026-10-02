@@ -1,0 +1,146 @@
+"""Unit tests for the evidence-set coverage selectors in ``tools/multihop_coverage.py``.
+
+These exercise the pure selection arithmetic — document quotas, fact-atom dedup, atom
+facility location, and the pool reorder ceiling — against hand-computed values. No
+encoder, network, or benchmark data is touched: importing the module only pulls in its
+pure ``beir``/``evalkit`` imports.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+
+import multihop_coverage as mc  # noqa: E402
+
+
+# ── fact atoms ──────────────────────────────────────────────────────────
+
+def test_split_atoms_splits_sentences_and_drops_short_fragments():
+    text = "The first fact is long enough to keep. Short. \nAnother sufficiently long fact here!"
+    assert mc.split_atoms(text) == [
+        "The first fact is long enough to keep.",
+        "Another sufficiently long fact here!",
+    ]
+
+
+def test_split_atoms_respects_min_chars():
+    assert mc.split_atoms("Alpha. Beta.", min_chars=100) == []
+    assert mc.split_atoms("Alpha. Beta.", min_chars=1) == ["Alpha.", "Beta."]
+
+
+def test_atom_index_deduplicates_identical_atoms_across_candidates():
+    a = "The same overlapping fact appears here."
+    b = "A distinct second fact lives in this chunk."
+    per_candidate, weight, texts = mc.atom_index([[a, b], [a], [a.upper()]])
+
+    assert len(texts) == 2
+    assert per_candidate == [[0, 1], [0], [0]]
+    assert all(w >= 0 for w in weight)
+    assert weight[0] == pytest.approx(float(len(" ".join(a.lower().split()))))
+    assert weight[1] == pytest.approx(float(len(" ".join(b.lower().split()))))
+
+
+def test_atom_index_deduplicates_within_a_candidate():
+    per_candidate, _, texts = mc.atom_index([["Repeated fact, long enough to matter.", "repeated   fact, long enough to matter."]])
+    assert len(texts) == 1
+    assert per_candidate == [[0]]
+
+
+# ── document quota ──────────────────────────────────────────────────────
+
+def test_doc_quota_select_represents_min_docs_and_respects_top_k():
+    rel = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
+    docs = np.array(["a", "a", "b", "c", "a"])
+    selected = mc.doc_quota_select(rel, docs, top_k=4, min_docs=3)
+
+    assert len(selected) == 4
+    assert len({docs[i] for i in selected}) == 3
+    # first pass takes the best-ranked candidate for each new document
+    assert selected[:3] == [0, 2, 3]
+    # second pass fills from untouched candidates in descending relevance
+    assert selected[3] == 1
+
+
+def test_doc_quota_select_is_deterministic_and_ties_break_to_lower_index():
+    docs = np.array(["a", "a", "b", "b"])
+    rel = np.zeros(4)
+    first = mc.doc_quota_select(rel, docs, top_k=3, min_docs=2)
+    second = mc.doc_quota_select(rel, docs, top_k=3, min_docs=2)
+
+    assert first == second
+    assert first == [0, 2, 1]
+
+
+def test_doc_quota_select_falls_back_when_fewer_docs_exist():
+    rel = np.array([0.5, 0.4, 0.3])
+    docs = np.array(["a", "a", "a"])
+    selected = mc.doc_quota_select(rel, docs, top_k=3, min_docs=5)
+
+    assert selected == [0, 1, 2]
+    assert len(selected) <= 3
+
+
+# ── atom facility location ──────────────────────────────────────────────
+
+def test_facility_location_select_covers_distinct_atoms_not_duplicates():
+    # A and B carry the same two atoms; C carries one new, higher-weight atom.
+    rel = np.zeros(3)
+    cand_atoms = [[0, 1], [0, 1], [2]]
+    weights = [50.0, 50.0, 100.0]
+    gram = np.zeros((3, 3))
+
+    selected = mc.facility_location_select(rel, cand_atoms, weights, gram, top_k=3, lam=0.5)
+
+    assert selected[0] == 0
+    assert selected[1] == 2  # B repeats A's atoms and adds nothing; C adds atom 2
+    covered: set[int] = set()
+    growth = []
+    for i in selected:
+        covered.update(cand_atoms[i])
+        growth.append(len(covered))
+    assert growth == [2, 3, 3]
+    assert covered == {0, 1, 2}
+
+
+def test_facility_location_select_respects_top_k_and_valid_indices():
+    rel = np.array([0.4, 0.9, 0.1, 0.7])
+    cand_atoms = [[0], [1, 2], [3], [4, 5]]
+    weights = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    gram = np.eye(4)
+
+    selected = mc.facility_location_select(rel, cand_atoms, weights, gram, top_k=2, lam=0.5)
+
+    assert len(selected) == 2
+    assert len(set(selected)) == 2
+    assert all(0 <= i < 4 for i in selected)
+
+
+def test_facility_location_select_handles_constant_relevance():
+    cand_atoms = [[0], [1]]
+    gram = np.zeros((2, 2))
+    # constant rel must normalize to all-zeros rather than divide by zero
+    selected = mc.facility_location_select(np.array([3.0, 3.0]), cand_atoms, [1.0, 1.0], gram, top_k=1)
+    assert selected == [0]
+
+
+# ── pool reorder ceiling ────────────────────────────────────────────────
+
+def test_pool_ceiling_map_places_the_largest_new_match_first():
+    # Greedy picks candidate 1 (two new facts) at rank 1 -> AP = 2/1 / min(2,2) = 1.0.
+    assert mc.pool_ceiling_map(None, [{0}, {0, 1}], 2) == pytest.approx(1.0)
+
+
+def test_pool_ceiling_map_hand_computed_partial_coverage():
+    # pool [[g1],[g2],[g3]] top_k=2: ranks find one new fact each ->
+    # AP = (1/1 + 1/2) / min(3, 2) = 0.75.
+    assert mc.pool_ceiling_map(None, [{0}, {1}, {2}], 2) == pytest.approx(0.75)
+
+
+def test_pool_ceiling_map_is_zero_without_matches():
+    assert mc.pool_ceiling_map(None, [set(), set()], 2) == 0.0
+    assert mc.pool_ceiling_map(None, [], 10) == 0.0

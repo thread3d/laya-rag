@@ -24,6 +24,7 @@ path has to produce the *same* ranking, not merely a plausible one.
 from __future__ import annotations
 
 import argparse
+import heapq
 import json
 import resource
 import sys
@@ -76,8 +77,23 @@ class OnDiskBM25:
         self._postings: np.ndarray | None = None
 
     # -- build ----------------------------------------------------------
-    def build(self, documents: Iterable[tuple[str, str]], block_docs: int = 50000) -> None:
-        """Stream ``(doc_id, text)`` through sorted runs, then merge them to packed form."""
+    def build(
+        self,
+        documents: Iterable[tuple[str, str]],
+        block_docs: int = 50000,
+        block_tokens: int = 1_000_000,
+    ) -> None:
+        """Stream ``(doc_id, text)`` through sorted runs, then merge them to packed form.
+
+        A block flushes at ``block_docs`` documents or ``block_tokens`` tokens, whichever
+        comes first. The token cap bounds the one build block that otherwise dominates
+        peak RSS (a `term -> count` dict per document held in RAM); the merge is a heap
+        over the sorted runs, so it holds one row per run rather than a run's column.
+        """
+        if block_docs < 1:
+            raise ValueError(f"block_docs must be positive, got {block_docs}")
+        if block_tokens < 1:
+            raise ValueError(f"block_tokens must be positive, got {block_tokens}")
         self.directory.mkdir(parents=True, exist_ok=True)
         run_dir = self.directory / "runs"
         run_dir.mkdir(exist_ok=True)
@@ -88,6 +104,7 @@ class OnDiskBM25:
         runs: list[Path] = []
         block: list[tuple[str, Any]] = []
         block_start = 0
+        block_token_count = 0
 
         def flush() -> None:
             if not block:
@@ -125,9 +142,11 @@ class OnDiskBM25:
             for token in tokens:
                 counts[token] = counts.get(token, 0) + 1
             block.append((doc_id, counts))
-            if len(block) >= block_docs:
+            block_token_count += len(tokens)
+            if len(block) >= block_docs or block_token_count >= block_tokens:
                 flush()
                 block_start = len(ids)
+                block_token_count = 0
         flush()
 
         self.n_docs = len(ids)
@@ -139,28 +158,36 @@ class OnDiskBM25:
         self._df = df
         offsets = np.zeros(n_terms + 1, dtype=np.int64)
 
-        # K-way merge by term id. Runs are memory-mapped, so peak memory is one term's
-        # postings at a time rather than the whole index.
+        # K-way merge by (term id, run index). Popping the smallest run index first
+        # drains a run's whole block for a term before the next run, reproducing the
+        # previous per-run scan's order and therefore its ranking, while holding only
+        # one head row per run.
         handles = [np.load(path, mmap_mode="r") for path in runs]
         positions = [0] * len(handles)
+        heads: list[tuple[int, int, int, int]] = []
+        for r, handle in enumerate(handles):
+            if len(handle):
+                row0 = handle[0]
+                heapq.heappush(heads, (int(row0[0]), r, int(row0[1]), int(row0[2])))
+                positions[r] = 1
         postings_path = self.directory / "postings.bin"
         written = 0
+        closed_terms = 0
         with open(postings_path, "wb") as out:
-            for term in range(n_terms):
-                for r, handle in enumerate(handles):
-                    start = positions[r]
-                    if start >= len(handle):
-                        continue
-                    column = handle[start:, 0]
-                    lo = int(np.searchsorted(column, term, side="left"))
-                    hi = int(np.searchsorted(column, term, side="right"))
-                    if hi <= lo:
-                        continue
-                    chunk = np.asarray(handle[start + lo : start + hi, 1:3], dtype=np.int32)
-                    out.write(chunk.tobytes())
-                    written += len(chunk)
-                    positions[r] = start + hi
-                offsets[term + 1] = written
+            while heads:
+                term, r, row, tf = heapq.heappop(heads)
+                out.write(np.asarray([row, tf], dtype=np.int32).tobytes())
+                written += 1
+                handle = handles[r]
+                position = positions[r]
+                if position < len(handle):
+                    nxt = handle[position]
+                    heapq.heappush(heads, (int(nxt[0]), r, int(nxt[1]), int(nxt[2])))
+                    positions[r] = position + 1
+                if not heads or heads[0][0] != term:
+                    for earlier in range(closed_terms, term + 1):
+                        offsets[earlier + 1] = written
+                    closed_terms = term + 1
         np.save(self.directory / "df.npy", df)
         np.save(self.directory / "offsets.npy", offsets)
         self.offsets = offsets
@@ -329,6 +356,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--limit-queries", type=int, default=None)
     ap.add_argument("--top-k", type=int, default=100)
     ap.add_argument("--block-docs", type=int, default=50000)
+    ap.add_argument("--block-tokens", type=int, default=1_000_000,
+                    help="flush a build block at this many tokens (bounds peak RSS)")
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--verify-queries", type=int, default=50,
                     help="how many queries to check give the identical in-memory ranking")
@@ -359,7 +388,11 @@ def main(argv=None) -> int:
         bm25_dir = Path(args.out) / args.dataset / "bm25"
         started = time.perf_counter()
         ondisk = OnDiskBM25(bm25_dir)
-        ondisk.build(((doc_id, text) for doc_id, text in corpus.items()), block_docs=args.block_docs)
+        ondisk.build(
+            ((doc_id, text) for doc_id, text in corpus.items()),
+            block_docs=args.block_docs,
+            block_tokens=args.block_tokens,
+        )
         bm25_seconds = time.perf_counter() - started
         print(f"  on-disk BM25 built in {bm25_seconds:.0f}s, {ondisk.disk_bytes() / 1e6:.0f} MB, "
               f"peak RSS {peak_rss_mb():.0f} MB", flush=True)

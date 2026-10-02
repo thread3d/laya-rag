@@ -20,10 +20,11 @@ RECALIBRATE_ARGS ?=
 ROUTING_ARGS ?=
 FINETUNE_ARGS ?=
 ONDISK_ARGS ?=
+ANSWERABILITY_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench beir beir-ablate multihop multihop-gate multihop-coverage multihop-recalibrate beir-routing finetune ondisk charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate multihop multihop-gate multihop-coverage multihop-recalibrate multihop-answerability beir-routing finetune ondisk charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -37,12 +38,15 @@ help:
 	@echo "test-gui     drive the running service's GUI in headless Chrome"
 	@echo "eval         measure retrieval and calibration on labelled queries"
 	@echo "bench        probe the engine's limits (evidence, batch, scale, ...)"
+	@echo "bench-index-parallel  serial vs threads vs processes on the Laya encoder"
+	@echo "bench-biencoder-parallel  the same for a retrieval-trained bi-encoder"
 	@echo "beir         standard IR metrics on BEIR (nDCG@10, MRR@10, ...)"
 	@echo "beir-ablate  sweep fusion weights and rerank depth on BEIR"
 	@echo "multihop     MultiHop-RAG under the benchmark's own protocol"
 	@echo "multihop-gate  answerability rejection on the null_query records"
 	@echo "multihop-coverage  does a coverage objective beat per-document rank on MAP@10?"
 	@echo "multihop-recalibrate  does a threshold fitted on one split transfer?"
+	@echo "multihop-answerability  fit and score the feature-based answerability gate"
 	@echo "beir-routing per-corpus channel selection, measured out of sample"
 	@echo "finetune     in-domain domain adaptation (adapted, not zero-shot)"
 	@echo "ondisk       on-disk postings and streaming dense index"
@@ -102,6 +106,14 @@ eval:
 bench:
 	OMP_NUM_THREADS=16 $(PY) tools/bench.py $(BENCH_ARGS)
 
+# `make bench-index-parallel BENCH_ARGS="--n 512"`; writes eval/index-parallel.{json,md}.
+bench-index-parallel:
+	$(PY) tools/bench_index_parallel.py $(BENCH_ARGS)
+
+# `make bench-biencoder-parallel BENCH_ARGS="--model BAAI/bge-small-en-v1.5"`.
+bench-biencoder-parallel:
+	$(PY) tools/bench_biencoder_parallel.py $(BENCH_ARGS)
+
 # Standard-benchmark retrieval quality. Downloads the datasets into eval/beir/data and
 # needs network on the first run plus the Laya checkpoints for the dense rows.
 # `make beir BEIR_ARGS="--datasets scifact --retrievers bm25"` narrows it.
@@ -128,6 +140,10 @@ multihop-coverage:
 # Does an answerability threshold fitted on one split transfer to the other?
 multihop-recalibrate:
 	$(PY) tools/multihop_recalibrate.py $(RECALIBRATE_ARGS)
+
+# Fit the feature gate on the gate run's recorded signals and score it out of sample.
+multihop-answerability:
+	$(PY) tools/answerability_train.py $(ANSWERABILITY_ARGS)
 
 # Per-corpus channel selection, measured out of sample.
 beir-routing:

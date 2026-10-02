@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 import time
 from pathlib import Path
@@ -111,6 +112,13 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--out", default=str(ROOT_BENCH / "official.json"))
     ap.add_argument("--no-merge", action="store_true",
                     help="write only this run's rows instead of merging into the report")
+    ap.add_argument("--limit-queries", type=int, default=None,
+                    help="score a deterministic sample of this many answerable queries; a "
+                         "subset signal (the report records the limit), not the full protocol")
+    ap.add_argument("--sample-seed", type=int, default=17)
+    ap.add_argument("--rerank-targets", default="dense,hybrid",
+                    help="which first stages the cross-encoder reranks: dense, hybrid, or both — "
+                         "reranking one halves the scoring cost")
     return ap.parse_args(argv)
 
 
@@ -123,6 +131,14 @@ def main(argv=None) -> int:
     depth = max(10, args.rerank_depth) if args.rerank else 10
 
     ev_items = [(i, x) for i, x in enumerate(items) if x["question_type"] != "null_query"]
+    total_answerable = len(ev_items)
+    if args.limit_queries and args.limit_queries < total_answerable:
+        sampled = sorted(
+            random.Random(args.sample_seed).sample(range(total_answerable), args.limit_queries)
+        )
+        ev_items = [ev_items[i] for i in sampled]
+        print(f"subset: {len(ev_items)} of {total_answerable} answerable queries "
+              f"(seed {args.sample_seed})", flush=True)
     golds = [[e["fact"] for e in x["evidence_list"]] for _, x in ev_items]
 
     results: dict = {}
@@ -175,10 +191,13 @@ def main(argv=None) -> int:
                 f"{short} hybrid": {q: v[:10] for q, v in fused_full.items()},
             }
             if cross_encoder is not None:
-                for label, base in (
-                    (f"{short} dense+rerank", dense_full),
-                    (f"{short} hybrid+rerank", fused_full),
-                ):
+                targets = {t.strip() for t in str(args.rerank_targets).split(",") if t.strip()}
+                options = []
+                if "dense" in targets:
+                    options.append((f"{short} dense+rerank", dense_full))
+                if "hybrid" in targets:
+                    options.append((f"{short} hybrid+rerank", fused_full))
+                for label, base in options:
                     started = time.perf_counter()
                     reranked, _ = beir.crossencoder_rankings(
                         corpus, queries, base, cross_encoder, depth, 10
@@ -193,6 +212,7 @@ def main(argv=None) -> int:
                 print(f"  {name:22s} Hits@10={m['Hits@10']:.4f} Hits@4={m['Hits@4']:.4f} "
                       f"MAP@10={m['MAP@10']:.4f} MRR@10={m['MRR@10']:.4f}", flush=True)
 
+    results["_settings"] = vars(args)
     evalkit.write_json(out_path, results)
     print("\nwrote", out_path)
     return 0

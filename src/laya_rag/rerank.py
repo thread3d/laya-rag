@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
+import numpy as np
+
 from .index_store import Hit, VectorIndex  # noqa: F401  (Hit re-exported for callers)
 from .model import LayaModel
 
@@ -74,6 +76,11 @@ class RerankResult:
     passages: list[ScoredPassage] = field(default_factory=list)
     answerable: bool = False
     answerability: float | None = None
+    #: Whether ``answerability`` came from a decision. The relevance gate short-circuits
+    #: to ``0.0`` when nothing survives it, and that structural zero is *not measured*:
+    #: feeding it into a calibration as if it were a head output mixes two mechanisms
+    #: (the reason ``tools/multihop_recalibrate.py`` filters on ``p > 0``).
+    answerability_measured: bool = False
     considered: int = 0
     kept: int = 0
     dropped_below_threshold: int = 0
@@ -82,6 +89,32 @@ class RerankResult:
     @property
     def best(self) -> ScoredPassage | None:
         return self.passages[0] if self.passages else None
+
+
+def blend_scores(
+    recall: Sequence[float],
+    relevance: Sequence[float],
+    blend: float,
+) -> list[float]:
+    """Interpolate the first-stage and decision scores into one ordering key.
+
+    ``blend == 1.0`` returns the decisions unchanged (the historical behaviour).
+    ``blend == 0.0`` returns the recall order. In between, each channel is min-max
+    normalised per query and mixed, so a second stage can *nudge* a ranking instead of
+    replacing it — which is what a fully-trusted pointwise cross-encoder did when it
+    lowered nDCG@10 on all five BEIR corpora, catastrophically on ArguAna.
+    """
+    if not 0.0 <= blend <= 1.0:
+        raise ValueError(f"blend must be in [0, 1], got {blend!r}")
+    recall_array = np.asarray(recall, dtype=np.float64)
+    if recall_array.size and float(recall_array.max()) > float(recall_array.min()):
+        recall_array = (recall_array - recall_array.min()) / (
+            recall_array.max() - recall_array.min()
+        )
+    else:
+        recall_array = np.zeros_like(recall_array)
+    relevance_array = np.asarray(relevance, dtype=np.float64)
+    return (blend * relevance_array + (1.0 - blend) * recall_array).tolist()
 
 
 def _noul_value(result: dict[str, Any], qid: str) -> float:
@@ -209,6 +242,9 @@ class LayaReranker:
         batch_size: int = 8,
         order: str = "relevance",
         scores: Sequence[float] | None = None,
+        blend: float = 1.0,
+        gate: Any | None = None,
+        answerability_fn: Any | None = None,
     ) -> RerankResult:
         """Apply a relevance decision to the candidates and gate on answerability.
 
@@ -222,6 +258,19 @@ class LayaReranker:
         ``scores`` lets the caller supply the relevance probabilities instead of having
         Laya compute them — the engine uses this to substitute a retrieval-trained
         cross-encoder for ordering and filtering while keeping Laya's answerability gate.
+
+        ``blend`` mixes that supplied score with the first-stage recall score before
+        ordering (see :func:`blend_scores`). ``1.0`` keeps the historical behaviour of
+        ordering fully by the decision; values below it bound how far a second stage can
+        move the list.
+
+        ``gate`` is an optional answerability model (anything with ``predict_proba``)
+        that replaces Laya's single-scalar decision with a multi-feature one. ``None``
+        keeps Laya's own question.
+
+        ``answerability_fn`` is a higher-precedence override: a callable
+        ``(query, passages) -> probability`` used for an NLI answerability model. It wins
+        over ``gate`` and over Laya's question because it is the most specific scorer.
         """
         if not hits:
             return RerankResult()
@@ -253,7 +302,22 @@ class LayaReranker:
         ]
 
         above = [passage for passage in scored if passage.relevance >= relevance_threshold]
-        if order == "recall":
+        if blend < 1.0:
+            # The second stage nudges the first-stage order instead of replacing it.
+            combined = blend_scores(
+                [passage.recall_score for passage in scored],
+                [passage.relevance for passage in scored],
+                blend,
+            )
+            blended = {passage.chunk_id: score for passage, score in zip(scored, combined)}
+            above.sort(
+                key=lambda passage: (
+                    -blended[passage.chunk_id],
+                    -passage.relevance,
+                    -passage.recall_score,
+                )
+            )
+        elif order == "recall":
             # Retrieval order, with Laya's probability breaking ties.
             above.sort(key=lambda passage: (-passage.recall_score, -passage.relevance))
         else:
@@ -272,8 +336,22 @@ class LayaReranker:
             result.answerability = 0.0
             return result
 
-        answerability, answer_usage = self.check_answerability(query, kept)
-        _merge_usage(result.usage, answer_usage)
+        if answerability_fn is not None:
+            # Highest precedence: a dedicated scorer (e.g. an NLI cross-encoder) that
+            # looks at the evidence directly rather than at retrieval features.
+            answerability = float(answerability_fn(query, kept))
+        elif gate is not None:
+            # A trained feature gate replaces the one-scalar decision. The features are
+            # the evidence signals the engine already has, so this needs no extra model
+            # call and can be calibrated on a domain's own null/answerable split.
+            from .answerability import extract_features
+
+            features = extract_features(query, kept)
+            answerability = float(np.asarray(gate.predict_proba([features])).reshape(-1)[0])
+        else:
+            answerability, answer_usage = self.check_answerability(query, kept)
+            _merge_usage(result.usage, answer_usage)
         result.answerability = answerability
+        result.answerability_measured = True
         result.answerable = answerability >= answerability_threshold
         return result

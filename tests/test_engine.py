@@ -182,6 +182,60 @@ def test_rebuild_discards_previous_content(tmp_path):
     assert all("only.md" in path for path in engine.index.paths())
 
 
+def test_reindexing_a_directory_prunes_deleted_files(tmp_path):
+    """A file removed from disk must not stay retrievable after re-indexing its parent."""
+    corpus = write_corpus(tmp_path / "corpus")
+    engine = stub_engine(tmp_path)
+    engine.index_paths([corpus])
+    assert any("shipping.md" in path for path in engine.index.paths())
+
+    (corpus / "shipping.md").unlink()
+    report = engine.index_paths([corpus])
+
+    assert report.removed_chunks > 0
+    assert not any("shipping.md" in path for path in engine.index.paths())
+    assert all("shipping.md" not in record["path"] for record in engine.list_chunks())
+
+
+def test_reindexing_a_directory_prunes_a_file_made_unreadable(tmp_path):
+    """A file that becomes empty is refused by the loader and must be pruned too."""
+    corpus = write_corpus(tmp_path / "corpus")
+    engine = stub_engine(tmp_path)
+    engine.index_paths([corpus])
+
+    (corpus / "security.md").write_text("   \n\n", encoding="utf-8")
+    engine.index_paths([corpus])
+
+    assert not any("security.md" in path for path in engine.index.paths())
+
+
+def test_pruning_never_touches_files_outside_the_reindexed_directory(tmp_path):
+    """Passing a single file is not a claim about the rest of the index."""
+    corpus = write_corpus(tmp_path / "corpus")
+    engine = stub_engine(tmp_path)
+    engine.index_paths([corpus])
+
+    (corpus / "shipping.md").unlink()
+    # Re-index one surviving file, not the directory: the missing file is out of scope.
+    engine.index_paths([corpus / "refunds.md"])
+
+    assert any("shipping.md" in path for path in engine.index.paths())
+
+
+def test_prune_false_keeps_stale_chunks(tmp_path):
+    """The old append-only behaviour stays available for callers that want it."""
+    corpus = write_corpus(tmp_path / "corpus")
+    engine = stub_engine(tmp_path)
+    engine.index_paths([corpus])
+
+    (corpus / "shipping.md").unlink()
+    engine.index_paths([corpus], prune=False)
+
+    # Incremental replacement still removes the chunks of the files it reloaded, but the
+    # deleted file's chunks are deliberately left alone under `prune=False`.
+    assert any("shipping.md" in path for path in engine.index.paths())
+
+
 def test_missing_lexical_channel_degrades_loudly(tmp_path):
     """An index without lexical.json must still answer, and must say recall is degraded."""
     corpus = write_corpus(tmp_path / "corpus")

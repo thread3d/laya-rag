@@ -290,7 +290,8 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `EMBED_BATCH_SIZE` | `16` | texts per embedding forward pass |
 | `TORCH_THREADS` | `16` | torch intra-op threads; oversubscription hurts on high-core hosts |
 | `INDEX_DIR` | `./indexes/default` | where the index is persisted |
-| `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `200` | chunking budget |
+| `INDEX_BACKEND` | `memory` | `memory` or `ondisk`; `ondisk` streams vectors to a memory-mapped file and packs BM25 postings into one mmap so query-time memory stops scaling with corpus size (append-only; rebuild on change) |
+| `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `400` | chunking budget; a fact up to the overlap survives any split, a cut inside a sentence backs up to the sentence start, and the overlap is clamped below `CHUNK_CHARS` |
 | `MIN_CHUNK_CHARS` | `80` | a shorter trailing chunk is folded into the previous one |
 | `LEXICAL_STEM` | `true` | English stemming for the lexical channel; `false` keeps exact terms only |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
@@ -299,12 +300,16 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `EMBED_QUERY_INSTRUCTION` | `false` | prepend the model's retrieval instruction to queries |
 | `DENSE_WEIGHT` / `LEXICAL_WEIGHT` | `auto` / `1.0` | RRF channel weights; `auto` is `0` for Laya's encoder and `1` for a configured `EMBED_MODEL` |
 | `RECALL_DEDUP_THRESHOLD` | `0.0` | drop a fused candidate whose cosine to a kept chunk is at or above this; `0.9` is the measured MultiHop-RAG setting, `0.0` disables it |
+| `RECALL_COVERAGE_LAMBDA` | `0.0` | evidence-set coverage selection on the fused pool (sentence-atom submodular max-coverage); `0.5` is the measured MultiHop-RAG setting (MAP@10 0.2835), `0.0` disables it |
 | `RERANK_MODEL` | unset | retrieval-trained cross-encoder that orders and filters evidence; Laya still gates |
 | `RERANK_ORDER` | `auto` | `auto` orders by the scorer when `RERANK_MODEL` is set and keeps recall order otherwise; or force `recall` / `relevance` |
+| `RERANK_BLEND` | `1.0` | how far a supplied second stage may move the first-stage order, in `[0, 1]`; `1.0` replaces it (historical), below it is fused so the second stage nudges rather than overrides |
 | `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
 | `CLAIM_MAX` | `25` | claims adjudicated per answer, so one long answer cannot run unbounded |
 | `RELEVANCE_THRESHOLD` | `0.5` | minimum Laya P(relevant) to keep a passage |
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
+| `ANSWERABILITY_GATE_PATH` | unset | persisted feature-based answerability gate (see `tools/answerability_train.py`); unset uses Laya's own scalar decision |
+| `ANSWERABILITY_NLI_MODEL` | unset | NLI cross-encoder used as an answerability scorer (e.g. `cross-encoder/nli-deberta-v3-base`); takes precedence over the gate and Laya's scalar |
 | `HOST` / `PORT` | `127.0.0.1` / `8077` | service bind address |
 | `API_KEY` | unset | when set, requires `Authorization: Bearer <key>` |
 | `WARMUP` | `true` | load the checkpoint during service startup instead of on the first request |
@@ -342,7 +347,7 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (330 tests)
+make test          # Python suite, offline, deterministic (473 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```
@@ -777,26 +782,49 @@ should not be cited as a strength out of domain.
 
 ### Where this RAG is worse
 
-- **Coverage on multi-hop queries.** MAP@10 0.279 against 0.479 published, even after a
-  model-free coverage pass lifts it +0.024. It finds *an* answer passage, not *the set*.
-- **Answerability out of domain**, as above — AUC 0.51 at the best, and a recalibration split
-  fitted on MultiHop-RAG itself transfers at chance.
+- **Coverage on multi-hop queries.** MAP@10 **0.2835** against 0.479 published, after a
+  sentence-atom submodular coverage pass lifts it **+0.0288** (held-out) over the fused
+  baseline. It still finds *an* answer passage far more reliably than *the set* — but the
+  fused top-100 already contains enough evidence that an oracle reordering reaches MAP@10
+  **0.7307**, so the remaining gap is selection, not recall. The published 0.479 is a
+  *reranked* number and this engine's reranked row on MultiHop-RAG has not been run.
+  Reports: `eval/benchmarks/multihop-rag/coverage-set.json`.
+- **Answerability's shipped single scalar out of domain** — AUC 0.51 at the best, and a
+  recalibration split fitted on MultiHop-RAG itself transfers at chance. The signal is not
+  absent, though: a feature gate over the retrieval and evidence signals the engine already
+  has scores **held-out ROC-AUC 0.815** (balanced accuracy 0.725) on a fresh 300-query
+  MultiHop split where the scalar scores 0.520. The fix is to recalibrate on the target
+  domain — `tools/answerability_train.py`, `LAYA_RAG_ANSWERABILITY_GATE_PATH` — not to
+  trust the scalar.
 - **No text generation**, so it cannot be entered on KILT, MTEB, HHEM or the TREC RAG track at
   all, and any end-to-end answer accuracy would belong to whichever LLM is attached.
-- **Laya's own encoder is close to useless for retrieval** (nDCG@10 ≈ 0.014 on SciFact against
-  BM25's 0.654), so the shipped default is lexical-only and reaching competitive dense retrieval
-  means supplying `bge-small`. The engine's differentiating model is a *decision* model, and the
-  retrieval quality comes from stock components.
-- **Cross-encoder reranking did not pay off here**, unlike in most published pipelines, and it is
-  now measured at the depth the literature assumes: `bge-reranker-base` over the fused top-100
-  lowered nDCG@10 on all five datasets, catastrophically on ArguAna (0.568 → 0.250) where
-  relevance is an *opposition* relation a pointwise ranker does not model.
-- **Scale.** The vector index holds every chunk's text and vector in memory and the postings are
-  Python dicts, so the large BEIR datasets (BioASQ 14.9M, FEVER 5.4M, NQ 2.7M documents) are out
-  of reach. Five of eighteen datasets is the honest coverage.
+- **Laya's own encoder is unadapted for retrieval, not merely useless** (nDCG@10 ≈ 0.014 on
+  SciFact against BM25's 0.654), so the shipped default is lexical-only and reaching competitive
+  dense retrieval means supplying `bge-small`. A closed-form ridge projection distilled from
+  `bge-small` document embeddings lifts that 0.014 to **0.0810** (5.7×) on SciFact — see
+  `tools/projection_head.py` — so the representation carries signal and the remaining gap is the
+  query encoder. The engine's differentiating model is still a *decision* model, and the shipped
+  retrieval quality still comes from stock components until an encoder is trained and packaged.
+- **Cross-encoder reranking is corpus-dependent, not a general loss.** `bge-reranker-base` over
+  the fused top-100 lowered nDCG@10 on all five BEIR datasets — catastrophically on ArguAna
+  (0.568 → 0.250), where relevance is an *opposition* relation a pointwise ranker does not model
+  — but on MultiHop-RAG the same reranker is the **largest single lever measured**: MAP@10
+  0.2522 → **0.2986** (+0.0464 [+0.0275, +0.0655]), Hits@4 0.6625 → **0.7225**, Hits@10 → **0.8600**,
+  MRR@10 → **0.6010** on a deterministic 400-query subset, every paired interval excluding zero.
+  The second stage therefore belongs to per-corpus routing (and blending via `RERANK_BLEND`),
+  not a global on/off.
+- **Scale.** The default backend holds every chunk's text and vector in memory and the postings
+  are Python dicts. `INDEX_BACKEND=ondisk` streams vectors to a memory-mapped file and packs BM25
+  postings into one mmap, with chunk text read on demand, so query-time memory stops scaling with
+  corpus size; the build block is token-capped so construction memory stops scaling with document
+  length either. The largest BEIR corpora (BioASQ 14.9M, FEVER 5.4M, NQ 2.7M documents) still need
+  streaming *ingestion* and an on-disk term dictionary and chunk-id list; five of eighteen datasets
+  is the honest measured coverage.
 - **SciDocs** is the weakest dataset for the single-model configuration (0.199 vs a published
   0.225); the three-model ensemble reaches 0.225, so the shortfall there is a single-encoder
-  effect rather than a corpus the pipeline cannot handle.
+  effect rather than a corpus the pipeline cannot handle. Turning on the retrieval query
+  instruction lifts the single `bge-small` encoder to **0.2052** on cached embeddings, and
+  `--dataset-models` / `--dense-text-only-datasets` let a per-corpus encoder be routed to it.
 
 ### Experiments that did not work
 
@@ -831,7 +859,7 @@ measurements; each item is a `make` target. In the priority order they were rank
 | 5 | **Multi-model dense ensemble** (`bge-small` + `bge-base` + `bge-large` by RRF) | **Done, and it beat its estimate on every corpus.** +0.025 / +0.019 / +0.083 / +0.026 / +0.062 nDCG@10 on SciFact / NFCorpus / ArguAna / SciDocs / FiQA, all significant; the five-dataset mean moves 0.452 → **0.495** (+0.0431 [+0.0382, +0.0481]) and the four-dataset mean to **0.507**, above the previously cherry-picked 0.495. Cost: 478M parameters and three embedding passes. |
 | 6 | **Per-corpus channel selection** | **Done.** A router calibrated on half of each corpus scores 0.4576 against global fusion's 0.4515 on the held-out halves (+0.0061 [+0.0026, +0.0096]) — exactly the oracle. The gain is ArguAna, which it picks 100% of the time. |
 | 7 | **Full fine-tuning** on 110k in-domain pairs | **Done, negative.** The whole 110,575-pair NFCorpus train split, one epoch, plus 5,180 mined hard negatives: adapted nDCG@10 **0.3285 vs zero-shot 0.3385 (−0.0100)**. The earlier 20k-pair +0.0085 was not a floor — scaling it up with naively mined negatives *hurt*. |
-| 8 | **On-disk postings and streaming index construction** | **Infrastructure landed.** The full 171,332-document TREC-COVID corpus builds packed, memory-mapped postings in 128 MB with byte-identical ranking. The streaming dense index writes vectors without accumulating them — peak RSS flat at 1,249 MB from 5k to 15k documents once padding is fixed-length (the first version grew to 4.5 GB because torch's MPS graph cache keys on tensor shape). 10M+ corpora still need a bounded external merge and an on-disk ANN. |
+| 8 | **On-disk postings and streaming index construction** | **Infrastructure landed.** The full 171,332-document TREC-COVID corpus builds packed, memory-mapped postings in 128 MB with byte-identical ranking. The build block is token-capped, which cut peak RSS on a 30k×200-token synthetic corpus from 1,045 MB to 453 MB at the same speed, and the merge is a heap over the sorted runs. The streaming dense index writes vectors without accumulating them — peak RSS flat at 1,249 MB from 5k to 15k documents once padding is fixed-length (the first version grew to 4.5 GB because torch's MPS graph cache keys on tensor shape). 10M+ corpora still need an on-disk term dictionary and chunk-id list. |
 
 Four of the eight changed a claim rather than adding a number. **Item 2** turned "the gate does
 not discriminate" into "the gate has no signal to calibrate" — a stronger and more useful
@@ -889,31 +917,45 @@ laya-rag/
 These are measured, by `make eval` and `make bench`, rather than inferred. The numbers come from
 the planted corpus and the synthetic scale run and will move with a different corpus or checkpoint.
 
-**A fact longer than the chunk overlap can be lost, not merely truncated.** A fact shorter than
-`CHUNK_OVERLAP_CHARS` (200 by default) survived every boundary split tested, intact and retrieved.
-A 290-character fact placed across a boundary was present in no single chunk at one split distance,
-and was not retrieved at either distance tried. Long facts need a larger `CHUNK_OVERLAP_CHARS`.
+**A fact longer than the chunk overlap can be lost, not merely truncated — but the guaranteed
+length is now the overlap, and sentences are never split.** A fact no longer than
+`CHUNK_OVERLAP_CHARS` (400 by default) is intact in at least one chunk at any split distance, and
+`chunk_text` backs a cut that lands inside a sentence up to that sentence's start, so a whole
+sentence up to `CHUNK_CHARS` survives even when it is longer than the overlap. The 290-character
+fact that the old 200-character overlap lost was intact and retrieved at every split distance
+tested once the default became 400 (`make bench BENCH_ARGS="--probes boundary"`). The residual
+limit is a fact longer than the overlap *and* spanning more than one sentence: no single chunk
+then contains all of it.
 
 **The relevance gate does most of the abstaining; the answerability gate is rarely reached on a
 negative.** Every plainly unrelated question was refused before Laya was ever asked the
 answerability question. Only a hard negative — a question the corpus discusses but does not answer —
 got that far, and it cleared both gates and was reported answerable. "Measured" is not "supported".
 
-**Deleting a file does not remove its chunks.** Indexing is incremental: a path that is re-indexed
-has its old chunks replaced, but a file that has been deleted or made unreadable is never loaded, so
-its stale chunks stay in the index and remain retrievable until a rebuild. After removing files,
-re-index the parent directory with `--rebuild` rather than just the files that are left.
+**Deleting a file now removes its chunks on a directory re-index.** Indexing is incremental, so a
+path that is re-indexed has its old chunks replaced. Previously a file that had been deleted or
+made unreadable was simply never loaded, and its stale chunks stayed retrievable until a rebuild;
+`index_paths` now prunes every indexed path under a directory it is re-indexing that is gone from
+disk or was refused by the loader (unreadable, empty, binary, over the size limit) and reports the
+count in `removed_chunks`. A single-file root is never pruned — passing one file is not a claim
+about the others — and `--no-prune` (CLI) or `prune=false` (HTTP API) keeps the old behaviour. The
+append-only on-disk backend still requires `--rebuild`.
 
 **BM25 is pure Python and grows linearly, though an inverted index halved the constant.** The
 lexical channel keeps `term -> postings` now rather than looping over every document per query
 term, which is what unblocked ArguAna (~190-word queries): 40,000 synthetic chunks went from
 ~120 ms to ~37 ms per query, and ArguAna's query set from stalling past 50 minutes to 4.3. The
-shipped engine still holds the postings in memory, but `tools/ondisk.py` is the route past that:
-`OnDiskBM25` streams documents through sorted runs and merges them into a packed, memory-mapped
-`postings.bin`, and `StreamingVectorIndex` appends embedding batches straight to a memmap. On the
-full 171,332-document TREC-COVID corpus the on-disk postings build in 1,073 s to **128 MB** and
-return the identical ranking to the in-memory index; 10M+ document corpora still need a bounded
-k-way merge (peak RSS was 2.4 GB, dominated by one build block) and an on-disk ANN index.
+shipped engine still holds the postings in memory, but `INDEX_BACKEND=ondisk`
+(`src/laya_rag/ondisk.py`) streams documents through sorted runs and merges them with a heap into a
+packed, memory-mapped `postings.bin`, and appends embedding batches straight to a memmap. A build
+block now flushes on `--block-tokens` (default 1M) as well as `--block-docs`, which removes the one
+block that dominated peak RSS: on a 30,000-document, 200-token synthetic corpus peak RSS fell from
+**1,045 MB to 453 MB** at the same build time, and the ranking is byte-identical across block sizes.
+On the full 171,332-document TREC-COVID corpus the on-disk postings build returns the identical
+ranking to the in-memory index. What still scales with the corpus is the Python term dictionary and
+the chunk-id list, so 10M+ document corpora need an on-disk term dictionary (or a bounded external
+merge that never materialises it); the quantized IVF+PQ ANN (`ANN=1`, persisted to `ann.faiss` and
+loaded on open) is the query-time route, with an exact mmap fallback.
 
 **The dense channel is off by default because it never earned its weight.** On BEIR SciFact and
 NFCorpus Laya's mean-pooled encoder scored nDCG@10 ≈ 0.014 against BM25's 0.654 and 0.304, and every

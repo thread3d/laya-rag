@@ -14,6 +14,8 @@ passage carries its source path and probabilities.
 """
 from __future__ import annotations
 
+import re
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -69,6 +71,9 @@ class QueryResult:
     query: str
     answerable: bool = False
     answerability: float | None = None
+    #: False when the relevance gate emptied the evidence set, so ``answerability`` is a
+    #: structural zero rather than a measured decision. Calibration must not mix the two.
+    answerability_measured: bool = False
     passages: list[dict[str, Any]] = field(default_factory=list)
     considered: int = 0
     kept: int = 0
@@ -84,6 +89,7 @@ class QueryResult:
         payload: dict[str, Any] = {
             "query": self.query,
             "answerable": self.answerable,
+            "answerability_measured": self.answerability_measured,
             "passages": self.passages,
             "considered": self.considered,
             "kept": self.kept,
@@ -132,6 +138,43 @@ def _progress(progress: ProgressFn | None, stage: str, **counters: Any) -> None:
     progress({"stage": stage, **_PROGRESS_DEFAULTS, **counters})
 
 
+def _resolved(path: Path | str) -> Path:
+    """Absolute, symlink-resolved form, for comparing indexed paths with roots."""
+    try:
+        return Path(path).expanduser().resolve()
+    except OSError:  # pragma: no cover - resolve(strict=False) rarely raises
+        return Path(path).expanduser().absolute()
+
+
+def _stale_indexed_paths(
+    indexed_paths: Iterable[str],
+    roots: Sequence[Path],
+    skipped_paths: Iterable[str],
+) -> list[str]:
+    """Indexed paths under a re-indexed directory that no longer deserve to be there.
+
+    A deleted file is never handed to the loader, so incremental indexing replaces the
+    chunks of files it *does* see and silently leaves the rest. Restricting pruning to
+    directory roots (never a single-file root) keeps the operation safe: a file passed on
+    its own may simply not have been part of this run, but a directory is a claim about
+    its whole contents. A path counts as stale when its file is gone, or when the loader
+    refused it this run (unreadable, empty, binary, over the size limit).
+    """
+    resolved_roots = [_resolved(root) for root in roots if Path(root).expanduser().is_dir()]
+    if not resolved_roots:
+        return []
+    refused = {str(Path(path)) for path in skipped_paths}
+    stale: list[str] = []
+    for path in indexed_paths:
+        candidate = Path(path)
+        resolved = _resolved(candidate)
+        if not any(resolved == root or resolved.is_relative_to(root) for root in resolved_roots):
+            continue
+        if str(candidate) in refused or not candidate.is_file():
+            stale.append(path)
+    return stale
+
+
 def _suppress_near_duplicates(
     index: VectorIndex,
     fused: Sequence[tuple[str, float]],
@@ -159,6 +202,96 @@ def _suppress_near_duplicates(
         if len(kept) >= limit:
             break
     return kept
+
+
+_ATOM_SPLIT = re.compile(r"(?<=[.!?])|\n")
+_ATOM_MIN_CHARS = 25
+
+
+def _chunk_atoms(text: str) -> list[str]:
+    """Sentence-like "fact atoms" of a chunk, normalised and de-duplicated in order."""
+    atoms: list[str] = []
+    seen: set[str] = set()
+    for part in _ATOM_SPLIT.split(str(text)):
+        normalised = " ".join(part.lower().split())
+        if len(normalised) < _ATOM_MIN_CHARS or normalised in seen:
+            continue
+        seen.add(normalised)
+        atoms.append(normalised)
+    return atoms
+
+
+def _coverage_select(
+    index: VectorIndex,
+    fused: Sequence[tuple[str, float]],
+    limit: int,
+    lam: float,
+) -> list[tuple[str, float]]:
+    """Spend the recall budget on new facts, not near-duplicates of kept passages.
+
+    Greedy submodular max-coverage over sentence atoms: at each step a candidate scores
+    ``lam * relevance + (1 - lam) * marginal_new_atom_weight - (1 - lam) * redundancy``,
+    where relevance is the normalised fused RRF score, marginal weight is the atom
+    weight not yet covered (normalised by the best available gain so the two terms are
+    comparable), and redundancy is the cosine to the closest kept chunk. Measured on
+    MultiHop-RAG this lifts MAP@10 from 0.2546 to 0.2835 (held-out +0.0288), the best
+    coverage pass measured — better than near-duplicate suppression alone (0.2790) —
+    because it targets the *set* of facts the benchmark scores rather than mere
+    diversity. Missing atom weights or vectors never remove a candidate.
+    """
+    if limit <= 0 or not fused:
+        return list(fused[:limit])
+    weights: list[float] = []
+    atom_id_of: dict[str, int] = {}
+    candidate_atoms: list[list[int]] = []
+    for chunk_id, _score in fused:
+        chunk = index.get(chunk_id)
+        ids: list[int] = []
+        if chunk is not None:
+            for atom in _chunk_atoms(chunk.text):
+                atom_id = atom_id_of.get(atom)
+                if atom_id is None:
+                    atom_id = len(weights)
+                    atom_id_of[atom] = atom_id
+                    weights.append(float(len(atom)))
+                ids.append(atom_id)
+        candidate_atoms.append(ids)
+
+    relevance = np.asarray([score for _chunk_id, score in fused], dtype=np.float64)
+    if relevance.size and float(relevance.max()) > float(relevance.min()):
+        relevance = (relevance - relevance.min()) / (relevance.max() - relevance.min())
+    else:
+        relevance = np.zeros_like(relevance)
+    vectors = [index.vector(chunk_id) for chunk_id, _score in fused]
+
+    selected: list[int] = []
+    covered: set[int] = set()
+    candidates = list(range(len(fused)))
+    while candidates and len(selected) < limit:
+        gains = {
+            i: float(sum(weights[a] for a in candidate_atoms[i] if a not in covered))
+            for i in candidates
+        }
+        scale = max(gains.values()) if gains else 0.0
+        scale = scale if scale > 0.0 else 1.0
+        best_index, best_score = None, -1e18
+        for i in candidates:
+            marginal = gains[i] / scale
+            redundancy = 0.0
+            if selected:
+                sims = [
+                    float(np.dot(vectors[i], vectors[j]))
+                    for j in selected
+                    if vectors[i] is not None and vectors[j] is not None
+                ]
+                redundancy = max(sims) if sims else 0.0
+            score = lam * float(relevance[i]) + (1.0 - lam) * marginal - (1.0 - lam) * redundancy
+            if score > best_score:
+                best_index, best_score = i, score
+        selected.append(best_index)
+        covered.update(candidate_atoms[best_index])
+        candidates.remove(best_index)
+    return [fused[i] for i in selected]
 
 
 class RagEngine:
@@ -198,36 +331,70 @@ class RagEngine:
         # progress is reported: measured warm, 64 and 256 cost the same, and 64 gives
         # four updates where 256 gives one on a small corpus.
         self.embed_batch_texts = embed_batch_texts
-        self._index: VectorIndex | None = None
-        self._lexical: BM25Index | None = None
+        self._index: Any | None = None
+        self._lexical: Any | None = None
+        # Optional persisted feature gate for answerability (see config). Loaded lazily:
+        # a missing or damaged file must not stop the engine from answering, it only
+        # falls back to Laya's own decision.
+        self._answerability_gate: Any | None = None
+        self._gate_loaded = False
+        self._answerability_nli: Any | None = None
+        self._nli_loaded = False
 
     # -- index state -----------------------------------------------------
     @property
-    def index(self) -> VectorIndex:
+    def index(self) -> Any:
         if self._index is None:
-            if not VectorIndex.exists_on_disk(self.config.index_dir):
-                raise IndexNotBuiltError(
-                    f"no index at {self.config.index_dir}. Index a directory first "
-                    f"(laya-rag index <path>)."
-                )
-            self._index = VectorIndex.load(self.config.index_dir)
+            if self.config.resolved_index_backend == "ondisk":
+                from .ondisk import DENSE_DIRNAME, OnDiskVectorIndex
+
+                directory = self.config.index_dir / DENSE_DIRNAME
+                if not OnDiskVectorIndex.exists_on_disk(directory):
+                    raise IndexNotBuiltError(
+                        f"no on-disk index at {directory}. Index a directory first "
+                        f"(laya-rag index <path> --rebuild)."
+                    )
+                self._index = OnDiskVectorIndex.open(directory)
+            else:
+                if not VectorIndex.exists_on_disk(self.config.index_dir):
+                    raise IndexNotBuiltError(
+                        f"no index at {self.config.index_dir}. Index a directory first "
+                        f"(laya-rag index <path>)."
+                    )
+                self._index = VectorIndex.load(self.config.index_dir)
         return self._index
 
     def has_index(self) -> bool:
-        return self._index is not None or VectorIndex.exists_on_disk(self.config.index_dir)
+        if self._index is not None:
+            return True
+        if self.config.resolved_index_backend == "ondisk":
+            from .ondisk import DENSE_DIRNAME, OnDiskVectorIndex
+
+            return OnDiskVectorIndex.exists_on_disk(self.config.index_dir / DENSE_DIRNAME)
+        return VectorIndex.exists_on_disk(self.config.index_dir)
 
     @property
-    def lexical(self) -> BM25Index | None:
+    def lexical(self) -> Any | None:
         """The lexical recall channel, or None when it was never built."""
         if self._lexical is None:
-            path = self.config.index_dir / LEXICAL_FILE
-            if path.is_file():
-                try:
-                    self._lexical = BM25Index.load(path)
-                except (OSError, ValueError, KeyError):
-                    # A stale or damaged lexical index must not break vector search;
-                    # the engine degrades to dense-only recall.
-                    self._lexical = None
+            if self.config.resolved_index_backend == "ondisk":
+                from .ondisk import BM25_DIRNAME, OnDiskBM25
+
+                directory = self.config.index_dir / BM25_DIRNAME
+                if OnDiskBM25.exists_on_disk(directory):
+                    try:
+                        self._lexical = OnDiskBM25.open(directory)
+                    except (OSError, ValueError, KeyError):
+                        self._lexical = None
+            else:
+                path = self.config.index_dir / LEXICAL_FILE
+                if path.is_file():
+                    try:
+                        self._lexical = BM25Index.load(path)
+                    except (OSError, ValueError, KeyError):
+                        # A stale or damaged lexical index must not break vector search;
+                        # the engine degrades to dense-only recall.
+                        self._lexical = None
         return self._lexical
 
     def reset(self) -> None:
@@ -235,6 +402,42 @@ class RagEngine:
         wipe(self.config.index_dir)
         self._index = None
         self._lexical = None
+
+    @property
+    def answerability_gate(self) -> Any | None:
+        """The optional trained answerability gate, or None when unset/unreadable."""
+        if not self._gate_loaded:
+            self._gate_loaded = True
+            raw = (self.config.answerability_gate_path or "").strip()
+            if raw:
+                path = Path(raw).expanduser()
+                if path.is_file():
+                    from .answerability import LogisticGate
+
+                    try:
+                        self._answerability_gate = LogisticGate.load(path)
+                    except (OSError, ValueError, KeyError):
+                        # A stale or damaged gate degrades to Laya's own decision rather
+                        # than breaking every query.
+                        self._answerability_gate = None
+        return self._answerability_gate
+
+    @property
+    def answerability_nli(self) -> Any | None:
+        """The optional NLI answerability scorer, or None when not configured.
+
+        Constructed lazily and *not* loaded here: weights are fetched on the first score,
+        so a status call never triggers a model download. It has higher precedence than
+        the feature gate and than Laya's own question.
+        """
+        if not self._nli_loaded:
+            self._nli_loaded = True
+            raw = (self.config.answerability_nli_model or "").strip()
+            if raw:
+                from .answerability import NLIAnswerability
+
+                self._answerability_nli = NLIAnswerability(raw, device=self.config.device)
+        return self._answerability_nli
 
     # -- indexing --------------------------------------------------------
     def index_paths(
@@ -244,6 +447,7 @@ class RagEngine:
         extensions: Iterable[str] = DEFAULT_EXTENSIONS,
         max_file_bytes: int = MAX_FILE_BYTES,
         progress: ProgressFn | None = None,
+        prune: bool = True,
     ) -> IndexReport:
         """Read, chunk and embed everything under ``paths``; then persist the index.
 
@@ -251,16 +455,16 @@ class RagEngine:
         read, one per document chunked, one per embedding batch — so a caller can show
         running numbers rather than an opaque wait. It is never required and never
         affects the result.
+
+        ``prune`` (the default) drops the chunks of files that have disappeared from a
+        directory being re-indexed; pass ``False`` to keep the old append-only
+        behaviour where a deleted file's chunks survive until a rebuild.
         """
         started = time.perf_counter()
         report = IndexReport()
 
         if rebuild:
             self.reset()
-
-        # A first run has nothing on disk; start from an empty index rather than
-        # failing, which is what the `index` property would do.
-        index = VectorIndex() if rebuild or not self.has_index() else self.index
 
         _progress(progress, "reading")
         resolved = [Path(p).expanduser() for p in paths]
@@ -285,28 +489,60 @@ class RagEngine:
         chunks = chunk_documents(
             loaded.documents,
             chunk_chars=self.config.chunk_chars,
-            overlap_chars=self.config.chunk_overlap_chars,
+            overlap_chars=self.config.resolved_chunk_overlap,
             min_chunk_chars=self.config.min_chunk_chars,
             on_document=chunking,
         )
         report.documents = len(loaded.documents)
         report.chunks = len(chunks)
 
+        if self.config.resolved_index_backend == "ondisk":
+            self._build_ondisk(chunks, report, progress, rebuild)
+            report.total_seconds = time.perf_counter() - started
+            return report
+
+        # A first run has nothing on disk; start from an empty index rather than
+        # failing, which is what the `index` property would do.
+        index = VectorIndex() if rebuild or not self.has_index() else self.index
+
         # A file that changed since the last run must not leave stale chunks behind.
         changed_paths = [doc.path for doc in loaded.documents]
         if changed_paths and len(index):
             report.removed_chunks = index.remove_paths(changed_paths)
 
+        # A file that was deleted (or made unreadable) is never loaded, so it is not in
+        # `changed_paths` and its chunks would otherwise stay retrievable forever. When a
+        # directory is re-indexed, prune the paths under it that are gone or refused.
+        if prune and len(index):
+            stale = _stale_indexed_paths(
+                index.paths(),
+                resolved,
+                [path for path, _reason in loaded.skipped],
+            )
+            if stale:
+                report.removed_chunks += index.remove_paths(stale)
+
         if chunks:
             embed_started = time.perf_counter()
-            vectors: list[np.ndarray] = []
+            # Preallocate the final matrix and fill it per batch. The previous version
+            # kept every batch's array in a list and `np.vstack`ed at the end, which held
+            # roughly two full copies of the corpus embeddings at peak — the difference
+            # between an index that fits in RAM and one that does not at millions of
+            # chunks. The embedder's dimension is only known from the first batch.
+            matrix: np.ndarray | None = None
             embedded = 0
             _progress(progress, "embedding", chunks=len(chunks), embedded=0)
             for batch in _batched(chunks, self.embed_batch_texts):
-                vectors.append(np.asarray(self.embedder.embed([chunk.text for chunk in batch]), dtype=np.float32))
+                block = np.asarray(
+                    self.embedder.embed([chunk.text for chunk in batch]), dtype=np.float32
+                )
+                if matrix is None:
+                    matrix = np.empty((len(chunks), block.shape[1]), dtype=np.float32)
+                matrix[embedded : embedded + len(batch)] = block
                 embedded += len(batch)
                 _progress(progress, "embedding", chunks=len(chunks), embedded=embedded)
-            matrix = np.vstack(vectors) if vectors else np.zeros((0, 0), dtype=np.float32)
+            if matrix is None:
+                matrix = np.zeros((0, 0), dtype=np.float32)
             report.embed_seconds = time.perf_counter() - embed_started
             index.add(chunks, matrix)
             if self.config.ann:
@@ -329,6 +565,64 @@ class RagEngine:
         report.total_seconds = time.perf_counter() - started
         self._index = index
         return report
+
+    def _build_ondisk(
+        self,
+        chunks: Sequence[Any],
+        report: IndexReport,
+        progress: ProgressFn | None,
+        rebuild: bool,
+    ) -> None:
+        """Build the memory-mapped dense + packed-postings backends.
+
+        The on-disk format is append-only, so an incremental pass over new paths would
+        silently drop the existing chunks; the engine refuses it and the caller rebuilds.
+        Embedding is streamed batch by batch, so the vector matrix is never resident.
+        """
+        from .ondisk import BM25_DIRNAME, DENSE_DIRNAME, OnDiskBM25, OnDiskVectorIndex
+
+        if self.has_index() and not rebuild:
+            raise ValueError(
+                "the ondisk index backend is append-only and cannot re-index a path "
+                "incrementally; call index_paths(..., rebuild=True)"
+            )
+        dense_dir = self.config.index_dir / DENSE_DIRNAME
+        bm25_dir = self.config.index_dir / BM25_DIRNAME
+        for directory in (dense_dir, bm25_dir):
+            if directory.exists():
+                shutil.rmtree(directory)
+
+        dense = OnDiskVectorIndex(dense_dir, dim=0)
+        embed_started = time.perf_counter()
+        embedded = 0
+        _progress(progress, "embedding", chunks=len(chunks), embedded=0)
+        for batch in _batched(chunks, self.embed_batch_texts):
+            vectors = np.asarray(
+                self.embedder.embed([chunk.text for chunk in batch]), dtype=np.float32
+            )
+            dense.add(batch, vectors)
+            embedded += len(batch)
+            _progress(progress, "embedding", chunks=len(chunks), embedded=embedded)
+        dense.finalize()
+        report.embed_seconds = time.perf_counter() - embed_started
+        # Re-open so the freshly built index is query-ready: the builder only wrote the
+        # files, the memory maps and the deferred-text offset table come from `open`.
+        dense = OnDiskVectorIndex.open(dense_dir)
+        if self.config.ann:
+            dense.nprobe = self.config.ann_nprobe
+            dense.build_ann()
+
+        save_started = time.perf_counter()
+        _progress(progress, "saving", chunks=len(chunks), embedded=len(chunks))
+        lexical = OnDiskBM25(bm25_dir, stem=self.config.lexical_stem)
+        lexical.build((chunk.chunk_id, chunk.text) for chunk in chunks)
+        report.save_seconds = time.perf_counter() - save_started
+
+        self._index = dense
+        self._lexical = lexical
+        report.removed_chunks = 0
+        report.total_chunks = len(chunks)
+        report.paths = len({chunk.path for chunk in chunks})
 
     # -- querying --------------------------------------------------------
     def query(
@@ -370,7 +664,11 @@ class RagEngine:
             dense_weight = 1.0
         # Diversification can only replace a duplicate with a deeper candidate if the
         # channels were searched deeper to begin with.
-        recall_k = candidate_k * 3 if self.config.recall_dedup_threshold > 0.0 else candidate_k
+        recall_k = (
+            candidate_k * 3
+            if (self.config.recall_dedup_threshold > 0.0 or self.config.recall_coverage_lambda > 0.0)
+            else candidate_k
+        )
         if dense_weight == 0.0:
             dense_hits: list[Hit] = []
         else:
@@ -384,6 +682,7 @@ class RagEngine:
             dense_weight=dense_weight,
             lexical_weight=self.config.lexical_weight,
             dedup_threshold=self.config.recall_dedup_threshold,
+            coverage_lambda=self.config.recall_coverage_lambda,
         )
         retrieval_seconds = time.perf_counter() - retrieve_started
 
@@ -403,6 +702,7 @@ class RagEngine:
             cross_scores = self.cross_encoder.score_pairs(
                 [(query, hit.chunk.text) for hit in candidates]
             )
+        nli = self.answerability_nli
         reranked = self.reranker.rerank(
             query,
             candidates,
@@ -417,6 +717,9 @@ class RagEngine:
             ),
             order=self.config.resolved_rerank_order,
             scores=cross_scores,
+            blend=self.config.rerank_blend,
+            gate=self.answerability_gate,
+            answerability_fn=nli.score if nli is not None else None,
         )
         rerank_seconds = time.perf_counter() - rerank_started
 
@@ -424,6 +727,7 @@ class RagEngine:
             query=query,
             answerable=reranked.answerable,
             answerability=reranked.answerability,
+            answerability_measured=reranked.answerability_measured,
             passages=[p.as_dict(max_chars=max_passage_chars) for p in reranked.passages],
             considered=reranked.considered,
             kept=reranked.kept,
@@ -445,6 +749,7 @@ class RagEngine:
         dense_weight: float = 1.0,
         lexical_weight: float = 1.0,
         dedup_threshold: float = 0.0,
+        coverage_lambda: float = 0.0,
     ) -> list[Hit]:
         """Fuse dense and lexical rankings into one candidate list.
 
@@ -458,19 +763,21 @@ class RagEngine:
 
         ``dedup_threshold`` > 0 walks the fused list and drops a candidate whose cosine to
         an already-kept chunk is at or above it, until ``limit`` are kept or the list ends.
-        With chunk overlap a matching passage arrives several times; on MultiHop-RAG keeping
-        it once per cluster is worth +0.024 MAP@10. Off by default because it needs the
-        dense index and is only a win on overlap-heavy corpora.
+        ``coverage_lambda`` > 0 instead runs the evidence-set coverage selection
+        (:func:`_coverage_select`), which subsumes near-duplicate suppression and targets
+        new facts. Both need a wider pool to replace duplicates with deeper candidates.
         """
         dense_ids = [hit.chunk.chunk_id for hit in dense_hits]
         lexical_ids = [hit.chunk_id for hit in lexical_hits]
         # Over-fetch when diversifying: the duplicates have to be *replaced* by deeper
         # candidates, so the fused pool is wider than the returned candidate list.
-        pool = limit * 3 if dedup_threshold > 0.0 else limit
+        pool = limit * 3 if (dedup_threshold > 0.0 or coverage_lambda > 0.0) else limit
         fused = reciprocal_rank_fusion(
             [dense_ids, lexical_ids], limit=pool, weights=[dense_weight, lexical_weight]
         )
-        if dedup_threshold > 0.0:
+        if coverage_lambda > 0.0:
+            fused = _coverage_select(index, fused, limit, coverage_lambda)
+        elif dedup_threshold > 0.0:
             fused = _suppress_near_duplicates(index, fused, limit, dedup_threshold)
         dense_set = set(dense_ids)
         lexical_set = set(lexical_ids)
@@ -608,7 +915,11 @@ class RagEngine:
             dense_weight = 1.0
         use_dense = dense_weight != 0.0
         vectors = np.asarray(self.embedder.embed(cleaned), dtype=np.float32) if use_dense else None
-        recall_k = candidate_k * 3 if self.config.recall_dedup_threshold > 0.0 else candidate_k
+        recall_k = (
+            candidate_k * 3
+            if (self.config.recall_dedup_threshold > 0.0 or self.config.recall_coverage_lambda > 0.0)
+            else candidate_k
+        )
         per_claim_hits: list[list[Hit]] = []
         for position, claim in enumerate(cleaned):
             dense = index.search(vectors[position], k=recall_k) if vectors is not None else []
@@ -622,6 +933,7 @@ class RagEngine:
                     dense_weight=dense_weight,
                     lexical_weight=self.config.lexical_weight,
                     dedup_threshold=self.config.recall_dedup_threshold,
+                    coverage_lambda=self.config.recall_coverage_lambda,
                 )
             )
 
@@ -722,9 +1034,9 @@ class RagEngine:
             "embedder": self.embedder.info() if hasattr(self.embedder, "info") else {"embedder": type(self.embedder).__name__},
             "reranker": self.cross_encoder.info() if self.cross_encoder is not None else {"kind": "laya decisions"},
             "index_dir": str(self.config.index_dir),
-            "index_present": VectorIndex.exists_on_disk(self.config.index_dir),
-            "lexical_present": (self._lexical is not None)
-            or (self.config.index_dir / LEXICAL_FILE).is_file(),
+            "index_backend": self.config.resolved_index_backend,
+            "index_present": self.has_index(),
+            "lexical_present": self.lexical is not None,
             "compose": self.composer.describe(),
         }
         if payload["index_present"]:
@@ -734,4 +1046,12 @@ class RagEngine:
                 payload["index_error"] = str(exc)
         else:
             payload["index"] = {"chunks": 0, "documents": 0, "paths": 0}
+        payload["answerability_gate"] = {
+            "configured": bool((self.config.answerability_gate_path or "").strip()),
+            "loaded": self.answerability_gate is not None,
+        }
+        payload["answerability_nli"] = {
+            "configured": bool((self.config.answerability_nli_model or "").strip()),
+            "model": self.config.answerability_nli_model or None,
+        }
         return payload

@@ -82,6 +82,10 @@ class IndexRequest(BaseModel):
     paths: list[str] = Field(..., min_length=1, description="Files or directories to index")
     rebuild: bool = Field(False, description="Discard the existing index first")
     extensions: list[str] | None = Field(None, description="Override the indexable file extensions")
+    prune: bool = Field(
+        True,
+        description="Drop chunks of files deleted since the last run when re-indexing a directory",
+    )
 
 
 class QueryRequest(BaseModel):
@@ -263,6 +267,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
             report = engine.index_paths(
                 request.paths,
                 rebuild=request.rebuild,
+                prune=request.prune,
                 **({"extensions": extensions} if extensions else {}),
             )
         except ModelUnavailableError as exc:
@@ -298,6 +303,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                     outcome["report"] = engine.index_paths(
                         request.paths,
                         rebuild=request.rebuild,
+                        prune=request.prune,
                         progress=counters.put,
                         **({"extensions": extensions} if extensions else {}),
                     )
