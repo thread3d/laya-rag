@@ -81,6 +81,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--min-chunk-chars", type=int, default=None)
     ap.add_argument("--chunk-merge-short", action="store_true",
                     help="keep documents of at most chunk_chars+overlap as one chunk")
+    ap.add_argument("--retrieve-k", type=int, default=None,
+                    help="candidates considered before rerank; chunking packs several "
+                         "chunks per document into this budget")
+    ap.add_argument("--context-prefix", action="store_true",
+                    help="index a structural breadcrumb (path + title line) on every chunk, "
+                         "so later chunks keep the document's context")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None, help="cap the number of test queries")
     ap.add_argument("--out", default=str(ROOT / "eval" / "engine-beir"))
@@ -127,6 +133,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             os.environ.pop(f"LAYA_RAG_{name}", None)
     os.environ["LAYA_RAG_CHUNK_MERGE_SHORT"] = "1" if args.chunk_merge_short else "0"
+    if args.retrieve_k is not None:
+        os.environ["LAYA_RAG_RETRIEVE_K"] = str(args.retrieve_k)
+    else:
+        os.environ.pop("LAYA_RAG_RETRIEVE_K", None)
+    os.environ["LAYA_RAG_CONTEXT_PREFIX"] = "1" if args.context_prefix else "0"
     if args.sparse:
         os.environ["LAYA_RAG_SPARSE_MODEL"] = args.sparse_model
     else:
