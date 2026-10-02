@@ -1,10 +1,10 @@
-"""Does the coverage selection help BEIR, or only MultiHop?
+"""Do the opt-in fused-pool rewriters (coverage, dedup) help BEIR?
 
-`RECALL_COVERAGE_LAMBDA` is off by default even though it is the best measured pass on
-MultiHop-RAG (MAP@10 0.2546 -> 0.2850), because the selection objective targets a *set* of
-facts and BEIR is largely single-fact: one abstract answers a query. This measures the same
-objective on BEIR with the cached `bge-small` embeddings, so the default is a decision backed
-by evidence on both sides rather than an assumption.
+`RECALL_COVERAGE_LAMBDA` and `RECALL_DEDUP_THRESHOLD` are both off by default even though
+each is a measured win on MultiHop-RAG (coverage +0.0304 MAP@10, dedup +0.0244), because
+both target a *set* of facts or near-duplicate chunks and BEIR is largely single-fact: one
+abstract answers a query. This measures both objectives on BEIR with the cached `bge-small`
+embeddings, so their defaults are decisions backed by evidence on both sides.
 
     .venv/bin/python tools/beir_coverage.py --datasets scifact,nfcorpus,arguana
 """
@@ -20,10 +20,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 import beir, evalkit  # noqa: E402
-from multihop_coverage import atom_index, facility_location_select, split_atoms  # noqa: E402
+from multihop_coverage import (  # noqa: E402
+    atom_index,
+    cluster_dedup_select,
+    facility_location_select,
+    split_atoms,
+)
 
 DEFAULT_DATASETS = "scifact,nfcorpus,arguana"
 LAMBDAS = (0.5, 0.7)
+DEDUP_THRESHOLDS = (0.8, 0.9, 0.95)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -50,7 +56,8 @@ def coverage_rankings(
 ) -> dict[str, dict[str, list[str]]]:
     """Fused baseline plus coverage-selected lists at each lambda, with/without redundancy."""
     names = ["fused"] + [f"coverage-{lam}" for lam in LAMBDAS] \
-        + [f"coverage-nored-{lam}" for lam in LAMBDAS]
+        + [f"coverage-nored-{lam}" for lam in LAMBDAS] \
+        + [f"dedup-{t}" for t in DEDUP_THRESHOLDS]
     out: dict[str, dict[str, list[str]]] = {name: {} for name in names}
     import numpy as np
 
@@ -68,6 +75,9 @@ def coverage_rankings(
                     rel, atom_ids, atom_weight, gram, k, lam, use_redundancy=use_redundancy
                 )
                 out[f"coverage{suffix}-{lam}"][query_id] = [cand[i] for i in selected]
+        for threshold in DEDUP_THRESHOLDS:
+            selected = cluster_dedup_select(gram, k, threshold)
+            out[f"dedup-{threshold}"][query_id] = [cand[i] for i in selected]
     return out
 
 
@@ -139,9 +149,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def render_markdown(payload: Mapping[str, Any]) -> str:
-    names = ["fused", "coverage-0.5", "coverage-nored-0.5", "coverage-0.7", "coverage-nored-0.7"]
+    names = ["fused", "coverage-0.5", "coverage-nored-0.5", "coverage-0.7", "coverage-nored-0.7",
+             "dedup-0.8", "dedup-0.9", "dedup-0.95"]
     lines = [
-        "# Does the coverage selection help BEIR?",
+        "# Do the fused-pool rewriters help BEIR?",
         "",
         "nDCG@10 per dataset; `fused` is the shipped dense+BM25 hybrid at RRF k=5.",
         "",
@@ -152,7 +163,7 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
         s = row["summary"]
         cells = [f"{s[n]['nDCG@10']:.4f}" if n in s else "—" for n in names]
         lines.append(f"| {dataset} | " + " | ".join(cells) + " |")
-    lines += ["", "## Coverage vs fused (paired bootstrap, nDCG@10)", ""]
+    lines += ["", "## Rewriter vs fused (paired bootstrap, nDCG@10)", ""]
     for dataset, row in payload["datasets"].items():
         for name, value in row["comparisons"].items():
             boot = value["bootstrap"]

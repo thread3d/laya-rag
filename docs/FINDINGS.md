@@ -37,7 +37,7 @@ are what stops the next pass from re-trying them.
 | Atomic lexical channel on BEIR | Lowers nDCG@10 on all five datasets, significantly on three (fiqa −0.0528) | [findings-atom-channel-beir.md](findings-atom-channel-beir.md) |
 | Atom-level lexical retrieval (MultiHop alone) | Worse than chunk BM25 on every metric; only useful fused, and only for Hits@4 | [findings-atom-index.md](findings-atom-index.md) |
 | Widening `RETRIEVE_K` for the CE path | A depth-100 pool is not significantly better than depth 20 for CE or coverage (all MAP deltas p>0.3), so the 5× scoring cost was not taken | [findings-rerank-selection.md](findings-rerank-selection.md) |
-| Coverage as a default | The coverage objective is a **multi-fact instrument**: it costs 0.02–0.08 nDCG@10 on every BEIR dataset measured (ArguAna 0.560 → 0.087 at λ=0.5, all significant), so it stays off by default | [findings-coverage-scope.md](findings-coverage-scope.md) |
+| Coverage and dedup as defaults | Both fused-pool rewriters are **corpus-shape instruments**: coverage costs 0.02–0.08 nDCG@10 and dedup 0.002–0.51 on every BEIR dataset measured (all significant; ArguAna 0.560 → 0.087), so both stay off by default | [findings-coverage-scope.md](findings-coverage-scope.md) |
 | RGB negative rejection | Not adapted: no clean no-answer label in the English files and a judge-based official metric | [../BENCHMARKS.md](../BENCHMARKS.md) |
 
 ## Method notes worth carrying forward
