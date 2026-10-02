@@ -53,18 +53,57 @@ would locate the band; it is left as the next measurement rather than run to exh
 `--retrieve-k` and `--context-prefix` so each hypothesis above is one command. The knob is
 documented as a **negative**; no default changed.
 
+## The fix: derive the chunk size from the corpus
+
+If the loss is the chunked representation, the response is not another constant — it is to
+choose the size from the corpus. `derive_chunk_chars` takes the **90th percentile** of the
+document lengths, clamped into `[CHUNK_CHARS, CHUNK_CHARS_AUTO_MAX=2000]`, so it can only ever
+chunk *less* aggressively than before and never exceeds what a 512-token encoder can see.
+SciFact's p90 is above the clamp, so it derives 2,000 — one chunk for 86% of abstracts.
+
+| configuration | chunks | nDCG@10 | vs base |
+| --- | --- | --- | --- |
+| fixed 1200/400 | 9,986 | 0.7264 | — |
+| **corpus-aware (`CHUNK_CHARS_AUTO`)** | 5,976 | **0.7417** | **+0.0153 [+0.0025, +0.0293]**, p=0.023 |
+| whole-document (upper bound) | 5,183 | 0.7396 | +0.0132, p=0.058 |
+
+The derived size is **significantly better** than the fixed default and statistically
+indistinguishable from whole-document chunking (+0.0021, p=0.54) — it captures the whole
+gain the fixed constant was leaving behind, with 40% fewer chunks.
+
+The project's own corpus agrees, measured on the vendored Laya docs with the same lexical
+harness (`tools/context_prefix_eval.py`):
+
+| chunk size | chunks | MRR (no prefix) | MRR (context prefix) |
+| --- | --- | --- | --- |
+| fixed 1200 | 459 | 0.6429 | 0.8333 |
+| derived 2000 | 220 | **0.7143** | **0.8929** |
+
+Recall stays 1.000 and the worst rank stays 6 in both, so the gain is in where the right
+document lands, not in whether it is found.
+
+**Shipped: `CHUNK_CHARS_AUTO` now defaults to `true`.** Two corpora, one short-document and
+one long-document, both improve, and the derived value can never be smaller than the old
+default. `CHUNK_CHARS` remains the floor and setting `CHUNK_CHARS_AUTO=false` restores the
+fixed behaviour exactly.
+
 ## Honest limits and the next experiment
 
-- One dataset, and the whole-document delta itself is borderline (p=0.058); the significant
-  comparison is whole-document against the merge rule (+0.0160, p=0.016).
+- Two corpora, both improved (SciFact +0.0153, p=0.023; the vendored docs MRR +0.0714), but
+  the SciFact whole-document delta on its own was borderline (p=0.058) — the significant
+  comparisons are the corpus-aware size against the fixed default, and whole-document against
+  the merge rule (+0.0160, p=0.016).
 - The bisection is unfinished. `merge_short` covered 1,200–1,600 characters and changed
-  nothing, so the gain must sit in documents **longer than 1,600**; `--chunk-chars 2000`
-  would locate the band. If it does not recover the gain either, the mechanism is not a length
-  threshold and a document-level score aggregation (rather than first-occurrence selection)
-  becomes the next candidate.
-- Raising the default chunk size is **not** proposed: it would change behaviour for every
-  corpus on the strength of one short-document dataset, and the engine cannot know a corpus's
-  document-length distribution before it is indexed.
-- A corpus-aware default — chunk size derived from the measured document-length distribution
-  at index time — is the shape a real fix would take, and it is a design change, not a
-  parameter.
+  nothing, so the gain sits in documents **longer than 1,600**; `--chunk-chars 2000` would
+  locate the band precisely. The shipped rule reaches the same place by a different route
+  (it derives 2,000 for SciFact), so the bisection is now diagnostic rather than blocking.
+- The **percentile and the 2,000-character clamp are heuristic**, not swept: 0.9 and 2,000
+  were chosen to keep most documents whole within a 512-token window. A sweep over p75/p90/p95
+  on two corpora would be a reasonable next measurement.
+- Long-document corpora now index at 2,000 rather than 1,200 characters. The vendored docs
+  improved, but a corpus whose queries need *precise* local matches could prefer the smaller
+  chunks; `CHUNK_CHARS_AUTO=false` is the escape hatch and the per-corpus answer is measurable
+  with the same harnesses.
+- The docs-corpus table above changes the baseline used by
+  [findings-context-prefix.md](findings-context-prefix.md) (0.6429 → 0.8333 was measured at
+  1,200; at 2,000 it is 0.7143 → 0.8929). The prefix still helps by a similar margin.

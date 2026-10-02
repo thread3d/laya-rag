@@ -367,3 +367,12 @@ def test_bm25_parameters_default_and_serialise():
     assert config.bm25_b == 0.75
     assert config.as_dict()["bm25_k1"] == 1.2
     assert config.as_dict()["bm25_b"] == 0.75
+
+
+def test_chunk_chars_auto_defaults_on_and_serialises():
+    from laya_rag.config import EngineConfig
+
+    config = EngineConfig()
+    assert config.chunk_chars_auto is True
+    assert config.chunk_chars_auto_max == 2000
+    assert config.as_dict()["chunk_chars_auto"] is True

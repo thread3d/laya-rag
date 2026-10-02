@@ -357,3 +357,24 @@ def test_chunk_documents_passes_merge_short_through(tmp_path):
     merged = chunk_documents([document], chunk_chars=1200, overlap_chars=400, merge_short=True)
     assert len(plain) == 2
     assert len(merged) == 1
+
+
+def test_derive_chunk_chars_uses_the_percentile_and_clamps():
+    from laya_rag.chunking import derive_chunk_chars
+
+    lengths = [100, 500, 1200, 1400, 1600, 1800, 2600, 4000, 5000, 20000]
+    # p90 of ten values is the ninth (0-based rank 8) = 5000, clamped to 2000.
+    assert derive_chunk_chars(lengths) == 2000
+    assert derive_chunk_chars(lengths, maximum=4000) == 4000
+    # Deriving never chunks more aggressively than the previous fixed default.
+    assert derive_chunk_chars([100, 200]) == 1200
+    assert derive_chunk_chars([]) == 1200
+    assert derive_chunk_chars([100, 200], minimum=400) == 400
+
+
+def test_derive_chunk_chars_keeps_most_documents_whole():
+    from laya_rag.chunking import derive_chunk_chars
+
+    lengths = [1400, 1450, 1500, 1550, 1600, 9000, 9500, 10000, 10500, 11000]
+    size = derive_chunk_chars(lengths, maximum=6000)
+    assert sum(1 for length in lengths if length <= size) >= 5

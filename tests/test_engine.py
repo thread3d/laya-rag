@@ -555,3 +555,25 @@ def test_engine_builds_the_lexical_channel_with_the_configured_bm25_parameters(t
     engine.index_paths([write_corpus(tmp_path / "corpus")])
     assert engine.lexical.k1 == 0.9
     assert engine.lexical.b == 0.4
+
+
+def test_chunk_chars_auto_derives_from_the_corpus(tmp_path):
+    config = make_config(tmp_path, dense_weight=1.0, rerank_k=3, chunk_chars_auto=True,
+                         chunk_chars=400, chunk_chars_auto_max=2000)
+    engine = RagEngine(config, model=StubModel())
+    report = engine.index_paths([_long_document_corpus(tmp_path)])
+    # The corpus's long documents push the p90 above the fixed 400-char default.
+    assert report.derived_chunk_chars > 400
+    assert report.as_dict()["derived_chunk_chars"] == report.derived_chunk_chars
+
+
+def test_chunk_chars_auto_defaults_on_and_can_be_disabled(tmp_path):
+    from laya_rag.config import EngineConfig
+
+    assert EngineConfig().chunk_chars_auto is True
+    engine = RagEngine(
+        make_config(tmp_path, dense_weight=1.0, rerank_k=3, chunk_chars_auto=False),
+        model=StubModel(),
+    )
+    report = engine.index_paths([write_corpus(tmp_path / "corpus")])
+    assert report.derived_chunk_chars == 0

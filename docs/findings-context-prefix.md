@@ -27,6 +27,11 @@ stemming and stopword filtering:
 | median rank | 2 | 1 | — |
 | worst rank | 6 | 3 | — |
 
+*(Measured at the fixed 1,200-character chunk size. `CHUNK_CHARS_AUTO` now derives 2,000 for
+this corpus and lifts both arms — MRR 0.7143 without the prefix and 0.8929 with it — so the
+prefix's benefit is unchanged in direction and similar in size on a higher baseline; see
+[findings-chunk-merge.md](findings-chunk-merge.md).)*
+
 Per query (gold rank): three queries improved — `d-langchain` 6 → 3, `d-evals` 2 → 1,
 `d-adoption` 3 → 1 — and four were unchanged (all already at rank 1). **No query got
 worse.** Recall and precision were already saturated, so the only room was ordering, which

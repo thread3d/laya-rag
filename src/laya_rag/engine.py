@@ -24,7 +24,13 @@ from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 
-from .chunking import DEFAULT_EXTENSIONS, MAX_FILE_BYTES, chunk_documents, load_documents
+from .chunking import (
+    DEFAULT_EXTENSIONS,
+    MAX_FILE_BYTES,
+    chunk_documents,
+    derive_chunk_chars,
+    load_documents,
+)
 from .compose import Composer
 from .config import EngineConfig
 from .index_store import Hit, VectorIndex, wipe
@@ -56,6 +62,7 @@ class IndexReport:
     embed_seconds: float = 0.0
     save_seconds: float = 0.0
     sparse_seconds: float = 0.0
+    derived_chunk_chars: int = 0
     total_seconds: float = 0.0
     skipped: list[tuple[str, str]] = field(default_factory=list)
 
@@ -69,6 +76,7 @@ class IndexReport:
             "embed_seconds": round(self.embed_seconds, 3),
             "save_seconds": round(self.save_seconds, 3),
             "sparse_seconds": round(self.sparse_seconds, 3),
+            "derived_chunk_chars": self.derived_chunk_chars,
             "total_seconds": round(self.total_seconds, 3),
             "skipped": [{"path": path, "reason": reason} for path, reason in self.skipped],
         }
@@ -677,9 +685,18 @@ class RagEngine:
         def chunking(done: int, total: int, chunks: int) -> None:
             _progress(progress, "chunking", documents=done, documents_total=total, chunks=chunks)
 
+        chunk_chars = self.config.chunk_chars
+        if self.config.chunk_chars_auto:
+            # Derive the size from this corpus rather than the fixed default; see
+            # docs/findings-chunk-merge.md.
+            chunk_chars = derive_chunk_chars(
+                [len(document.text) for document in loaded.documents],
+                maximum=self.config.chunk_chars_auto_max,
+            )
+            report.derived_chunk_chars = chunk_chars
         chunks = chunk_documents(
             loaded.documents,
-            chunk_chars=self.config.chunk_chars,
+            chunk_chars=chunk_chars,
             overlap_chars=self.config.resolved_chunk_overlap,
             min_chunk_chars=self.config.min_chunk_chars,
             on_document=chunking,

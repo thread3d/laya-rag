@@ -135,6 +135,9 @@ def make_config(tmp_path: Path, **overrides: Any) -> EngineConfig:
         "chunk_chars": 400,
         "chunk_overlap_chars": 80,
         "min_chunk_chars": 40,
+        # Tests pin an explicit chunk size; the engine derives one from the corpus by
+        # default, which would make every chunk-count assertion corpus-dependent.
+        "chunk_chars_auto": False,
         "retrieve_k": 10,
         "rerank_k": 3,
         "relevance_threshold": 0.3,

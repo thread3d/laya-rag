@@ -140,6 +140,16 @@ class EngineConfig:
     # 200, which is why the default is 400). `chunk_text` additionally never splits a
     # sentence that fits in one chunk, so prose facts longer than the overlap survive too.
     chunk_chars: int = field(default_factory=lambda: _env_int("CHUNK_CHARS", 1200))
+    # Derive the chunk size from each corpus's own document lengths instead of using the
+    # fixed default: the 90th percentile, clamped into [CHUNK_CHARS, CHUNK_CHARS_AUTO_MAX]
+    # so deriving can only chunk *less* aggressively than before. Measured at the engine
+    # level on SciFact: 0.7264 -> 0.7417 nDCG@10 (p=0.023), with 9,986 -> 5,976 chunks; and
+    # on the vendored docs corpus MRR 0.6429 -> 0.7143 with 459 -> 220 chunks. See
+    # docs/findings-chunk-merge.md.
+    chunk_chars_auto: bool = field(default_factory=lambda: _env_bool("CHUNK_CHARS_AUTO", True))
+    chunk_chars_auto_max: int = field(
+        default_factory=lambda: _env_int("CHUNK_CHARS_AUTO_MAX", 2000)
+    )
     chunk_overlap_chars: int = field(default_factory=lambda: _env_int("CHUNK_OVERLAP_CHARS", 400))
     min_chunk_chars: int = field(default_factory=lambda: _env_int("MIN_CHUNK_CHARS", 80))
     # Keep a document of at most chunk_chars + overlap_chars whole instead of splitting it

@@ -172,6 +172,33 @@ def invisible_payload_flags(text: str) -> list[str]:
     return flags
 
 
+def derive_chunk_chars(
+    lengths: Sequence[int],
+    *,
+    minimum: int = 1200,
+    maximum: int = 2000,
+    percentile: float = 0.9,
+) -> int:
+    """A chunk size that keeps most documents whole, from their measured lengths.
+
+    Round 34 found the engine's chunking gap is the chunked *representation* of documents
+    longer than the merge window, not pool depth, lost context or short-document splits —
+    a single embedding over the whole document ranked better than any of its chunks. The
+    fix is therefore a chunk size chosen from the corpus's own length distribution, and
+    the ``maximum`` is what keeps it honest: an encoder with a 512-token window cannot see
+    much past ~2,000 characters, so a larger chunk would only pad the truncation.
+
+    ``minimum`` is the previous fixed default, so deriving can only ever chunk *less*
+    aggressively than the engine did before — a corpus of short documents keeps the old
+    behaviour rather than being split harder.
+    """
+    values = sorted(int(length) for length in lengths if int(length) > 0)
+    if not values:
+        return minimum
+    rank = int(round(percentile * (len(values) - 1)))
+    return max(minimum, min(maximum, values[min(rank, len(values) - 1)]))
+
+
 def _doc_id(path: Path) -> str:
     return hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
 
