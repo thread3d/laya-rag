@@ -169,3 +169,101 @@ def test_stats_reports_the_trust_state(tmp_path):
     assert payload["trust"]["default_tier"] == "untrusted"
     assert payload["trust"]["query_min_trust"] == "trusted"
     assert payload["trust"]["rules"] == 1
+    assert payload["trust"]["tenants"] == []
+    assert payload["trust"]["acl_enabled"] is False
+
+
+# ── per-tenant ACL ───────────────────────────────────────────────────────
+
+def test_tenant_block_parses_and_enables_the_acl():
+    manifest = TrustManifest.from_mapping(
+        {"default": "trusted", "tenants": {"acme": ["*/acme/*"], "beta": "*/shared/*"}}
+    )
+    assert manifest.acl_enabled is True
+    assert manifest.tenants["acme"] == ("*/acme/*",)
+    assert manifest.tenants["beta"] == ("*/shared/*",)
+    assert TrustManifest.from_mapping({"*": "trusted"}).acl_enabled is False
+
+
+def test_no_tenant_block_allows_every_caller():
+    manifest = TrustManifest.from_mapping({"*": "trusted"})
+    assert manifest.tenant_allowed("/any/doc.md", None) is True
+    assert manifest.tenant_allowed("/any/doc.md", "acme") is True
+
+
+def test_tenant_acl_fails_closed():
+    manifest = TrustManifest.from_mapping({"tenants": {"acme": ["*/acme/*"]}})
+    assert manifest.tenant_allowed("/x/acme/doc.md", "acme") is True
+    # Another tenant's document, an unknown tenant, and no identity are all denied.
+    assert manifest.tenant_allowed("/x/beta/doc.md", "acme") is False
+    assert manifest.tenant_allowed("/x/acme/doc.md", "beta") is False
+    assert manifest.tenant_allowed("/x/acme/doc.md", None) is False
+    assert manifest.allows("/x/acme/doc.md", "untrusted", "acme") is True
+    assert manifest.allows("/x/acme/doc.md", "untrusted", "beta") is False
+
+
+def test_tenant_block_rejects_bad_shapes():
+    with pytest.raises(ValueError):
+        TrustManifest.from_mapping({"tenants": {"a": 5}})
+    with pytest.raises(ValueError):
+        TrustManifest.from_mapping({"tenants": ["a"]})
+
+
+def _write_tenant_corpus(root):
+    (root / "acme").mkdir(parents=True, exist_ok=True)
+    (root / "beta").mkdir(parents=True, exist_ok=True)
+    (root / "acme" / "secret.md").write_text(
+        "# Acme\n\nThe acme secret codename is falcon-nine and is confidential.\n",
+        encoding="utf-8",
+    )
+    (root / "beta" / "secret.md").write_text(
+        "# Beta\n\nThe beta secret codename is otter-four and is confidential.\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def _tenant_manifest(tmp_path):
+    path = tmp_path / "tenants.json"
+    path.write_text(json.dumps({
+        "default": "trusted",
+        "tenants": {"acme": ["*/acme/*"], "beta": ["*/beta/*"]},
+    }), encoding="utf-8")
+    return path
+
+
+def test_engine_isolates_tenants(tmp_path):
+    corpus = _write_tenant_corpus(tmp_path / "corpus")
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3, relevance_threshold=0.0,
+        trust_manifest=str(_tenant_manifest(tmp_path)),
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([corpus])
+
+    acme = engine.query("acme secret codename", tenant="acme")
+    assert acme.passages
+    assert all("beta" not in passage["path"] for passage in acme.passages)
+
+    beta = engine.query("beta secret codename", tenant="beta")
+    assert beta.passages
+    assert all("acme" not in passage["path"] for passage in beta.passages)
+
+    # Asking for the other tenant's content never returns it, and the exclusion is counted.
+    # (The acme document legitimately matches "secret codename", so it may still appear.)
+    stolen = engine.query("beta secret codename", tenant="acme")
+    assert all("beta" not in passage["path"] for passage in stolen.passages)
+    assert stolen.acl_filtered > 0
+
+    # With an ACL configured, a request with no identity retrieves nothing.
+    anonymous = engine.query("acme secret codename")
+    assert anonymous.passages == []
+    assert anonymous.acl_filtered > 0
+
+
+def test_stats_reports_tenants(tmp_path):
+    config = make_config(tmp_path, trust_manifest=str(_tenant_manifest(tmp_path)))
+    engine = RagEngine(config, model=StubModel())
+    payload = engine.stats()
+    assert payload["trust"]["tenants"] == ["acme", "beta"]
+    assert payload["trust"]["acl_enabled"] is True

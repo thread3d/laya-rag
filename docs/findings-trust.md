@@ -60,3 +60,42 @@ opt-in per query, as designed. The whole behaviour is pinned by 13 offline tests
 - The honest caveat: it is a **capability**, and its quality is exactly the quality of the
   manifest. The value measured here is correctness (an untrusted document is never
   returned), not retrieval quality.
+
+## Per-tenant ACL
+
+The same manifest can carry a `tenants` block mapping a caller identity to the path globs it
+may retrieve:
+
+```json
+{ "default": "trusted",
+  "tenants": { "alpha": ["alpha/*", "shared/*"], "beta": ["beta/*", "shared/*"] } }
+```
+
+`RagEngine.query(..., tenant="alpha")` (and the `tenant` field on `POST /v1/query`) applies
+it. The semantics are deliberately **fail-closed**: once a tenant block exists, a request
+with no tenant, or an unknown tenant, retrieves nothing. With no `tenants` block every caller
+is allowed, so single-tenant deployments are unchanged. `acl_filtered` on the response counts
+the exclusions separately from `trust_filtered`, and `stats()` reports the tenant names and
+whether the ACL is enabled.
+
+Measured by `make adversarial-audit` on a three-document corpus (two tenants plus a shared
+document):
+
+| check | result |
+| --- | --- |
+| alpha retrieves a beta document | **false** |
+| beta retrieves an alpha document | **false** |
+| a request with no identity retrieves anything | **false** (0 passages) |
+| a shared document is visible to a listed tenant | **true** |
+
+The isolation probe and all the trust/injection checks pass together
+(`ADVERSARIAL_ARGS="--check"`).
+
+### Limits
+
+- It is a **filter keyed on a caller-supplied identity**, not authentication. The tenant
+  string must come from a trusted place — the service's own auth layer — or a caller can
+  simply claim another tenant's name. The API's single optional bearer token does not
+  distinguish tenants today; a real deployment maps token → tenant outside this engine.
+- Path globs are only as correct as the ingestion layout; a document filed under the wrong
+  directory is isolated by that mistake, in both directions.

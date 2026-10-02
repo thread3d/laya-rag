@@ -88,6 +88,9 @@ class QueryResult:
     #: Candidates excluded because their document's trust tier was below the query's
     #: minimum. Zero unless a trust manifest and a minimum are both configured.
     trust_filtered: int = 0
+    #: Candidates excluded by the manifest's per-tenant ACL. Zero unless a tenant block
+    #: is configured.
+    acl_filtered: int = 0
     retrieval_seconds: float = 0.0
     rerank_seconds: float = 0.0
     total_seconds: float = 0.0
@@ -105,6 +108,7 @@ class QueryResult:
             "kept": self.kept,
             "dropped_below_threshold": self.dropped_below_threshold,
             "trust_filtered": self.trust_filtered,
+            "acl_filtered": self.acl_filtered,
             "checkpoint": self.checkpoint,
             "timings": {
                 "retrieval_seconds": round(self.retrieval_seconds, 4),
@@ -731,8 +735,14 @@ class RagEngine:
         relevance_threshold: float | None = None,
         answerability_threshold: float | None = None,
         max_passage_chars: int | None = 2000,
+        tenant: str | None = None,
     ) -> QueryResult:
-        """Retrieve, re-rank and gate evidence for ``query``."""
+        """Retrieve, re-rank and gate evidence for ``query``.
+
+        ``tenant`` selects a caller identity for the manifest's per-tenant ACL, when one is
+        configured. With no tenant block in the manifest it is ignored, so single-tenant
+        deployments are unaffected.
+        """
         if not query or not query.strip():
             raise ValueError("query must be a non-empty string")
         started = time.perf_counter()
@@ -761,11 +771,13 @@ class RagEngine:
         if lexical is None:
             dense_weight = 1.0
         # Diversification can only replace a duplicate with a deeper candidate if the
-        # channels were searched deeper to begin with. Trust filtering has the same need:
-        # excluding a document must leave enough deeper candidates to refill.
+        # channels were searched deeper to begin with. Trust and ACL filtering have the
+        # same need: excluding a document must leave enough deeper candidates to refill.
         trust_manifest = self.trust_manifest
         min_trust = (self.config.query_min_trust or "").strip()
-        trust_active = trust_manifest is not None and bool(min_trust)
+        acl_active = trust_manifest is not None and trust_manifest.acl_enabled
+        trust_active = trust_manifest is not None and (bool(min_trust) or acl_active)
+        effective_min_trust = min_trust or "untrusted"
         recall_k = (
             candidate_k * 3
             if (
@@ -791,10 +803,21 @@ class RagEngine:
             coverage_lambda=self.config.recall_coverage_lambda,
         )
         trust_filtered = 0
+        acl_filtered = 0
         if trust_active:
             before = len(candidates)
-            candidates = filter_candidates(candidates, trust_manifest, min_trust)
-            trust_filtered = before - len(candidates)
+            if acl_active:
+                allowed = [
+                    hit for hit in candidates
+                    if trust_manifest.tenant_allowed(hit.chunk.path, tenant)
+                ]
+                acl_filtered = before - len(allowed)
+                candidates = allowed
+            remaining = len(candidates)
+            candidates = filter_candidates(
+                candidates, trust_manifest, effective_min_trust, tenant
+            )
+            trust_filtered = remaining - len(candidates)
         retrieval_seconds = time.perf_counter() - retrieve_started
 
         # An index written before the lexical channel existed, or one whose
@@ -863,6 +886,7 @@ class RagEngine:
             kept=reranked.kept,
             dropped_below_threshold=reranked.dropped_below_threshold,
             trust_filtered=trust_filtered,
+            acl_filtered=acl_filtered,
             retrieval_seconds=retrieval_seconds,
             rerank_seconds=rerank_seconds,
             total_seconds=time.perf_counter() - started,
@@ -1192,5 +1216,7 @@ class RagEngine:
             "default_tier": self.config.trust_default_tier,
             "query_min_trust": self.config.query_min_trust or None,
             "rules": len(manifest.rules) if manifest is not None else 0,
+            "tenants": sorted(manifest.tenants) if manifest is not None else [],
+            "acl_enabled": bool(manifest.acl_enabled) if manifest is not None else False,
         }
         return payload

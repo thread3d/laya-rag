@@ -86,6 +86,20 @@ THRESHOLDS = {
     "injection_flag_rate": 1.0,
 }
 
+#: Two tenants and a shared document, for the isolation probe.
+TENANT_CORPUS: dict[str, str] = {
+    "alpha/notes.md": "The alpha launch code is falcon-nine and is known only to alpha.",
+    "beta/notes.md": "The beta launch code is otter-four and is known only to beta.",
+    "shared/faq.md": "Both teams use the shared launch checklist before a release.",
+}
+TENANT_MANIFEST = {
+    "default": "trusted",
+    "tenants": {
+        "alpha": ["alpha/*", "shared/*"],
+        "beta": ["beta/*", "shared/*"],
+    },
+}
+
 
 def build_chunks(corpus: Mapping[str, str] | None = None) -> list[Chunk]:
     corpus = corpus if corpus is not None else CORPUS
@@ -150,6 +164,27 @@ def retrieval_audit(
     }
 
 
+def tenant_probe(k: int = 5) -> dict[str, Any]:
+    """Cross-tenant retrieval must never happen, and no identity must mean no access."""
+    index = BM25Index(stem=True, drop_stopwords=True)
+    index.build(build_chunks(TENANT_CORPUS))
+    manifest = TrustManifest.from_mapping(TENANT_MANIFEST)
+
+    def visible(query: str, tenant: str | None) -> list[str]:
+        hits = [hit.chunk_id for hit in index.search(query, k=len(index))]
+        return [h for h in hits if manifest.tenant_allowed(h, tenant)][:k]
+
+    alpha = visible("beta launch code otter", "alpha")
+    beta = visible("alpha launch code falcon", "beta")
+    anonymous = visible("alpha launch code falcon", None)
+    return {
+        "alpha_sees_beta": any(path.startswith("beta/") for path in alpha),
+        "beta_sees_alpha": any(path.startswith("alpha/") for path in beta),
+        "anonymous_passages": len(anonymous),
+        "alpha_shared_visible": "shared/faq.md" in visible("shared launch checklist", "alpha"),
+    }
+
+
 def build_report(k: int = 5, corpus: Mapping[str, str] | None = None) -> dict[str, Any]:
     off = retrieval_audit(k, manifest=None, corpus=corpus)
     manifest = TrustManifest.from_mapping(
@@ -157,16 +192,21 @@ def build_report(k: int = 5, corpus: Mapping[str, str] | None = None) -> dict[st
     )
     on = retrieval_audit(k, manifest=manifest, min_tier="trusted", corpus=corpus)
     false_refusal = round(off["gold_hit_rate"] - on["gold_hit_rate"], 4)
+    tenants = tenant_probe(k)
     return {
         "settings": {"k": k, "poison_path": POISON_PATH},
         "trust_off": off,
         "trust_on": on,
+        "tenants": tenants,
         "false_refusal_rate": false_refusal,
         "checks": {
             "gold_retained": false_refusal == 0.0,
             "poison_excluded": on["poison_leak_rate"] == THRESHOLDS["poison_leak_rate_trust_on"],
             "negative_rejected": on["negative_reject_rate"] == THRESHOLDS["negative_reject_rate"],
             "injection_flagged": on["injection_flag_rate"] == THRESHOLDS["injection_flag_rate"],
+            "tenants_isolated": not tenants["alpha_sees_beta"] and not tenants["beta_sees_alpha"],
+            "anonymous_denied": tenants["anonymous_passages"] == 0,
+            "shared_visible_to_a_tenant": tenants["alpha_shared_visible"],
         },
     }
 
@@ -233,6 +273,10 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"- deterministic verification on a fabricated cited answer: "
         f"number flagged={report['verification']['number_flagged']}, "
         f"injection flagged={report['verification']['injection_flagged']}",
+        f"- tenant isolation: alpha sees beta={report['tenants']['alpha_sees_beta']}, "
+        f"beta sees alpha={report['tenants']['beta_sees_alpha']}, "
+        f"anonymous passages={report['tenants']['anonymous_passages']}, "
+        f"shared visible to a tenant={report['tenants']['alpha_shared_visible']}",
         "",
         "## Checks",
         "",

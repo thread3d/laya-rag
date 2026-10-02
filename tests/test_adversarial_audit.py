@@ -72,3 +72,23 @@ def test_render_markdown_lists_both_scenarios_and_checks():
 
 def test_main_check_mode_returns_zero():
     assert audit.main(["--check", "--out", "/tmp/adversarial-audit-test"]) == 0
+
+
+# ── tenant isolation ─────────────────────────────────────────────────────
+
+def test_tenant_probe_finds_no_cross_tenant_leak():
+    probe = audit.tenant_probe(k=5)
+    assert probe["alpha_sees_beta"] is False
+    assert probe["beta_sees_alpha"] is False
+    # Once a tenant block exists, no identity retrieves nothing.
+    assert probe["anonymous_passages"] == 0
+    # A shared document is still visible to a listed tenant.
+    assert probe["alpha_shared_visible"] is True
+
+
+def test_report_includes_the_tenant_checks_and_they_pass():
+    report = audit.build_report(k=5)
+    for name in ("tenants_isolated", "anonymous_denied", "shared_visible_to_a_tenant"):
+        assert name in report["checks"]
+        assert report["checks"][name] is True
+    assert report["tenants"]["alpha_sees_beta"] is False

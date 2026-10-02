@@ -37,10 +37,12 @@ def tier_rank(tier: str) -> int:
 
 @dataclass
 class TrustManifest:
-    """Path patterns mapped to tiers, plus the tier for anything unmatched."""
+    """Path patterns mapped to tiers, an optional per-tenant allow-list, and a default."""
 
     rules: list[tuple[str, str]] = field(default_factory=list)
     default_tier: str = "untrusted"
+    #: tenant name -> path globs that tenant may retrieve. Empty means no ACL at all.
+    tenants: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         # Validate eagerly so a typo in a manifest fails at load, not at query time.
@@ -52,15 +54,28 @@ class TrustManifest:
     def from_mapping(
         cls, mapping: Mapping[str, Any], *, default_tier: str | None = None
     ) -> "TrustManifest":
-        """Build from ``{pattern: tier}`` or ``{"default": ..., "rules": {...}}``."""
+        """Build from ``{pattern: tier}`` or ``{"default": ..., "rules": {...}, "tenants": {...}}``."""
         default = default_tier or str(mapping.get("default", "untrusted"))
         rules_source = mapping.get("rules", None)
         if rules_source is None:
-            rules_source = {k: v for k, v in mapping.items() if k != "default"}
+            rules_source = {
+                k: v for k, v in mapping.items() if k not in {"default", "tenants"}
+            }
         if not isinstance(rules_source, Mapping):
             raise ValueError("a trust manifest's 'rules' must be an object of pattern -> tier")
         rules = [(str(pattern), str(tier)) for pattern, tier in rules_source.items()]
-        return cls(rules=rules, default_tier=default)
+
+        raw_tenants = mapping.get("tenants") or {}
+        if not isinstance(raw_tenants, Mapping):
+            raise ValueError("a trust manifest's 'tenants' must be an object of tenant -> globs")
+        tenants: dict[str, tuple[str, ...]] = {}
+        for name, patterns in raw_tenants.items():
+            if isinstance(patterns, str):
+                patterns = [patterns]
+            if not isinstance(patterns, (list, tuple)):
+                raise ValueError(f"tenant {name!r} must map to a glob or a list of globs")
+            tenants[str(name)] = tuple(str(pattern) for pattern in patterns)
+        return cls(rules=rules, default_tier=default, tenants=tenants)
 
     @classmethod
     def from_path(cls, path: str | Path, *, default_tier: str | None = None) -> "TrustManifest":
@@ -68,6 +83,29 @@ class TrustManifest:
         if not isinstance(payload, Mapping):
             raise ValueError(f"{path} must contain a JSON object")
         return cls.from_mapping(payload, default_tier=default_tier)
+
+    @property
+    def acl_enabled(self) -> bool:
+        """Whether any tenant allow-list is configured (and therefore enforced)."""
+        return bool(self.tenants)
+
+    def tenant_allowed(self, path: str | None, tenant: str | None) -> bool:
+        """Whether ``tenant`` may retrieve ``path``.
+
+        With no tenant block configured every caller is allowed, so the shipped behaviour
+        is unchanged. Once a tenant block exists the check **fails closed**: a request with
+        no tenant, or an unknown tenant, retrieves nothing. That is the only safe reading
+        of "these tenants may see these documents".
+        """
+        if not self.tenants:
+            return True
+        if not tenant:
+            return False
+        patterns = self.tenants.get(str(tenant))
+        if patterns is None:
+            return False
+        candidate = str(path or "")
+        return any(fnmatch.fnmatch(candidate, pattern) for pattern in patterns)
 
     def tier(self, path: str | None) -> str:
         """The tier for one path: the first matching rule, else the default.
@@ -81,21 +119,26 @@ class TrustManifest:
                 return tier
         return self.default_tier
 
-    def allows(self, path: str | None, min_tier: str) -> bool:
-        return tier_rank(self.tier(path)) >= tier_rank(min_tier)
+    def allows(self, path: str | None, min_tier: str, tenant: str | None = None) -> bool:
+        return self.tenant_allowed(path, tenant) and tier_rank(self.tier(path)) >= tier_rank(min_tier)
 
     def describe(self) -> dict[str, Any]:
         return {
             "default_tier": self.default_tier,
             "tiers": list(TIERS),
             "rules": [{"pattern": pattern, "tier": tier} for pattern, tier in self.rules],
+            "tenants": sorted(self.tenants),
+            "acl_enabled": self.acl_enabled,
         }
 
 
 def filter_candidates(
-    candidates: Sequence[Any], manifest: TrustManifest, min_tier: str
+    candidates: Sequence[Any],
+    manifest: TrustManifest,
+    min_tier: str,
+    tenant: str | None = None,
 ) -> list[Any]:
-    """Keep only candidates whose chunk path meets ``min_tier``.
+    """Keep only candidates whose chunk path passes the tenant ACL and the tier minimum.
 
     Candidates are engine ``Hit`` objects; anything without a chunk path is treated as
     the empty path and therefore falls to the manifest's default, which is the safe
@@ -106,6 +149,6 @@ def filter_candidates(
     for hit in candidates:
         chunk = getattr(hit, "chunk", None)
         path = getattr(chunk, "path", None)
-        if manifest.allows(path, min_tier):
+        if manifest.allows(path, min_tier, tenant):
             kept.append(hit)
     return kept

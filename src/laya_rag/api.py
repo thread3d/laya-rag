@@ -98,6 +98,11 @@ class QueryRequest(BaseModel):
     relevance_threshold: float | None = Field(None, ge=0.0, le=1.0)
     answerability_threshold: float | None = Field(None, ge=0.0, le=1.0)
     max_passage_chars: int | None = Field(2000, ge=100, le=20000)
+    tenant: str | None = Field(
+        None,
+        description="Caller identity for the trust manifest's per-tenant ACL, when one "
+                    "is configured; ignored otherwise",
+    )
 
 
 class ComposePassage(BaseModel):
@@ -363,6 +368,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 relevance_threshold=request.relevance_threshold,
                 answerability_threshold=request.answerability_threshold,
                 max_passage_chars=request.max_passage_chars,
+                tenant=request.tenant,
             )
         except IndexNotBuiltError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
