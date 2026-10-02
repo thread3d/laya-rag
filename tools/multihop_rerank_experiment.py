@@ -466,6 +466,70 @@ def holdout_selection(
     }
 
 
+def coverage_query_order(
+    scores: Sequence[float],
+    atoms: Sequence[Sequence[int]],
+    atom_weight: Sequence[float],
+    atom_tokens: Sequence[set],
+    query_terms: set,
+    top_k: int,
+    lam: float = 0.7,
+    qboost: float = 1.0,
+) -> list[int]:
+    """Coverage selection with atoms that address the query weighted more.
+
+    Plain coverage weights an atom by its length, so a long generic sentence counts as
+    much as a short sentence that names the thing asked about. This multiplies each
+    atom's weight by ``1 + qboost * overlap`` with the query's surface terms, so the
+    marginal-gain term prefers *new query-relevant* facts. It reuses the same greedy rule
+    via :func:`coverage_order`.
+    """
+    adjusted = list(atom_weight)
+    if query_terms:
+        touched: set[int] = set()
+        for index, tokens in enumerate(atom_tokens):
+            shared = len(tokens & query_terms)
+            if shared:
+                touched.add(index)
+                adjusted[index] = atom_weight[index] * (1.0 + qboost * shared / len(query_terms))
+        if not touched:
+            adjusted = list(atom_weight)
+    return coverage_order(scores, atoms, adjusted, top_k, lam)
+
+
+def coverage_query_rankings(
+    cache: Mapping[str, Any],
+    corpus: Mapping[str, str],
+    queries: Mapping[str, str],
+    top_k: int,
+    *,
+    lam: float = 0.7,
+    qboosts: Sequence[float] = (1.0, 3.0),
+) -> dict[str, dict[str, list[int]]]:
+    """Query-aware coverage strategies, rebuilding the atom index the cache points at."""
+    from multihop_coverage import atom_index, split_atoms
+
+    from laya_rag.lexical import STOPWORDS, tokenize
+
+    atoms_by_doc = {doc_id: split_atoms(text) for doc_id, text in corpus.items()}
+    atom_ids_of, atom_weight, atom_texts = atom_index(list(atoms_by_doc.values()))
+    atom_ids_by_doc = dict(zip(atoms_by_doc, atom_ids_of))
+    atom_tokens = [set(text.split()) for text in atom_texts]
+
+    names = [f"coverage-q-{boost}" for boost in qboosts]
+    out: dict[str, dict[str, list[int]]] = {name: {} for name in names}
+    for q, payload in cache["queries"].items():
+        query_terms = {
+            t for t in tokenize(queries.get(q, ""), stem=False) if t not in STOPWORDS
+        }
+        for boost in qboosts:
+            out[f"coverage-q-{boost}"][q] = coverage_query_order(
+                payload["ce"], payload["atoms"], atom_weight, atom_tokens,
+                query_terms, top_k, lam, boost,
+            )
+    return out
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="multihop_rerank_experiment.py")
     ap.add_argument("--cache", default=str(DEFAULT_CACHE))
@@ -515,6 +579,12 @@ def main(argv=None) -> int:
     rankings = strategy_rankings(cache, args.top_k, args.rrf_k)
     rankings.update(rescue_rankings(cache, tokens_by_query, args.top_k, args.seed_k))
     rankings.update(doc_rankings(cache, args.top_k))
+    item_queries = {
+        str(i): x["query"]
+        for i, x in enumerate(json.loads((ROOT_BENCH / "MultiHopRAG.json").read_text(encoding="utf-8")))
+        if x["question_type"] != "null_query"
+    }
+    rankings.update(coverage_query_rankings(cache, corpus, item_queries, args.top_k))
     per_query: dict[str, dict[str, dict[str, float]]] = {}
     summary: dict[str, dict[str, float]] = {}
     for name, ranking in rankings.items():

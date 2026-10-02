@@ -96,6 +96,25 @@ reason the full 2,255-query confirmation is the next step rather than an afterth
 if `covquota-3-0.7` does not hold against both `ce` and `coverage-0.7` there, the honest
 shipped setting is `RERANK_COVERAGE_MIN_DOCS=0`.
 
+## A marginal negative: query-aware atom weighting
+
+Plain coverage weights an atom by its length, so a long generic sentence counts as much as
+a short sentence that names the thing asked about. Weighting each atom by
+`1 + qboost * (query-term overlap)` and re-running the same greedy rule gives, on the
+400-query subset:
+
+| strategy | Hits@10 | Hits@4 | MAP@10 |
+| --- | --- | --- | --- |
+| coverage-0.7 | 0.8850 | 0.7600 | 0.3206 |
+| coverage-q-1.0 | 0.8875 | 0.7650 | 0.3202 |
+| coverage-q-3.0 | 0.8925 | 0.7650 | 0.3238 |
+
+`coverage-q-3.0` is +0.0033 MAP@10 [−0.0015, +0.0080] over coverage-0.7 — **not
+significant** (p=0.17), and Hits@4 is flat. It is recorded as a marginal change rather than
+shipped; the honest reading is that the query's own terms are already what the cross-encoder
+scored, so re-weighting atoms by them adds little. The tooling stays in the experiment as
+`coverage-q-*`.
+
 ## A negative: the lexical bridge-linked rescue
 
 The diagnostic (§3.1 of `RESEARCH.md`) predicted that the second hop is what the top-10

@@ -276,3 +276,49 @@ def test_holdout_selection_reports_the_winners_held_out_score_even_if_it_loses()
 
 def test_holdout_selection_handles_an_empty_input():
     assert exp.holdout_selection({}, seed=1) == {}
+
+
+# ── query-aware coverage ─────────────────────────────────────────────────
+
+def test_query_aware_coverage_prefers_a_new_query_relevant_atom():
+    scores = [0.9, 0.1, 0.1]
+    atoms = [[0], [1], [2]]
+    atom_weight = [1.0, 5.0, 1.0]           # candidate 1 is longer/generic
+    atom_tokens = [{"a"}, {"x"}, {"q"}]     # candidate 2 is query-relevant
+    query_terms = {"q"}
+    # Without the boost the longer atom wins; with a strong boost the query-relevant one does.
+    plain = exp.coverage_query_order(
+        scores, atoms, atom_weight, atom_tokens, query_terms, top_k=2, lam=0.5, qboost=0.0
+    )
+    boosted = exp.coverage_query_order(
+        scores, atoms, atom_weight, atom_tokens, query_terms, top_k=2, lam=0.5, qboost=10.0
+    )
+    assert plain[1] == 1
+    assert boosted[1] == 2
+
+
+def test_query_aware_coverage_with_zero_boost_matches_plain_coverage():
+    scores = [0.9, 0.5, 0.2]
+    atoms = [[0], [1], [2]]
+    weight = [1.0, 2.0, 3.0]
+    tokens = [{"a"}, {"b"}, {"c"}]
+    assert exp.coverage_query_order(
+        scores, atoms, weight, tokens, {"c"}, top_k=3, lam=0.7, qboost=0.0
+    ) == exp.coverage_order(scores, atoms, weight, top_k=3, lam=0.7)
+
+
+def test_coverage_query_rankings_returns_the_boost_strategies():
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    from multihop_coverage import atom_index, split_atoms
+
+    corpus = {"a#0": "Refunds are processed within five business days for every customer."}
+    atoms_by_doc = {key: split_atoms(text) for key, text in corpus.items()}
+    ids, weight, _ = atom_index(list(atoms_by_doc.values()))
+    cache = {
+        "_settings": {"atom_weight": weight},
+        "queries": {"0": {"pool": ["a#0"], "ce": [0.9], "atoms": [ids[0]]}},
+    }
+    rankings = exp.coverage_query_rankings(cache, corpus, {"0": "refund policy"}, top_k=1)
+    assert set(rankings) == {"coverage-q-1.0", "coverage-q-3.0"}
+    assert len(rankings["coverage-q-3.0"]["0"]) == 1
