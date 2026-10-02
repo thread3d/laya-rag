@@ -15,47 +15,56 @@ make bright BRIGHT_ARGS="--subsets pony,theoremqa_theorems"
 
 ## Measured
 
-Two CPU-cheap subsets, `bge-small` dense, no reranker, no generator:
+Six CPU-cheap subsets, `bge-small` dense, no reranker, no generator:
 
-| subset | docs | queries | retriever | nDCG@10 | nDCG@100 |
+| subset | docs | queries | bm25 | dense | hybrid |
 | --- | --- | --- | --- | --- | --- |
-| pony | 7,894 | 112 | bm25 | 0.1221 | 0.2350 |
-| pony | 7,894 | 112 | dense | 0.0398 | 0.1015 |
-| pony | 7,894 | 112 | **hybrid** | **0.1281** | 0.2143 |
-| theoremqa_theorems | 23,839 | 76 | bm25 | 0.0296 | 0.0437 |
-| theoremqa_theorems | 23,839 | 76 | **dense** | **0.0579** | 0.0941 |
-| theoremqa_theorems | 23,839 | 76 | hybrid | 0.0446 | 0.0889 |
+| pony | 7,894 | 112 | 0.1221 | 0.0398 | **0.1281** |
+| theoremqa_theorems | 23,839 | 76 | 0.0296 | **0.0579** | 0.0446 |
+| biology | 57,359 | 103 | **0.2089** | 0.1076 | 0.1789 |
+| economics | 50,220 | 103 | 0.1519 | 0.1321 | **0.1783** |
+| psychology | 52,835 | 101 | 0.1282 | 0.1487 | **0.1786** |
+| sustainable_living | 60,792 | 108 | 0.1535 | 0.1082 | 0.1529 |
+| **macro mean** | — | 603 | 0.1324 | 0.0991 | **0.1436** |
 
 Paired over queries (bootstrap 95% CI, nDCG@10):
 
 | comparison | delta | 95% CI | verdict |
 | --- | --- | --- | --- |
 | pony dense vs bm25 | **−0.0823** | [−0.1119, −0.0555] | significant |
-| pony hybrid vs bm25 | +0.0060 | [−0.0231, +0.0348] | tie |
+| biology dense vs bm25 | **−0.1013** | [−0.1553, −0.0516] | significant |
+| psychology hybrid vs bm25 | **+0.0504** | [+0.0148, +0.0862] | significant |
+| economics hybrid vs bm25 | +0.0265 | [−0.0035, +0.0561] | tie |
+| biology hybrid vs bm25 | −0.0300 | [−0.0733, +0.0093] | tie |
+| sustainable_living hybrid vs bm25 | −0.0006 | [−0.0371, +0.0351] | tie |
 | theoremqa hybrid vs bm25 | +0.0151 | [−0.0063, +0.0385] | tie |
-| theoremqa dense vs bm25 | +0.0284 | [−0.0070, +0.0662] | tie (n=76) |
 
 ## Reading
 
-- **Pony reproduces BRIGHT's premise exactly.** Dense-only retrieval is *significantly worse*
-  than BM25 (−0.0823) on programming-language questions — the query asks for a program to be
-  written, and the relevant document is a language reference that shares few surface terms
-  with it. BM25's exact-term strength wins, and the fused hybrid matches it.
-- **TheoremQA-Theorems reverses the order**: dense leads BM25 by +0.0284, but with 76 scored
-  queries the interval crosses zero, so it is a tie, not a win.
-- **The engine's hybrid is a safe default on both**: it is the best channel on pony and
-  within noise of the best on theoremqa. That is the same "fusion is robust" pattern BEIR and
-  MultiHop showed, now on a reasoning-intensive benchmark.
-- The absolute numbers are far below the paper's ceiling because this is a 33M `bge-small`
-  with no reranker on 2 of 12 subsets; they are honest retrieval rows, not leaderboard
-  positions.
+- **The benchmark's premise reproduces.** Dense-only retrieval is *significantly worse* than
+  BM25 on pony (−0.0823) and biology (−0.1013) — the queries ask for programs or infer
+  relationships, and the relevant documents share few surface terms with them. Dense also
+  has the lowest macro mean (0.0991 against BM25's 0.1324).
+- **The fused hybrid has the best macro mean (0.1436)**, above BM25 by +0.0112 and dense by
+  +0.0445, and it is the best channel on three of six subsets. Per dataset it is only
+  *significantly* better than BM25 on psychology (+0.0504); elsewhere the intervals cross
+  zero, which is the honest reading on 76–112 queries per subset.
+- **Biology is the one place BM25 leads the hybrid** (0.2089 vs 0.1789), the same pattern as
+  pony: exact terminology dominates, and fusion dilutes it slightly.
+- **This is the same "fusion is robust, dense alone is not" pattern** BEIR and MultiHop
+  showed, now on the reasoning-intensive benchmark, and it is the strongest argument for the
+  engine shipping fusion rather than a single channel.
+- The absolute numbers are far below the paper's ~21 ceiling because this is a 33M
+  `bge-small` with no reranker; they are honest retrieval rows, not leaderboard positions.
 
 ## Honest limits
 
-- **Two of twelve subsets.** `leetcode` (414k docs), `aops` and `theoremqa_questions` (188k
-  each) are excluded by default as too large for this host; the remaining StackExchange
-  subsets (~50–120k each) were not run.
+- **Six of twelve subsets.** `leetcode` (414k docs), `aops` and `theoremqa_questions` (188k
+  each) are excluded as too large for this host; `stackoverflow` (107k) and the remaining
+  three StackExchange subsets were not run.
 - The published top score uses much larger encoders and reranking; these rows are not
   comparable to it, only to themselves.
 - BRIGHT queries are instruction-formatted; they are used raw. The paper's own guidance is
   that an instruction-tuned query encoder helps, which `bge-small` is not.
+- Per-subset query counts (76–112) make all but the largest deltas ties; the macro mean is
+  reported for breadth, not as a significance claim.
