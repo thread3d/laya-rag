@@ -278,7 +278,9 @@ class EngineConfig:
     # 1.0 orders entirely by the decision (the historical behaviour); 0.0 keeps the
     # recall order. Measured, a pointwise cross-encoder trusted fully lost nDCG@10 on
     # all five BEIR corpora (ArguAna 0.568 -> 0.250); blending bounds that damage, so a
-    # second stage can be used as a nudge rather than a replacement.
+    # second stage can be used as a nudge rather than a replacement. It is ignored when
+    # the coverage pass below is active, because a blend reorders by a mixed score and
+    # would discard the coverage order; coverage forces a pure replacement.
     rerank_blend: float = field(default_factory=lambda: _env_float("RERANK_BLEND", 1.0))
 
     # Coverage selection over the cross-encoder-scored pool. When a cross-encoder is

@@ -875,8 +875,11 @@ class RagEngine:
         # Optional coverage reordering over the cross-encoder-scored pool: spend the
         # recall budget on distinct facts *after* the second stage has scored, which
         # measured better than a full CE re-sort. It reorders the pool, so the reranker
-        # must preserve that order rather than re-sort by the score again.
+        # must preserve that order rather than re-sort by the score again — and a blend
+        # below 1 would override the order, so coverage forces it back to a pure
+        # replacement of the ordering key.
         lambda_ = self.config.resolved_rerank_coverage_lambda
+        blend = self.config.rerank_blend
         if cross_scores is not None and lambda_ > 0.0 and candidates:
             pairs = [(hit.chunk.chunk_id, float(score)) for hit, score in zip(candidates, cross_scores)]
             selected = _coverage_select_from(
@@ -890,6 +893,9 @@ class RagEngine:
             candidates = [by_id[chunk_id] for chunk_id, _score in selected]
             cross_scores = [score_of[hit.chunk.chunk_id] for hit in candidates]
             order = "recall"
+            # `blend < 1` reorders by a first-stage/CE mix and would discard the coverage
+            # order entirely, so it is forced to a pure replacement here.
+            blend = 1.0
         nli = self.answerability_nli
         reranked = self.reranker.rerank(
             query,
@@ -905,7 +911,7 @@ class RagEngine:
             ),
             order=order,
             scores=cross_scores,
-            blend=self.config.rerank_blend,
+            blend=blend,
             gate=self.answerability_gate,
             answerability_fn=nli.score if nli is not None else None,
         )

@@ -247,3 +247,48 @@ def test_engine_query_runs_with_coverage_enabled(tmp_path):
     result = engine.query("How long does a refund take?")
     assert result.considered > 0
     assert result.passages
+
+
+def _spy_on_rerank(engine):
+    captured: dict = {}
+    original = engine.reranker.rerank
+
+    def spy(*args, **kwargs):
+        captured.update(kwargs)
+        return original(*args, **kwargs)
+
+    engine.reranker.rerank = spy
+    return captured
+
+
+def test_coverage_ordering_forces_a_pure_replacement_not_a_blend(tmp_path):
+    """`blend < 1` reorders by a first-stage/CE mix, which would discard the coverage
+    order entirely, so the engine forces a pure replacement when coverage is applied."""
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3,
+        rerank_coverage_lambda=0.7, rerank_blend=0.5,
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    engine.cross_encoder = _StubCrossEncoder()
+    captured = _spy_on_rerank(engine)
+    result = engine.query("How long does a refund take?")
+    assert result.passages
+    assert captured["order"] == "recall"
+    assert captured["blend"] == 1.0
+
+
+def test_blend_passes_through_when_coverage_is_disabled(tmp_path):
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3,
+        rerank_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        rerank_coverage_lambda=0.0, rerank_blend=0.5,
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    engine.cross_encoder = _StubCrossEncoder()
+    captured = _spy_on_rerank(engine)
+    result = engine.query("How long does a refund take?")
+    assert result.passages
+    assert captured["order"] == "relevance"
+    assert captured["blend"] == 0.5
