@@ -14,6 +14,7 @@ BENCH_ARGS ?=
 BEIR_ARGS ?=
 BEIR_ABLATE_ARGS ?=
 BEIR_ATOM_ARGS ?=
+BEIR_COVERAGE_ARGS ?=
 CONTEXT_PREFIX_ARGS ?=
 BRIGHT_ARGS ?=
 MULTIHOP_ARGS ?=
@@ -36,7 +37,7 @@ ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune ondisk bench-lexical adversarial-audit charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune ondisk bench-lexical adversarial-audit charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -55,6 +56,7 @@ help:
 	@echo "beir         standard IR metrics on BEIR (nDCG@10, MRR@10, ...)"
 	@echo "beir-ablate  sweep fusion weights and rerank depth on BEIR"
 	@echo "beir-atom-channel  does an atomic lexical channel help BEIR fusion?"
+	@echo "beir-coverage  does the coverage selection help BEIR, or only multi-fact corpora?"
 	@echo "context-prefix  lexical effect of the structural context prefix"
 	@echo "bright       BRIGHT reasoning-intensive retrieval, retrieval only"
 	@echo "multihop     MultiHop-RAG under the benchmark's own protocol"
@@ -151,6 +153,10 @@ beir-ablate:
 # Does an atomic lexical channel help BEIR fusion? (uses cached document embeddings)
 beir-atom-channel:
 	OMP_NUM_THREADS=16 $(PY) tools/beir_atom_channel.py $(BEIR_ATOM_ARGS)
+
+# Does the coverage selection help BEIR, or only multi-fact corpora?
+beir-coverage:
+	OMP_NUM_THREADS=16 $(PY) tools/beir_coverage.py $(BEIR_COVERAGE_ARGS)
 
 # Lexical effect of the structural context prefix (CONTEXT_PREFIX) on a local corpus.
 context-prefix:
