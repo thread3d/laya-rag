@@ -793,9 +793,11 @@ should not be cited as a strength out of domain.
   recalibration split fitted on MultiHop-RAG itself transfers at chance. The signal is not
   absent, though: a feature gate over the retrieval and evidence signals the engine already
   has scores **held-out ROC-AUC 0.815** (balanced accuracy 0.725) on a fresh 300-query
-  MultiHop split where the scalar scores 0.520. The fix is to recalibrate on the target
-  domain — `tools/answerability_train.py`, `LAYA_RAG_ANSWERABILITY_GATE_PATH` — not to
-  trust the scalar.
+  MultiHop split where the scalar scores 0.520 — but that is a **within-question-type**
+  number: with a whole question type held out it falls to **0.767** [0.671, 0.827], worst on
+  comparison questions (0.664). The fix is to recalibrate on the target domain —
+  `tools/answerability_train.py` (see `--group-by`), `LAYA_RAG_ANSWERABILITY_GATE_PATH` — not
+  to trust the scalar.
 - **No text generation**, so it cannot be entered on KILT, MTEB, HHEM or the TREC RAG track at
   all, and any end-to-end answer accuracy would belong to whichever LLM is attached.
 - **Laya's own encoder is unadapted for retrieval, not merely useless** (nDCG@10 ≈ 0.014 on

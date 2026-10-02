@@ -346,9 +346,13 @@ Offline suite: **472 passed, 4 deselected** (baseline 344).
   32.7% on nulls and 32.0% on answerable questions — the same chance behaviour as before —
   but the gate fit on one half scores the other at **ROC-AUC 0.8146 [0.7628, 0.8570]** and
   **balanced accuracy 0.7248**, against the scalar's **0.5199 / 0.5026** on the same
-  queries. So the signal was always in the retrieval/evidence features; the single scalar
-  simply discarded it. Artefacts: `eval/benchmarks/multihop-rag/gate-features.json`,
-  `answerability-gate.json`, `answerability-gate.json.gate`.
+  queries. That is a **within-question-type** figure: holding out a whole question type
+  (`tools/answerability_train.py --group-by question_type`) gives **0.7666 [0.6712,
+  0.8267]**, worst on comparison questions (0.6640) and strongest on temporal ones (0.8276),
+  still far above the scalar's 0.5235 on the same folds. So the signal was always in the
+  retrieval/evidence features; the single scalar simply discarded it. Artefacts:
+  `eval/benchmarks/multihop-rag/gate-features.json`, `answerability-gate.json`,
+  `answerability-gate.json.gate`, `answerability-grouped.json`.
 
 - **Cross-encoder on MultiHop-RAG (§5/§1) — it pays here, unlike on BEIR.** A deterministic
   400-query subset (seed 17, overlap 200) reranked with `bge-reranker-base` at depth 100:
