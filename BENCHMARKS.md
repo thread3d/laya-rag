@@ -207,7 +207,7 @@ not in the benchmark.
 | --- | --- |
 | **BEIR** | **measured** — 5 of 18 datasets. The other 13 are not run: Robust04 and TREC-NEWS return stubs on the mirror used here, and the largest (BioASQ 14.9M, FEVER 5.4M, NQ 2.7M documents) exceed the 28 GB free disk |
 | **MTEB (retrieval subset)** | **partially measured** — its retrieval tasks are largely BEIR's. The leaderboard wants a *model* submission; this system is an engine around a model, so it cannot be entered as-is |
-| **BRIGHT** | **runnable** — reasoning-intensive, 12 datasets; some collections are large. Adapter: days |
+| **BRIGHT** | **partially measured** — `tools/bright.py` runs the CPU-cheap subsets. On pony (7,894 docs, 112 queries) BM25 0.1221 nDCG@10 vs dense 0.0398 vs hybrid 0.1281; on theoremqa_theorems (23,839, 76) dense 0.0579 leads BM25's 0.0296 without significance. Dense-only is significantly worse than BM25 on pony, which is the benchmark's premise. The large subsets (leetcode 414k, aops/theoremqa_questions 188k) are not run. Findings: `docs/findings-bright.md` |
 | **MIRACL** | **blocked as-is** — 18 languages and per-language Wikipedia indexes (disk), and the dense channel would need a multilingual encoder. Laya's own checkpoint is multilingual, which is the one favourable fact |
 | **LoTTE** | **runnable** — search/forum splits, long-tail; several collections are large |
 | **ViDoRe** | **not applicable** — visual documents (screenshots/charts); this engine takes text only and has no OCR or vision path |

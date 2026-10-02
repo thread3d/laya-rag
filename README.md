@@ -293,7 +293,9 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `INDEX_BACKEND` | `memory` | `memory` or `ondisk`; `ondisk` streams vectors to a memory-mapped file and packs BM25 postings into one mmap so query-time memory stops scaling with corpus size (append-only; rebuild on change) |
 | `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `400` | chunking budget; a fact up to the overlap survives any split, a cut inside a sentence backs up to the sentence start, and the overlap is clamped below `CHUNK_CHARS` |
 | `MIN_CHUNK_CHARS` | `80` | a shorter trailing chunk is folded into the previous one |
+| `CONTEXT_PREFIX` | `false` | attach a structural breadcrumb (file name, first heading, first line) that the lexical and dense channels index but the returned evidence does not contain; requires a re-index. Measured MRR 0.64 → 0.83 on the vendored docs |
 | `LEXICAL_STEM` | `true` | English stemming for the lexical channel; `false` keeps exact terms only |
+| `LEXICAL_BACKEND` | `bm25` | `bm25` or `eager`; `eager` precomputes posting weights and scores with NumPy, with byte-identical rankings — measured 11–13× faster queries and ~5× smaller index at 20k docs |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
 | `EMBED_MODEL` | unset | retrieval-trained bi-encoder for the dense channel; unset uses Laya's own encoder |
 | `EMBED_POOLING` | `auto` | `cls` for BGE-family models, `mean` otherwise — BGE is trained with `[CLS]` |
@@ -304,12 +306,17 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `RERANK_MODEL` | unset | retrieval-trained cross-encoder that orders and filters evidence; Laya still gates |
 | `RERANK_ORDER` | `auto` | `auto` orders by the scorer when `RERANK_MODEL` is set and keeps recall order otherwise; or force `recall` / `relevance` |
 | `RERANK_BLEND` | `1.0` | how far a supplied second stage may move the first-stage order, in `[0, 1]`; `1.0` replaces it (historical), below it is fused so the second stage nudges rather than overrides |
+| `RERANK_COVERAGE_LAMBDA` | `0.0` | sentence-atom coverage reordering over the cross-encoder-scored pool; `0.7` is the measured setting (full-protocol MAP@10 0.2948 → 0.3165, Hits@4 0.7348 → 0.7694), `0.0` disables it and needs a `RERANK_MODEL` |
+| `RERANK_COVERAGE_MIN_DOCS` | `0` | seed the coverage pass with the best candidate of this many distinct documents; `3` adds +0.0027 MAP@10 over coverage alone but costs −0.0106 Hits@4, so it is a MAP-priority option |
 | `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
 | `CLAIM_MAX` | `25` | claims adjudicated per answer, so one long answer cannot run unbounded |
 | `RELEVANCE_THRESHOLD` | `0.5` | minimum Laya P(relevant) to keep a passage |
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
 | `ANSWERABILITY_GATE_PATH` | unset | persisted feature-based answerability gate (see `tools/answerability_train.py`); unset uses Laya's own scalar decision |
 | `ANSWERABILITY_NLI_MODEL` | unset | NLI cross-encoder used as an answerability scorer (e.g. `cross-encoder/nli-deberta-v3-base`); takes precedence over the gate and Laya's scalar |
+| `TRUST_MANIFEST` | unset | JSON file mapping path globs to a trust tier (`quarantined` < `untrusted` < `trusted`) and, optionally, `tenants` to per-caller path globs; unset means no trust or ACL filtering |
+| `TRUST_DEFAULT_TIER` | `untrusted` | tier for a path the manifest does not name, when a manifest is configured (an allow-list is the safe default) |
+| `QUERY_MIN_TRUST` | unset | minimum tier a candidate must have to be returned; unset keeps trust filtering off even when a manifest is loaded |
 | `HOST` / `PORT` | `127.0.0.1` / `8077` | service bind address |
 | `API_KEY` | unset | when set, requires `Authorization: Bearer <key>` |
 | `WARMUP` | `true` | load the checkpoint during service startup instead of on the first request |
@@ -347,7 +354,7 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (473 tests)
+make test          # Python suite, offline, deterministic (655 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```
@@ -895,7 +902,8 @@ laya-rag/
 │   ├── rerank.py            relevance filtering and ordering, answerability gate
 │   ├── engine.py            orchestration: index, hybrid recall, evidence bundle
 │   ├── compose.py           optional answer composition (the one non-Laya step)
-│   ├── verify.py            deterministic citation and quote checks
+│   ├── verify.py            deterministic citation, quote, numeric and injection checks
+│   ├── trust.py             trust tiers and the per-tenant path ACL
 │   ├── api.py               FastAPI service
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
@@ -903,10 +911,16 @@ laya-rag/
 │                          beir_ablate.py, beir_routing.py, ann_bench.py, sparse.py,
 │                          finetune.py, ondisk.py, compare.py (cross-system tables,
 │                          error bars, charts), diagram.py (the architecture diagram),
-│                          and the multiHop harnesses: multihop_official.py,
+│                          the multiHop harnesses (multihop_official.py,
 │                          multihop_gate.py, multihop_recalibrate.py,
-│                          multihop_coverage.py, multihop_doclevel.py
-├── docs/                  generated figures embedded in this README (make charts)
+│                          multihop_coverage.py, multihop_doclevel.py,
+│                          multihop_diagnostics.py, multihop_ce_cache.py,
+│                          multihop_rerank_experiment.py, multihop_atom_index.py),
+│                          eval_significance.py,
+│                          answerability_train.py, answerability_features.py,
+│                          adversarial_audit.py, bright.py, beir_atom_channel.py,
+│                          context_prefix_eval.py, bench_lexical.py
+├── docs/                  generated figures plus the per-topic findings documents
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
