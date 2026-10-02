@@ -530,12 +530,33 @@ def coverage_query_rankings(
     return out
 
 
+def truncate_pools(cache: Mapping[str, Any], limit: int | None) -> Mapping[str, Any]:
+    """Truncate every cached pool to its first ``limit`` candidates, in place.
+
+    The cache stores a fixed depth-100 pool; truncating models a narrower ``RETRIEVE_K``
+    without re-running the cross-encoder, which is how the cost of a shallow first stage is
+    measured here.
+    """
+    if not limit:
+        return cache
+    for payload in cache["queries"].values():
+        payload["pool"] = payload["pool"][:limit]
+        payload["ce"] = payload["ce"][:limit]
+        payload["atoms"] = payload["atoms"][:limit]
+    return cache
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="multihop_rerank_experiment.py")
     ap.add_argument("--cache", default=str(DEFAULT_CACHE))
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--rrf-k", type=int, default=60)
     ap.add_argument("--seed-k", type=int, default=3, help="CE seeds kept before rescue fills")
+    ap.add_argument(
+        "--depth-limit", type=int, default=None,
+        help="truncate each cached pool to this many candidates before scoring — models a "
+             "narrower RETRIEVE_K without re-running the cross-encoder",
+    )
     ap.add_argument("--samples", type=int, default=1000)
     ap.add_argument("--holdout-seed", type=int, default=17,
                     help="split for choose-on-A / report-on-B selection")
@@ -551,6 +572,7 @@ def main(argv=None) -> int:
             f"{cache_path} is missing; run tools/multihop_ce_cache.py first"
         )
     cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    truncate_pools(cache, args.depth_limit)
     golds = cache["golds"]
     order = list(cache["queries"])
     overlap = cache["_settings"]["overlap"]

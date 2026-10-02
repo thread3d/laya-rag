@@ -34,6 +34,7 @@ are what stops the next pass from re-trying them.
 | Engineered gate features | Nine derived columns move every metric the wrong way (AUC 0.8146 → 0.8106) | [findings-answerability-features.md](findings-answerability-features.md) |
 | Atomic lexical channel on BEIR | Lowers nDCG@10 on all five datasets, significantly on three (fiqa −0.0528) | [findings-atom-channel-beir.md](findings-atom-channel-beir.md) |
 | Atom-level lexical retrieval (MultiHop alone) | Worse than chunk BM25 on every metric; only useful fused, and only for Hits@4 | [findings-atom-index.md](findings-atom-index.md) |
+| Widening `RETRIEVE_K` for the CE path | A depth-100 pool is not significantly better than depth 20 for CE or coverage (all MAP deltas p>0.3), so the 5× scoring cost was not taken | [findings-rerank-selection.md](findings-rerank-selection.md) |
 | RGB negative rejection | Not adapted: no clean no-answer label in the English files and a judge-based official metric | [../BENCHMARKS.md](../BENCHMARKS.md) |
 
 ## Method notes worth carrying forward

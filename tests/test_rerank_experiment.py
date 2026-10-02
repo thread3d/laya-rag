@@ -278,6 +278,20 @@ def test_holdout_selection_handles_an_empty_input():
     assert exp.holdout_selection({}, seed=1) == {}
 
 
+def test_truncate_pools_limits_every_member_of_the_cache():
+    cache = {
+        "queries": {
+            "0": {"pool": ["a", "b", "c"], "ce": [0.1, 0.2, 0.3], "atoms": [[0], [1], [2]]},
+        }
+    }
+    out = exp.truncate_pools(cache, 2)
+    assert out["queries"]["0"]["pool"] == ["a", "b"]
+    assert out["queries"]["0"]["ce"] == [0.1, 0.2]
+    assert out["queries"]["0"]["atoms"] == [[0], [1]]
+    # A falsy limit is a no-op, so the default path is untouched.
+    assert exp.truncate_pools(cache, None) is cache
+
+
 # ── query-aware coverage ─────────────────────────────────────────────────
 
 def test_query_aware_coverage_prefers_a_new_query_relevant_atom():

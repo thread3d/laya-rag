@@ -184,6 +184,30 @@ baselines, and the small MAP edge over coverage alone survives out of sample.
 MAP@10 and costs Hits@4, so it is left off by default while the project's headline
 strength is its Hits@4/Hits@10.
 
+## Depth: the engine's `RETRIEVE_K=20` is enough
+
+The experiments above score a depth-**100** pool, but the engine's default first stage is
+`RETRIEVE_K=20`, so the shipped path might have been leaving the measured gain on the table
+— at five times the cross-encoder scoring cost. `--depth-limit` truncates the cached pool
+and re-scores without re-running the cross-encoder, which tests exactly that.
+
+Depth 100 minus depth 20, MAP@10 (paired, n=400):
+
+| strategy | delta | 95% CI | p |
+| --- | --- | --- | --- |
+| ce | −0.0010 | [−0.0124, +0.0106] | 0.87 |
+| coverage-0.5 | −0.0005 | [−0.0135, +0.0125] | 0.93 |
+| coverage-0.7 | −0.0045 | [−0.0166, +0.0074] | 0.46 |
+| covquota-3-0.7 | −0.0063 | [−0.0187, +0.0058] | 0.32 |
+
+**None is significant**, so the default `RETRIEVE_K=20` is kept: a cross-encoder plus
+coverage does not need a five-times wider scoring pass. Hit@4 point values are actually
+*mixed* (coverage-0.5 scores 0.7825 at depth 20 against 0.7450 at depth 100), but per-query
+Hits@4 is not stored in the report, so that observation is untested and not claimed.
+
+This is the useful shape of a negative: a plausible five-fold cost increase was measured
+before being shipped, and the measurement said no.
+
 ## Honest limits
 
 - The subset experiment was confirmed on the **full 2,255-query protocol** (above), and the
