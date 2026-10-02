@@ -81,6 +81,27 @@ features come from the engine's own retrieval, so it is "recalibrate on the targ
 not transferable abstention. What is new is that the abstention claim is now a
 risk-coverage statement rather than a single AUC.
 
+### 2b. The 0.815 is a within-question-type number
+
+A random stratified half reuses queries of the same question type on both sides, which is the
+weakest transfer test: the gate can learn that type's idiosyncrasies. Holding out an entire
+answerable question type (`--group-by question_type`, leave-one-type-out with the null
+queries distributed round-robin) gives a lower and more honest number:
+
+| split | gate ROC-AUC | balanced accuracy | risk @ 80% |
+| --- | --- | --- | --- |
+| random stratified half | 0.8146 [0.7628, 0.8570] | 0.7248 | 0.4069 |
+| **leave-one-question-type-out** | **0.7666** [0.6712, 0.8267] | 0.7044 | 0.4206 |
+
+Per held-out type: `comparison_query` **0.6640** (n=105), `inference_query` 0.8083 (n=103),
+`temporal_query` 0.8276 (n=92). The gate transfers worst to comparison questions, whose
+answerable/not distinction evidently differs most from the other types.
+
+The correction matters: **0.815 should be read as within-question-type transfer, and 0.767 as
+transfer to an unseen question type.** The gate still beats the scalar decisively (0.5235 on
+the same grouped folds), so the conclusion that the signal exists holds — but the headline
+number is a best case, not the portable figure.
+
 ## 3. What changed in the code
 
 | change | file |

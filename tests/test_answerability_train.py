@@ -131,3 +131,64 @@ def test_main_writes_a_report_and_a_loadable_gate(tmp_path):
     assert report["held_out"]["gate_auc"]["mean"] > 0.9
     loaded = LogisticGate.load(out.with_suffix(".json.gate"))
     assert loaded.predict_proba(np.zeros((1, len(FEATURE_NAMES)))).shape == (1,)
+
+
+# ── grouped (leave-one-question-type-out) splits ─────────────────────────
+
+def _grouped_fixture():
+    y = np.array([1] * 30 + [0] * 30, dtype=float)
+    groups = ["a"] * 10 + ["b"] * 10 + ["c"] * 10 + ["null"] * 30
+    return y, groups
+
+
+def test_grouped_folds_hold_out_each_answerable_group():
+    y, groups = _grouped_fixture()
+    folds = train.grouped_folds(y, groups)
+    assert [fold["group"] for fold in folds] == ["a", "b", "c"]
+    for fold in folds:
+        # The held-out positives are exactly the fold's own group.
+        test_positives = [i for i in fold["test"] if y[i] == 1]
+        assert test_positives and all(groups[i] == fold["group"] for i in test_positives)
+        # Negatives are distributed so both classes are present on both sides.
+        assert set(y[fold["test"]]) == {0.0, 1.0}
+        assert set(y[fold["train"]]) == {0.0, 1.0}
+        assert set(fold["test"]).isdisjoint(set(fold["train"]))
+
+
+def test_grouped_folds_can_take_an_explicit_number_of_negatives():
+    y, groups = _grouped_fixture()
+    folds = train.grouped_folds(y, groups, negatives_per_fold=5)
+    assert all(sum(1 for i in fold["test"] if y[i] == 0) == 5 for fold in folds)
+
+
+def test_grouped_folds_never_uses_a_negative_only_group_as_a_fold():
+    y = np.array([1, 1, 1, 1, 0, 0, 0, 0], dtype=float)
+    groups = ["a", "a", "b", "b", "null", "null", "null", "null"]
+    folds = train.grouped_folds(y, groups)
+    assert [fold["group"] for fold in folds] == ["a", "b"]
+
+
+def test_grouped_folds_needs_at_least_two_answerable_groups():
+    # With one answerable group there is no training set left, so there is no fold; the
+    # caller sees an empty list rather than a degenerate split.
+    y = np.array([1, 1, 0, 0], dtype=float)
+    groups = ["a", "a", "null", "null"]
+    assert train.grouped_folds(y, groups) == []
+
+
+def test_grouped_readings_returns_one_reading_per_fold(tmp_path):
+    rows = []
+    for group, label in (("comparison_query", 1), ("inference_query", 1),
+                         ("temporal_query", 1), ("null_query", 0)):
+        for offset in range(12):
+            row = _record(label, strong=bool(label))
+            row["question_type"] = group
+            row["q"] = f"{group}-{offset}"
+            rows.append(row)
+    X, y, head = train.build_matrix(rows)
+    readings, detail = train.grouped_readings(X, y, head, rows, "question_type")
+    assert len(readings) == len(detail) >= 3
+    assert all("gate_auc" in reading for reading in readings)
+    assert {row["group"] for row in detail} == {
+        "comparison_query", "inference_query", "temporal_query"
+    }

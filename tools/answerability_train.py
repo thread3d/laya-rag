@@ -122,11 +122,10 @@ def selective_metrics(labels: np.ndarray, scores: np.ndarray, threshold: float) 
     }
 
 
-def evaluate_split(
-    X: np.ndarray, y: np.ndarray, head: np.ndarray, seed: int
+def evaluate_indices(
+    X: np.ndarray, y: np.ndarray, head: np.ndarray, train: np.ndarray, test: np.ndarray
 ) -> dict[str, float]:
-    """Fit on one half, score the other, and compare against the scalar baseline."""
-    train, test = stratified_split(y, seed)
+    """Fit on one index set, score the other, and compare against the scalar baseline."""
     if len(np.unique(y[train])) < 2 or len(np.unique(y[test])) < 2:
         return {}
     gate = LogisticGate().fit(X[train], y[train])
@@ -148,6 +147,47 @@ def evaluate_split(
         for name, value in selective_metrics(y[test], scores, cut).items():
             metrics[f"{prefix}_{name}"] = value
     return metrics
+
+
+def evaluate_split(
+    X: np.ndarray, y: np.ndarray, head: np.ndarray, seed: int
+) -> dict[str, float]:
+    """Fit on one random stratified half, score the other."""
+    train, test = stratified_split(y, seed)
+    return evaluate_indices(X, y, head, train, test)
+
+
+def grouped_folds(
+    y: np.ndarray, groups: Sequence[str], *, negatives_per_fold: int | None = None
+) -> list[dict[str, Any]]:
+    """Leave-one-answerable-group-out folds, each with a share of the negatives.
+
+    A random stratified half reuses queries of the same question type on both sides, which
+    is the weakest transfer test: the gate can learn that type's idiosyncrasies. This holds
+    out an entire answerable group instead, and distributes the negative (null) queries
+    round-robin so every fold still has both classes. Negatives are one group in this
+    dataset, so they cannot be held out wholesale without leaving a single-class test set.
+    """
+    labels = list(y)
+    group_list = [str(g) for g in groups]
+    positives = [index for index, label in enumerate(labels) if int(label) == 1]
+    negatives = [index for index, label in enumerate(labels) if int(label) == 0]
+    answerable_groups = sorted({group_list[i] for i in positives})
+    folds: list[dict[str, Any]] = []
+    for position, group in enumerate(answerable_groups):
+        test_positives = [i for i in positives if group_list[i] == group]
+        if negatives_per_fold is not None:
+            test_negatives = negatives[position * negatives_per_fold : (position + 1) * negatives_per_fold]
+        else:
+            test_negatives = [i for offset, i in enumerate(negatives) if offset % len(answerable_groups) == position]
+        test = np.asarray(sorted(test_positives + test_negatives), dtype=int)
+        mask = np.ones(len(labels), dtype=bool)
+        mask[test] = False
+        train = np.where(mask)[0]
+        if len(np.unique(np.asarray(labels)[train])) < 2 or len(np.unique(np.asarray(labels)[test])) < 2:
+            continue
+        folds.append({"group": group, "train": train, "test": test})
+    return folds
 
 
 def summarize(values: Sequence[float]) -> dict[str, float]:
@@ -172,7 +212,34 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--splits", type=int, default=200)
     parser.add_argument("--seed", type=int, default=17)
+    parser.add_argument(
+        "--group-by", default="",
+        help="hold out whole groups (e.g. question_type) instead of random halves; "
+             "the strongest transfer test available here",
+    )
     return parser.parse_args(argv)
+
+
+def grouped_readings(
+    X: np.ndarray, y: np.ndarray, head: np.ndarray, records: Sequence[dict[str, Any]], key: str
+) -> tuple[list[dict[str, float]], list[dict[str, Any]]]:
+    """One reading per leave-one-group-out fold, plus the fold descriptions."""
+    groups = [str(record.get(key, "")) for record in records]
+    folds = grouped_folds(y, groups)
+    readings: list[dict[str, float]] = []
+    detail: list[dict[str, Any]] = []
+    for fold in folds:
+        reading = evaluate_indices(X, y, head, fold["train"], fold["test"])
+        if reading:
+            readings.append(reading)
+            detail.append({
+                "group": fold["group"],
+                "test": int(len(fold["test"])),
+                "train": int(len(fold["train"])),
+                "gate_auc": reading["gate_auc"],
+                "base_rate": round(float(np.mean(y[fold["test"]])), 4),
+            })
+    return readings, detail
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -181,17 +248,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     X, y, head = build_matrix(records)
     print(f"{len(records)} labelled queries, {X.shape[1]} features", flush=True)
 
-    readings = [
-        evaluate_split(X, y, head, seed=args.seed + offset) for offset in range(args.splits)
-    ]
-    readings = [reading for reading in readings if reading]
+    grouped: list[dict[str, Any]] = []
+    if args.group_by:
+        readings, grouped = grouped_readings(X, y, head, records, args.group_by)
+        if not readings:
+            raise SystemExit(f"no usable folds for --group-by {args.group_by!r}")
+        mode = f"grouped:{args.group_by}"
+    else:
+        readings = [
+            evaluate_split(X, y, head, seed=args.seed + offset) for offset in range(args.splits)
+        ]
+        readings = [reading for reading in readings if reading]
+        mode = "random-stratified"
     reached = ~np.isclose(head, 0.0)
     keys = sorted(readings[0]) if readings else []
     report = {
         "n": len(records),
+        "split": mode,
         "class_counts": {str(int(label)): int((y == label).sum()) for label in np.unique(y)},
         "features": list(FEATURE_NAMES),
         "held_out": {key: summarize([reading[key] for reading in readings]) for key in keys},
+        "held_out_folds": grouped,
         "full_data": {
             "head_auc": round(float(roc_auc(y, head)), 4),
             "head_auc_reached": round(
@@ -212,9 +289,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
-    print("held-out (mean [2.5%, 97.5%] over splits):")
+    print(f"held-out [{mode}] (mean [2.5%, 97.5%] over {len(readings)} folds):")
     for key, value in report["held_out"].items():
         print(f"  {key:26s} {value['mean']:.4f} [{value['lo']:.4f}, {value['hi']:.4f}]")
+    for fold in grouped:
+        print(f"  fold {fold['group']:20s} gate AUC {fold['gate_auc']:.4f} "
+              f"(n={fold['test']}, base rate {fold['base_rate']})")
     print(f"  head AUC (all)             {report['full_data']['head_auc']}")
     print(f"  head AUC (reached head)    {report['full_data']['head_auc_reached']}")
     print(f"wrote {out_path}")
