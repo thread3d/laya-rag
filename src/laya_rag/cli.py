@@ -56,6 +56,7 @@ def _cmd_query(args: argparse.Namespace, config: EngineConfig) -> int:
             top_k=args.top_k,
             retrieve_k=args.retrieve_k,
             relevance_threshold=args.relevance_threshold,
+            tenant=args.tenant,
         )
     except IndexNotBuiltError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -180,6 +181,10 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("--retrieve-k", type=int, default=None, dest="retrieve_k")
     query.add_argument("--relevance-threshold", type=float, default=None, dest="relevance_threshold")
     query.add_argument("--full", action="store_true", help="print whole passages, not a 400-char preview")
+    query.add_argument(
+        "--tenant", default=None,
+        help="caller identity for the trust manifest's per-tenant ACL, when one is configured",
+    )
     query.add_argument("--json", action="store_true")
     query.set_defaults(func=_cmd_query)
 
