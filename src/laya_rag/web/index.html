@@ -89,11 +89,15 @@
             <label for="ctl-answerability">Answerability threshold <span class="mono" id="ctl-answerability-val"></span></label>
             <input type="range" id="ctl-answerability" min="0" max="1" step="0.01" value="0.5">
           </div>
+          <div class="field">
+            <label for="ctl-tenant">Tenant <span class="summary-note">(per-tenant ACL)</span></label>
+            <input type="text" id="ctl-tenant" placeholder="empty = no ACL" autocomplete="off" spellcheck="false">
+          </div>
           <div class="control-actions">
             <button type="button" class="btn btn-ghost" id="ctl-reset">Restore engine defaults</button>
           </div>
         </div>
-        <p class="hint">Laya emits calibrated probabilities, so these thresholds are real decision boundaries — not cosine cut-offs.</p>
+        <p class="hint">Laya emits calibrated probabilities, so these thresholds are real decision boundaries — not cosine cut-offs. A configured cross-encoder is cut by <span class="mono">RERANK_THRESHOLD</span> instead, because its scores carry a different model's calibration. The tenant is only sent when non-empty; with a tenant ACL configured the engine denies an empty identity.</p>
       </details>
 
       <div class="form-actions">

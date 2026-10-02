@@ -808,12 +808,27 @@
   ];
 
   function controlValues() {
-    return {
+    const values = {
       top_k: Number(ui.topK.value),
       retrieve_k: Number(ui.retrieveK.value),
       relevance_threshold: Number(ui.relevance.value),
       answerability_threshold: Number(ui.answerability.value),
     };
+    // Only send a threshold the user actually changed. The engine resolves its own
+    // defaults for the configured backend — Laya's relevance bar, or RERANK_THRESHOLD for
+    // a substituted cross-encoder — and a slider that always sent its default would
+    // override them.
+    if (state.defaults) {
+      if (values.relevance_threshold === state.defaults.relevance_threshold) {
+        delete values.relevance_threshold;
+      }
+      if (values.answerability_threshold === state.defaults.answerability_threshold) {
+        delete values.answerability_threshold;
+      }
+    }
+    const tenant = ui.tenant ? ui.tenant.value.trim() : "";
+    if (tenant) values.tenant = tenant;
+    return values;
   }
 
   function pushHistory(query) {
@@ -1713,19 +1728,26 @@
 
   function applyDefaults() {
     const config = (state.stats || {}).config || {};
+    // With a cross-encoder configured the engine cuts its scores at RERANK_THRESHOLD, not
+    // at Laya's RELEVANCE_THRESHOLD, so the slider should show the value actually used.
+    const usesRerank = String(config.rerank_model || "").trim() !== "";
+    const relevanceDefault = usesRerank && isFinite(Number(config.rerank_threshold))
+      ? Number(config.rerank_threshold)
+      : Number(config.relevance_threshold);
     const defaults = {
       top_k: Number(config.rerank_k) || 5,
       retrieve_k: Number(config.retrieve_k) || 20,
-      relevance_threshold: Number(config.relevance_threshold),
+      relevance_threshold: relevanceDefault,
       answerability_threshold: Number(config.answerability_threshold),
     };
-    if (!isFinite(defaults.relevance_threshold)) defaults.relevance_threshold = 0.5;
+    if (!isFinite(defaults.relevance_threshold)) defaults.relevance_threshold = usesRerank ? 0 : 0.5;
     if (!isFinite(defaults.answerability_threshold)) defaults.answerability_threshold = 0.5;
 
     ui.topK.value = defaults.top_k;
     ui.retrieveK.value = defaults.retrieve_k;
     ui.relevance.value = defaults.relevance_threshold;
     ui.answerability.value = defaults.answerability_threshold;
+    if (ui.tenant) ui.tenant.value = "";
     state.defaults = defaults;
     syncControlLabels();
   }
@@ -1740,7 +1762,8 @@
       Number(ui.topK.value) !== state.defaults.top_k ||
       Number(ui.retrieveK.value) !== state.defaults.retrieve_k ||
       Number(ui.relevance.value) !== state.defaults.relevance_threshold ||
-      Number(ui.answerability.value) !== state.defaults.answerability_threshold
+      Number(ui.answerability.value) !== state.defaults.answerability_threshold ||
+      (ui.tenant && ui.tenant.value.trim() !== "")
     );
     ui.controlsSummary.textContent = changed ? "customised" : "engine defaults";
   }
@@ -1872,6 +1895,7 @@
       retrieveK: $("ctl-retrievek"), retrieveKVal: $("ctl-retrievek-val"),
       relevance: $("ctl-relevance"), relevanceVal: $("ctl-relevance-val"),
       answerability: $("ctl-answerability"), answerabilityVal: $("ctl-answerability-val"),
+      tenant: $("ctl-tenant"),
       ctlReset: $("ctl-reset"),
       corpusFilter: $("corpus-filter"),
       corpusList: $("corpus-list"),
@@ -1946,8 +1970,8 @@
       if (state.lastResult) renderResult();
     });
 
-    for (const control of [ui.topK, ui.retrieveK, ui.relevance, ui.answerability]) {
-      control.addEventListener("input", syncControlLabels);
+    for (const control of [ui.topK, ui.retrieveK, ui.relevance, ui.answerability, ui.tenant]) {
+      if (control) control.addEventListener("input", syncControlLabels);
     }
     ui.ctlReset.addEventListener("click", () => { applyDefaults(); });
 
