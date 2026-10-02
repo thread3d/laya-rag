@@ -262,6 +262,17 @@ class EngineConfig:
         default_factory=lambda: _env_int("RERANK_COVERAGE_MIN_DOCS", 0)
     )
 
+    # Retrieval-time trust (src/laya_rag/trust.py). A JSON manifest maps path globs to a
+    # tier — quarantined < untrusted < trusted — and a query may exclude candidates below
+    # QUERY_MIN_TRUST. An empty manifest means no filtering at all, so the shipped
+    # behaviour is unchanged; when a manifest is set, anything it does not name falls to
+    # TRUST_DEFAULT_TIER (untrusted by default: an allow-list is the safe reading).
+    trust_manifest: str = field(default_factory=lambda: _env("TRUST_MANIFEST") or "")
+    trust_default_tier: str = field(
+        default_factory=lambda: _env("TRUST_DEFAULT_TIER") or "untrusted"
+    )
+    query_min_trust: str = field(default_factory=lambda: _env("QUERY_MIN_TRUST") or "")
+
     # Claim adjudication is linear in claims x candidates. Measured warm on five
     # claims: 21.6s at retrieve_k=20 against 8.7s at 10, for the same verdicts on the
     # sample. Claims are short, so a smaller pool is the better default here even

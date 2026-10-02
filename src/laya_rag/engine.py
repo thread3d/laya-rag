@@ -30,6 +30,7 @@ from .index_store import Hit, VectorIndex, wipe
 from .lexical import LEXICAL_FILE, BM25Index, reciprocal_rank_fusion
 from .model import BiEncoderModel, CrossEncoderModel, LayaModel
 from .rerank import ANSWERABILITY_QUESTION, LayaReranker
+from .trust import TrustManifest, filter_candidates
 
 
 class IndexNotBuiltError(RuntimeError):
@@ -78,6 +79,9 @@ class QueryResult:
     considered: int = 0
     kept: int = 0
     dropped_below_threshold: int = 0
+    #: Candidates excluded because their document's trust tier was below the query's
+    #: minimum. Zero unless a trust manifest and a minimum are both configured.
+    trust_filtered: int = 0
     retrieval_seconds: float = 0.0
     rerank_seconds: float = 0.0
     total_seconds: float = 0.0
@@ -94,6 +98,7 @@ class QueryResult:
             "considered": self.considered,
             "kept": self.kept,
             "dropped_below_threshold": self.dropped_below_threshold,
+            "trust_filtered": self.trust_filtered,
             "checkpoint": self.checkpoint,
             "timings": {
                 "retrieval_seconds": round(self.retrieval_seconds, 4),
@@ -392,6 +397,8 @@ class RagEngine:
         self._gate_loaded = False
         self._answerability_nli: Any | None = None
         self._nli_loaded = False
+        self._trust_manifest: TrustManifest | None = None
+        self._trust_loaded = False
 
     # -- index state -----------------------------------------------------
     @property
@@ -454,6 +461,28 @@ class RagEngine:
         wipe(self.config.index_dir)
         self._index = None
         self._lexical = None
+
+    @property
+    def trust_manifest(self) -> TrustManifest | None:
+        """The optional path->tier manifest, or None when no path is configured.
+
+        Loaded lazily and cached. A missing or malformed manifest degrades to no
+        filtering: an unreadable policy must not silently refuse every query, but the
+        caller can see the failure because ``stats`` reports the loaded state.
+        """
+        if not self._trust_loaded:
+            self._trust_loaded = True
+            raw = (self.config.trust_manifest or "").strip()
+            if raw:
+                path = Path(raw).expanduser()
+                if path.is_file():
+                    try:
+                        self._trust_manifest = TrustManifest.from_path(
+                            path, default_tier=self.config.trust_default_tier
+                        )
+                    except (OSError, ValueError, KeyError):
+                        self._trust_manifest = None
+        return self._trust_manifest
 
     @property
     def answerability_gate(self) -> Any | None:
@@ -715,10 +744,18 @@ class RagEngine:
         if lexical is None:
             dense_weight = 1.0
         # Diversification can only replace a duplicate with a deeper candidate if the
-        # channels were searched deeper to begin with.
+        # channels were searched deeper to begin with. Trust filtering has the same need:
+        # excluding a document must leave enough deeper candidates to refill.
+        trust_manifest = self.trust_manifest
+        min_trust = (self.config.query_min_trust or "").strip()
+        trust_active = trust_manifest is not None and bool(min_trust)
         recall_k = (
             candidate_k * 3
-            if (self.config.recall_dedup_threshold > 0.0 or self.config.recall_coverage_lambda > 0.0)
+            if (
+                self.config.recall_dedup_threshold > 0.0
+                or self.config.recall_coverage_lambda > 0.0
+                or trust_active
+            )
             else candidate_k
         )
         if dense_weight == 0.0:
@@ -736,6 +773,11 @@ class RagEngine:
             dedup_threshold=self.config.recall_dedup_threshold,
             coverage_lambda=self.config.recall_coverage_lambda,
         )
+        trust_filtered = 0
+        if trust_active:
+            before = len(candidates)
+            candidates = filter_candidates(candidates, trust_manifest, min_trust)
+            trust_filtered = before - len(candidates)
         retrieval_seconds = time.perf_counter() - retrieve_started
 
         # An index written before the lexical channel existed, or one whose
@@ -803,6 +845,7 @@ class RagEngine:
             considered=reranked.considered,
             kept=reranked.kept,
             dropped_below_threshold=reranked.dropped_below_threshold,
+            trust_filtered=trust_filtered,
             retrieval_seconds=retrieval_seconds,
             rerank_seconds=rerank_seconds,
             total_seconds=time.perf_counter() - started,
@@ -1124,5 +1167,13 @@ class RagEngine:
         payload["answerability_nli"] = {
             "configured": bool((self.config.answerability_nli_model or "").strip()),
             "model": self.config.answerability_nli_model or None,
+        }
+        manifest = self.trust_manifest
+        payload["trust"] = {
+            "configured": bool((self.config.trust_manifest or "").strip()),
+            "loaded": manifest is not None,
+            "default_tier": self.config.trust_default_tier,
+            "query_min_trust": self.config.query_min_trust or None,
+            "rules": len(manifest.rules) if manifest is not None else 0,
         }
         return payload
