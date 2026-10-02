@@ -99,3 +99,12 @@ The isolation probe and all the trust/injection checks pass together
   distinguish tenants today; a real deployment maps token → tenant outside this engine.
 - Path globs are only as correct as the ingestion layout; a document filed under the wrong
   directory is isolated by that mistake, in both directions.
+
+## The second verification layer shares the filter
+
+`adjudicate_claims` re-retrieves across the **whole** corpus to decide whether the corpus
+supports a claim — which meant it could adjudicate against a document the caller may not
+retrieve, letting the second verification layer resurrect what the first one filtered. It now
+applies the same tier minimum and tenant ACL, and reports `trust_filtered` / `acl_filtered`
+alongside the verdicts. Measured: a beta claim adjudicated as `acme` never cites a beta
+source, and an anonymous call with an ACL configured cites nothing.

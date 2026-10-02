@@ -267,3 +267,36 @@ def test_stats_reports_tenants(tmp_path):
     payload = engine.stats()
     assert payload["trust"]["tenants"] == ["acme", "beta"]
     assert payload["trust"]["acl_enabled"] is True
+
+
+def test_adjudicate_claims_respects_the_tenant_acl(tmp_path):
+    corpus = _write_tenant_corpus(tmp_path / "corpus")
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3, relevance_threshold=0.0,
+        trust_manifest=str(_tenant_manifest(tmp_path)),
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([corpus])
+
+    # The second verification layer must not resurrect what the first one filters.
+    report = engine.adjudicate_claims(["beta secret codename is otter-four"], tenant="acme")
+    sources = [
+        source["path"]
+        for claim in report["claims"]
+        for source in claim.get("sources", [])
+    ]
+    assert all("beta" not in path for path in sources)
+    assert report["acl_filtered"] > 0
+
+
+def test_adjudicate_claims_denies_an_anonymous_caller_when_an_acl_exists(tmp_path):
+    corpus = _write_tenant_corpus(tmp_path / "corpus")
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3, relevance_threshold=0.0,
+        trust_manifest=str(_tenant_manifest(tmp_path)),
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([corpus])
+    report = engine.adjudicate_claims(["acme secret codename is falcon-nine"])
+    assert report["acl_filtered"] > 0
+    assert all(not claim.get("sources") for claim in report["claims"])

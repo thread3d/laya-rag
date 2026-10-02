@@ -1003,6 +1003,7 @@ class RagEngine:
         retrieve_k: int | None = None,
         relevance_threshold: float | None = None,
         answerability_threshold: float | None = None,
+        tenant: str | None = None,
     ) -> dict[str, Any]:
         """Ask Laya whether the corpus supports each claim.
 
@@ -1010,6 +1011,11 @@ class RagEngine:
         *cites* evidence; this decides whether the corpus actually *supports* what it
         says, by re-retrieving candidates for every claim across the whole index and
         adjudicating them with Laya's calibrated decisions.
+
+        The trust manifest's tier minimum and per-tenant ACL apply here exactly as they do
+        to a query: a claim can otherwise be adjudicated against a document the caller may
+        not retrieve, which would make the second verification layer leak what the first
+        one filters.
 
         Two decisions shape this:
 
@@ -1052,6 +1058,8 @@ class RagEngine:
             "answerability_threshold": gate,
             "relevance_threshold": relevance_bar,
             "retrieve_k": candidate_k,
+            "trust_filtered": 0,
+            "acl_filtered": 0,
             "question": ANSWERABILITY_QUESTION["instructions"],
             "checkpoint": self.config.checkpoint,
             "note": "no claims to adjudicate" if not cleaned else "the index is empty",
@@ -1070,27 +1078,48 @@ class RagEngine:
             dense_weight = 1.0
         use_dense = dense_weight != 0.0
         vectors = np.asarray(self.embedder.embed(cleaned), dtype=np.float32) if use_dense else None
+        trust_manifest = self.trust_manifest
+        min_trust = (self.config.query_min_trust or "").strip()
+        acl_active = trust_manifest is not None and trust_manifest.acl_enabled
+        trust_active = trust_manifest is not None and (bool(min_trust) or acl_active)
+        effective_min_trust = min_trust or "untrusted"
         recall_k = (
             candidate_k * 3
-            if (self.config.recall_dedup_threshold > 0.0 or self.config.recall_coverage_lambda > 0.0)
+            if (
+                self.config.recall_dedup_threshold > 0.0
+                or self.config.recall_coverage_lambda > 0.0
+                or trust_active
+            )
             else candidate_k
         )
         per_claim_hits: list[list[Hit]] = []
+        trust_filtered = 0
+        acl_filtered = 0
         for position, claim in enumerate(cleaned):
             dense = index.search(vectors[position], k=recall_k) if vectors is not None else []
             lexical_hits = lexical.search(claim, k=recall_k) if lexical else []
-            per_claim_hits.append(
-                self._fuse(
-                    index,
-                    dense,
-                    lexical_hits,
-                    limit=candidate_k,
-                    dense_weight=dense_weight,
-                    lexical_weight=self.config.lexical_weight,
-                    dedup_threshold=self.config.recall_dedup_threshold,
-                    coverage_lambda=self.config.recall_coverage_lambda,
-                )
+            hits = self._fuse(
+                index,
+                dense,
+                lexical_hits,
+                limit=candidate_k,
+                dense_weight=dense_weight,
+                lexical_weight=self.config.lexical_weight,
+                dedup_threshold=self.config.recall_dedup_threshold,
+                coverage_lambda=self.config.recall_coverage_lambda,
             )
+            if trust_active:
+                before = len(hits)
+                if acl_active:
+                    hits = [
+                        hit for hit in hits
+                        if trust_manifest.tenant_allowed(hit.chunk.path, tenant)
+                    ]
+                    acl_filtered += before - len(hits)
+                remaining = len(hits)
+                hits = filter_candidates(hits, trust_manifest, effective_min_trust, tenant)
+                trust_filtered += remaining - len(hits)
+            per_claim_hits.append(hits)
 
         # 2. One batched relevance pass across every (claim, candidate) pair.
         pairs: list[tuple[str, str]] = []
@@ -1172,6 +1201,8 @@ class RagEngine:
             "answerability_threshold": gate,
             "relevance_threshold": relevance_bar,
             "retrieve_k": candidate_k,
+            "trust_filtered": trust_filtered,
+            "acl_filtered": acl_filtered,
             "question": ANSWERABILITY_QUESTION["instructions"],
             "checkpoint": self.config.checkpoint,
             "note": None if lexical is not None else (

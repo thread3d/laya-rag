@@ -168,6 +168,9 @@ class AdjudicateRequest(BaseModel):
     retrieve_k: int | None = Field(None, ge=1, le=100, description="Candidates per claim")
     relevance_threshold: float | None = Field(None, ge=0.0, le=1.0)
     answerability_threshold: float | None = Field(None, ge=0.0, le=1.0)
+    tenant: str | None = Field(
+        None, description="Caller identity for the trust manifest's per-tenant ACL"
+    )
 
     @field_validator("answer")
     @classmethod
@@ -451,6 +454,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 retrieve_k=request.retrieve_k,
                 relevance_threshold=request.relevance_threshold,
                 answerability_threshold=request.answerability_threshold,
+                tenant=request.tenant,
             )
         except IndexNotBuiltError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
