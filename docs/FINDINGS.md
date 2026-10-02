@@ -41,6 +41,12 @@ are what stops the next pass from re-trying them.
 | Coverage and dedup as defaults | Both fused-pool rewriters are **corpus-shape instruments**: coverage costs 0.02–0.08 nDCG@10 and dedup 0.002–0.51 on every BEIR dataset measured (all significant; ArguAna 0.560 → 0.087), so both stay off by default | [findings-coverage-scope.md](findings-coverage-scope.md) |
 | RGB negative rejection | Not adapted: no clean no-answer label in the English files and a judge-based official metric | [../BENCHMARKS.md](../BENCHMARKS.md) |
 
+## Positive candidates not yet shipped
+
+| idea | evidence | document |
+| --- | --- | --- |
+| Evidence-shape gate features | Three new raw signals (max single-passage coverage, coverage spread, pairwise redundancy) improve the gate significantly on five of six metrics: AUC 0.8146 → **0.8290**, risk@80 0.4069 → **0.4009**, at a non-significant calibration cost. Needs a `FEATURE_NAMES` format change and a retrain | [findings-gate-shape-features.md](findings-gate-shape-features.md) |
+
 ## Method notes worth carrying forward
 
 - **Pin the chunking constant.** Up to +0.067 Hits@10 comes from an undeclared overlap.

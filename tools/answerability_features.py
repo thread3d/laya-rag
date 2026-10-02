@@ -16,6 +16,7 @@ worth the breaking format change, using only the recorded features.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -52,6 +53,24 @@ def augment(base: np.ndarray) -> np.ndarray:
     return np.column_stack([base, extra])
 
 
+def load_extras(path: Path) -> np.ndarray:
+    """The recorded ``extra`` columns, in ``EXTRA_NAMES`` order and record order.
+
+    ``multihop_gate.py`` writes these beside the shipped nine, so they can be compared
+    without re-running Laya. Record order matches ``answerability_train.load_records``:
+    every ``null`` row, then every ``positive`` row.
+    """
+    from gate_extra_features import EXTRA_NAMES
+
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    rows: list[list[float]] = []
+    for group in ("null", "positive"):
+        for row in payload.get(group) or []:
+            recorded = row.get("extra") or {}
+            rows.append([float(recorded.get(name, 0.0)) for name in EXTRA_NAMES])
+    return np.asarray(rows, dtype=np.float64)
+
+
 def selective(labels: np.ndarray, scores: np.ndarray, threshold: float) -> dict[str, float]:
     probabilities = [float(v) for v in scores]
     outcomes = [int(v) for v in labels]
@@ -68,7 +87,12 @@ def selective(labels: np.ndarray, scores: np.ndarray, threshold: float) -> dict[
     }
 
 
-def evaluate(X: np.ndarray, y: np.ndarray, splits: int, seed: int) -> dict[str, dict[str, float]]:
+def evaluate_splits(X: np.ndarray, y: np.ndarray, splits: int, seed: int) -> list[dict[str, float]]:
+    """One reading per stratified split, so two feature sets can be compared pairwise.
+
+    Both arms use the same split seeds, so the per-split deltas are paired and a
+    permutation test over them is meaningful.
+    """
     readings: list[dict[str, float]] = []
     for offset in range(splits):
         train_idx, test_idx = train.stratified_split(y, seed + offset)
@@ -77,8 +101,32 @@ def evaluate(X: np.ndarray, y: np.ndarray, splits: int, seed: int) -> dict[str, 
         gate = LogisticGate().fit(X[train_idx], y[train_idx])
         threshold, _ = train.best_threshold(y[train_idx], gate.predict_proba(X[train_idx]))
         readings.append(selective(y[test_idx], gate.predict_proba(X[test_idx]), threshold))
+    return readings
+
+
+def evaluate(X: np.ndarray, y: np.ndarray, splits: int, seed: int) -> dict[str, dict[str, float]]:
+    readings = evaluate_splits(X, y, splits, seed)
     keys = sorted(readings[0]) if readings else []
     return {key: train.summarize([reading[key] for reading in readings]) for key in keys}
+
+
+def paired_across_splits(
+    base_readings: Sequence[Mapping[str, float]],
+    augmented_readings: Sequence[Mapping[str, float]],
+    samples: int = 5000,
+) -> dict[str, dict[str, float]]:
+    """Paired bootstrap over the per-split readings of the two arms."""
+    base = {str(i): row for i, row in enumerate(base_readings)}
+    augmented = {str(i): row for i, row in enumerate(augmented_readings)}
+    metrics = sorted(set(base_readings[0]) & set(augmented_readings[0])) if base_readings else []
+    return {
+        metric: evalkit.paired_bootstrap(
+            {key: float(row[metric]) for key, row in base.items()},
+            {key: float(row[metric]) for key, row in augmented.items()},
+            samples=samples,
+        )
+        for metric in metrics
+    }
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -86,6 +134,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--features", default=str(
         ROOT / "eval" / "benchmarks" / "multihop-rag" / "gate-features.json"
     ))
+    ap.add_argument("--extras", action="store_true",
+                    help="compare against the recorded evidence-shape extras from "
+                         "gate_extra_features.py instead of the derived columns")
     ap.add_argument("--splits", type=int, default=200)
     ap.add_argument("--seed", type=int, default=17)
     ap.add_argument("--out", default=str(ROOT / "eval" / "answerability-features"))
@@ -96,23 +147,36 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     records = train.load_records(Path(args.features))
     X, y, _head = train.build_matrix(records)
-    X_aug = augment(X)
+    if args.extras:
+        from gate_extra_features import EXTRA_NAMES
+
+        extras = load_extras(Path(args.features))
+        X_aug = np.column_stack([X, extras])
+        column_names = list(EXTRA_NAMES)
+    else:
+        X_aug = augment(X)
+        column_names = list(DERIVED)
     print(f"{len(records)} queries; {X.shape[1]} base features, {X_aug.shape[1]} augmented",
           flush=True)
 
-    base = evaluate(X, y, args.splits, args.seed)
-    augmented = evaluate(X_aug, y, args.splits, args.seed)
+    base_readings = evaluate_splits(X, y, args.splits, args.seed)
+    augmented_readings = evaluate_splits(X_aug, y, args.splits, args.seed)
+    keys = sorted(base_readings[0]) if base_readings else []
+    base = {key: train.summarize([row[key] for row in base_readings]) for key in keys}
+    augmented = {key: train.summarize([row[key] for row in augmented_readings]) for key in keys}
     deltas = {
         key: round(augmented[key]["mean"] - base[key]["mean"], 4)
         for key in base
         if key in augmented
     }
+    paired = paired_across_splits(base_readings, augmented_readings)
     payload = {
         "_settings": vars(args),
         "base": base,
         "augmented": augmented,
-        "derived_names": list(DERIVED),
+        "derived_names": column_names,
         "delta": deltas,
+        "paired": paired,
         "n": len(records),
     }
     out = Path(args.out)
@@ -126,26 +190,31 @@ def main(argv=None) -> int:
 def render_markdown(payload: Mapping[str, Any]) -> str:
     base, aug = payload["base"], payload["augmented"]
     lines = [
-        "# Answerability gate: raw vs engineered features",
+        "# Answerability gate: raw vs extended features",
         "",
         f"- {payload['n']} labelled queries, {payload['_settings']['splits']} stratified splits",
-        f"- derived columns: {', '.join(payload['derived_names'])}",
+        f"- added columns: {', '.join(payload['derived_names'])}",
         "",
-        "| metric | raw nine | + derived | delta |",
-        "| --- | --- | --- | --- |",
+        "| metric | raw nine | + added | delta | paired 95% CI | p |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
+    paired = payload.get("paired", {})
     for key in sorted(base):
         if key not in aug:
             continue
+        row = paired.get(key) or {}
+        ci = (f"[{row['ci_low']:+.4f}, {row['ci_high']:+.4f}]" if row else "—")
+        p_value = f"{row.get('p_value', float('nan')):.4f}" if row else "—"
         lines.append(
             f"| {key} | {base[key]['mean']:.4f} [{base[key]['lo']:.4f}, {base[key]['hi']:.4f}] | "
             f"{aug[key]['mean']:.4f} [{aug[key]['lo']:.4f}, {aug[key]['hi']:.4f}] | "
-            f"{payload['delta'][key]:+.4f} |"
+            f"{payload['delta'][key]:+.4f} | {ci} | {p_value} |"
         )
     lines += [
         "",
         "Higher is better for `auc`/`balanced_accuracy`; lower is better for "
-        "`aurc`/`augrc`/`risk@80`/`ece`.",
+        "`aurc`/`augrc`/`risk@80`/`ece`. The CI and p are a paired bootstrap/permutation over "
+        "the per-split readings, since both arms use the same splits.",
         "",
     ]
     return "\n".join(lines)

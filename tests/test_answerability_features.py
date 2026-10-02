@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -76,3 +77,45 @@ def test_evaluate_reports_the_expected_metric_keys():
     assert set(readings) == {"auc", "balanced_accuracy", "aurc", "augrc", "risk@80", "ece"}
     for value in readings.values():
         assert value["lo"] <= value["mean"] <= value["hi"]
+
+
+def test_load_extras_reads_the_recorded_columns_in_record_order(tmp_path):
+    import json
+
+    payload = {
+        "null": [
+            {"extra": {"max_passage_coverage": 0.1, "coverage_spread": 2.0,
+                       "pairwise_redundancy": 0.3}},
+        ],
+        "positive": [
+            {"extra": {"max_passage_coverage": 0.9, "coverage_spread": 1.0,
+                       "pairwise_redundancy": 0.0}},
+            {"extra": {}},  # a record with no extras is zero, not an error
+        ],
+    }
+    path = tmp_path / "gate-extra.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    extras = feat.load_extras(path)
+
+    assert extras.shape == (3, 3)
+    assert list(extras[0]) == [0.1, 2.0, 0.3]   # null first
+    assert list(extras[1]) == [0.9, 1.0, 0.0]   # then positive
+    assert list(extras[2]) == [0.0, 0.0, 0.0]
+
+
+def test_evaluate_splits_returns_one_reading_per_split():
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(80, 3))
+    y = np.array([1, 0] * 40, dtype=float)
+    readings = feat.evaluate_splits(X, y, splits=5, seed=3)
+    assert 0 < len(readings) <= 5
+    assert set(readings[0]) == {"auc", "balanced_accuracy", "aurc", "augrc", "risk@80", "ece"}
+
+
+def test_paired_across_splits_reports_a_positive_paired_delta():
+    base = [{"auc": 0.50}, {"auc": 0.60}, {"auc": 0.70}]
+    augmented = [{"auc": 0.60}, {"auc": 0.70}, {"auc": 0.80}]
+    paired = feat.paired_across_splits(base, augmented, samples=500)
+    assert paired["auc"]["delta"] == pytest.approx(0.1, abs=1e-9)
+    assert paired["auc"]["ci_low"] > 0.0
