@@ -87,6 +87,24 @@ one long-document, both improve, and the derived value can never be smaller than
 default. `CHUNK_CHARS` remains the floor and setting `CHUNK_CHARS_AUTO=false` restores the
 fixed behaviour exactly.
 
+### The percentile is not critical (but p90 is the best of those tried)
+
+SciFact's derivation by quantile, and the engine score each produces:
+
+| quantile | derived size | single-chunk coverage | nDCG@10 | vs fixed 1200 |
+| --- | --- | --- | --- | --- |
+| — (fixed) | 1200 (+400 overlap) | — | 0.7264 | — |
+| p50 | 1426 | 50% | — | not run |
+| p75 | 1811 | 75% | 0.7376 | +0.0112 [−0.0015, +0.0241], p=0.079 |
+| **p90 (default)** | **2000** (clamped) | **86%** | **0.7417** | **+0.0153 [+0.0025, +0.0293]**, p=0.023 |
+| p95 | 2000 | 86% | — | same as p90 by the clamp |
+
+p90 beats p75 by **−0.0041 [−0.0121, +0.0031]** (p=0.28, not significant), so the exact
+quantile is not a knife-edge: what matters is deriving a size that keeps most documents whole.
+p90 is kept because it is the best of the two measured and its gain over the fixed default is
+the significant one. The clamp makes p90 and p95 identical here, so there is nothing above p90
+left to tune on this corpus.
+
 ## Honest limits and the next experiment
 
 - Two corpora, both improved (SciFact +0.0153, p=0.023; the vendored docs MRR +0.0714), but
@@ -97,9 +115,11 @@ fixed behaviour exactly.
   nothing, so the gain sits in documents **longer than 1,600**; `--chunk-chars 2000` would
   locate the band precisely. The shipped rule reaches the same place by a different route
   (it derives 2,000 for SciFact), so the bisection is now diagnostic rather than blocking.
-- The **percentile and the 2,000-character clamp are heuristic**, not swept: 0.9 and 2,000
-  were chosen to keep most documents whole within a 512-token window. A sweep over p75/p90/p95
-  on two corpora would be a reasonable next measurement.
+- The **percentile and the 2,000-character clamp are heuristic**: 0.9 and 2,000 were chosen to
+  keep most documents whole within a 512-token window. They were then swept on SciFact — p75
+  is 0.0041 behind p90 (not significant) and p90/p95 are identical under the clamp — so the
+  choice is robust to the quantile but still rests on one short-document corpus for the clamp
+  itself.
 - Long-document corpora now index at 2,000 rather than 1,200 characters. The vendored docs
   improved, but a corpus whose queries need *precise* local matches could prefer the smaller
   chunks; `CHUNK_CHARS_AUTO=false` is the escape hatch and the per-corpus answer is measurable
