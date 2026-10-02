@@ -84,6 +84,67 @@ def test_recall_coverage_is_off_by_default():
     assert EngineConfig().recall_coverage_lambda == 0.0
 
 
+# ── coverage over a cross-encoder-scored pool ────────────────────────────
+
+def test_coverage_select_from_uses_the_supplied_relevance():
+    from laya_rag.engine import _coverage_select_from
+
+    dup = "Refunds are processed within five business days to the original payment method."
+    other = "Shipping is free on orders over fifty dollars in the continental United States."
+    index = _FakeIndex({"a": dup, "b": dup, "c": other})
+    # Cross-encoder ranks b (a duplicate fact) highest and c (a new fact) lowest.
+    fused = [("a", 1.0), ("b", 2.0), ("c", 3.0)]
+    relevance = [0.1, 0.9, 0.2]
+
+    selected = _coverage_select_from(index, fused, relevance, limit=2, lam=0.7,
+                                     use_redundancy=False)
+
+    ids = [chunk_id for chunk_id, _ in selected]
+    assert ids[0] == "b"  # highest CE relevance
+    assert ids[1] == "c"  # a new atom beats a's higher-than-c relevance
+
+
+def test_rerank_coverage_is_off_by_default_and_serialised():
+    config = EngineConfig()
+    assert config.rerank_coverage_lambda == 0.0
+    assert "rerank_coverage_lambda" in config.as_dict()
+
+
+class _StubCrossEncoder:
+    """Returns a fixed score for every pair; enough to exercise the wiring."""
+
+    def __init__(self, score: float = 0.9) -> None:
+        self.score = score
+        self.calls = 0
+
+    def score_pairs(self, pairs):
+        self.calls += 1
+        return [self.score for _ in pairs]
+
+
+def test_engine_query_runs_with_rerank_coverage_enabled(tmp_path):
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_coverage_lambda=0.7, rerank_k=3
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    engine.cross_encoder = _StubCrossEncoder()
+    result = engine.query("How long does a refund take?")
+    assert engine.cross_encoder.calls == 1
+    assert result.considered > 0
+    assert result.passages
+
+
+def test_rerank_coverage_requires_a_cross_encoder(tmp_path):
+    """Without a second stage there is no CE score to select on, so it is a no-op."""
+    config = make_config(tmp_path, dense_weight=1.0, rerank_coverage_lambda=0.7, rerank_k=3)
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    assert engine.cross_encoder is None
+    result = engine.query("How long does a refund take?")
+    assert result.passages
+
+
 def test_engine_query_runs_with_coverage_enabled(tmp_path):
     config = make_config(tmp_path, dense_weight=1.0, recall_coverage_lambda=0.5, rerank_k=3)
     engine = RagEngine(config, model=StubModel())

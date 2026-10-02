@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 import evalkit  # noqa: E402
-from multihop_official import official_metrics  # noqa: E402
+from multihop_official import chunk_text  # noqa: E402
 
 from laya_rag.lexical import reciprocal_rank_fusion  # noqa: E402
 
@@ -128,27 +128,83 @@ def coverage_order(
     return selected
 
 
-def strategy_rankings(cache: Mapping[str, Any], top_k: int, rrf_k: int) -> dict[str, dict[str, list[str]]]:
-    """Every strategy's top-k ids, keyed by strategy then query id."""
+def strategy_rankings(cache: Mapping[str, Any], top_k: int, rrf_k: int) -> dict[str, dict[str, list[int]]]:
+    """Every strategy's top-k **pool indices**, keyed by strategy then query id.
+
+    Strategies work over positions ``0..n-1`` rather than document ids so the result can
+    be scored against the cached per-candidate gold matches without rebuilding the corpus.
+    """
     atom_weight = cache["_settings"]["atom_weight"]
     names = ["fused", "ce", "blend-0.25", "blend-0.5", "blend-0.75",
              "guardrail-1", "guardrail-2",
              "coverage-0.3", "coverage-0.5", "coverage-0.7"]
-    out: dict[str, dict[str, list[str]]] = {name: {} for name in names}
+    out: dict[str, dict[str, list[int]]] = {name: {} for name in names}
     for q, payload in cache["queries"].items():
-        pool = payload["pool"]
         scores = payload["ce"]
         atoms = payload["atoms"]
-        out["fused"][q] = list(pool[:top_k])
-        out["ce"][q] = ce_order(pool, scores)[:top_k]
+        positions = list(range(len(payload["pool"])))
+        out["fused"][q] = positions[:top_k]
+        out["ce"][q] = [int(i) for i in ce_order(positions, scores)[:top_k]]
         for blend in (0.25, 0.5, 0.75):
-            out[f"blend-{blend}"][q] = blend_order(pool, scores, blend, rrf_k)[:top_k]
+            out[f"blend-{blend}"][q] = [
+                int(i) for i in blend_order(positions, scores, blend, rrf_k)[:top_k]
+            ]
         for pin in (1, 2):
-            out[f"guardrail-{pin}"][q] = guardrail_order(pool, scores, pin)[:top_k]
+            out[f"guardrail-{pin}"][q] = [
+                int(i) for i in guardrail_order(positions, scores, pin)[:top_k]
+            ]
         for lam in (0.3, 0.5, 0.7):
-            indices = coverage_order(scores, atoms, atom_weight, top_k, lam)
-            out[f"coverage-{lam}"][q] = [pool[i] for i in indices]
+            out[f"coverage-{lam}"][q] = coverage_order(scores, atoms, atom_weight, top_k, lam)
     return out
+
+
+def metrics_from_matches(
+    ranked: Sequence[int],
+    matches: Sequence[set],
+    gold_count: int,
+    top_k: int = 10,
+) -> dict[str, float]:
+    """The benchmark's own metric definitions, computed from per-candidate gold matches.
+
+    Mirrors ``multihop_official.official_metrics``: a fact found at rank r contributes
+    ``1/r`` to AP the first time it is found among the top-k, and MAP normalizes by
+    ``min(len(gold), top_k)`` whether or not every fact is present in the pool.
+    """
+    hits10 = hits4 = False
+    first: int | None = None
+    found: set = set()
+    ap = 0.0
+    for rank, index in enumerate(ranked[:top_k], start=1):
+        new = matches[index] - found
+        if not new:
+            continue
+        if rank <= top_k:
+            hits10 = True
+        if rank <= 4:
+            hits4 = True
+        if first is None:
+            first = rank
+        ap += len(new) / rank
+        found |= new
+    denominator = min(max(gold_count, 1), top_k)
+    return {
+        "Hits@10": float(hits10),
+        "Hits@4": float(hits4),
+        "MAP@10": ap / denominator,
+        "MRR@10": 1.0 / first if first else 0.0,
+    }
+
+
+def gold_matches_for_pool(
+    corpus: Mapping[str, str], pool: Sequence[str], gold_facts: Sequence[str]
+) -> list[set]:
+    """Gold-fact index sets per pool candidate, using the benchmark's normalization."""
+    normalized = [f.replace(" ", "").replace("\n", "") for f in gold_facts]
+    matches: list[set] = []
+    for doc_id in pool:
+        text = corpus[doc_id].replace(" ", "").replace("\n", "")
+        matches.append({j for j, fact in enumerate(normalized) if fact and fact in text})
+    return matches
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -171,6 +227,19 @@ def main(argv=None) -> int:
     cache = json.loads(cache_path.read_text(encoding="utf-8"))
     golds = cache["golds"]
     order = list(cache["queries"])
+    overlap = cache["_settings"]["overlap"]
+
+    # The cache stores pool ids; rebuild the corpus so a candidate's gold matches can be
+    # recovered, then score every strategy against the same matches. No model, no network.
+    raw = json.loads((ROOT_BENCH / "corpus.json").read_text(encoding="utf-8"))
+    corpus: dict[str, str] = {}
+    for article in raw:
+        for j, text in enumerate(chunk_text(article["title"] + " " + article["body"], 256, overlap)):
+            corpus[f"{article['url']}#{j}"] = text
+    matches_by_query = {
+        q: gold_matches_for_pool(corpus, payload["pool"], golds[q])
+        for q, payload in cache["queries"].items()
+    }
 
     rankings = strategy_rankings(cache, args.top_k, args.rrf_k)
     per_query: dict[str, dict[str, dict[str, float]]] = {}
@@ -178,9 +247,9 @@ def main(argv=None) -> int:
     for name, ranking in rankings.items():
         rows: dict[str, dict[str, float]] = {metric: {} for metric in METRICS}
         for q in order:
-            retrieved = ranking[q]
-            gold = golds[q]
-            metrics, _ = official_metrics([retrieved], [gold])
+            metrics = metrics_from_matches(
+                ranking[q], matches_by_query[q], len(golds[q]), args.top_k
+            )
             for metric in METRICS:
                 rows[metric][q] = metrics[metric]
         per_query[name] = rows

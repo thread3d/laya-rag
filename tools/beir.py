@@ -339,8 +339,14 @@ class CrossEncoder:
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_id).to(device).eval()
 
-    def score(self, pairs: Sequence[tuple[str, str]]) -> list[float]:
-        """Relevance score per ``(query, passage)`` pair; higher is more relevant."""
+    def score(self, pairs: Sequence[tuple[str, str]], fixed_length: bool = False) -> list[float]:
+        """Relevance score per ``(query, passage)`` pair; higher is more relevant.
+
+        ``fixed_length`` pads every batch to ``max_length``. Dynamic padding is cheaper
+        per batch but gives each batch a different tensor shape, and the MPS backend
+        caches a compiled graph per shape — over thousands of batches that recompilation
+        dominates. Fixed width trades some compute for a flat, predictable run.
+        """
         rows = list(pairs)
         out: list[float] = []
         for start in range(0, len(rows), self.batch_size):
@@ -348,7 +354,7 @@ class CrossEncoder:
             encoded = self.tokenizer(
                 [query for query, _ in batch],
                 [passage for _, passage in batch],
-                padding=True,
+                padding="max_length" if fixed_length else True,
                 truncation=True,
                 max_length=self.max_length,
                 return_tensors="pt",

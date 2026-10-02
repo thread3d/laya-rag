@@ -105,7 +105,7 @@ def main(argv=None) -> int:
     for n, (q, text) in enumerate(queries.items()):
         pool = list(fused[q])[: args.depth]
         pairs = [(text, corpus[doc_id]) for doc_id in pool]
-        scores = cross_encoder.score(pairs)
+        scores = cross_encoder.score(pairs, fixed_length=True)
         per_query[q] = {
             "pool": pool,
             "ce": [round(float(s), 4) for s in scores],
@@ -130,9 +130,9 @@ def main(argv=None) -> int:
         "golds": {str(i): gold for (i, _), gold in zip(ev_items, golds)},
         "queries": per_query,
     }
-    out = Path(args.out)
+    out = Path(str(args.out) + ".json")
     evalkit_write(out, payload)
-    print(f"wrote {out}.json in {payload['_settings']['seconds']}s", flush=True)
+    print(f"wrote {out} in {payload['_settings']['seconds']}s", flush=True)
     return 0
 
 

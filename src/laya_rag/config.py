@@ -239,6 +239,18 @@ class EngineConfig:
     # second stage can be used as a nudge rather than a replacement.
     rerank_blend: float = field(default_factory=lambda: _env_float("RERANK_BLEND", 1.0))
 
+    # Coverage selection over the cross-encoder-scored pool. When a cross-encoder is
+    # configured and this is > 0, the candidate pool is reordered by sentence-atom
+    # max-coverage using the cross-encoder score as the relevance term, before the
+    # relevance filter and the top-k cut. Measured on the deterministic 400-query
+    # MultiHop subset against a full cross-encoder re-sort: MAP@10 0.2986 -> 0.3206
+    # (lam 0.7, +0.0220 [+0.0165, +0.0286], p=0.001) and Hits@4 0.7225 -> 0.7600
+    # (+0.0375 [+0.0125, +0.0650]). 0.0 disables it, so the shipped order is unchanged
+    # unless a CE is configured and this is set.
+    rerank_coverage_lambda: float = field(
+        default_factory=lambda: _env_float("RERANK_COVERAGE_LAMBDA", 0.0)
+    )
+
     # Claim adjudication is linear in claims x candidates. Measured warm on five
     # claims: 21.6s at retrieve_k=20 against 8.7s at 10, for the same verdicts on the
     # sample. Claims are short, so a smaller pool is the better default here even

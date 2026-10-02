@@ -9,6 +9,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
@@ -96,8 +98,39 @@ def test_strategy_rankings_returns_every_named_rule():
         },
     }
     rankings = exp.strategy_rankings(cache, top_k=2, rrf_k=60)
-    assert rankings["fused"]["0"] == ["a", "b"]
-    assert rankings["ce"]["0"] == ["b", "c"]
-    assert rankings["guardrail-1"]["0"][0] == "a"
+    # Strategies return pool indices so they can be scored against cached matches.
+    assert rankings["fused"]["0"] == [0, 1]
+    assert rankings["ce"]["0"] == [1, 2]
+    assert rankings["guardrail-1"]["0"][0] == 0
     for name in ("blend-0.5", "coverage-0.5", "guardrail-2"):
         assert len(rankings[name]["0"]) == 2
+
+
+def test_metrics_from_matches_matches_the_official_definition():
+    # Two gold facts; candidate 0 covers fact 0, candidate 1 covers fact 1.
+    matches = [{0}, {1}, set()]
+    metrics = exp.metrics_from_matches([0, 1], matches, gold_count=2, top_k=10)
+    assert metrics["Hits@10"] == 1.0
+    assert metrics["Hits@4"] == 1.0
+    # AP = 1/1 + 1/2 = 1.5, normalized by min(2, 10) = 2.
+    assert metrics["MAP@10"] == pytest.approx(0.75)
+    assert metrics["MRR@10"] == 1.0
+
+
+def test_metrics_from_matches_penalizes_a_late_fact():
+    matches = [set(), set(), {0}]
+    metrics = exp.metrics_from_matches([0, 1, 2], matches, gold_count=1, top_k=10)
+    assert metrics["Hits@10"] == 1.0
+    assert metrics["Hits@4"] == 1.0
+    assert metrics["MAP@10"] == pytest.approx(1 / 3)
+
+
+def test_metrics_from_matches_is_zero_when_nothing_matches():
+    metrics = exp.metrics_from_matches([0, 1], [set(), set()], gold_count=2, top_k=10)
+    assert metrics == {"Hits@10": 0.0, "Hits@4": 0.0, "MAP@10": 0.0, "MRR@10": 0.0}
+
+
+def test_gold_matches_for_pool_uses_the_benchmark_normalization():
+    corpus = {"a": "The quick brown fox", "b": "a slow turtle"}
+    matches = exp.gold_matches_for_pool(corpus, ["a", "b"], ["quick brown", "turtle"])
+    assert matches == [{0}, {1}]

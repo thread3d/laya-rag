@@ -239,6 +239,29 @@ def _coverage_select(
     because it targets the *set* of facts the benchmark scores rather than mere
     diversity. Missing atom weights or vectors never remove a candidate.
     """
+    relevance = [score for _chunk_id, score in fused]
+    return _coverage_select_from(index, fused, relevance, limit, lam, use_redundancy=True)
+
+
+def _coverage_select_from(
+    index: VectorIndex,
+    fused: Sequence[tuple[str, float]],
+    relevance: Sequence[float],
+    limit: int,
+    lam: float,
+    *,
+    use_redundancy: bool = True,
+) -> list[tuple[str, float]]:
+    """Coverage selection with an explicit relevance signal.
+
+    ``_coverage_select`` reads relevance from the fused RRF scores; this takes it as an
+    argument so the same rule can run over a *cross-encoder* score vector after the
+    second stage, which is the configuration measured to beat a full cross-encoder
+    re-sort on MultiHop-RAG (MAP@10 0.2986 -> 0.3206 at lam 0.7). When the relevance
+    signal already comes from a model that attends over the candidate, the dense-gram
+    redundancy term is dropped: atom coverage already stops the same fact being selected
+    twice, and the experiment that chose this rule did not use it.
+    """
     if limit <= 0 or not fused:
         return list(fused[:limit])
     weights: list[float] = []
@@ -257,12 +280,14 @@ def _coverage_select(
                 ids.append(atom_id)
         candidate_atoms.append(ids)
 
-    relevance = np.asarray([score for _chunk_id, score in fused], dtype=np.float64)
+    relevance = np.asarray(list(relevance), dtype=np.float64)
     if relevance.size and float(relevance.max()) > float(relevance.min()):
         relevance = (relevance - relevance.min()) / (relevance.max() - relevance.min())
     else:
         relevance = np.zeros_like(relevance)
-    vectors = [index.vector(chunk_id) for chunk_id, _score in fused]
+    vectors = (
+        [index.vector(chunk_id) for chunk_id, _score in fused] if use_redundancy else []
+    )
 
     selected: list[int] = []
     covered: set[int] = set()
@@ -277,15 +302,17 @@ def _coverage_select(
         best_index, best_score = None, -1e18
         for i in candidates:
             marginal = gains[i] / scale
-            redundancy = 0.0
-            if selected:
-                sims = [
-                    float(np.dot(vectors[i], vectors[j]))
-                    for j in selected
-                    if vectors[i] is not None and vectors[j] is not None
-                ]
-                redundancy = max(sims) if sims else 0.0
-            score = lam * float(relevance[i]) + (1.0 - lam) * marginal - (1.0 - lam) * redundancy
+            score = lam * float(relevance[i]) + (1.0 - lam) * marginal
+            if use_redundancy:
+                redundancy = 0.0
+                if selected:
+                    sims = [
+                        float(np.dot(vectors[i], vectors[j]))
+                        for j in selected
+                        if vectors[i] is not None and vectors[j] is not None
+                    ]
+                    redundancy = max(sims) if sims else 0.0
+                score -= (1.0 - lam) * redundancy
             if score > best_score:
                 best_index, best_score = i, score
         selected.append(best_index)
@@ -698,10 +725,27 @@ class RagEngine:
         # A configured cross-encoder replaces Laya's relevance scores for ordering and
         # filtering; `rerank` still runs the answerability gate on the kept passages.
         cross_scores = None
+        order = self.config.resolved_rerank_order
         if self.cross_encoder is not None:
             cross_scores = self.cross_encoder.score_pairs(
                 [(query, hit.chunk.text) for hit in candidates]
             )
+        # Optional coverage reordering over the cross-encoder-scored pool: spend the
+        # recall budget on distinct facts *after* the second stage has scored, which
+        # measured better than a full CE re-sort. It reorders the pool, so the reranker
+        # must preserve that order rather than re-sort by the score again.
+        lambda_ = self.config.rerank_coverage_lambda
+        if cross_scores is not None and lambda_ > 0.0 and candidates:
+            pairs = [(hit.chunk.chunk_id, float(score)) for hit, score in zip(candidates, cross_scores)]
+            selected = _coverage_select_from(
+                index, pairs, [score for _id, score in pairs], len(pairs), lambda_,
+                use_redundancy=False,
+            )
+            by_id = {hit.chunk.chunk_id: hit for hit in candidates}
+            score_of = dict(pairs)
+            candidates = [by_id[chunk_id] for chunk_id, _score in selected]
+            cross_scores = [score_of[hit.chunk.chunk_id] for hit in candidates]
+            order = "recall"
         nli = self.answerability_nli
         reranked = self.reranker.rerank(
             query,
@@ -715,7 +759,7 @@ class RagEngine:
                 if answerability_threshold is None
                 else answerability_threshold
             ),
-            order=self.config.resolved_rerank_order,
+            order=order,
             scores=cross_scores,
             blend=self.config.rerank_blend,
             gate=self.answerability_gate,
