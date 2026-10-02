@@ -929,8 +929,12 @@ laya-rag/
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
 ├── tools/                 gui-smoke.mjs; evalkit.py, eval.py, bench.py, beir.py,
-│                          beir_ablate.py, beir_routing.py, engine_beir.py, ann_bench.py, sparse.py,
-│                          finetune.py, ondisk.py, compare.py (cross-system tables,
+│                          beir_ablate.py, beir_routing.py, beir_coverage.py,
+│                          engine_beir.py, ann_bench.py, sparse.py,
+│                          finetune.py, distill_eval.py, package_model.py,
+│                          gate_calibration.py, gate_extra_features.py,
+│                          bench_index_parallel.py, bench_biencoder_parallel.py,
+│                          ondisk.py, compare.py (cross-system tables,
 │                          error bars, charts), diagram.py (the architecture diagram),
 │                          the multiHop harnesses (multihop_official.py,
 │                          multihop_gate.py, multihop_recalibrate.py,
@@ -940,7 +944,7 @@ laya-rag/
 │                          eval_significance.py,
 │                          answerability_train.py, answerability_features.py,
 │                          adversarial_audit.py, bright.py, beir_atom_channel.py,
-│                          context_prefix_eval.py, bench_lexical.py
+│                          generation_eval.py, context_prefix_eval.py, bench_lexical.py
 ├── docs/                  generated figures, `FINDINGS.md` (the index of every measured
 │                          result), and the per-topic findings documents
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
