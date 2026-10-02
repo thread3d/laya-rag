@@ -240,3 +240,39 @@ def test_coverage_doc_quota_fills_beyond_the_quota_by_coverage():
     assert order[0] == 0 and order[1] == 2  # A's best, then B
     # Candidate 1 is a repeat of candidate 0's atom, so C's new atom beats it.
     assert order[2] == 3
+
+
+# ── held-out selection ───────────────────────────────────────────────────
+
+def test_holdout_selection_picks_on_a_and_reports_on_b():
+    per_query = {
+        "ce": {str(i): 0.2 for i in range(12)},
+        "good": {str(i): 0.3 for i in range(12)},
+    }
+    holdout = exp.holdout_selection(per_query, seed=3)
+    assert holdout["selected_on_a"] == "good"
+    assert holdout["selected_b_score"] == 0.3
+    assert holdout["baseline_b"]["ce"] == 0.2
+    assert holdout["queries_a"] + holdout["queries_b"] == 12
+
+
+def test_holdout_selection_reports_the_winners_held_out_score_even_if_it_loses():
+    import random
+
+    per_query = {
+        "steady": {str(i): 0.4 for i in range(20)},
+        "lucky": {str(i): (0.9 if i < 10 else 0.0) for i in range(20)},
+    }
+    holdout = exp.holdout_selection(per_query, seed=1)
+    # Independently reconstruct half B from the same seed and check the reported number.
+    qids = sorted(per_query["steady"])
+    shuffled = list(qids)
+    random.Random(1).shuffle(shuffled)
+    set_b = shuffled[len(shuffled) // 2:]
+    name = holdout["selected_on_a"]
+    expected = round(sum(per_query[name][q] for q in set_b) / len(set_b), 4)
+    assert holdout["selected_b_score"] == expected
+
+
+def test_holdout_selection_handles_an_empty_input():
+    assert exp.holdout_selection({}, seed=1) == {}

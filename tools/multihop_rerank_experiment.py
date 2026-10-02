@@ -423,6 +423,49 @@ def gold_matches_for_pool(
     return matches
 
 
+def holdout_selection(
+    per_query: Mapping[str, Mapping[str, float]], seed: int
+) -> dict[str, Any]:
+    """Pick the best strategy on one half of the queries, score it on the other.
+
+    Comparing ~20 rules on the same queries and quoting the winner's score is how a
+    benchmark result turns into an artefact. This splits the queries, chooses by MAP@10 on
+    half A only, and reports every strategy on the untouched half B, so the number that
+    matters is the held-out one for the strategy that selection would have shipped.
+    """
+    import random
+
+    names = list(per_query)
+    if not names:
+        return {}
+    qids = sorted(per_query[names[0]])
+    shuffled = list(qids)
+    random.Random(seed).shuffle(shuffled)
+    half = len(shuffled) // 2
+    set_a, set_b = set(shuffled[:half]), set(shuffled[half:])
+
+    def mean(name: str, subset: set[str]) -> float:
+        values = [per_query[name][q] for q in subset if q in per_query[name]]
+        return round(sum(values) / len(values), 4) if values else 0.0
+
+    means_a = {name: mean(name, set_a) for name in names}
+    best = max(means_a, key=lambda name: means_a[name])
+    held_out = {name: mean(name, set_b) for name in names}
+    return {
+        "seed": seed,
+        "queries_a": len(set_a),
+        "queries_b": len(set_b),
+        "selected_on_a": best,
+        "selected_a_score": means_a[best],
+        "selected_b_score": held_out[best],
+        "baseline_b": {
+            name: held_out[name]
+            for name in ("ce", "coverage-0.7", "covquota-3-0.7")
+            if name in held_out
+        },
+    }
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="multihop_rerank_experiment.py")
     ap.add_argument("--cache", default=str(DEFAULT_CACHE))
@@ -430,6 +473,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--rrf-k", type=int, default=60)
     ap.add_argument("--seed-k", type=int, default=3, help="CE seeds kept before rescue fills")
     ap.add_argument("--samples", type=int, default=1000)
+    ap.add_argument("--holdout-seed", type=int, default=17,
+                    help="split for choose-on-A / report-on-B selection")
     ap.add_argument("--out", default=str(ROOT_BENCH / "rerank-experiment"))
     return ap.parse_args(argv)
 
@@ -504,6 +549,9 @@ def main(argv=None) -> int:
         "_settings": {**cache["_settings"], "top_k": args.top_k, "rrf_k": args.rrf_k},
         "summary": summary,
         "comparisons": comparisons,
+        "holdout": holdout_selection(
+            {name: per_query[name]["MAP@10"] for name in rankings}, args.holdout_seed
+        ),
         "per_query": {name: per_query[name]["MAP@10"] for name in rankings},
     }
     out = Path(args.out)
@@ -537,6 +585,19 @@ def render_markdown(result: Mapping[str, Any]) -> str:
             f"- `{key}`: {boot['delta']:+.4f} [{boot['ci_low']:+.4f}, {boot['ci_high']:+.4f}] "
             f"p={perm['p_value']:.4f} ({'sig' if boot['significant'] else 'ns'})"
         )
+    lines += ["", "## Choose on half, report on the other", ""]
+    holdout = result.get("holdout") or {}
+    if holdout:
+        lines.append(
+            f"- selected on {holdout['queries_a']} queries: `{holdout['selected_on_a']}` "
+            f"(MAP@10 {holdout['selected_a_score']:.4f})"
+        )
+        lines.append(
+            f"- its held-out MAP@10 on the other {holdout['queries_b']}: "
+            f"**{holdout['selected_b_score']:.4f}**"
+        )
+        for name, value in holdout.get("baseline_b", {}).items():
+            lines.append(f"- held-out `{name}`: {value:.4f}")
     lines.append("")
     return "\n".join(lines)
 
