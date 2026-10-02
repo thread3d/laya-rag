@@ -197,6 +197,153 @@ def rescue_rankings(
     return out
 
 
+def document_of(chunk_id: str) -> str:
+    """A MultiHop-RAG chunk id is ``<url>#<position>``, so the article is the prefix."""
+    return chunk_id.rsplit("#", 1)[0]
+
+
+def doc_quota_order(
+    scores: Sequence[float], docs: Sequence[str], top_k: int, min_docs: int
+) -> list[int]:
+    """CE order, but force the first ``min_docs`` slots onto distinct articles.
+
+    The multi-hop failure mode is one strongly-matching article occupying the top-10 with
+    overlapping chunks. A document quota spends early slots on breadth, then fills from
+    the untouched candidates in CE order. Deterministic; ties break to the lower index.
+    """
+    order = sorted(range(len(scores)), key=lambda i: (-float(scores[i]), i))
+    selected: list[int] = []
+    seen: set[str] = set()
+    for i in order:
+        if len(selected) >= top_k or len(seen) >= min_docs:
+            break
+        if docs[i] in seen:
+            continue
+        seen.add(docs[i])
+        selected.append(i)
+    taken = set(selected)
+    for i in order:
+        if len(selected) >= top_k:
+            break
+        if i in taken:
+            continue
+        selected.append(i)
+        taken.add(i)
+    return selected
+
+
+def doc_best_order(scores: Sequence[float], docs: Sequence[str], top_k: int) -> list[int]:
+    """Round-robin across articles, best article first.
+
+    Articles are ordered by their best candidate, then the selection takes one chunk from
+    each article in turn, so a second article's best chunk is emitted before the first
+    article's second-best. This is the "document-level aggregation" reading: the top-k
+    should represent the *set* of articles the query needs, not one article's overlapping
+    windows. Deterministic; ties break by document id then index.
+    """
+    groups: dict[str, list[int]] = {}
+    for i, doc in enumerate(docs):
+        groups.setdefault(doc, []).append(i)
+    for indices in groups.values():
+        indices.sort(key=lambda i: (-float(scores[i]), i))
+    doc_order = sorted(groups, key=lambda doc: (-float(scores[groups[doc][0]]), doc))
+    out: list[int] = []
+    position = {doc: 0 for doc in groups}
+    while len(out) < top_k:
+        progressed = False
+        for doc in doc_order:
+            if position[doc] < len(groups[doc]):
+                out.append(groups[doc][position[doc]])
+                position[doc] += 1
+                progressed = True
+                if len(out) >= top_k:
+                    break
+        if not progressed:
+            break
+    return out
+
+
+def coverage_doc_quota_order(
+    scores: Sequence[float],
+    atoms: Sequence[Sequence[int]],
+    atom_weight: Sequence[float],
+    docs: Sequence[str],
+    top_k: int,
+    lam: float = 0.7,
+    min_docs: int = 3,
+) -> list[int]:
+    """Coverage selection seeded with the best candidate from distinct articles.
+
+    Two measured wins are combined: a document quota (``docquota``) stops one article
+    occupying the top-10 with overlapping chunks, and atom coverage (``coverage``) stops
+    a slot being spent on a repeat of a fact already present. Phase 1 takes the best
+    cross-encoder candidate of each of the top ``min_docs`` articles; phase 2 fills the
+    rest greedily by ``lam * normalized_ce + (1 - lam) * marginal_atom_gain``.
+    """
+    n = len(scores)
+    if n == 0 or top_k <= 0:
+        return []
+    rel = [float(value) for value in scores]
+    lo, hi = min(rel), max(rel)
+    normalized = [(value - lo) / (hi - lo) if hi > lo else 0.0 for value in rel]
+    best: dict[str, float] = {}
+    for i, doc in enumerate(docs):
+        best[doc] = max(best.get(doc, -1e18), rel[i])
+    doc_order = sorted(set(docs), key=lambda doc: (-best[doc], doc))
+
+    selected: list[int] = []
+    covered: set[int] = set()
+    remaining = list(range(n))
+    represented: set[str] = set()
+    for doc in doc_order:
+        if len(selected) >= top_k or len(represented) >= min_docs:
+            break
+        candidates = [i for i in remaining if docs[i] == doc]
+        if not candidates:
+            continue
+        pick = max(candidates, key=lambda i: (rel[i], -i))
+        selected.append(pick)
+        covered.update(atoms[pick])
+        remaining.remove(pick)
+        represented.add(doc)
+
+    while remaining and len(selected) < top_k:
+        gains = {
+            i: float(sum(atom_weight[a] for a in atoms[i] if a not in covered))
+            for i in remaining
+        }
+        scale = max(gains.values()) if gains else 0.0
+        scale = scale if scale > 0.0 else 1.0
+        best_index, best_score = None, -1e18
+        for i in remaining:
+            score = lam * normalized[i] + (1.0 - lam) * (gains[i] / scale)
+            if score > best_score:
+                best_index, best_score = i, score
+        selected.append(best_index)
+        covered.update(atoms[best_index])
+        remaining.remove(best_index)
+    return selected
+
+
+def doc_rankings(cache: Mapping[str, Any], top_k: int) -> dict[str, dict[str, list[int]]]:
+    """Document-aware strategies, keyed by strategy then query id."""
+    atom_weight = cache["_settings"]["atom_weight"]
+    names = ["docquota-3", "docquota-4", "docbest", "covquota-3-0.5", "covquota-3-0.7"]
+    out: dict[str, dict[str, list[int]]] = {name: {} for name in names}
+    for q, payload in cache["queries"].items():
+        scores = payload["ce"]
+        atoms = payload["atoms"]
+        docs = [document_of(chunk_id) for chunk_id in payload["pool"]]
+        out["docquota-3"][q] = doc_quota_order(scores, docs, top_k, 3)
+        out["docquota-4"][q] = doc_quota_order(scores, docs, top_k, 4)
+        out["docbest"][q] = doc_best_order(scores, docs, top_k)
+        for lam in (0.5, 0.7):
+            out[f"covquota-3-{lam}"][q] = coverage_doc_quota_order(
+                scores, atoms, atom_weight, docs, top_k, lam, 3
+            )
+    return out
+
+
 def strategy_rankings(cache: Mapping[str, Any], top_k: int, rrf_k: int) -> dict[str, dict[str, list[int]]]:
     """Every strategy's top-k **pool indices**, keyed by strategy then query id.
 
@@ -322,6 +469,7 @@ def main(argv=None) -> int:
 
     rankings = strategy_rankings(cache, args.top_k, args.rrf_k)
     rankings.update(rescue_rankings(cache, tokens_by_query, args.top_k, args.seed_k))
+    rankings.update(doc_rankings(cache, args.top_k))
     per_query: dict[str, dict[str, dict[str, float]]] = {}
     summary: dict[str, dict[str, float]] = {}
     for name, ranking in rankings.items():
@@ -336,7 +484,8 @@ def main(argv=None) -> int:
         summary[name] = {m: round(sum(rows[m].values()) / len(rows[m]), 4) for m in METRICS}
 
     comparisons: dict[str, dict[str, Any]] = {}
-    for baseline in ("fused", "ce"):
+    baselines = [name for name in ("fused", "ce", "coverage-0.7") if name in rankings]
+    for baseline in baselines:
         for name in rankings:
             if name == baseline:
                 continue

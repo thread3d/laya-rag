@@ -250,6 +250,14 @@ class EngineConfig:
     rerank_coverage_lambda: float = field(
         default_factory=lambda: _env_float("RERANK_COVERAGE_LAMBDA", 0.0)
     )
+    # Document quota for the coverage pass above: the first N selections are the best
+    # cross-encoder candidate of distinct documents, then coverage fills the rest. This
+    # stops one article occupying the top-k with overlapping chunks, which is the
+    # multi-hop failure mode. Measured with lambda 0.7 on the 400-query subset: MAP@10
+    # 0.3206 (coverage alone) -> 0.3280, Hits@4 0.7550. 0 keeps the plain coverage rule.
+    rerank_coverage_min_docs: int = field(
+        default_factory=lambda: _env_int("RERANK_COVERAGE_MIN_DOCS", 0)
+    )
 
     # Claim adjudication is linear in claims x candidates. Measured warm on five
     # claims: 21.6s at retrieve_k=20 against 8.7s at 10, for the same verdicts on the

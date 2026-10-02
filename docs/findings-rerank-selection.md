@@ -66,6 +66,36 @@ relevance, and the reranker preserves that order (`order="recall"`) instead of r
 by the score. It is off by default, so nothing changes unless it is set; the measured
 setting is **0.7**.
 
+## Document quota, and the combined rule
+
+The same cached pool also tests the "one article dominates the top-10" failure mode
+directly. `docquota-n` keeps the CE order but forces the first `n` slots onto distinct
+articles; `covquota-3-l` combines that with atom coverage (three article seeds, then
+coverage fills).
+
+| strategy | Hits@10 | Hits@4 | MAP@10 |
+| --- | --- | --- | --- |
+| ce | 0.8600 | 0.7225 | 0.2986 |
+| docquota-3 | 0.8725 | 0.7375 | 0.3187 |
+| coverage-0.7 | 0.8850 | 0.7600 | 0.3206 |
+| **covquota-3-0.7** | **0.8850** | 0.7550 | **0.3280** |
+| covquota-3-0.5 | 0.8750 | 0.7575 | 0.3277 |
+
+`docquota-3` is +0.0201 [+0.0142, +0.0262] over CE (p=0.001). The combined rule is best,
+and it is **significantly better than coverage alone**: MAP@10 +0.0074 [+0.0006, +0.0140],
+p=0.026, with a small Hits@4 change (−0.0050, ns). Against CE it is +0.0293
+[+0.0235, +0.0358], p=0.001, Hits@4 +0.0325 [+0.0050, +0.0650].
+
+Shipped as `RERANK_COVERAGE_MIN_DOCS` (default `0`), used with
+`RERANK_COVERAGE_LAMBDA=0.7`; `0` keeps the plain coverage rule, so existing behaviour is
+unchanged unless it is set.
+
+**This is the item with the most overfitting risk**: ~20 strategies were compared on the
+same 400 queries, and +0.0074 is inside the noise band of a 400-query draw. It is the
+reason the full 2,255-query confirmation is the next step rather than an afterthought —
+if `covquota-3-0.7` does not hold against both `ce` and `coverage-0.7` there, the honest
+shipped setting is `RERANK_COVERAGE_MIN_DOCS=0`.
+
 ## A negative: the lexical bridge-linked rescue
 
 The diagnostic (§3.1 of `RESEARCH.md`) predicted that the second hop is what the top-10

@@ -107,7 +107,37 @@ def test_coverage_select_from_uses_the_supplied_relevance():
 def test_rerank_coverage_is_off_by_default_and_serialised():
     config = EngineConfig()
     assert config.rerank_coverage_lambda == 0.0
+    assert config.rerank_coverage_min_docs == 0
     assert "rerank_coverage_lambda" in config.as_dict()
+    assert "rerank_coverage_min_docs" in config.as_dict()
+
+
+def test_coverage_select_from_seeds_distinct_documents():
+    from laya_rag.engine import _coverage_select_from
+
+    index = _FakeIndex({
+        "a": "Refunds are processed within five business days to the original method.",
+        "b": "Refunds are processed within five business days to the original method.",
+        "c": "Shipping is free on orders over fifty dollars in the continental states.",
+        "d": "Contact billing support if the refund has not arrived after ten days.",
+    })
+    fused = [("a", 1.0), ("b", 1.0), ("c", 1.0), ("d", 1.0)]
+    relevance = [0.9, 0.8, 0.7, 0.6]
+    docs = ["A", "A", "B", "C"]
+    selected = _coverage_select_from(
+        index, fused, relevance, limit=3, lam=0.7, use_redundancy=False,
+        docs=docs, min_docs=3,
+    )
+    chosen_docs = [docs[[c for c, _ in fused].index(chunk_id)] for chunk_id, _ in selected]
+    assert chosen_docs == ["A", "B", "C"]
+
+
+def test_coverage_select_from_without_docs_is_unchanged():
+    from laya_rag.engine import _coverage_select_from
+
+    index = _FakeIndex({"a": "A sufficiently long sentence to be an atom here."})
+    fused = [("a", 1.0)]
+    assert _coverage_select_from(index, fused, [0.5], limit=1, lam=0.7) == [("a", 1.0)]
 
 
 class _StubCrossEncoder:

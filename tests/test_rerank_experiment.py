@@ -178,3 +178,65 @@ def test_rescue_rankings_returns_the_three_bridge_weights():
     assert set(rankings) == {"rescue-0.3", "rescue-0.5", "rescue-0.7"}
     for name in rankings:
         assert len(rankings[name]["0"]) == 2
+
+
+# ── document-aware selection ─────────────────────────────────────────────
+
+def test_document_of_splits_the_article_from_the_chunk_position():
+    assert exp.document_of("example.com_news#3") == "example.com_news"
+    assert exp.document_of("no-position") == "no-position"
+
+
+def test_doc_quota_forces_distinct_articles_into_the_top_slots():
+    scores = [0.9, 0.8, 0.7, 0.6]
+    docs = ["A", "A", "A", "B"]
+    order = exp.doc_quota_order(scores, docs, top_k=3, min_docs=2)
+    # Slot 1 is A's best; slot 2 must be a new article, so B displaces A's second chunk.
+    assert order[0] == 0
+    assert order[1] == 3
+    assert sorted(order) == [0, 1, 3]
+
+
+def test_doc_best_puts_a_second_article_best_chunk_ahead_of_a_first_article_third():
+    scores = [0.9, 0.8, 0.7, 0.85]
+    docs = ["A", "A", "A", "B"]
+    order = exp.doc_best_order(scores, docs, top_k=3)
+    # A's best (0.9) first, then B's best (0.85) before A's second (0.8).
+    assert order[:2] == [0, 3]
+
+
+def test_doc_rankings_returns_the_document_strategies():
+    cache = {
+        "_settings": {"atom_weight": [1.0, 1.0, 1.0]},
+        "queries": {"0": {"pool": ["a#0", "a#1", "b#0"], "ce": [0.9, 0.7, 0.8],
+                          "atoms": [[0], [1], [2]]}},
+    }
+    rankings = exp.doc_rankings(cache, top_k=2)
+    assert set(rankings) == {
+        "docquota-3", "docquota-4", "docbest", "covquota-3-0.5", "covquota-3-0.7"
+    }
+    for name in rankings:
+        assert len(rankings[name]["0"]) == 2
+
+
+def test_coverage_doc_quota_seeds_distinct_articles_then_fills_by_coverage():
+    scores = [0.9, 0.8, 0.7, 0.6]
+    docs = ["A", "A", "B", "C"]
+    atoms = [[0], [1], [2], [3]]
+    order = exp.coverage_doc_quota_order(
+        scores, atoms, [1.0, 1.0, 1.0, 1.0], docs, top_k=3, lam=0.7, min_docs=3
+    )
+    # Phase 1 takes A's best, then B, then C: three distinct articles in three slots.
+    assert [docs[i] for i in order[:3]] == ["A", "B", "C"]
+
+
+def test_coverage_doc_quota_fills_beyond_the_quota_by_coverage():
+    scores = [0.9, 0.8, 0.2, 0.1]
+    docs = ["A", "A", "B", "C"]
+    atoms = [[0], [0], [1], [2]]  # candidate 1 repeats candidate 0's only atom
+    order = exp.coverage_doc_quota_order(
+        scores, atoms, [1.0, 1.0, 1.0, 1.0], docs, top_k=4, lam=0.5, min_docs=2
+    )
+    assert order[0] == 0 and order[1] == 2  # A's best, then B
+    # Candidate 1 is a repeat of candidate 0's atom, so C's new atom beats it.
+    assert order[2] == 3
