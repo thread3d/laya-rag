@@ -4,11 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any, Sequence
 
 from .config import EngineConfig
 from .engine import IndexNotBuiltError, RagEngine
 from .model import ModelUnavailableError
+from .verify import split_claims, verify_citations
 
 
 def _emit(payload: Any, as_json: bool, human: str) -> None:
@@ -91,6 +93,73 @@ def _cmd_query(args: argparse.Namespace, config: EngineConfig) -> int:
             snippet = snippet[:400].rstrip() + ("…" if len(snippet) > 400 else "")
         for line in snippet.splitlines():
             print(f"    {line}")
+    return 0
+
+
+def _read_answer(args: argparse.Namespace) -> str | None:
+    """The answer text from the positional argument or ``--answer-file``."""
+    if getattr(args, "answer", None):
+        return args.answer
+    if getattr(args, "answer_file", None):
+        try:
+            return Path(args.answer_file).read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"error: cannot read {args.answer_file}: {exc}", file=sys.stderr)
+            return None
+    print("error: provide the answer as an argument or with --answer-file", file=sys.stderr)
+    return None
+
+
+def _cmd_verify(args: argparse.Namespace, config: EngineConfig) -> int:
+    """Deterministic citation/quote checks, the same ones ``/v1/verify`` runs."""
+    answer = _read_answer(args)
+    if answer is None:
+        return 2
+    passages: list[str] = []
+    for path in args.evidence or []:
+        try:
+            passages.append(Path(path).read_text(encoding="utf-8"))
+        except OSError as exc:
+            print(f"error: cannot read {path}: {exc}", file=sys.stderr)
+            return 2
+    report = verify_citations(answer, passages, query=args.query or "")
+    counts = report["counts"]
+    human = "\n".join([
+        report.get("summary", ""),
+        f"clean: {'yes' if report['clean'] else 'no'}",
+        f"claims {counts['claims']} (cited {counts['cited']}, uncited {counts['uncited']}, "
+        f"invalid citations {counts['invalid_citations']})",
+        str(report["content"].get("summary", "")),
+        str(report["injection"].get("summary", "")),
+    ])
+    _emit(report, args.json, human)
+    return 0
+
+
+def _cmd_adjudicate(args: argparse.Namespace, config: EngineConfig) -> int:
+    """Ask Laya whether the corpus supports each claim, as ``/v1/adjudicate`` does."""
+    answer = _read_answer(args)
+    if answer is None:
+        return 2
+    engine = RagEngine(config)
+    try:
+        report = engine.adjudicate_claims(split_claims(answer), tenant=args.tenant)
+    except IndexNotBuiltError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 4
+    except ModelUnavailableError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 3
+    lines = [
+        f"supported {report['supported']}  unsupported {report['unsupported']}  "
+        f"not measured {report['not_measured']}  of {report['total']}",
+        f"relevance threshold {report['relevance_threshold']}, "
+        f"answerability threshold {report['answerability_threshold']}",
+    ]
+    for claim in report["claims"]:
+        verdict = claim.get("verdict") or claim.get("supported")
+        lines.append(f"  [{verdict}] {claim.get('text') or claim.get('claim')}")
+    _emit(report, args.json, "\n".join(lines))
     return 0
 
 
@@ -187,6 +256,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     query.add_argument("--json", action="store_true")
     query.set_defaults(func=_cmd_query)
+
+    verify = sub.add_parser("verify", help="check an answer's citations against evidence")
+    verify.add_argument("answer", nargs="?", default=None, help="the answer text")
+    verify.add_argument("--answer-file", default=None, dest="answer_file")
+    verify.add_argument("--query", default="", help="the question the answer responds to")
+    verify.add_argument(
+        "--evidence", action="append", default=[], metavar="FILE",
+        help="a file whose text is one evidence passage; repeat for more (index [1] is the first)",
+    )
+    verify.add_argument("--json", action="store_true")
+    verify.set_defaults(func=_cmd_verify)
+
+    adjudicate = sub.add_parser(
+        "adjudicate", help="ask Laya whether the corpus supports each claim in an answer"
+    )
+    adjudicate.add_argument("answer", nargs="?", default=None, help="the answer text")
+    adjudicate.add_argument("--answer-file", default=None, dest="answer_file")
+    adjudicate.add_argument(
+        "--tenant", default=None, help="caller identity for the trust manifest's per-tenant ACL"
+    )
+    adjudicate.add_argument("--json", action="store_true")
+    adjudicate.set_defaults(func=_cmd_adjudicate)
 
     stats = sub.add_parser("stats", help="show configuration and corpus statistics")
     stats.add_argument("--json", action="store_true")

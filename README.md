@@ -104,10 +104,18 @@ Verify everything is wired up:
 
 # Show configuration, model and corpus state
 .venv/bin/laya-rag stats --json
+
+# Deterministic citation/quote check of a composed answer against evidence files
+.venv/bin/laya-rag verify "Refunds take five business days [1]." --evidence passage.txt
+
+# Ask Laya whether the whole corpus supports each claim in an answer
+.venv/bin/laya-rag adjudicate --answer-file answer.txt --tenant acme
 ```
 
 `query` prints Laya's calibrated verdict, the passages it selected with their sources, and which
-recall channel found each one. Use `--json` for machine-readable output.
+recall channel found each one. `verify` is model-free and checks citations and quoted spans
+only; `adjudicate` re-retrieves across the corpus and reuses the measured answerability
+question. Use `--json` for machine-readable output on any of them.
 
 ### HTTP service
 

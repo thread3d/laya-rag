@@ -56,3 +56,65 @@ def test_cli_query_without_a_tenant_passes_none(monkeypatch):
     args = cli.build_parser().parse_args(["query", "how long", "--json"])
     cli._cmd_query(args, EngineConfig())
     assert captured["tenant"] is None
+
+
+def test_cli_verify_reports_clean_for_a_supported_citation(tmp_path, capsys):
+    evidence = tmp_path / "evidence.txt"
+    evidence.write_text(
+        "Refunds are processed within five business days.", encoding="utf-8"
+    )
+    args = cli.build_parser().parse_args([
+        "verify", "Refunds take five business days [1].", "--evidence", str(evidence),
+    ])
+    code = cli._cmd_verify(args, EngineConfig())
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "clean: yes" in out
+    assert "claims 1 (cited 1, uncited 0, invalid citations 0)" in out
+
+
+def test_cli_verify_without_an_answer_errors(capsys):
+    args = cli.build_parser().parse_args(["verify"])
+    assert cli._cmd_verify(args, EngineConfig()) == 2
+    assert "provide the answer" in capsys.readouterr().err
+
+
+def test_cli_verify_reads_the_answer_from_a_file(tmp_path, capsys):
+    answer = tmp_path / "answer.txt"
+    answer.write_text("No citations here.", encoding="utf-8")
+    args = cli.build_parser().parse_args(["verify", "--answer-file", str(answer)])
+    assert cli._cmd_verify(args, EngineConfig()) == 0
+    assert "clean:" in capsys.readouterr().out
+
+
+def test_cli_adjudicate_summarises_the_report(monkeypatch, capsys):
+    class _FakeEngine:
+        def __init__(self, config):
+            pass
+
+        def adjudicate_claims(self, claims, tenant=None):
+            assert claims == [
+                "Alpha is a true statement about refunds.",
+                "Beta is entirely unknown to this corpus.",
+            ]
+            assert tenant == "acme"
+            return {
+                "supported": 1, "unsupported": 0, "not_measured": 1, "total": 2,
+                "relevance_threshold": 0.5, "answerability_threshold": 0.5,
+                "claims": [
+                    {"verdict": "supported", "text": "Alpha is a true statement about refunds."},
+                    {"verdict": "not_measured", "text": "Beta is entirely unknown to this corpus."},
+                ],
+            }
+
+    monkeypatch.setattr(cli, "RagEngine", _FakeEngine)
+    args = cli.build_parser().parse_args([
+        "adjudicate",
+        "Alpha is a true statement about refunds. Beta is entirely unknown to this corpus.",
+        "--tenant", "acme",
+    ])
+    code = cli._cmd_adjudicate(args, EngineConfig())
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "supported 1  unsupported 0  not measured 1  of 2" in out
+    assert "[supported] Alpha is a true statement about refunds." in out
