@@ -120,6 +120,38 @@ def test_save_leaves_no_temporary_files(tmp_path):
     assert leftovers == []
 
 
+def test_save_and_load_preserves_the_chunk_context(tmp_path):
+    contextual = Chunk(
+        chunk_id="a", doc_id="d1", path="/doc.md", text="alpha", index=0,
+        start_char=0, end_char=5, context="doc.md | Title | first line",
+    )
+    index = VectorIndex()
+    index.add([contextual], np.array([[1.0, 0.0]], dtype=np.float32))
+    index.save(tmp_path / "idx")
+
+    restored = VectorIndex.load(tmp_path / "idx")
+    assert restored.get("a").context == "doc.md | Title | first line"
+    assert restored.get("a").text == "alpha"
+
+
+def test_an_index_written_before_context_exists_loads_with_no_context(tmp_path):
+    import json
+
+    from laya_rag.index_store import INDEX_META
+
+    index = VectorIndex()
+    index.add([make_chunk("a", "alpha")], np.array([[1.0, 0.0]], dtype=np.float32))
+    index.save(tmp_path / "idx")
+    meta_path = tmp_path / "idx" / INDEX_META
+    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    for record in payload["chunks"]:
+        record.pop("context", None)
+    meta_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    restored = VectorIndex.load(tmp_path / "idx")
+    assert restored.get("a").context == ""
+
+
 def test_load_rejects_missing_index(tmp_path):
     with pytest.raises(IndexError_, match="index.json is missing"):
         VectorIndex.load(tmp_path / "absent")

@@ -143,6 +143,12 @@ class EngineConfig:
     chunk_overlap_chars: int = field(default_factory=lambda: _env_int("CHUNK_OVERLAP_CHARS", 400))
     min_chunk_chars: int = field(default_factory=lambda: _env_int("MIN_CHUNK_CHARS", 80))
 
+    # Structural context prefix (RESEARCH.md Tier 1.6). When true, every chunk carries a
+    # breadcrumb (document path and first heading) that the lexical and dense channels
+    # index but the returned evidence does not contain. It is off by default so existing
+    # indexes and their rankings are unchanged; turning it on requires a re-index.
+    context_prefix: bool = field(default_factory=lambda: _env_bool("CONTEXT_PREFIX", False))
+
     @property
     def resolved_chunk_overlap(self) -> int:
         """The overlap actually used, never wider than the chunk.

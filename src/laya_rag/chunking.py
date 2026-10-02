@@ -49,7 +49,14 @@ class Document:
 
 @dataclass(frozen=True)
 class Chunk:
-    """A retrievable slice of a :class:`Document`."""
+    """A retrievable slice of a :class:`Document`.
+
+    ``text`` is what gets returned as evidence and verified, so it stays exactly the
+    document's own words. ``context`` is an optional structural breadcrumb (document path
+    and first heading) that is prepended **only** when the chunk is indexed, via
+    :attr:`index_text` — the retrieval channels see the context, the reader and the
+    citation checker never do.
+    """
 
     chunk_id: str
     doc_id: str
@@ -58,6 +65,40 @@ class Chunk:
     index: int
     start_char: int
     end_char: int
+    context: str = ""
+
+    @property
+    def index_text(self) -> str:
+        """The text a lexical or dense channel should index for this chunk."""
+        return f"{self.context}\n{self.text}" if self.context else self.text
+
+
+def document_context(document: Document, *, max_line_chars: int = 120) -> str:
+    """A short structural breadcrumb for every chunk of one document.
+
+    The first Markdown heading (if any) and the first non-heading line, prefixed with the
+    file's path, give a chunk that says "revenue grew 3%" the company, period and document
+    it belongs to. It is deterministic and model-free, which is the point: the research
+    version of this idea uses an LLM at ingest, and that is not affordable locally.
+    """
+    heading = ""
+    first_line = ""
+    for raw in str(document.text).splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if not heading and line.startswith("#"):
+            heading = line.lstrip("#").strip()
+            continue
+        if not first_line:
+            first_line = line[:max_line_chars]
+            break
+    parts = [Path(document.path).name or document.path]
+    if heading:
+        parts.append(heading)
+    if first_line and first_line.casefold() not in {p.casefold() for p in parts}:
+        parts.append(first_line)
+    return " | ".join(part for part in parts if part)
 
 
 @dataclass
@@ -358,11 +399,16 @@ def chunk_documents(
     overlap_chars: int = 400,
     min_chunk_chars: int = 80,
     on_document: Callable[[int, int, int], None] | None = None,
+    context_prefix: bool = False,
 ) -> list[Chunk]:
     """Chunk every document, preserving reading order per document.
 
     ``on_document`` is called after each document with ``(done, total, chunks)``: how
     many documents have been chunked, how many there are, and the running chunk count.
+
+    ``context_prefix`` attaches a structural breadcrumb (:func:`document_context`) to each
+    chunk's ``context``, which the retrieval channels index but the evidence text does not
+    contain. It is off by default so existing indexes and their rankings are unchanged.
     """
     chunks: list[Chunk] = []
     total = len(documents)
@@ -373,6 +419,7 @@ def chunk_documents(
             overlap_chars=overlap_chars,
             min_chunk_chars=min_chunk_chars,
         )
+        context = document_context(document) if context_prefix else ""
         for index, (snippet, start, end) in enumerate(pieces):
             chunks.append(Chunk(
                 chunk_id=f"{document.doc_id}:{index:04d}",
@@ -382,6 +429,7 @@ def chunk_documents(
                 index=index,
                 start_char=start,
                 end_char=end,
+                context=context,
             ))
         if on_document is not None:
             on_document(done, total, len(chunks))

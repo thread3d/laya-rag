@@ -584,6 +584,7 @@ class RagEngine:
             overlap_chars=self.config.resolved_chunk_overlap,
             min_chunk_chars=self.config.min_chunk_chars,
             on_document=chunking,
+            context_prefix=self.config.context_prefix,
         )
         report.documents = len(loaded.documents)
         report.chunks = len(chunks)
@@ -626,7 +627,7 @@ class RagEngine:
             _progress(progress, "embedding", chunks=len(chunks), embedded=0)
             for batch in _batched(chunks, self.embed_batch_texts):
                 block = np.asarray(
-                    self.embedder.embed([chunk.text for chunk in batch]), dtype=np.float32
+                    self.embedder.embed([chunk.index_text for chunk in batch]), dtype=np.float32
                 )
                 if matrix is None:
                     matrix = np.empty((len(chunks), block.shape[1]), dtype=np.float32)
@@ -695,7 +696,7 @@ class RagEngine:
         _progress(progress, "embedding", chunks=len(chunks), embedded=0)
         for batch in _batched(chunks, self.embed_batch_texts):
             vectors = np.asarray(
-                self.embedder.embed([chunk.text for chunk in batch]), dtype=np.float32
+                self.embedder.embed([chunk.index_text for chunk in batch]), dtype=np.float32
             )
             dense.add(batch, vectors)
             embedded += len(batch)
@@ -712,7 +713,7 @@ class RagEngine:
         save_started = time.perf_counter()
         _progress(progress, "saving", chunks=len(chunks), embedded=len(chunks))
         lexical = OnDiskBM25(bm25_dir, stem=self.config.lexical_stem)
-        lexical.build((chunk.chunk_id, chunk.text) for chunk in chunks)
+        lexical.build((chunk.chunk_id, chunk.index_text) for chunk in chunks)
         report.save_seconds = time.perf_counter() - save_started
 
         self._index = dense

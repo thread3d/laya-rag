@@ -226,6 +226,7 @@ class VectorIndex:
                     "index": c.index,
                     "start_char": c.start_char,
                     "end_char": c.end_char,
+                    "context": c.context,
                 }
                 for c in self._chunks
             ],
@@ -270,6 +271,8 @@ class VectorIndex:
                 index=record["index"],
                 start_char=record["start_char"],
                 end_char=record["end_char"],
+                # Absent means an index written before the context prefix existed.
+                context=record.get("context", ""),
             )
             for record in meta.get("chunks", [])
         ]

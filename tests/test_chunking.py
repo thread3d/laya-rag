@@ -261,3 +261,62 @@ def test_chunk_documents_reports_progress_per_document(tmp_path):
     assert all(total == 3 for _, total, _ in seen)
     assert all(produced <= len(chunks) for _, _, produced in seen)
     assert seen[-1][2] == len(chunks)
+
+
+# -- structural context prefix ----------------------------------------------
+
+def _document(text: str, path: str = "/corpus/refunds.md") -> "Document":
+    from laya_rag.chunking import Document
+
+    return Document(doc_id="d", path=path, text=text)
+
+
+def test_document_context_uses_path_heading_and_first_line():
+    from laya_rag.chunking import document_context
+
+    text = "# Refund policy\n\nRefunds are processed within five business days.\n\nMore detail."
+    context = document_context(_document(text))
+    assert context.startswith("refunds.md")
+    assert "Refund policy" in context
+    assert "Refunds are processed within five business days." in context
+
+
+def test_document_context_is_stable_and_skips_a_duplicate_first_line():
+    from laya_rag.chunking import document_context
+
+    text = "# Title only\n\nTitle only\n\nbody"
+    context = document_context(_document(text))
+    # The heading and the first line are the same, so it appears once.
+    assert context.count("Title only") == 1
+
+
+def test_index_text_includes_context_only_when_present():
+    from laya_rag.chunking import Chunk
+
+    plain = Chunk(chunk_id="c", doc_id="d", path="/p.md", text="body", index=0,
+                  start_char=0, end_char=4)
+    assert plain.index_text == "body"
+    contextual = Chunk(chunk_id="c", doc_id="d", path="/p.md", text="body", index=0,
+                       start_char=0, end_char=4, context="refunds.md | Refund policy")
+    assert contextual.index_text == "refunds.md | Refund policy\nbody"
+    # The evidence text is untouched.
+    assert contextual.text == "body"
+
+
+def test_chunk_documents_attaches_context_when_asked(tmp_path):
+    from laya_rag.chunking import document_context
+
+    corpus = write_corpus(tmp_path / "corpus")
+    documents = load_documents([corpus]).documents
+    plain = chunk_documents(documents)
+    assert all(chunk.context == "" for chunk in plain)
+
+    prefixed = chunk_documents(documents, context_prefix=True)
+    assert all(chunk.context for chunk in prefixed)
+    # Every chunk of one document carries that document's breadcrumb.
+    by_doc: dict[str, set[str]] = {}
+    for chunk in prefixed:
+        by_doc.setdefault(chunk.doc_id, set()).add(chunk.context)
+    assert all(len(contexts) == 1 for contexts in by_doc.values())
+    first = documents[0]
+    assert next(c.context for c in prefixed if c.doc_id == first.doc_id) == document_context(first)

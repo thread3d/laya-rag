@@ -305,3 +305,58 @@ def test_engine_builds_and_queries_with_the_eager_backend(tmp_path):
     result = reloaded.query("How long does a refund take?")
     assert result.passages
     assert result.considered > 0
+
+
+# ── structural context prefix ────────────────────────────────────────────
+
+def _contextual_chunk(context: str) -> Chunk:
+    return Chunk(
+        chunk_id="d1",
+        doc_id="d",
+        path="/corpus/refunds.md",
+        text="refunds are processed within five business days",
+        index=0,
+        start_char=0,
+        end_char=50,
+        context=context,
+    )
+
+
+def test_bm25_indexes_the_context_but_not_as_evidence():
+    index = BM25Index(stem=True)
+    index.build([_contextual_chunk("billing/invoices.md | Invoice policy")])
+    assert [hit.chunk_id for hit in index.search("invoices", k=3)] == ["d1"]
+    # With no context the same term finds nothing.
+    plain = BM25Index(stem=True)
+    plain.build([_contextual_chunk("")])
+    assert plain.search("invoices", k=3) == []
+
+
+def test_eager_bm25_indexes_the_context_too():
+    index = EagerBM25Index(stem=True)
+    index.build([_contextual_chunk("billing/invoices.md | Invoice policy")])
+    assert [hit.chunk_id for hit in index.search("invoices", k=3)] == ["d1"]
+
+
+def test_engine_context_prefix_retrieves_on_the_path_but_returns_clean_text(tmp_path):
+    from laya_rag.engine import RagEngine
+    from tests.support import StubModel, make_config
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "zebra_handbook.md").write_text(
+        "# Handbook\n\nThe procedure describes how to escalate an incident.\n",
+        encoding="utf-8",
+    )
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3, context_prefix=True,
+        chunk_chars=400, chunk_overlap_chars=0, relevance_threshold=0.0,
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([corpus])
+    # "zebra" appears only in the file name, which is indexed as context. The relevance
+    # gate reads the chunk text, so it is kept only because the threshold is 0.0 here —
+    # the point is that the context made the chunk retrievable at all.
+    result = engine.query("zebra")
+    assert result.passages
+    assert all("zebra" not in passage["text"].casefold() for passage in result.passages)

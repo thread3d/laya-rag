@@ -75,6 +75,16 @@ def tokenize(text: str, stem: bool = False) -> list[str]:
     return tokens
 
 
+def _index_text(chunk: Any) -> str:
+    """The text to index for a unit: its structural context plus its body when it has one.
+
+    A :class:`laya_rag.chunking.Chunk` exposes ``index_text`` (context + text); plain
+    passage/atom objects used by the harnesses expose only ``text``. The fallback keeps
+    them working unchanged.
+    """
+    return getattr(chunk, "index_text", None) or str(getattr(chunk, "text", ""))
+
+
 @dataclass
 class LexicalHit:
     """One BM25 result, identified by chunk id."""
@@ -138,7 +148,7 @@ class BM25Index:
         self._doc_freq = Counter()
         self._lengths = []
         for chunk in chunks:
-            tokens = tokenize(chunk.text, stem=self.stem)
+            tokens = tokenize(_index_text(chunk), stem=self.stem)
             counts = Counter(tokens)
             self._ids.append(chunk.chunk_id)
             self._term_freqs.append(counts)
@@ -268,7 +278,7 @@ class EagerBM25Index:
         lengths: list[int] = []
         doc_freq: Counter[str] = Counter()
         for chunk in chunks:
-            tokens = tokenize(chunk.text, stem=self.stem)
+            tokens = tokenize(_index_text(chunk), stem=self.stem)
             counts = Counter(tokens)
             ids.append(chunk.chunk_id)
             term_freqs.append(counts)
