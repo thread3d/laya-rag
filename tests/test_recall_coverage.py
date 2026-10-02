@@ -292,3 +292,33 @@ def test_blend_passes_through_when_coverage_is_disabled(tmp_path):
     assert result.passages
     assert captured["order"] == "relevance"
     assert captured["blend"] == 0.5
+
+
+def test_substituted_cross_encoder_uses_the_rerank_threshold(tmp_path):
+    """RELEVANCE_THRESHOLD is calibrated for Laya; a cross-encoder's sigmoid is not."""
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3,
+        rerank_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        relevance_threshold=0.3,
+    )
+    assert config.rerank_threshold == 0.0
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    # 0.2 would fail the Laya bar (0.3) and the old shared 0.5 cut, but the CE path keeps
+    # the pool at RERANK_THRESHOLD 0.0 and lets coverage and top-k decide.
+    engine.cross_encoder = _StubCrossEncoder(score=0.2)
+    result = engine.query("How long does a refund take?")
+    assert result.passages
+
+
+def test_an_explicit_relevance_threshold_still_filters_a_cross_encoder(tmp_path):
+    config = make_config(
+        tmp_path, dense_weight=1.0, rerank_k=3,
+        rerank_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    engine.cross_encoder = _StubCrossEncoder(score=0.2)
+    result = engine.query("How long does a refund take?", relevance_threshold=0.5)
+    assert result.passages == []
+    assert result.answerable is False

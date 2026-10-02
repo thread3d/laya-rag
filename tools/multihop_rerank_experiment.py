@@ -546,6 +546,24 @@ def truncate_pools(cache: Mapping[str, Any], limit: int | None) -> Mapping[str, 
     return cache
 
 
+def filter_pools(cache: Mapping[str, Any], threshold: float | None) -> Mapping[str, Any]:
+    """Drop cached candidates whose cross-encoder score is below ``threshold``, in place.
+
+    The engine historically applied its Laya-calibrated ``RELEVANCE_THRESHOLD`` (0.5) to a
+    substituted cross-encoder's sigmoid, which on this pool removes far too much; the cached
+    cross-encoder scores here are raw logits, so ``threshold=0.0`` models a sigmoid cut of
+    0.5 and ``None`` models the experiments' no-threshold behaviour.
+    """
+    if threshold is None:
+        return cache
+    for payload in cache["queries"].values():
+        keep = [i for i, score in enumerate(payload["ce"]) if score >= threshold]
+        payload["pool"] = [payload["pool"][i] for i in keep]
+        payload["atoms"] = [payload["atoms"][i] for i in keep]
+        payload["ce"] = [payload["ce"][i] for i in keep]
+    return cache
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="multihop_rerank_experiment.py")
     ap.add_argument("--cache", default=str(DEFAULT_CACHE))
@@ -556,6 +574,12 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--depth-limit", type=int, default=None,
         help="truncate each cached pool to this many candidates before scoring — models a "
              "narrower RETRIEVE_K without re-running the cross-encoder",
+    )
+    ap.add_argument(
+        "--score-threshold", type=float, default=None,
+        help="drop candidates whose cached cross-encoder logit is below this; 0.0 models "
+             "the engine's historical sigmoid>=0.5 cut, omitting it is the experiments' "
+             "no-threshold behaviour",
     )
     ap.add_argument("--samples", type=int, default=1000)
     ap.add_argument("--holdout-seed", type=int, default=17,
@@ -573,6 +597,7 @@ def main(argv=None) -> int:
         )
     cache = json.loads(cache_path.read_text(encoding="utf-8"))
     truncate_pools(cache, args.depth_limit)
+    filter_pools(cache, args.score_threshold)
     golds = cache["golds"]
     order = list(cache["queries"])
     overlap = cache["_settings"]["overlap"]

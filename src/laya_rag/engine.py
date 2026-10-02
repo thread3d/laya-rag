@@ -897,13 +897,23 @@ class RagEngine:
             # order entirely, so it is forced to a pure replacement here.
             blend = 1.0
         nli = self.answerability_nli
+        # `RELEVANCE_THRESHOLD` is calibrated for Laya's probabilities. When a
+        # cross-encoder supplies the scores they are a different model's sigmoid, and the
+        # 0.5 cut is far too strict there: on the MultiHop CE pool only ~11% of candidates
+        # clear it, so many queries would keep nothing. The experiments never thresholded
+        # the second stage, so a substituted scorer gets `RERANK_THRESHOLD` (0.0 by
+        # default) unless the caller passes an explicit relevance_threshold.
+        if relevance_threshold is not None:
+            effective_relevance = relevance_threshold
+        elif cross_scores is not None:
+            effective_relevance = self.config.rerank_threshold
+        else:
+            effective_relevance = self.config.relevance_threshold
         reranked = self.reranker.rerank(
             query,
             candidates,
             top_k=top_k or self.config.rerank_k,
-            relevance_threshold=(
-                self.config.relevance_threshold if relevance_threshold is None else relevance_threshold
-            ),
+            relevance_threshold=effective_relevance,
             answerability_threshold=(
                 self.config.answerability_threshold
                 if answerability_threshold is None

@@ -335,6 +335,14 @@ class EngineConfig:
 
     # Laya emits calibrated probabilities, so these are real thresholds, not scores.
     relevance_threshold: float = field(default_factory=lambda: _env_float("RELEVANCE_THRESHOLD", 0.5))
+    # Minimum score a *substituted* second stage (a cross-encoder) must reach to be kept.
+    # RELEVANCE_THRESHOLD is calibrated for Laya's probabilities and is far too strict for
+    # another model's sigmoid: on the MultiHop CE pool only ~11% of the top-100 clear 0.5,
+    # and within the engine's top-20 pool 83 of 400 queries would keep nothing at all. The
+    # experiments that measured the second stage never thresholded it, so this defaults to
+    # 0.0 (keep the pool, let the ordering and top-k decide). Laya's own path still uses
+    # RELEVANCE_THRESHOLD.
+    rerank_threshold: float = field(default_factory=lambda: _env_float("RERANK_THRESHOLD", 0.0))
     answerability_threshold: float = field(default_factory=lambda: _env_float("ANSWERABILITY_THRESHOLD", 0.5))
     # Optional persisted multi-feature answerability gate (src/laya_rag/answerability.py).
     # The shipped decision is a single scalar that measured at chance out of domain

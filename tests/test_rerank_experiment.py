@@ -292,6 +292,19 @@ def test_truncate_pools_limits_every_member_of_the_cache():
     assert exp.truncate_pools(cache, None) is cache
 
 
+def test_filter_pools_drops_candidates_below_the_threshold():
+    cache = {
+        "queries": {
+            "0": {"pool": ["a", "b", "c"], "ce": [1.0, -1.0, 0.5], "atoms": [[0], [1], [2]]},
+        }
+    }
+    out = exp.filter_pools(cache, 0.0)
+    assert out["queries"]["0"]["pool"] == ["a", "c"]
+    assert out["queries"]["0"]["ce"] == [1.0, 0.5]
+    assert out["queries"]["0"]["atoms"] == [[0], [2]]
+    assert exp.filter_pools(cache, None) is cache
+
+
 # ── query-aware coverage ─────────────────────────────────────────────────
 
 def test_query_aware_coverage_prefers_a_new_query_relevant_atom():
