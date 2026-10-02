@@ -302,7 +302,8 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `EMBED_QUERY_INSTRUCTION` | `false` | prepend the model's retrieval instruction to queries |
 | `DENSE_WEIGHT` / `LEXICAL_WEIGHT` | `auto` / `1.0` | RRF channel weights; `auto` is `0` for Laya's encoder and `1` for a configured `EMBED_MODEL` |
 | `RECALL_DEDUP_THRESHOLD` | `0.0` | drop a fused candidate whose cosine to a kept chunk is at or above this; `0.9` is the measured MultiHop-RAG setting, `0.0` disables it |
-| `RECALL_COVERAGE_LAMBDA` | `0.0` | evidence-set coverage selection on the fused pool (sentence-atom submodular max-coverage); `0.5` is the measured MultiHop-RAG setting (MAP@10 0.2835), `0.0` disables it |
+| `RECALL_COVERAGE_LAMBDA` | `0.0` | evidence-set coverage selection on the fused pool (sentence-atom submodular max-coverage); `0.5` is the measured MultiHop-RAG setting (MAP@10 0.2850), `0.0` disables it |
+| `RECALL_COVERAGE_REDUNDANCY` | `false` | keep the dense-gram redundancy penalty inside the coverage objective; full-protocol at `λ=0.5` dropping it lifts MAP@10 0.2835 → 0.2850 and Hits@4 0.7197 → 0.7326, while at `λ=0.7` the penalty helps (+0.0036) |
 | `RERANK_MODEL` | unset | retrieval-trained cross-encoder that orders and filters evidence; Laya still gates |
 | `RERANK_ORDER` | `auto` | `auto` orders by the scorer when `RERANK_MODEL` is set and keeps recall order otherwise; or force `recall` / `relevance` |
 | `RERANK_BLEND` | `1.0` | how far a supplied second stage may move the first-stage order, in `[0, 1]`; `1.0` replaces it (historical), below it is fused so the second stage nudges rather than overrides |
@@ -789,13 +790,15 @@ should not be cited as a strength out of domain.
 
 ### Where this RAG is worse
 
-- **Coverage on multi-hop queries.** MAP@10 **0.2835** against 0.479 published, after a
-  sentence-atom submodular coverage pass lifts it **+0.0288** (held-out) over the fused
-  baseline. It still finds *an* answer passage far more reliably than *the set* — but the
+- **Coverage on multi-hop queries.** MAP@10 **0.2850** against 0.479 published, after a
+  sentence-atom submodular coverage pass lifts it **+0.0304** over the fused baseline
+  (0.2546); dropping the dense-gram redundancy term at `λ=0.5` adds a further +0.0015 MAP and
+  +0.013 Hits@4. It still finds *an* answer passage far more reliably than *the set* — the
   fused top-100 already contains enough evidence that an oracle reordering reaches MAP@10
   **0.7307**, so the remaining gap is selection, not recall. The published 0.479 is a
-  *reranked* number and this engine's reranked row on MultiHop-RAG has not been run.
-  Reports: `eval/benchmarks/multihop-rag/coverage-set.json`.
+  *reranked* number; this engine's own reranked configuration is cross-encoder scores plus the
+  same coverage objective, which reaches MAP@10 **0.3165** (`RERANK_COVERAGE_LAMBDA=0.7`).
+  Reports: `eval/benchmarks/multihop-rag/coverage-nored.json`, `coverage-set.json`.
 - **Answerability's shipped single scalar out of domain** — AUC 0.51 at the best, and a
   recalibration split fitted on MultiHop-RAG itself transfers at chance. The signal is not
   absent, though: a feature gate over the retrieval and evidence signals the engine already

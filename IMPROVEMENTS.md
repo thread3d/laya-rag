@@ -332,10 +332,14 @@ Offline suite: **472 passed, 4 deselected** (baseline 344).
 - **Multi-hop coverage (§1).** The new submodular evidence-set objective is the best pass
   measured: `facility-0.5` reaches **MAP@10 0.2835** (held-out **+0.0288** over the 0.2546
   fused baseline) with **Hits@4 0.7197**, beating the previous best `cluster-dedup-0.9`
-  (0.2790, +0.0244). `doc-quota-4` adds +0.0173. Report:
-  `eval/benchmarks/multihop-rag/coverage-set.json`.
+  (0.2790, +0.0244). `doc-quota-4` adds +0.0173. A later full-protocol run showed the
+  dense-gram redundancy term is not needed at the recommended λ: `facility-nored-0.5`
+  reaches **MAP@10 0.2850** (+0.0015 [+0.0002, +0.0029], p=0.032), **Hits@4 0.7326** and
+  **Hits@10 0.8723**, so `RECALL_COVERAGE_REDUNDANCY=false` is the shipped default (at λ=0.7
+  the penalty does help, +0.0036, which is why it stays exposed). Reports:
+  `eval/benchmarks/multihop-rag/coverage-set.json`, `coverage-nored.json`.
 - **The gap is selection, not recall.** The pool-recall ceiling — the best MAP@10 any
-  reordering of the fused top-100 could reach — is **0.7307**, against the 0.2835 achieved
+  reordering of the fused top-100 could reach — is **0.7307**, against the 0.2850 achieved
   and the 0.479 published. The evidence is already in the candidate pool; ordering is where
   the remaining headroom is.
 - **SciDocs (§7).** Query instruction lifts the single `bge-small` encoder from **0.1973 to

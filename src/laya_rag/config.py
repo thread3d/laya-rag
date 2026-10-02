@@ -221,6 +221,14 @@ class EngineConfig:
     recall_coverage_lambda: float = field(
         default_factory=lambda: _env_float("RECALL_COVERAGE_LAMBDA", 0.0)
     )
+    # The dense-gram redundancy term inside the coverage objective. Full 2,255-query
+    # measurement at the recommended lambda 0.5: dropping it lifts MAP@10 0.2835 -> 0.2850
+    # (+0.0015 [+0.0002, +0.0029], p=0.032) with Hits@4 0.7197 -> 0.7326 and Hits@10
+    # 0.8585 -> 0.8723, so it defaults to false; at lambda 0.7 the penalty does help
+    # (+0.0036), so it stays exposed. Only relevant when RECALL_COVERAGE_LAMBDA > 0.
+    recall_coverage_redundancy: bool = field(
+        default_factory=lambda: _env_bool("RECALL_COVERAGE_REDUNDANCY", False)
+    )
 
     @property
     def resolved_dense_weight(self) -> float:

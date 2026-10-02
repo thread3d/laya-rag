@@ -237,6 +237,8 @@ def facility_location_select(
     gram: np.ndarray,
     top_k: int,
     lam: float = 0.5,
+    *,
+    use_redundancy: bool = True,
 ) -> list[int]:
     """Greedy submodular facility-location / max-coverage selection over the pool.
 
@@ -248,6 +250,10 @@ def facility_location_select(
     (1 - lam) * marginal_gain`` minus a redundancy penalty ``(1 - lam) *
     max(gram[i, selected])`` once anything is selected. ``rel`` is min-max normalised
     internally (all-zeros when constant). Deterministic; ties break to the lower index.
+
+    ``use_redundancy=False`` drops the dense-gram penalty, leaving relevance plus atom
+    coverage. The cross-encoder-pool experiment measured the redundancy-free variant as
+    the better rule there; this flag lets the fused pool test the same question.
     """
     rel = np.asarray(rel, dtype=float)
     lo, hi = float(rel.min()), float(rel.max())
@@ -265,8 +271,10 @@ def facility_location_select(
         best_index, best_score = None, -1e18
         for i in candidates:
             marginal = gains[i] / scale
-            redundancy = float(np.max(gram[i, selected])) if selected else 0.0
-            score = lam * normalized[i] + (1.0 - lam) * marginal - (1.0 - lam) * redundancy
+            score = lam * normalized[i] + (1.0 - lam) * marginal
+            if use_redundancy:
+                redundancy = float(np.max(gram[i, selected])) if selected else 0.0
+                score -= (1.0 - lam) * redundancy
             if score > best_score:
                 best_index, best_score = i, score
         selected.append(best_index)
@@ -376,6 +384,7 @@ def main(argv=None) -> int:
     names += [f"query-coverage-{lam}" for lam in COVERAGE_LAMBDAS]
     names += [f"doc-quota-{n}" for n in DOC_QUOTA_MIN_DOCS]
     names += [f"facility-{lam}" for lam in FACILITY_LAMBDAS]
+    names += [f"facility-nored-{lam}" for lam in FACILITY_LAMBDAS]
     rankings: dict[str, dict[str, list[str]]] = {name: {} for name in names}
     pool_ceiling: dict[str, float] = {}
 
@@ -412,6 +421,10 @@ def main(argv=None) -> int:
         for lam in FACILITY_LAMBDAS:
             sel = facility_location_select(rel, cand_atom_ids, atom_weight, gram, args.top_k, lam)
             rankings[f"facility-{lam}"][q] = [cand[i] for i in sel]
+            sel = facility_location_select(
+                rel, cand_atom_ids, atom_weight, gram, args.top_k, lam, use_redundancy=False
+            )
+            rankings[f"facility-nored-{lam}"][q] = [cand[i] for i in sel]
 
         # Pool ceiling diagnostic: the best MAP@10 any reordering of the fused pool could
         # reach, using the same normalized-substring gold match as official_metrics_one.

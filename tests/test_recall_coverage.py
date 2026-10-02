@@ -112,6 +112,30 @@ def test_rerank_coverage_is_off_by_default_and_serialised():
     assert "rerank_coverage_min_docs" in config.as_dict()
 
 
+def test_coverage_redundancy_defaults_off_and_is_serialised():
+    config = EngineConfig()
+    assert config.recall_coverage_redundancy is False
+    assert "recall_coverage_redundancy" in config.as_dict()
+
+
+def test_coverage_select_redundancy_penalty_is_optional():
+    dup_atom = "Refunds are processed within five business days to the original method."
+    other = "Shipping is free on orders over fifty dollars in the continental states."
+    index = _FakeIndex(
+        {"a": dup_atom, "b": other, "c": other},
+        vectors={
+            "a": np.array([1.0, 0.0]),
+            "b": np.array([1.0, 0.0]),  # distinct atom, nearly parallel to a
+            "c": np.array([0.0, 1.0]),
+        },
+    )
+    fused = [("a", 3.0), ("b", 2.0), ("c", 1.0)]
+    with_penalty = _coverage_select(index, fused, limit=2, lam=0.5)
+    without = _coverage_select(index, fused, limit=2, lam=0.5, use_redundancy=False)
+    assert [chunk_id for chunk_id, _ in with_penalty] == ["a", "c"]
+    assert [chunk_id for chunk_id, _ in without] == ["a", "b"]
+
+
 def test_coverage_select_from_seeds_distinct_documents():
     from laya_rag.engine import _coverage_select_from
 

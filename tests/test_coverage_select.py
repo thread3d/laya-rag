@@ -128,6 +128,25 @@ def test_facility_location_select_handles_constant_relevance():
     assert selected == [0]
 
 
+def test_facility_location_select_can_drop_the_redundancy_penalty():
+    # Candidates 1 and 2 add distinct atoms and are otherwise identical; candidate 1 is
+    # nearly parallel to candidate 0. The gram penalty should avoid it, and dropping the
+    # penalty should let the tie break to the lower index instead.
+    rel = np.array([1.0, 1.0, 1.0])
+    cand_atoms = [[0], [1], [2]]
+    weights = [1.0, 1.0, 1.0]
+    gram = np.zeros((3, 3))
+    gram[0, 1] = gram[1, 0] = 0.9
+
+    with_penalty = mc.facility_location_select(rel, cand_atoms, weights, gram, top_k=2, lam=0.5)
+    without = mc.facility_location_select(
+        rel, cand_atoms, weights, gram, top_k=2, lam=0.5, use_redundancy=False
+    )
+
+    assert with_penalty == [0, 2]
+    assert without == [0, 1]
+
+
 # ── pool reorder ceiling ────────────────────────────────────────────────
 
 def test_pool_ceiling_map_places_the_largest_new_match_first():

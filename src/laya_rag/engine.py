@@ -241,6 +241,8 @@ def _coverage_select(
     fused: Sequence[tuple[str, float]],
     limit: int,
     lam: float,
+    *,
+    use_redundancy: bool = True,
 ) -> list[tuple[str, float]]:
     """Spend the recall budget on new facts, not near-duplicates of kept passages.
 
@@ -253,9 +255,17 @@ def _coverage_select(
     coverage pass measured — better than near-duplicate suppression alone (0.2790) —
     because it targets the *set* of facts the benchmark scores rather than mere
     diversity. Missing atom weights or vectors never remove a candidate.
+
+    ``use_redundancy=False`` drops the dense-gram penalty. On the full 2,255-query
+    protocol at ``lam=0.5`` that measured MAP@10 0.2835 → 0.2850
+    (+0.0015 [+0.0002, +0.0029], p=0.032) with Hits@4 0.7197 → 0.7326 and Hits@10
+    0.8585 → 0.8723, so it is the shipped setting; at ``lam=0.7`` the penalty does
+    help (+0.0036), which is why the flag is exposed rather than deleted.
     """
     relevance = [score for _chunk_id, score in fused]
-    return _coverage_select_from(index, fused, relevance, limit, lam, use_redundancy=True)
+    return _coverage_select_from(
+        index, fused, relevance, limit, lam, use_redundancy=use_redundancy
+    )
 
 
 def _coverage_select_from(
@@ -905,6 +915,7 @@ class RagEngine:
         lexical_weight: float = 1.0,
         dedup_threshold: float = 0.0,
         coverage_lambda: float = 0.0,
+        coverage_redundancy: bool = True,
     ) -> list[Hit]:
         """Fuse dense and lexical rankings into one candidate list.
 
@@ -931,7 +942,8 @@ class RagEngine:
             [dense_ids, lexical_ids], limit=pool, weights=[dense_weight, lexical_weight]
         )
         if coverage_lambda > 0.0:
-            fused = _coverage_select(index, fused, limit, coverage_lambda)
+            fused = _coverage_select(index, fused, limit, coverage_lambda,
+                                     use_redundancy=coverage_redundancy)
         elif dedup_threshold > 0.0:
             fused = _suppress_near_duplicates(index, fused, limit, dedup_threshold)
         dense_set = set(dense_ids)
@@ -1107,6 +1119,7 @@ class RagEngine:
                 lexical_weight=self.config.lexical_weight,
                 dedup_threshold=self.config.recall_dedup_threshold,
                 coverage_lambda=self.config.recall_coverage_lambda,
+                coverage_redundancy=self.config.recall_coverage_redundancy,
             )
             if trust_active:
                 before = len(hits)
