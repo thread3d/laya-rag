@@ -6,7 +6,13 @@ import json
 import pytest
 
 from laya_rag.chunking import Chunk
-from laya_rag.lexical import BM25Index, reciprocal_rank_fusion, tokenize
+from laya_rag.lexical import (
+    EAGER_LEXICAL_FILE,
+    BM25Index,
+    EagerBM25Index,
+    reciprocal_rank_fusion,
+    tokenize,
+)
 
 
 def make_chunk(chunk_id: str, text: str) -> Chunk:
@@ -203,3 +209,99 @@ def test_a_term_absent_from_the_index_scores_nothing(tmp_path):
     index = BM25Index()
     index.build([make_chunk("d1", "refund policy")])
     assert index.search("zephyrous", k=5) == []
+
+
+# ── eager BM25 ───────────────────────────────────────────────────────────
+
+def _parity_corpus():
+    return [
+        make_chunk("d0", "refund policy refund window refund"),
+        make_chunk("d1", "shipping rates and delivery windows for orders"),
+        make_chunk("d2", "refund refund refund policy policy"),
+        make_chunk("d3", "account security and password reset"),
+        make_chunk("d4", "the quick brown fox jumps over the lazy dog"),
+        make_chunk("d5", "refund policy shipping rates account security"),
+    ]
+
+
+def test_eager_bm25_ranks_identically_to_bm25():
+    docs = _parity_corpus()
+    plain = BM25Index(stem=True)
+    plain.build(docs)
+    eager = EagerBM25Index(stem=True)
+    eager.build(docs)
+    for query in ("refund policy", "shipping rates windows", "security password",
+                  "quick fox", "refund", "nonexistentterm", "the and of"):
+        expected = [(h.chunk_id, round(h.score, 9)) for h in plain.search(query, k=6)]
+        got = [(h.chunk_id, round(h.score, 9)) for h in eager.search(query, k=6)]
+        assert got == expected, f"mismatch for {query!r}: {got} != {expected}"
+
+
+def test_eager_bm25_matches_at_several_depth_cuts():
+    docs = _parity_corpus()
+    plain = BM25Index(stem=False)
+    plain.build(docs)
+    eager = EagerBM25Index(stem=False)
+    eager.build(docs)
+    for k in (1, 3, 6):
+        assert [h.chunk_id for h in eager.search("refund policy", k=k)] == \
+               [h.chunk_id for h in plain.search("refund policy", k=k)]
+
+
+def test_eager_bm25_survives_a_save_and_load(tmp_path):
+    docs = _parity_corpus()
+    eager = EagerBM25Index(stem=True)
+    eager.build(docs)
+    before = [(h.chunk_id, round(h.score, 9)) for h in eager.search("refund policy", k=6)]
+    eager.save(tmp_path / EAGER_LEXICAL_FILE)
+    loaded = EagerBM25Index.load(tmp_path / EAGER_LEXICAL_FILE)
+    after = [(h.chunk_id, round(h.score, 9)) for h in loaded.search("refund policy", k=6)]
+    assert after == before
+
+
+def test_eager_bm25_validates_k_and_handles_an_empty_index(tmp_path):
+    eager = EagerBM25Index()
+    assert eager.search("anything", k=3) == []
+    eager.build(_parity_corpus())
+    with pytest.raises(ValueError):
+        eager.search("refund", k=0)
+
+
+def test_eager_load_rejects_an_unsupported_version(tmp_path):
+    eager = EagerBM25Index()
+    eager.build(_parity_corpus())
+    eager.save(tmp_path / EAGER_LEXICAL_FILE)
+    meta_path = (tmp_path / EAGER_LEXICAL_FILE).with_suffix(
+        (tmp_path / EAGER_LEXICAL_FILE).suffix + ".meta.json"
+    )
+    payload = json.loads(meta_path.read_text())
+    payload["version"] = 999
+    meta_path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError):
+        EagerBM25Index.load(tmp_path / EAGER_LEXICAL_FILE)
+
+
+def test_resolved_lexical_backend_validates():
+    from laya_rag.config import EngineConfig
+
+    assert EngineConfig().resolved_lexical_backend == "bm25"
+    assert EngineConfig(lexical_backend="eager").resolved_lexical_backend == "eager"
+    with pytest.raises(ValueError):
+        EngineConfig(lexical_backend="turbo").resolved_lexical_backend
+
+
+def test_engine_builds_and_queries_with_the_eager_backend(tmp_path):
+    from laya_rag.engine import RagEngine
+    from tests.support import StubModel, make_config, write_corpus
+
+    config = make_config(tmp_path, dense_weight=1.0, rerank_k=3, lexical_backend="eager")
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    assert (config.index_dir / EAGER_LEXICAL_FILE).is_file()
+    assert engine.lexical is not None and len(engine.lexical) > 0
+
+    reloaded = RagEngine(make_config(tmp_path, lexical_backend="eager"), model=StubModel())
+    assert reloaded.lexical is not None
+    result = reloaded.query("How long does a refund take?")
+    assert result.passages
+    assert result.considered > 0

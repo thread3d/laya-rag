@@ -164,6 +164,22 @@ class EngineConfig:
     # existing unstemmed index keeps working and its queries stay unstemmed.
     lexical_stem: bool = field(default_factory=lambda: _env_bool("LEXICAL_STEM", True))
 
+    # Which BM25 implementation the lexical channel uses. "bm25" is the historical
+    # per-document postings index; "eager" precomputes each posting's final weight and
+    # scores with vectorised NumPy accumulation. The ranking is identical for the same
+    # k1/b/stem/stopword settings (pinned by tests and a parity bench); "eager" trades a
+    # slightly larger build for far less per-query Python and a smaller resident index.
+    lexical_backend: str = field(default_factory=lambda: _env("LEXICAL_BACKEND") or "bm25")
+
+    @property
+    def resolved_lexical_backend(self) -> str:
+        value = (self.lexical_backend or "").strip().lower()
+        if value in {"bm25", "eager"}:
+            return value
+        raise ValueError(
+            f"{ENV_PREFIX}LEXICAL_BACKEND must be 'bm25' or 'eager', got {self.lexical_backend!r}"
+        )
+
     # Reciprocal-rank-fusion weights. Plain RRF assumes the two channels are
     # comparably good; measured, they are not. Laya's mean-pooled encoder scores
     # nDCG@10 ~0.014 on BEIR where BM25 scores ~0.654, and every non-zero dense weight

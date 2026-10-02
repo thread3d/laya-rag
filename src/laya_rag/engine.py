@@ -27,7 +27,13 @@ from .chunking import DEFAULT_EXTENSIONS, MAX_FILE_BYTES, chunk_documents, load_
 from .compose import Composer
 from .config import EngineConfig
 from .index_store import Hit, VectorIndex, wipe
-from .lexical import LEXICAL_FILE, BM25Index, reciprocal_rank_fusion
+from .lexical import (
+    EAGER_LEXICAL_FILE,
+    LEXICAL_FILE,
+    BM25Index,
+    EagerBM25Index,
+    reciprocal_rank_fusion,
+)
 from .model import BiEncoderModel, CrossEncoderModel, LayaModel
 from .rerank import ANSWERABILITY_QUESTION, LayaReranker
 from .trust import TrustManifest, filter_candidates
@@ -446,10 +452,15 @@ class RagEngine:
                     except (OSError, ValueError, KeyError):
                         self._lexical = None
             else:
-                path = self.config.index_dir / LEXICAL_FILE
+                if self.config.resolved_lexical_backend == "eager":
+                    path = self.config.index_dir / EAGER_LEXICAL_FILE
+                    loader = EagerBM25Index.load
+                else:
+                    path = self.config.index_dir / LEXICAL_FILE
+                    loader = BM25Index.load
                 if path.is_file():
                     try:
-                        self._lexical = BM25Index.load(path)
+                        self._lexical = loader(path)
                     except (OSError, ValueError, KeyError):
                         # A stale or damaged lexical index must not break vector search;
                         # the engine degrades to dense-only recall.
@@ -635,9 +646,14 @@ class RagEngine:
         index.save(self.config.index_dir)
         # The lexical channel is rebuilt from the full chunk set so it always
         # matches the vector index exactly.
-        lexical = BM25Index(stem=self.config.lexical_stem)
-        lexical.build(index.chunks)
-        lexical.save(self.config.index_dir / LEXICAL_FILE)
+        if self.config.resolved_lexical_backend == "eager":
+            lexical = EagerBM25Index(stem=self.config.lexical_stem)
+            lexical.build(index.chunks)
+            lexical.save(self.config.index_dir / EAGER_LEXICAL_FILE)
+        else:
+            lexical = BM25Index(stem=self.config.lexical_stem)
+            lexical.build(index.chunks)
+            lexical.save(self.config.index_dir / LEXICAL_FILE)
         self._lexical = lexical
         report.save_seconds = time.perf_counter() - save_started
 
