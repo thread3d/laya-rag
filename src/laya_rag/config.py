@@ -200,6 +200,13 @@ class EngineConfig:
     # embedder, which is the only case where the dense channel earns a weight.
     # -1 means auto; anything >= 0 is used verbatim.
     dense_weight: float = field(default_factory=lambda: _env_float("DENSE_WEIGHT", -1.0))
+    # Reciprocal-rank-fusion constant for the first stage (dense + lexical). Lower values
+    # weight the very top of each ranking more heavily. Full 2,255-query MultiHop
+    # measurement: `k=5` beats the historical default 60 on MAP@10 by
+    # +0.0040 [+0.0012, +0.0069] (p=0.008), with a non-significant Hits@10 cost
+    # (-0.0053, p=0.10) — and the harness that produced the MultiHop numbers already used
+    # 5, so this aligns the engine with its own measurement.
+    fusion_k: int = field(default_factory=lambda: _env_int("FUSION_K", 5))
     # Approximate dense search. The exact scan is fast to a few hundred thousand vectors and
     # linear after that; tools/ann_bench.py measures the recall/latency trade. Off by
     # default so small corpora keep exact results.

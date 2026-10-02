@@ -380,3 +380,41 @@ def test_adjudicate_claims_reuses_the_embedding_cache(tmp_path):
     engine.adjudicate_claims([claim], retrieve_k=3)
     # The claim is embedded once; the second adjudication reuses the cached vector.
     assert embedder.one_calls - before == 1
+
+
+# -- fusion constant ---------------------------------------------------------
+
+class _FakeIndex:
+    def __init__(self, ids):
+        self._ids = set(ids)
+
+    def get(self, chunk_id):
+        if chunk_id not in self._ids:
+            return None
+        from types import SimpleNamespace
+
+        return SimpleNamespace(chunk_id=chunk_id, text="text")
+
+
+def test_fusion_constant_defaults_to_the_measured_five():
+    from laya_rag.config import EngineConfig
+
+    config = EngineConfig()
+    assert config.fusion_k == 5
+    assert config.as_dict()["fusion_k"] == 5
+
+
+def test_fuse_respects_the_rrf_constant():
+    from types import SimpleNamespace
+
+    # `a` is rank 1 in one channel; `m` is rank 3 in both. At k=0 the single top hit
+    # wins; at k>=2 the twice-mid-ranked document wins. This is what the constant tunes.
+    dense = [SimpleNamespace(chunk=SimpleNamespace(chunk_id=i)) for i in ("a", "b", "m")]
+    lexical = [SimpleNamespace(chunk_id=i) for i in ("z", "c", "m")]
+    index = _FakeIndex({"a", "b", "m", "z", "c"})
+
+    order0 = [hit.chunk.chunk_id for hit in RagEngine._fuse(index, dense, lexical, limit=2, rrf_k=0)]
+    order5 = [hit.chunk.chunk_id for hit in RagEngine._fuse(index, dense, lexical, limit=2, rrf_k=5)]
+
+    assert order0[0] == "a"
+    assert order5[0] == "m"

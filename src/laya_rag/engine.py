@@ -941,6 +941,7 @@ class RagEngine:
         dedup_threshold: float = 0.0,
         coverage_lambda: float = 0.0,
         coverage_redundancy: bool = True,
+        rrf_k: int = 60,
     ) -> list[Hit]:
         """Fuse dense and lexical rankings into one candidate list.
 
@@ -964,7 +965,7 @@ class RagEngine:
         # candidates, so the fused pool is wider than the returned candidate list.
         pool = limit * 3 if (dedup_threshold > 0.0 or coverage_lambda > 0.0) else limit
         fused = reciprocal_rank_fusion(
-            [dense_ids, lexical_ids], limit=pool, weights=[dense_weight, lexical_weight]
+            [dense_ids, lexical_ids], k=rrf_k, limit=pool, weights=[dense_weight, lexical_weight]
         )
         if coverage_lambda > 0.0:
             fused = _coverage_select(index, fused, limit, coverage_lambda,
@@ -1152,6 +1153,7 @@ class RagEngine:
                 dedup_threshold=self.config.recall_dedup_threshold,
                 coverage_lambda=self.config.recall_coverage_lambda,
                 coverage_redundancy=self.config.recall_coverage_redundancy,
+                rrf_k=self.config.fusion_k,
             )
             if trust_active:
                 before = len(hits)
