@@ -924,7 +924,8 @@ laya-rag/
 │                          answerability_train.py, answerability_features.py,
 │                          adversarial_audit.py, bright.py, beir_atom_channel.py,
 │                          context_prefix_eval.py, bench_lexical.py
-├── docs/                  generated figures plus the per-topic findings documents
+├── docs/                  generated figures, `FINDINGS.md` (the index of every measured
+│                          result), and the per-topic findings documents
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)

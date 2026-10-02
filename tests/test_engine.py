@@ -370,3 +370,13 @@ def test_query_cache_is_bounded(tmp_path):
     engine.query("beta question about shipping")
     engine.query("alpha question about refunds")  # evicted by the second query
     assert embedder.one_calls - before == 3
+
+
+def test_adjudicate_claims_reuses_the_embedding_cache(tmp_path):
+    engine, embedder = _cached_engine(tmp_path)
+    claim = "refunds are processed within five business days"
+    before = embedder.one_calls
+    engine.adjudicate_claims([claim], retrieve_k=3)
+    engine.adjudicate_claims([claim], retrieve_k=3)
+    # The claim is embedded once; the second adjudication reuses the cached vector.
+    assert embedder.one_calls - before == 1

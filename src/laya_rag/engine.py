@@ -1114,7 +1114,14 @@ class RagEngine:
         if lexical is None:
             dense_weight = 1.0
         use_dense = dense_weight != 0.0
-        vectors = np.asarray(self.embedder.embed(cleaned), dtype=np.float32) if use_dense else None
+        # Reuse the query-embedding cache: claims repeat across adjudications (a composed
+        # answer is re-checked when its evidence changes) and a claim identical to a prior
+        # query reuses that vector too. Same vectors as `embed`, just not re-embedded.
+        vectors = (
+            np.asarray([self._query_vector(claim) for claim in cleaned], dtype=np.float32)
+            if use_dense
+            else None
+        )
         trust_manifest = self.trust_manifest
         min_trust = (self.config.query_min_trust or "").strip()
         acl_active = trust_manifest is not None and trust_manifest.acl_enabled
