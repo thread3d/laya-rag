@@ -67,6 +67,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--tag", default="base", help="names the index directory and outputs")
     ap.add_argument("--min-docs", type=int, default=0,
                     help="promote the best passage of this many distinct documents first")
+    ap.add_argument("--rerank-model", default=None,
+                    help="cross-encoder used as the second stage")
+    ap.add_argument("--rerank-coverage-lambda", type=float, default=None,
+                    help="explicit coverage weight; omit to use the engine's auto default")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None, help="cap the number of test queries")
     ap.add_argument("--out", default=str(ROOT / "eval" / "engine-beir"))
@@ -87,6 +91,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ["LAYA_RAG_RERANK_MIN_DOCS"] = str(args.min_docs)
     else:
         os.environ.pop("LAYA_RAG_RERANK_MIN_DOCS", None)
+    if args.rerank_model:
+        os.environ["LAYA_RAG_RERANK_MODEL"] = args.rerank_model
+    else:
+        os.environ.pop("LAYA_RAG_RERANK_MODEL", None)
+    if args.rerank_coverage_lambda is not None:
+        os.environ["LAYA_RAG_RERANK_COVERAGE_LAMBDA"] = str(args.rerank_coverage_lambda)
+    else:
+        os.environ.pop("LAYA_RAG_RERANK_COVERAGE_LAMBDA", None)
     if args.sparse:
         os.environ["LAYA_RAG_SPARSE_MODEL"] = args.sparse_model
     else:
