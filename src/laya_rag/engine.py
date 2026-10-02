@@ -851,7 +851,7 @@ class RagEngine:
         # recall budget on distinct facts *after* the second stage has scored, which
         # measured better than a full CE re-sort. It reorders the pool, so the reranker
         # must preserve that order rather than re-sort by the score again.
-        lambda_ = self.config.rerank_coverage_lambda
+        lambda_ = self.config.resolved_rerank_coverage_lambda
         if cross_scores is not None and lambda_ > 0.0 and candidates:
             pairs = [(hit.chunk.chunk_id, float(score)) for hit, score in zip(candidates, cross_scores)]
             selected = _coverage_select_from(

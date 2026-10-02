@@ -59,12 +59,14 @@ the plain CE order on MAP@10 (0.2893, ns), and the blends only matched it.
 
 ## What shipped
 
-`RERANK_COVERAGE_LAMBDA` (default `0.0`) in `src/laya_rag/config.py`, wired into
-`RagEngine.query`: when a cross-encoder is configured and the value is positive, the
+`RERANK_COVERAGE_LAMBDA` (**default `auto`**) in `src/laya_rag/config.py`, wired into
+`RagEngine.query`: when a cross-encoder is configured and the value resolves positive, the
 candidate pool is reordered by `_coverage_select_from` using the cross-encoder score as
 relevance, and the reranker preserves that order (`order="recall"`) instead of re-sorting
-by the score. It is off by default, so nothing changes unless it is set; the measured
-setting is **0.7**.
+by the score. `auto` resolves to the measured **0.7 when a `RERANK_MODEL` is set** and to
+`0.0` otherwise — the same shape `DENSE_WEIGHT` and `RERANK_ORDER` already use — so a caller
+who configures a second stage gets the measured-best configuration without setting anything
+else; an explicit `0.0` still disables it.
 
 ## Document quota, and the combined rule
 

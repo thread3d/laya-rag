@@ -270,17 +270,26 @@ class EngineConfig:
     rerank_blend: float = field(default_factory=lambda: _env_float("RERANK_BLEND", 1.0))
 
     # Coverage selection over the cross-encoder-scored pool. When a cross-encoder is
-    # configured and this is > 0, the candidate pool is reordered by sentence-atom
+    # configured and this resolves > 0, the candidate pool is reordered by sentence-atom
     # max-coverage using the cross-encoder score as the relevance term, before the
     # relevance filter and the top-k cut. Measured against a full cross-encoder re-sort,
     # first on the deterministic 400-query subset (MAP@10 0.2986 -> 0.3206 at lam 0.7)
     # and then confirmed on the full 2,255-query protocol: MAP@10 0.2948 -> 0.3165
     # (+0.0217 [+0.0190, +0.0242], p=0.0005) and Hits@4 0.7348 -> 0.7694
-    # (+0.0346 [+0.0235, +0.0457]). 0.0 disables it, so the shipped order is unchanged
-    # unless a CE is configured and this is set. Recommended setting: 0.7.
+    # (+0.0346 [+0.0235, +0.0457]). -1 means auto: 0.7 when a cross-encoder is configured
+    # (the measured setting, and the same "auto" shape DENSE_WEIGHT/RERANK_ORDER use) and
+    # 0.0 otherwise, so a caller who configures a second stage gets the measured-best
+    # configuration by default; >= 0 is used verbatim, so 0.0 still disables it explicitly.
     rerank_coverage_lambda: float = field(
-        default_factory=lambda: _env_float("RERANK_COVERAGE_LAMBDA", 0.0)
+        default_factory=lambda: _env_float("RERANK_COVERAGE_LAMBDA", -1.0)
     )
+
+    @property
+    def resolved_rerank_coverage_lambda(self) -> float:
+        """The coverage weight actually used: explicit, or 0.7 auto with a cross-encoder."""
+        if self.rerank_coverage_lambda >= 0.0:
+            return self.rerank_coverage_lambda
+        return 0.7 if (self.rerank_model or "").strip() else 0.0
     # Document quota for the coverage pass above: the first N selections are the best
     # cross-encoder candidate of distinct documents, then coverage fills the rest. This
     # stops one article occupying the top-k with overlapping chunks, which is the
@@ -376,6 +385,8 @@ class EngineConfig:
         out["dense_weight_resolved"] = self.resolved_dense_weight
         # The overlap is clamped below `chunk_chars`; report the value actually used.
         out["chunk_overlap_resolved"] = self.resolved_chunk_overlap
+        # `rerank_coverage_lambda` is -1 to mean "auto"; report what auto resolved to.
+        out["rerank_coverage_lambda_resolved"] = self.resolved_rerank_coverage_lambda
         return out
 
     def ensure_dirs(self) -> None:

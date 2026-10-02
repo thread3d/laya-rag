@@ -307,7 +307,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `RERANK_MODEL` | unset | retrieval-trained cross-encoder that orders and filters evidence; Laya still gates |
 | `RERANK_ORDER` | `auto` | `auto` orders by the scorer when `RERANK_MODEL` is set and keeps recall order otherwise; or force `recall` / `relevance` |
 | `RERANK_BLEND` | `1.0` | how far a supplied second stage may move the first-stage order, in `[0, 1]`; `1.0` replaces it (historical), below it is fused so the second stage nudges rather than overrides |
-| `RERANK_COVERAGE_LAMBDA` | `0.0` | sentence-atom coverage reordering over the cross-encoder-scored pool; `0.7` is the measured setting (full-protocol MAP@10 0.2948 → 0.3165, Hits@4 0.7348 → 0.7694), `0.0` disables it and needs a `RERANK_MODEL` |
+| `RERANK_COVERAGE_LAMBDA` | `auto` | sentence-atom coverage reordering over the cross-encoder-scored pool; `auto` is `0.7` when `RERANK_MODEL` is set (the measured setting: full-protocol MAP@10 0.2948 → 0.3165, Hits@4 0.7348 → 0.7694) and `0.0` otherwise; an explicit `0.0` disables it |
 | `RERANK_COVERAGE_MIN_DOCS` | `0` | seed the coverage pass with the best candidate of this many distinct documents; `3` adds +0.0027 MAP@10 over coverage alone but costs −0.0106 Hits@4, so it is a MAP-priority option |
 | `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
 | `CLAIM_MAX` | `25` | claims adjudicated per answer, so one long answer cannot run unbounded |
