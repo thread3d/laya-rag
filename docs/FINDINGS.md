@@ -26,6 +26,7 @@ are what stops the next pass from re-trying them.
 | Adversarial audit | Nine deterministic checks (poison exclusion, gold retention, negative rejection, injection flags, tenant isolation) run in `make adversarial-audit --check` | [findings-adversarial-audit.md](findings-adversarial-audit.md) |
 | Structural context prefix | Indexing a breadcrumb lifts MRR **0.6429 → 0.8333** on the vendored docs, with no query worse | [findings-context-prefix.md](findings-context-prefix.md) |
 | BRIGHT retrieval | Six subsets, macro mean nDCG@10: hybrid **0.1436** > BM25 0.1324 > dense 0.0991; dense alone is significantly worse than BM25 on pony and biology | [findings-bright.md](findings-bright.md) |
+| Encoder distillation | The 3-model ensemble (478M) distils into one 33M `bge-small`: NFCorpus **0.3385 → 0.3505** (+0.0120 [+0.0022, +0.0216], significant), recovering ~29% of the ensemble's +0.0413 — adapted, not zero-shot | [findings-distillation.md](findings-distillation.md) |
 
 ## Recorded negatives
 

@@ -23,6 +23,7 @@ GATE_ARGS ?=
 RECALIBRATE_ARGS ?=
 ROUTING_ARGS ?=
 FINETUNE_ARGS ?=
+DISTILL_EVAL_ARGS ?=
 ONDISK_ARGS ?=
 ANSWERABILITY_ARGS ?=
 DIAGNOSTICS_ARGS ?=
@@ -37,7 +38,7 @@ ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune ondisk bench-lexical adversarial-audit charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval ondisk bench-lexical adversarial-audit charts lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -71,6 +72,7 @@ help:
 	@echo "multihop-answerability  fit and score the feature-based answerability gate"
 	@echo "beir-routing per-corpus channel selection, measured out of sample"
 	@echo "finetune     in-domain domain adaptation (adapted, not zero-shot)"
+	@echo "distill-eval  distilled student vs zero-shot vs teacher ensemble"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -228,6 +230,10 @@ beir-routing:
 # Domain-adapted fine-tuning; results are labelled adapted, never zero-shot.
 finetune:
 	OMP_NUM_THREADS=16 $(PY) tools/finetune.py $(FINETUNE_ARGS)
+
+# Evaluate a distilled student against its zero-shot self and the teacher ensemble.
+distill-eval:
+	$(PY) tools/distill_eval.py $(DISTILL_EVAL_ARGS)
 
 # On-disk postings + streaming dense index, the route to the large BEIR corpora.
 ondisk:

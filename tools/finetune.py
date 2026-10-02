@@ -37,6 +37,32 @@ sys.path.insert(0, str(ROOT / "src"))
 import beir  # noqa: E402
 import evalkit  # noqa: E402
 from laya_rag.index_store import VectorIndex  # noqa: E402
+from laya_rag.lexical import reciprocal_rank_fusion  # noqa: E402
+
+
+def ensemble_positive_pairs(
+    corpus: dict[str, str],
+    queries: dict[str, str],
+    teacher_rankings: dict[str, dict[str, list[str]]],
+    per_query: int,
+) -> list[tuple[str, str]]:
+    """``(query, document)`` pairs from the teachers' RRF-fused top documents.
+
+    Distillation supervision: instead of the train qrels, the student learns to retrieve
+    what an ensemble of teachers already ranks highly. Each teacher is one dense channel;
+    fusing them by rank needs no score calibration between models. Deterministic.
+    """
+    teachers = list(teacher_rankings)
+    pairs: list[tuple[str, str]] = []
+    for query_id, text in queries.items():
+        channels = [teacher_rankings[name].get(query_id, []) for name in teachers]
+        if not any(channels):
+            continue
+        merged = reciprocal_rank_fusion(channels, k=5, limit=per_query, weights=[1.0] * len(channels))
+        for doc_id, _score in merged:
+            if doc_id in corpus:
+                pairs.append((text, corpus[doc_id]))
+    return pairs
 
 
 def training_pairs(
@@ -146,6 +172,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", default=str(ROOT / "eval" / "finetune"))
     parser.add_argument("--save-model", default=str(ROOT / "eval" / "finetuned-model"))
     parser.add_argument("--resume", default=None, help="checkpoint to continue training from")
+    parser.add_argument("--teacher-models", default="",
+                        help="comma list of bi-encoders to distil from: their RRF-fused top "
+                             "documents become the training positives instead of the qrels")
+    parser.add_argument("--teacher-positives", type=int, default=3,
+                        help="positive documents per train query taken from the teachers")
     parser.add_argument("--device", default=None)
     return parser.parse_args(argv)
 
@@ -161,11 +192,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     test_qrels = beir.load_qrels(dataset_dir, split="test")
     test_queries = {qid: text for qid, text in queries.items() if qid in test_qrels}
     all_pairs = training_pairs(queries, train_qrels, corpus, 0)
+    train_queries = {qid: text for qid, text in queries.items() if qid in train_qrels}
     print(
         f"{args.dataset}: {len(corpus)} documents, {len(all_pairs)} train pairs, "
         f"{len(test_queries)} test queries",
         flush=True,
     )
+
+    # Optional distillation: mine the teachers' fused top documents as positives. The
+    # document embeddings for the shipped teachers are already cached, so this is one
+    # query-embedding pass per teacher, not a corpus re-embed.
+    teacher_models = [m.strip() for m in (args.teacher_models or "").split(",") if m.strip()]
+    teacher_rankings: dict[str, dict[str, list[str]]] = {}
+    for model_id in teacher_models:
+        teacher = beir.BiEncoder(model_id)
+        cache = ROOT / "eval" / "beir" / "cache" / f"{args.dataset}.{teacher.name}"
+        vectors = beir.cached_embed(teacher, corpus, cache)
+        teacher_rankings[model_id] = beir.dense_rankings(
+            corpus, train_queries, teacher, vectors, args.top_k, fixed_length=True
+        )
+        print(f"  teacher {model_id} ranked {len(train_queries)} train queries", flush=True)
 
     import torch
     from sentence_transformers import InputExample, SentenceTransformer, losses
@@ -191,7 +237,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         report["zero_shot"] = zero_shot_metrics
         print(f"  zero-shot nDCG@10 {zero_shot_metrics['nDCG@10']:.4f}", flush=True)
 
-    pairs = training_pairs(queries, train_qrels, corpus, args.max_pairs)
+    if teacher_rankings:
+        pairs = ensemble_positive_pairs(
+            corpus, train_queries, teacher_rankings, args.teacher_positives
+        )
+        print(f"  distilling from {len(teacher_rankings)} teachers -> {len(pairs)} pairs", flush=True)
+    else:
+        pairs = training_pairs(queries, train_qrels, corpus, args.max_pairs)
     examples = [InputExample(texts=[query, document]) for query, document in pairs]
     loader = DataLoader(examples, shuffle=True, batch_size=args.batch_size)
     objectives: list[tuple[Any, Any]] = [(loader, losses.MultipleNegativesRankingLoss(model))]
@@ -218,6 +270,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ))
     report["train_pairs"] = len(pairs)
     report["hard_negatives"] = len(triplets)
+    report["teacher_models"] = teacher_models
 
     started = time.perf_counter()
     model.fit(
