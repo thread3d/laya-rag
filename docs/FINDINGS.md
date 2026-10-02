@@ -63,6 +63,15 @@ are what stops the next pass from re-trying them.
   under fixed chunking but only **+0.0048** (ns) once corpus-aware chunking is the default —
   both recover the same chunked-representation loss. Report each increment against the current
   default, never as a sum.
+- **Engine-level coverage is uneven.** `tools/engine_beir.py` measures the engine itself on
+  BEIR; the MultiHop rows still come from the 256-character harness
+  (`tools/multihop_official.py` and friends), so the engine's multi-hop retrieval under its own
+  corpus-aware chunking is **not measured**. That is the largest known gap in the evidence, and
+  it is stated rather than papered over.
+- **Verification.** `make test` is 746 offline tests and `make test-real` is 4 end-to-end tests
+  against the real checkpoint (checkpoint load and embed, Laya relevance beating cosine on a
+  probe, answerability gating, full pipeline retrieving the right file). Both pass under the
+  current defaults.
 - **Report the pool-reorder ceiling and fact recall** beside any reranking result, so a
   selection gain is never confused with a recall gain.
 - **Use grouped splits** for transfer claims; a random half reuses the same question types.

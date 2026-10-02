@@ -373,7 +373,7 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (655 tests)
+make test          # Python suite, offline, deterministic (746 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 ```
