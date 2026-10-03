@@ -20,14 +20,14 @@ Quoted from `RESEARCH.md` §1 and `IMPROVEMENTS.md`; not re-derived:
 | axis | bar to beat | why |
 | --- | --- | --- |
 | MultiHop-RAG MAP@10 | **0.2986** (the repo's own reranked 400-query subset) | the 0.479 comparison is a *reranked* published number; 0.2835 is the un-reranked baseline |
-| MultiHop-RAG pool-reorder oracle | **0.7307** at depth 100 `[repo]` | the gold evidence is *already in the pool*; the surviving loss is selection + set-construction |
+| MultiHop-RAG pool-reorder oracle | **0.609** at depth 100 `[repo]`, corrected 2026-10-03 (was 0.7307) | 36% of depth-100 pools lack a gold fact and the ceiling rises to 0.659 at depth 500, so the loss is **recall *and* set-construction** |
 | BEIR retrieval (5 datasets) | 0.452 single / **0.495** 3-model ensemble | already above published BGE-large; cost, not quality |
 | Answerability out of domain | scalar AUC 0.51; in-domain feature gate **0.815** | no portable calibrated abstention |
 | Cross-encoder | −0.027…−0.318 BEIR; **+0.0464** MultiHop | route it, never global |
 
 **Two structural facts the survey states and this pass sharpens:**
 
-1. **The 0.7307 ceiling is a *top-100 reordering* ceiling, not a corpus ceiling.** Every
+1. **The reorder ceiling (0.7307 when this was written; 0.609 corrected) is a *top-100 reordering* ceiling, not a corpus ceiling.** Every
    objective shipped so far — `facility_location_select`, `doc_quota_select`,
    `cluster_dedup_select` `[repo]` — consumes the fused pool and reorders it. None of them can
    admit a passage the *topical* first stage never retrieved. That is why "the gap is selection,
@@ -134,7 +134,7 @@ its *headline gap*, and because it is falsifiable in one harness run.
 > better than a wrong bridge, and still worse than a trained cross-encoder. Both halves of that
 > sentence are the result.
 
-### 2.2 DISCo — coverage as an *index*, which is how you escape the 0.7307 ceiling `[full text]`
+### 2.2 DISCo — coverage as an *index*, which is how you escape the reorder ceiling `[full text]`
 
 [Nair et al., *DISCo: A Dense Subset Index for Collective Query Coverage*, ICLR 2026](https://k-rt-k.github.io/DISCo/).
 
@@ -148,7 +148,7 @@ size. On MS-MARCO (8.8M) it matches greedy coverage **>100× faster**; on Hotpot
 and exact greedy on coverage error and MAP-on-gold.
 
 Why this matters specifically here: the repo's best coverage result (0.2850) is a *re-ranking* of
-a topically-built top-100, so it is capped at 0.7307. DISCo's formulation lets the coverage
+a topically-built top-100, so it is capped at the reorder ceiling. DISCo's formulation lets the coverage
 objective **build** the pool, which is the only measured route past that cap. Two honest
 constraints:
 
@@ -181,7 +181,9 @@ it is to ask whether Laya's own checkpoint exposes token states that a MaxSim he
 >   int8) against ~3 KB for one pooled vector, a **337×** multiplier.
 >
 > So DISCo's indexed collective-coverage objective is closed as a route for this engine, for two
-> independent reasons. The ceiling it was meant to lift (0.7307 at depth 100) still stands, and
+> independent reasons. The ceiling it was meant to lift (0.609 corrected) still stands — but note that
+> the corrected ceiling *rises* with depth, so a cheaper recall-oriented route to lifting it (deepening
+> the first stage, hop-2 expansion) is now justified, and is where the next work belongs. The
 > the remaining levers are the cheap model-free ones plus the coverage objective already shipped.
 > This is the DISCo row of the capability matrix below, and it is why the late-interaction item
 > drops out of the programme rather than being rescheduled.
@@ -340,7 +342,7 @@ the model's, not the engine's).
 | # | item | tag | why |
 | --- | --- | --- | --- |
 | **3.1** | **MaxSim / late-interaction channel from Laya hidden states** (token-level embeddings, no mean pooling) — first *inspect whether the checkpoint exposes usable token states*, then a MaxSim head over the fused pool | `[offline]` probe → `[model]` | it is the enabling substrate for **3.2**, and the repo's own §4 open item; probe is hours |
-| **3.2** | **DISCo-style coverage index** — lifted-space marginal gain + random-projection feature map so each greedy coverage step is an ANN probe; pool *built* by coverage, not reordered | `[gpu]`/`[dep]` at scale; the objective itself is a code change | the only measured route past the **0.7307** reorder ceiling |
+| **3.2** | **DISCo-style coverage index** — lifted-space marginal gain + random-projection feature map so each greedy coverage step is an ANN probe; pool *built* by coverage, not reordered | `[gpu]`/`[dep]` at scale; the objective itself is a code change | the only measured route past the reorder ceiling (0.609 corrected; and since it *rises* with depth, cheaper recall-side routes now compete with it) |
 | 3.3 | **Compressed listwise head** over existing chunk vectors | `[model]`, small | set-aware scoring without an 8B reranker |
 | 3.4 | **Distil the 3-model ensemble into one packaged encoder**; submit to MTEB | `[model]` | converts "quality comes from stock components" into an owned, submittable model |
 | 3.5 | MuSiQue + 2WikiMultiHopQA replication of the coverage gain | `[data]` | the multi-hop headline rests on one dataset; highest-value falsification available |
@@ -370,7 +372,7 @@ the objective runs.
 6. **The ceiling (weeks).** Probe Laya token states (3.1); if usable, MaxSim then DISCo (3.2).
 
 Steps 1–5 need no GPU, no API, no download. Step 6's probe is hours; its payoff is the only
-measured path past 0.7307.
+measured path past the reorder ceiling (0.609 corrected).
 
 ---
 
@@ -393,9 +395,16 @@ token-level method and is blocked on a late-interaction representation the repo 
 ship. RRK's model is 8B and non-commercial.
 
 **The claims that are this document's own, and are testable in hours each:** that Laya can
-implement `s(q,b,c)` without an LLM; that the 0.7307 figure is a reorder ceiling rather than a
+implement `s(q,b,c)` without an LLM; that the reorder ceiling (0.7307 as quoted, 0.609 corrected) is a ceiling rather than a
 corpus ceiling and can only be moved by changing what the first stage *builds*; and that the
 system's strategic position is rare strengths plus cheap commodity gaps.
 
 **Nothing here was implemented.** The survey discipline stands: `docs/research/` briefs and
 verification memos stay separate from `IMPROVEMENTS.md` (diagnosis) and `PLAN.md` (execution).
+
+> **Correction, 2026-10-03.** The pool-reorder ceiling of 0.7307 this document builds on was
+> mis-normalised: it divided by the gold facts *the pool matched* rather than the query's true gold
+> count. Corrected it is **0.609** at depth 100, it **rises** with depth (0.659 at 500), and 36% of
+> depth-100 pools are missing a gold fact — so recall is a live lever, not a solved one. The bridge
+> argument below is unaffected (it was measured separately), but the "the pool already contains
+> everything" framing is not.

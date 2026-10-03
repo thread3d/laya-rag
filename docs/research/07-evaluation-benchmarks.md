@@ -36,7 +36,7 @@ Already present: paired bootstrap, ECE + reliability bins + threshold sweep, per
 3. *Evidence:* [Buckley & Voorhees, 2004](https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=150469) on pool bias; [Drowning in Documents, ReNeuIR 2025 @ SIGIR](https://arxiv.org/html/2411.11767) finds reranker quality **declines past an optimal scoring depth** on full retrieval. **Do not cite ICTIR 2025 "Shallow vs. Deep Relevance Judgments on BERT-based Reranking Models" here** — that paper is about *training-set* construction (shallow-judged training data can *improve* generalization), not evaluation-pool bias.
 4. *Cost:* reuse cached run/candidate files; add depth curves and a second pool built without the reranker's candidates; CPU-only.
 5. *Claim:* "the gain holds on a pool constructed without the reranker, and improves R@1000, not only MAP@10."
-6. *Falsify:* if gold support is not exhaustive at depth 1000 the ceiling is still a floor; bound it with the existing 0.7307 reorder oracle and say so.
+6. *Falsify:* if gold support is not exhaustive at depth 1000 the ceiling is still a floor; bound it with the reorder oracle (0.609 corrected, was 0.7307) and say so.
 
 **5. LLM-free nugget / claim-recall protocol for multi-hop**
 1. *What:* score partial support as retrieved-nugget coverage instead of single-gold MAP.
@@ -87,3 +87,9 @@ Already present: paired bootstrap, ECE + reliability bins + threshold sweep, per
 6. *Falsify:* judge–human agreement κ < 0.5 voids the number entirely.
 
 **Deprioritized:** "BEIR-hard" is not a canonical released artifact — the real successors are BRIGHT and FollowIR. LoTTE/LongEmbed test long-document and long-context embedding behaviour that 256-token chunking sidesteps. MTEB v2 and retrieval leaderboards compare checkpoint embeddings, not this pipeline ([MTEB v2](https://huggingface.co/blog/isaacchung/mteb-v2)). FRAMES ([2409.12941](https://arxiv.org/html/2409.12941v2)) and LegalBench-RAG ([2408.10343](https://arxiv.org/pdf/2408.10343)) are downloadable and CPU-feasible but rank below replication.
+
+> **Correction, 2026-10-03.** The ceiling quoted here (0.7307 at depth 100) divided the oracle AP by the
+> gold facts *the pool matched* rather than by the query's true gold count, which inflated it on exactly
+> the queries whose recall was failing. Corrected it is **0.609**, and it **rises** with depth
+> (0.397 / 0.609 / 0.659 at depth 10 / 100 / 500). 36% of depth-100 pools are missing a gold fact, so
+> recall is a live lever, not a solved one. See the README diagnostics subsection.

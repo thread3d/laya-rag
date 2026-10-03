@@ -2,7 +2,7 @@
 
 Scope: additions for `laya-rag`, grounded in its own numbers — fact loss when a fact exceeds the
 400-char overlap and spans >1 sentence; multi-hop MAP@10 **0.2835** against an oracle reorder
-ceiling of **0.7307** on the fused top-100 (`eval/benchmarks/multihop-rag/coverage-set.json`);
+ceiling of **0.7307** on the fused top-100 (corrected 2026-10-03 to **0.609**; see the note below);
 BEIR fused mean 0.452 / ensemble 0.495; passage-level indexing and pointwise CE reranking already
 measured and **rejected** on BEIR. The ceiling is the key fact: the binding constraint is
 **selection inside a strong first stage**, so recall-oriented additions must justify themselves
@@ -157,3 +157,9 @@ measured CE result. #3–#4 are representation bets the oracle ceiling argues ag
 scale/lexical plays with no measured quality gap behind them yet. Everything except #7 changes the
 candidate set or the index, so none preserves ranking parity by default — budget a re-index and a
 held-out paired bootstrap each.
+
+> **Correction, 2026-10-03.** The ceiling quoted here (0.7307 at depth 100) divided the oracle AP by the
+> gold facts *the pool matched* rather than by the query's true gold count, which inflated it on exactly
+> the queries whose recall was failing. Corrected it is **0.609**, and it **rises** with depth
+> (0.397 / 0.609 / 0.659 at depth 10 / 100 / 500). 36% of depth-100 pools are missing a gold fact, so
+> recall is a live lever, not a solved one. See the README diagnostics subsection.

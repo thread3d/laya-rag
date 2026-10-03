@@ -20,7 +20,8 @@ rescued); **retention is reachability, not answer quality**; and the MuSiQue den
 sub-result **did not survive** a sharper grounding signal (the filtering tax is the robust
 two-dataset core). Laya's relevance gate and your CE both pay this tax. (b) **Single-vector
 topical matching**: one query embedding matches the bridge entity, not the answer facts. Your
-own numbers already say recall is decent (Hits@10 0.864, pool ceiling 0.7307 at depth 100) — but
+own numbers said recall was decent (Hits@10 0.864, pool ceiling 0.7307 at depth 100 — **corrected to
+0.609**, which changes this premise: see the note at the end of this file) — but
 that ceiling is far below 1.0, so recall still bounds everything. Caveat throughout: published
 0.479 is reranked; your 0.2986 already exceeds 0.2835, so rank the list below against **0.2986**,
 not 0.2835.
@@ -63,7 +64,7 @@ Maturity: the LLM version is well-established —
 [IRCoT, ACL 2023](https://aclanthology.org/2023.acl-long.557/),
 [self-ask, 2022](https://arxiv.org/abs/2210.03350) — but the *generator-free* variant is a
 build, not a published system. · Cost: **days**, pure Python + existing index. · Hypothesis:
-pool ceiling 0.7307 → **0.78–0.82**, MAP@10 **+0.02 to +0.05**. · Falsify: measure ceiling at
+pool ceiling 0.609 → **0.70–0.75** (re-based), MAP@10 **+0.02 to +0.05**. · Falsify: measure ceiling at
 depths 100 and 500 before/after. If the ceiling moves but MAP does not, the problem is fully
 selection-side and item 1 subsumes this. Skeptical: this is adjacent to the BM25 PRF you already
 rejected — use *entity* terms (capitalised n-grams / noun chunks filtered by corpus DF), not raw
@@ -140,3 +141,9 @@ want trainable beam rerankers.
 entities and fusion), full re-sort cross-encoders (BEIR-negative, MultiHop-positive; keep it as a
 *filter*/blend), GraphRAG-style LLM community summaries on one CPU/MPS host (cost without
 multi-hop news evidence).
+
+> **Correction, 2026-10-03.** The ceiling quoted here (0.7307 at depth 100) divided the oracle AP by the
+> gold facts *the pool matched* rather than by the query's true gold count, which inflated it on exactly
+> the queries whose recall was failing. Corrected it is **0.609**, and it **rises** with depth
+> (0.397 / 0.609 / 0.659 at depth 10 / 100 / 500). 36% of depth-100 pools are missing a gold fact, so
+> recall is a live lever, not a solved one. See the README diagnostics subsection.

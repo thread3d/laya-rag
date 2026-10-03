@@ -79,7 +79,8 @@ Guiding rules:
 - Phase 1: done (blend, gate, trainer, measurement flag, stats). Answerability gate measured
   on 300 real MultiHop queries: held-out AUC **0.815** vs the scalar's **0.520**.
 - Phase 2: done. `facility-0.5` is the best pass at **MAP@10 0.2835** (held-out +0.0288 vs
-  0.2546), ahead of `cluster-dedup-0.9` (0.2790). Pool reorder ceiling **0.7307**.
+  0.2546), ahead of `cluster-dedup-0.9` (0.2790). Pool reorder ceiling **0.609** corrected
+  (0.7307 as reported then; the denominator used the pool's matched facts, not the true gold count).
 - Phase 3.1: done; Phase 5 on-disk backend + quantized ANN done.
 - Phase 4: flags done; SciDocs query instruction **0.1973 → 0.2052**; SPECTER pooling fix
   (`--biencoder-pooling cls`) added after the default mean pooling scored poorly.
@@ -104,4 +105,8 @@ Measured: the 290-character boundary fact is intact and retrieved at every split
 build peak RSS 1,045 MB → **453 MB** on a 30k × 200-token synthetic corpus at unchanged speed.
 Test suite: **481 passed, 4 deselected**.
 
-
+**Correction (2026-10-03).** The ceiling quoted as 0.7307 was mis-normalised — it divided by the gold
+facts the pool matched, not the query's true gold count — and is **0.609** corrected. It also *rises*
+with pool depth (0.659 at 500) rather than falling, and 36% of depth-100 pools are missing a gold
+fact. The conclusion below that the gap is purely selection therefore overstates it: recall is a live
+lever. See the README diagnostics subsection.

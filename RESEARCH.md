@@ -38,7 +38,7 @@ re-derived here.
 | BEIR retrieval (5 datasets) | 0.452 single `bge-small`+BM25; **0.495** 3-model ensemble | already above published BGE-large; headroom is cost, not quality |
 | MultiHop-RAG Hits@10 / Hits@4 | **0.864 / 0.712** with coverage dedup | already above every published row including reranked ones |
 | MultiHop-RAG MAP@10 | **0.2835**; **0.2986** with the reranker on the 400-query subset | the headline retrieval gap |
-| MultiHop pool-reorder oracle | **0.7307** at depth 100 | **the evidence is already retrieved; ordering / set-selection is the loss** |
+| MultiHop pool-reorder oracle | **0.609** at depth 100 (corrected, 2026-10-03) | the pool is **not** sufficient: 36% of queries lack a gold fact, and the ceiling rises to 0.659 at depth 500 |
 | Answerability, out of domain | AUC **0.51** scalar; in-domain feature gate **0.81** | no portable calibrated abstention |
 | Cross-encoder (BEIR vs MultiHop) | −0.027…−0.318 on BEIR; **+0.0464 MAP@10** on MultiHop | a second stage must be *routed*, not global |
 | Scale | 5 of 18 BEIR datasets buildable; BioASQ 14.9M blocked | ingestion is the wall, not query time |
@@ -48,15 +48,20 @@ re-derived here.
 
 **Two corrections to the usual framing, both important.**
 
-1. **The published 0.479 is a *reranked* number; the internal bar is now 0.2986.** The
-   repository's own `bge-reranker-base` row on the 400-query subset already reaches MAP@10
-   0.2986, above the 0.2835 that the README compares against 0.479. Any new proposal should
-   be judged against **0.2986**, not 0.2835 — otherwise a real regression can read as a gain.
-2. **The single most important number is 0.7307.** The fused top-100 already contains enough
-   gold evidence for an oracle reordering to reach MAP@10 0.7307. So the highest-value work
-   is not "retrieve more" and not "embed better" — it is **deciding which candidates to keep,
-   and how many distinct facts the kept set covers**. Most of the ranked list below points
-   there.
+1. **The published 0.479 is a *reranked* number; the internal bar is now 0.3280.** The
+   repository's own coverage-plus-quota rule on the 400-query subset reaches MAP@10 0.3280
+   (0.3192 on the full 2,255), above the 0.2986 the project quoted earlier. Any new proposal
+   should be judged against **0.3280**, not 0.2986 or 0.2835 — otherwise a real regression can
+   read as a gain.
+2. **The single most important number was 0.7307, and it was wrong.** It divided the oracle AP
+   by the gold facts *the pool happened to match* rather than by the query's true gold count —
+   the normalisation every rule it was compared against uses. The corrected reorder ceiling is
+   **0.609 at depth 100**, and because it was inflated precisely where recall fails, the
+   conclusion drawn from it was backwards: the ceiling **rises** with pool depth (0.397 → 0.609
+   → 0.659 at depth 10/100/500, each step significant), **36% of depth-100 pools are missing a
+   gold fact**, and roughly a third of the remaining headroom is **recall**, not selection.
+   "Retrieve more" is back on the table; "embed better" still is not. See
+   [`docs/research/08`](docs/research/08-frontier-2026.md) and the README diagnostics subsection.
 
 ---
 
@@ -104,7 +109,9 @@ This matters because **Laya's relevance filter and the cross-encoder are both ex
 operation.** It also explains the local numbers without any contradiction: the CE helps
 MultiHop on average (it promotes the first hop and some co-relevant passages) while still
 taxing the bridge; the coverage pass recovers some of the loss by spending slots on distinct
-facts. The oracle ceiling of 0.7307 is what remains after the tax.
+facts. The reorder ceiling that remains after the tax is **0.609** at depth 100 (corrected
+2026-10-03; the 0.7307 previously quoted here divided by the wrong gold count), and part of
+the residual is recall — 36% of depth-100 pools are missing a gold fact.
 
 The source's own honest limits, which bound the proposal: the rescue signal is **lexical**, so
 a second hop sharing no surface tokens with its first hop (pure paraphrase linkage) is not
@@ -189,7 +196,7 @@ none needs a GPU or an API. The number to beat is the repository's own best meas
 | 2.1 | **Late-interaction MaxSim channel** (`answerai-colbert-small-v1`, 33M) over the fused top-100; CPU-viable via [MUVERA](https://arxiv.org/abs/2405.19504) / [SLIM](https://arxiv.org/abs/2302.06587) rather than full PLAID | §3.2 distributed matching; the second hop | MAP@10 +0.01–0.03; near-zero on ArguAna | if on-the-fly MaxSim does not beat the pointwise CE on MultiHop, skip it |
 | 2.2 | **Relational stance reranker** (DeBERTa-v3-base-MNLI; score by contradiction−entailment) `[model]` | ArguAna's opposition relation — the one corpus a pointwise ranker cannot do | 0.568 → toward/above the dense 0.596 | if contradiction-only ordering loses to BM25 there, the hypothesis is wrong; 300–500-token docs may truncate the signal |
 | 2.3 | **Listwise reranker** (`jina-reranker-v3`, 0.6B, "last but not late"; **CC BY-NC 4.0, non-commercial**) `[model]` | set-aware comparative scoring; most likely single model to beat RRF on ArguAna while keeping multi-hop (its ArguAna nDCG@10 is 73.43) | hypothesis, not a citation: its self-reported 61.85–61.94 is a 13-dataset average, not comparable to the 5-set 0.452; no CPU/MPS benchmark is published | reproduce locally on the five sets + MultiHop before believing it |
-| 2.4 | **Generator-free hop-2 expansion from bridge entities** — mine salient entity phrases from top chunks that are absent from the query, issue as extra dense+BM25 queries, RRF-fuse | raises the candidate-pool ceiling itself | ceiling 0.7307 → 0.78–0.82 hypothesis | use *entity* terms, not raw top-doc terms, and fuse not replace — otherwise it reproduces the rejected BM25 PRF failure |
+| 2.4 | **Generator-free hop-2 expansion from bridge entities** — mine salient entity phrases from top chunks that are absent from the query, issue as extra dense+BM25 queries, RRF-fuse | raises the candidate-pool ceiling itself | ceiling 0.609 → 0.70–0.75 hypothesis (re-based on the corrected figure; the direction is now supported, since the ceiling *rises* with depth) | use *entity* terms, not raw top-doc terms, and fuse not replace — otherwise it reproduces the rejected BM25 PRF failure |
 | 2.5 | **Non-LLM entity graph + personalized PageRank** (spaCy NER/noun-chunk co-occurrence, scipy PPR) `[dep]` | associative hops; structurally different from RRF | ceiling +0.03–0.06 | if PPR over the depth-100 pool does not beat RRF on gold-fact coverage, the graph is noise; alias resolution is the real failure point |
 | 2.6 | **BM25S mmapped sparse lexical channel** `[dep]` | Python-dict postings; the documented 10M-doc lexical wall | published NQ 2M: 4.36 GB → **0.49 GB**; MSMARCO 8M: 10.21 → 1.14 GB ([repo](https://github.com/xhluca/bm25s), [arXiv 2407.03618](https://arxiv.org/html/2407.03618v1)) | top-100 diff — expect tie noise, not byte-identical; verify stemmer/stopword parity |
 | 2.7 | **On-disk term dictionary + tombstones via SQLite FTS5 (stdlib, no dep) or Tantivy** `[offline]`/`[dep]` | the term-dict + chunk-id list is the residual 10M-doc wall | near-zero resident postings; incremental delete | FTS5's own BM25/tokenizer changes rankings unless you keep your scoring over its postings |
@@ -360,7 +367,7 @@ paper — treat it as a hypothesis with a clear test in Tier 0.1).
 | [05](docs/research/05-security-privacy-robustness.md) | security, privacy, robustness | trust tiers + spotlighting + provenance-bound verification |
 | [06](docs/research/06-scale-storage-vector-search.md) | scale, storage, vector search | BM25S + on-disk term dict; FAISS RaBitQ + quantization |
 | [07](docs/research/07-evaluation-benchmarks.md) | evaluation, benchmarks, rigor | permutation + FDR; selective prediction; MuSiQue/2Wiki replication |
-| [08](docs/research/08-frontier-2026.md) | **frontier delta, 2026-10-03** | Laya as the bridge-conditioned tripartite judge `s(q,b,c)`; DISCo to escape the 0.7307 reorder ceiling; index-lifecycle integrity as a retrieval concern |
+| [08](docs/research/08-frontier-2026.md) | **frontier delta, 2026-10-03** | Laya as the bridge-conditioned tripartite judge `s(q,b,c)`; DISCo to escape the then-quoted 0.7307 reorder ceiling (now 0.609, and partly a recall gap); index-lifecycle integrity as a retrieval concern |
 
 **Verification memos** (the serial primary-source pass behind §7) live beside the briefs:
 [01 chunking](docs/research/verification/01-chunking-verification.md),

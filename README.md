@@ -776,30 +776,43 @@ Five things to take from this, and the first is the least flattering:
   (Hits@10 +0.027 [+0.009, +0.045]), but once BM25 is fused the difference vanishes:
   `bge-large` hybrid vs `bge-small` hybrid is Hits@10 **+0.008 [−0.004, +0.020]**, and `bge-base`
   hybrid is significantly *worse* on Hits@4. Fusion absorbs the encoder-quality gain.
-- **MAP@10 still loses to the published reranked rows (0.319 vs 0.479) — but the gap is
-  selection, and the pool proves it.** See the next subsection: at depth 500 the fused pool
-  contains **100%** of the gold facts, yet the best any reordering of it can reach is
-  MAP@10 0.674. The evidence is retrieved; ranking the *set* is what is hard.
+- **MAP@10 still loses to the published reranked rows (0.319 vs 0.479), and the gap is now known
+  to be *two* gaps.** See the next subsection: the achievable MAP@10 by reordering the fused pool
+  is **0.609** at depth 100 — well below the 0.730 this project previously quoted, because that
+  number divided by the wrong gold count. 36% of depth-100 pools are missing a gold fact, so
+  roughly a third of the remaining headroom is recall rather than ordering. Both levers are open.
 - **`bge-small` is not a fair proxy for the published `bge-large` row** — it is *better* on this
   protocol — so the published comparison is a real head-to-head rather than a suggestive one.
 
-#### Second-stage selection: the pool is not the problem
+#### Second-stage selection: how much headroom, and of what kind
 
 `tools/multihop_diagnostics.py` answers the question the whole programme depends on, over all
 2,255 queries:
 
 | depth | pool fact recall | best possible MAP@10 by reordering | second-hop retention |
 | --- | --- | --- | --- |
-| 10 | 0.475 | **0.732** | 0.241 |
-| 100 | 0.867 | **0.730** | 0.719 |
-| 500 | **1.000** | 0.674 | **1.000** |
+| 10 | 0.475 | 0.397 | 0.241 |
+| 100 | 0.867 | **0.609** | 0.719 |
+| 500 | **1.000** | **0.659** | **1.000** |
 
-- **Retrieving more is not the answer.** At depth 500 every gold fact is in the pool, so recall is
-  solved — and the achievable MAP@10 is *lower* than at depth 100, because a bigger pool gives the
-  selector more distractors to sort through. The fused top-100 is already the right pool.
-- **The second-hop tax is real and measured.** Second-hop facts are retained at 0.719 in the
-  depth-100 pool while first-hop facts are at 0.950. The hop linked only through a bridge entity
-  is what relevance-based selection discards.
+- **The ceiling rises with pool depth, and it is lower than previously reported.** Paired over
+  queries: depth 10 → 100 is **+0.2118 [+0.2037, +0.2203]** and 100 → 500 is **+0.0505
+  [+0.0468, +0.0544]**, both significant. An earlier version of this table reported 0.732 / 0.730
+  / 0.674 — apparently flat and then falling — because the ceiling divided by the number of gold
+  facts *the pool happened to match* while every rule it was compared against is scored by the
+  official metric, which divides by the query's true gold count. The two agree only when the pool
+  is complete, so the error inflated the ceiling on exactly the queries whose recall was failing.
+  Corrected (`pool_ceiling_map(..., gold_count=...)`, with a test pinning the difference), the
+  ceiling is **0.609 at depth 100** and it **rises** to 0.659 at depth 500.
+- **So recall is not solved: 36% of depth-100 pools are missing at least one gold fact.** Those
+  811 queries have a ceiling of **0.451** against the complete-pool queries' **0.695**, and the
+  fused order achieves 0.155 on them against 0.310 on the rest. Making every pool complete would
+  raise the overall ceiling from 0.609 to about 0.695 — roughly **a third of the remaining
+  headroom is recall, not ordering** — which is the opposite of what the old number implied.
+- **The second-hop tax is still real.** Second-hop facts are retained at 0.719 in the depth-100
+  pool while first-hop facts are at 0.950. The hop linked only through a bridge entity is what
+  relevance-based selection discards, and it is the specific recall gap a hop-2 expansion would
+  target.
 
 Against that ceiling, the selection rules, all on the same cached pool (`bge-reranker-base`,
 depth 100, `chunk_overlap=200`) and all paired against the fused baseline:
@@ -808,10 +821,20 @@ depth 100, `chunk_overlap=200`) and all paired against the fused baseline:
 | --- | --- | --- | --- |
 | fused first stage | 0.2546 | — | 0.6825 |
 | cross-encoder re-sort | 0.2948 | +0.0401 [+0.0321, +0.0484] | 0.7348 |
-| cross-encoder + sentence-atom coverage (`λ=0.7`) | 0.3165 | +0.0619 [+0.0537, +0.0701] | 0.7694 |
 | **coverage + a 3-document quota** | **0.3192** | **+0.0646 [+0.0560, +0.0734]** | 0.7588 |
+| cross-encoder + sentence-atom coverage (`λ=0.7`) | 0.3165 | +0.0619 [+0.0537, +0.0701] | 0.7694 |
+| fitted scorer over the cached channels (held-out half, 200 queries) | 0.3102 | — | 0.7300 |
 | lexical bridge-linked rescue (`β=0.3`) | 0.2780 | +0.0234 | 0.7126 |
 | rank-1 guardrail, then cross-encoder | 0.2882 | +0.0336 | 0.7530 |
+
+A note on the fitted scorer, because "learn the combination" is the obvious next idea and it was
+tested: on 200 held-out queries a logistic scorer over the cross-encoder logit, the fused
+position and the bridge-conditioned score reaches MAP@10 **0.3102**, against the hand-built
+`blend-0.75`'s **0.3081** (**+0.0022 [−0.0068, +0.0113]**, p=0.65) and the coverage-quota rule's
+**0.3155**. It beats the cross-encoder alone (+0.0141, p=0.07) and the fused order (+0.0422,
+p=0.001), but it does **not** beat the rules already measured — the gain over the cross-encoder is
+the blending that `RERANK_BLEND` already does, not something the fit added. `tools/multihop_ltr.py`,
+`make multihop-ltr`.
 
 - **Coverage is the lever, not ranking.** The cross-encoder alone is +0.040; making it serve a
   set objective that spends slots on *distinct facts*, with a document quota, is +0.065 — the new
@@ -947,15 +970,18 @@ should not be cited as a strength out of domain.
 - **Coverage on multi-hop queries.** MAP@10 **0.3192** against 0.479 published, after a
   coverage-plus-quota pass over cross-encoder scores lifts it **+0.0646 [+0.0560, +0.0734]**
   over the fused baseline (0.2546). It still finds *an* answer passage far more reliably than
-  *the set*. **The gap is selection, not recall, and that is now proven rather than assumed:**
-  at depth 500 the fused pool contains 100% of the gold facts, so an oracle reordering could
-  reach MAP@10 0.674 — lower than the 0.730 reachable from the depth-100 pool, because a bigger
-  pool gives the selector more distractors. Second-hop facts are retained at 0.719 in that pool
-  against 0.950 for first-hop facts, which is the mechanism the remaining work has to attack.
-  The published 0.479 is a *reranked* number; this engine's best reranked configuration is 0.3192
-  (`RERANK_COVERAGE_LAMBDA=0.7` plus a 3-document quota), held-out on the unseen half at 0.3302.
+  *the set*. **The gap is partly recall and partly selection, and the split is now measured:**
+  the achievable MAP@10 by reordering the fused pool is **0.609** at depth 100 (not the 0.730
+  quoted before — see the diagnostics subsection for the normalisation fix), and it **rises** to
+  0.659 at depth 500. **36% of depth-100 pools are missing at least one gold fact** (ceiling
+  **0.451** for those 811 queries against **0.695** for the complete ones), so making every pool
+  complete would add roughly **+0.086** to the ceiling — about a third of the remaining headroom.
+  Second-hop facts are retained at 0.719 in that pool against 0.950 for first-hop facts, which is
+  the specific recall gap a hop-2 expansion targets. The published 0.479 is a *reranked* number;
+  this engine's best reranked configuration is 0.3192 (`RERANK_COVERAGE_LAMBDA=0.7` plus a
+  3-document quota), held-out on the unseen half at 0.3302.
   Reports: `eval/benchmarks/multihop-rag/coverage-nored.json`, `coverage-set.json`,
-  `rerank-experiment-full.json`, `diagnostics.json`.
+  `rerank-experiment-full.json`, `diagnostics.json`, `ltr.json`.
 - **Answerability's shipped single scalar out of domain** — AUC 0.51 at the best, and a
   recalibration split fitted on MultiHop-RAG itself transfers at chance. The signal is not
   absent, though: a feature gate over the retrieval and evidence signals the engine already
