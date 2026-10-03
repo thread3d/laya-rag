@@ -168,7 +168,7 @@ already shown to overstate the engine by **0.0144**.
 | --- | --- | --- | --- | --- | --- |
 | 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + the CE-cache retrofit + `make job-status`; the remaining four tools are still un-retrofitted | kill/resume and shard/merge equivalence tests | done (retrofit partial) |
 | 1.2 | Engine-level MultiHop-RAG | `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes | **done on the 400-query subset** — engine **+0.0535 MAP@10 [+0.0387, +0.0680]** over the harness hybrid, level with its reranker (+0.0071, ns), still below covquota 0.3280; full 2,255 owed |
-| 1.3 | Engine-level MuSiQue | `tools/engine_multihop.py`, `tools/musique.py` | the same under the MuSiQue adapter, where the coverage gain was falsified | the per-corpus bar is stated, not averaged | pending |
+| 1.3 | Engine-level MuSiQue | `tools/engine_musique.py` | run `RagEngine` on the MuSiQue validation split under its own chunking, full corpus, queries optionally narrowed; pair MAP@10 against the harness by qid | the per-corpus bar is stated, not averaged | **done on 200 queries** — engine **−0.0097 MAP@10 [−0.0190, −0.0007]** vs the harness `fused`, and raising the pool to depth 100 moves it only +0.0019, so the MultiHop win does not travel and pool depth is not the cause |
 | 1.4 | Publish the harness-vs-engine delta | `tools/engine_vs_harness.py`, `docs/findings-engine-multihop.md`, `docs/FINDINGS.md` | paired comparison that re-derives the subset and refuses a mismatch; every MultiHop row labelled by which harness produced it | `make engine-multihop-compare` | done |
 
 **Gate:** no Phase 2 result is quoted against the engine until 1.2 has a report under `eval/`.
@@ -335,3 +335,13 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   target survives the change. `tools/engine_vs_harness.py` makes the pairing reproducible and
   refuses a mismatched subset. Still owed: the full 2,255 and the shipped default path. Suite
   **973 passed, 4 deselected**. Next: 1.3/1.4 remainder, then Phase 2.
+- 2026-10-03 — **Phase 1.3 done, and it falsifies the generalisation.** `tools/engine_musique.py`
+  runs the engine on the full 21,098-paragraph MuSiQue validation corpus with only the queries
+  narrowed (never the corpus — `tools/musique.py --limit-queries` shrinks the corpus too, which
+  would make a subset incomparable). On 200 queries the engine is **−0.0097 MAP@10
+  [−0.0190, −0.0007]** against the harness's fused first stage, so the MultiHop-RAG engine win
+  does **not** travel. The obvious explanation — the engine's default `retrieve_k=20` against a
+  depth-100 harness — is falsified: raising it to 100 moved MAP@10 by +0.0019 and left the
+  deficit significant. The engine does beat the harness's `ce` and `covquota` rules on the same
+  subset. Suite **985 passed, 4 deselected**. Both Phase 1 gates now have reports; the full
+  2,255/2,417 runs and the shipped-default paths remain owed. Next: Phase 2.

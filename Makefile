@@ -39,12 +39,15 @@ ENGINE_BEIR_ARGS ?=
 ENGINE_MULTIHOP_ARGS ?=
 ENGINE_REPORT ?= eval/benchmarks/multihop-rag/engine-hybrid-400.json
 ENGINE_VS_HARNESS_ARGS ?=
+ENGINE_MUSIQUE_ARGS ?=
+ENGINE_MUSIQUE_REPORT ?= eval/benchmarks/musique/engine-hybrid-200
+ENGINE_MUSIQUE_COMPARE_ARGS ?=
 ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 JOB_STATUS_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -83,6 +86,8 @@ help:
 	@echo "engine-beir    the engine itself on BEIR (not the tools replica)"
 	@echo "engine-multihop  the engine itself on MultiHop-RAG under its own chunking (resumable)"
 	@echo "engine-multihop-compare  the engine vs the 256-token harness, paired over queries"
+	@echo "engine-musique  the engine itself on MuSiQue under its own chunking (resumable)"
+	@echo "engine-musique-compare  the engine vs the MuSiQue harness, paired MAP@10"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -276,6 +281,15 @@ engine-multihop:
 # run with the same --limit/--sample-seed; the tool refuses rather than compare different queries.
 engine-multihop-compare:
 	$(PY) tools/engine_vs_harness.py --engine $(ENGINE_REPORT) $(ENGINE_VS_HARNESS_ARGS)
+
+# The engine itself on MuSiQue under its own chunking. The corpus is always the full split;
+# `--limit` narrows only the queries, so a subset stays comparable to the harness's rows.
+engine-musique:
+	OMP_NUM_THREADS=16 $(PY) tools/engine_musique.py $(ENGINE_MUSIQUE_ARGS)
+
+# Pair the finished MuSiQue report's MAP@10 against the harness's per-query rows.
+engine-musique-compare:
+	$(PY) tools/engine_musique.py --compare --out $(ENGINE_MUSIQUE_REPORT) $(ENGINE_MUSIQUE_COMPARE_ARGS)
 
 # Does a learned gate threshold or a fitted temperature beat the fixed 0.5 and raw score?
 gate-calibration:
