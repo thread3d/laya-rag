@@ -93,10 +93,12 @@ Shipped as `RERANK_COVERAGE_MIN_DOCS` (default `0`), used with
 unchanged unless it is set.
 
 **This is the item with the most overfitting risk**: ~20 strategies were compared on the
-same 400 queries, and +0.0074 is inside the noise band of a 400-query draw. It is the
-reason the full 2,255-query confirmation is the next step rather than an afterthought —
-if `covquota-3-0.7` does not hold against both `ce` and `coverage-0.7` there, the honest
-shipped setting is `RERANK_COVERAGE_MIN_DOCS=0`.
+same 400 queries, and +0.0074 is inside the noise band of a 400-query draw. It was therefore
+confirmed on the full 2,255-query protocol before being trusted
+([below](#full-protocol-confirmation-2255-queries)): the MAP@10 edge over coverage alone
+survives there but shrinks to +0.0027 [+0.0002, +0.0052], and it is bought with a Hits@4
+loss of −0.0106 [−0.0195, −0.0018]. That trade — not a failed hold-out — is what keeps
+`RERANK_COVERAGE_MIN_DOCS` at `0` by default.
 
 ## A marginal negative: query-aware atom weighting
 

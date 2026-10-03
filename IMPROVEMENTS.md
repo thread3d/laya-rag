@@ -9,6 +9,12 @@ re-propose anything already measured and rejected.
 
 Numbers already in the repo are quoted as measured; proposals are labelled by confidence.
 
+**On the line numbers.** They point at the tree as it stood when each section was written, and
+they drift as the code moves — a review pass found several pointing at unrelated code, including
+in `config.py`, which no one had edited since the analysis. The **symbol or flag name is the
+durable reference**; treat `file.py:NNN` as a hint and confirm against the name. Where a citation
+was corrected the symbol was checked at the line it now names, not just the arithmetic.
+
 ---
 
 ## 0. The two structural facts that explain most of the list
@@ -21,8 +27,8 @@ Numbers already in the repo are quoted as measured; proposals are labelled by co
 2. **The differentiating model (Laya) is a filter/gate, not a retriever or an orderer.**
    `LayaModel.embed` mean-pools the checkpoint encoder (`src/laya_rag/model.py:124-136`); the
    shipped dense weight auto-resolves to `0` for it because it scores nDCG@10 ≈ 0.014 where
-   BM25 scores 0.654 (`src/laya_rag/config.py:148-179`). Laya's relevance probability is kept
-   as a *filter* because reordering by it loses (`src/laya_rag/config.py:181-194`).
+   BM25 scores 0.654 (`src/laya_rag/config.py:238`). Laya's relevance probability is kept
+   as a *filter* because reordering by it loses (`src/laya_rag/config.py:324`).
 
 So the weaknesses split cleanly into **retrieval-quality gaps the stock channels carry**,
 **decision-head gaps**, and **scope/scale gaps**. Improvements should be aimed accordingly
@@ -35,11 +41,11 @@ rather than all at the checkpoint.
 ### What the code does
 
 - Retrieval is a **single query pass**: one query embedding + one BM25 query, fused by RRF
-  (`src/laya_rag/engine.py:356-388`; the benchmark harness uses exactly the same shape,
-  `tools/multihop_official.py:168-171`). There is no decomposition, no second hop, and no
+  (`src/laya_rag/engine.py:950`; the benchmark harness uses exactly the same shape,
+  `tools/multihop_official.py:190`). There is no decomposition, no second hop, and no
   query expansion anywhere (`grep` for `decompos|subquery|HyDE|step-back` across `src/` and
   `tools/` returns nothing).
-- The coverage pass reorders **only** the fused top-100 (`tools/multihop_coverage.py:205`).
+- The coverage pass reorders **only** the fused top-100 (`tools/multihop_coverage.py:625`).
   Its four families are embedding MMR, article-level MMR, cluster dedup, and *query-term*
   coverage (`:95-144`). Gold evidence facts are used **only at scoring time** (`:170`,
   `:236-238`) — never to select. `query-coverage` therefore covers the query's own terms,
@@ -47,9 +53,9 @@ rather than all at the checkpoint.
   the answer set.
 - Chunks are `url#j` windows; the only document awareness is `doc-mmr`'s binary
   same-article penalty (`:104`, `:213`).
-- The answer path keeps `rerank_k = 5` (`src/laya_rag/config.py:139`,
-  `src/laya_rag/rerank.py:206`), and the relevance filter runs *before* any set-level
-  judgment (`src/laya_rag/rerank.py:255-262`).
+- The answer path keeps `rerank_k = 5` (`src/laya_rag/config.py:190`,
+  `src/laya_rag/rerank.py:436`), and the relevance filter runs *before* any set-level
+  judgment (`src/laya_rag/rerank.py:397`).
 
 ### Why the number is what it is
 
@@ -65,12 +71,12 @@ gain, not a recall gain. That is exactly why it is a small fraction of the 0.20 
 
 | # | Change | Effort | Expected | How to falsify |
 | --- | --- | --- | --- | --- |
-| 1 | **Run the cross-encoder under the official protocol.** `--rerank` exists (`multihop_official.py:105-108`) but `eval/benchmarks/multihop-rag/official.json` contains **no reranked rows** — the published 0.479 is a *reranked* number and the like-for-like was never run. Try `bge-reranker-base`/`large` and `bge-reranker-v2-m3` at depth 100 on the fused stage. | hours | Unknown; this is the one direct comparison missing | If it reproduces the BEIR loss, close it permanently |
+| 1 | **Run the cross-encoder under the official protocol.** `--rerank` exists (`multihop_official.py:111`) but `eval/benchmarks/multihop-rag/official.json` contains **no reranked rows** — the published 0.479 is a *reranked* number and the like-for-like was never run. Try `bge-reranker-base`/`large` and `bge-reranker-v2-m3` at depth 100 on the fused stage. | hours | Unknown; this is the one direct comparison missing | If it reproduces the BEIR loss, close it permanently |
 | 2 | **Measure the pool-recall ceiling.** Score "best achievable MAP@10 by reordering the fused top-100" and again at depth 500. | hours | Diagnostic — **done, and it settled both**: ceiling 0.609 at depth 100 and 0.659 at 500 (each step significant), with 36% of depth-100 pools missing a gold fact | selection is the larger lever; recall is not solved |
 | 3 | **Query decomposition / second hop (model-free first).** After pass 1, take the top documents' salient entities/phrases (not in the query), issue hop-2 dense+BM25 queries, fuse with RRF. Laya's relevance head scores hop-2 candidates as a filter. This is IRCoT without a generator. | days | The largest MAP lever, because it is the only one that raises pool recall | If pool-recall ceiling (2) was already high, this adds little |
 | 4 | **Fact-level set coverage (submodular max-coverage).** Split candidates into sentence "fact atoms", score atoms for query relevance (Laya relevance head), and greedily select chunks maximising *distinct query-relevant atom* coverage with a redundancy penalty — a facility-location objective that matches MAP's definition. | 1–2 wks | Attacks the objective directly rather than by proxy | Compare against (1)/(3) on a held-out half |
 | 5 | **Two-level document→passage selection with a document quota.** Force ≥k distinct documents into the top-10 (best chunk per doc), then fill. `doc-mmr@0.7` already reaches 0.274 from the same pool, so a hard quota should beat it. | hours–days | +0.005–0.02 MAP over dedup | Paired bootstrap on the held-out half |
-| 6 | **Chunking/aggregation for the protocol.** At overlap 200 a single article's overlapping windows can dominate; dedup fixes part of it (`RECALL_DEDUP_THRESHOLD`, `config.py:163-172`). Consider non-overlapping sentence windows for the multi-hop harness, and fact-substring dedup. `query-coverage` already wins at overlap 0 (`coverage-ov0.json`). | days | Small, but removes a confound | Re-run `coverage-ov0` with the new objective |
+| 6 | **Chunking/aggregation for the protocol.** At overlap 200 a single article's overlapping windows can dominate; dedup fixes part of it (`RECALL_DEDUP_THRESHOLD`, `config.py:279`). Consider non-overlapping sentence windows for the multi-hop harness, and fact-substring dedup. `query-coverage` already wins at overlap 0 (`coverage-ov0.json`). | days | Small, but removes a confound | Re-run `coverage-ov0` with the new objective |
 | 7 | **Listwise / late-interaction second stage** (the repo's own open item): MaxSim or a listwise cross-encoder trained on the benchmark's evidence labels can score the *set*. | weeks | Potentially large | Only worth it if (3)–(5) plateau |
 
 **Do not retry:** a bigger encoder (fusion absorbs it — measured twice), another pointwise CE
@@ -88,7 +94,7 @@ against a reranked one, which the document does not currently say.
 ### What the code does
 
 - The head is asked one `noul` question, verbatim: `"Can \`query\` be answered using only
-  \`evidence\`?"` (`src/laya_rag/rerank.py:29-33`), with the evidence assembled as one
+  \`evidence\`?"` (`src/laya_rag/rerank.py:32-35`), with the evidence assembled as one
   numbered concatenation of the kept passages (`:144`) and judged in a single call (`:145-148`).
   That yields **one scalar** P(the blob answers).
 - The relevance filter runs first and truncates to `top_k=5` before the head sees anything
@@ -114,26 +120,26 @@ scalar*. Two things the test therefore does not rule out:
 | # | Change | Effort | Expected |
 | --- | --- | --- | --- |
 | 1 | **Feature-based gate with grouped cross-validation.** Build a small logistic model over the existing free signals (max/mean dense cosine, BM25, top relevance probability, distinct-doc count, query-term coverage, entity overlap, evidence length) and fit on the domain's null/answerable labels. This is the literal form of the repo's own framing: *the calibration procedure transfers, not the threshold*. | days | Best single shot at beating 0.53 AUC |
-| 2 | **Add a dedicated answerability / entailment model.** An NLI cross-encoder ("does the evidence entail an answer?") or a SQuAD2.0/NQ-unanswerable-trained QA no-answer score. The `CrossEncoderModel` plumbing already exists (`src/laya_rag/model.py:353-441`); add an answerability mode. | days–weeks | Portable, out-of-domain signal the head lacks |
+| 2 | **Add a dedicated answerability / entailment model.** An NLI cross-encoder ("does the evidence entail an answer?") or a SQuAD2.0/NQ-unanswerable-trained QA no-answer score. The `CrossEncoderModel` plumbing already exists (`src/laya_rag/model.py:386-441`); add an answerability mode. | days–weeks | Portable, out-of-domain signal the head lacks |
 | 3 | **Per-passage support instead of one blob.** Score whether each passage supports a specific answer/claim, aggregate by noisy-OR, then combine support with coverage. Shared machinery with §1(4), so it pays twice. | 1–2 wks | Fixes both the gate and multi-hop set evidence |
 | 4 | **Two explicit stages: retrieval confidence ∧ answerability.** Report both; abstain when either is low. Calibrate each separately instead of letting the relevance gate silently do most of the abstaining (already noted in *Known limits*). | days | Cleaner selective-prediction curves |
 | 5 | **LLM-judge fallback (opt-in).** Ask the composer endpoint "can this be answered from this evidence?" — honest and out-of-domain-capable, but attribute it to the LLM. | hours | A working baseline / label source |
 | 6 | **Stronger splits.** Test transfer across *question types, time, and articles* (grouped), not a random stratified half; report risk–coverage rather than one balanced-accuracy point. Random halves are the weakest transfer test. | days | Turns a weak negative into a real one |
-| 7 | **Propagate the short-circuit distinction into the engine.** Do not present `0.0` as a calibrated head output; emit "not measured" (as `adjudicate_claims` already does, `engine.py:645-648, 661-672`). | hours | Correct calibration inputs |
+| 7 | **Propagate the short-circuit distinction into the engine.** Do not present `0.0` as a calibrated head output; emit "not measured" (as `adjudicate_claims` already does, `engine.py:1369-1375`). | hours | Correct calibration inputs |
 
 **Do not retry:** refitting the threshold on the head's probability (measured no-op), or
 citing the shipped 0.5 threshold out of domain.
 
 ---
 
-## 3. No text generation → cannot be entered on KILT / MTEB / HHEM / TREC RAG
+## 3. No owned generation → each external target is blocked for its own reason
 
 ### What the code does
 
 `compose.py` provides a real but opt-in generator: local Ollama by default
 (`ornith-1.5:35b`, `config.py:26,33`), OpenAI-compatible or native Ollama routes
 (`compose.py:78-112`), streamed, with a citation-forcing system prompt (`:52-63`). The API
-layer runs `verify_citations` (`api.py:409`) and `adjudicate_claims` (`api.py:430`). There is
+layer runs `verify_citations` (`api.py:456`) and `adjudicate_claims` (`api.py:477`). There is
 **no entity linker, no batch `generate()` with logprobs, no nuggetizer, and no
 factual-consistency scorer.** MTEB is *model*-centric, so an engine cannot be entered as-is.
 
@@ -167,7 +173,7 @@ structural.
 
 `LayaModel.embed` mean-pools the checkpoint encoder via `laya.embed_fn_from_agent`
 (`src/laya_rag/model.py:114-136`); the checkpoint is a decision/agent model, not
-retrieval-trained. Dense weight auto-resolves to `0` for Laya (`config.py:174-179`), so the
+retrieval-trained. Dense weight auto-resolves to `0` for Laya (`config.py:302`), so the
 shipped default is lexical-only and `EMBED_MODEL` (stock bge) is what supplies semantic
 recall. The engine's differentiator is therefore a *decision* model.
 
@@ -179,7 +185,7 @@ recall. The engine's differentiator is therefore a *decision* model.
 | 2 | **Give Laya's encoder a trained projection head before writing it off.** A linear/2-layer contrastive adapter on top of the mean-pooled embedding, trained on MS MARCO/in-domain pairs, tests whether the representation is unusable or merely unadapted. Also sweep pooling (CLS / last-token / layer) and task prefixes — the bge path showed pooling alone is worth ~0.014. | hours–days | Cheap test with real upside |
 | 3 | **Late interaction (ColBERT-style MaxSim) from Laya hidden states.** Replace mean pooling with token-level embeddings + MaxSim — the architecture lever the repo itself identified, at near-zero new parameters. Needs a multi-vector store, so pair with §6. | weeks | Potentially large over mean pooling |
 | 4 | **Ship a working retrieval encoder as the default.** Even stock `bge-small`, or the distilled student, should be the default rather than an env opt-in; today a query with no lexical overlap retrieves nothing (*Known limits*). | hours | Product-grade recall floor |
-| 5 | **Keep Laya where it is strong:** the gate/filter. Consider `typed-decisions` for richer decisions. Do not re-attempt it as a ranker (measured negative, `config.py:181-187`). | — | Avoids wasted work |
+| 5 | **Keep Laya where it is strong:** the gate/filter. Consider `typed-decisions` for richer decisions. Do not re-attempt it as a ranker (measured negative, `config.py:327`). | — | Avoids wasted work |
 
 ---
 
@@ -188,7 +194,7 @@ recall. The engine's differentiator is therefore a *decision* model.
 ### What the code does
 
 `CrossEncoderModel.score_pairs` is a pointwise MS-MARCO sequence classifier with sigmoid
-(`model.py:353-433`). In the harness, `crossencoder_rankings` slices the first-stage top-`depth`
+(`model.py:386-441`). In the harness, `crossencoder_rankings` slices the first-stage top-`depth`
 and then **discards the first-stage order entirely**: `order = sorted(..., key=-block[index])`
 (`tools/beir.py:545-576`, esp. `:561`, `:574`). It re-scores raw `corpus[doc_id]`, paying the
 512-token truncation a second time. Measured: −0.027 to −0.318 nDCG@10 on all five corpora,
@@ -200,7 +206,7 @@ does not represent).
 | # | Change | Effort | Expected |
 | --- | --- | --- | --- |
 | 1 | **Blend, don't replace.** Score = first-stage rank score + λ·CE, or RRF over the first-stage list and the CE list, with λ chosen on a calibration half. This bounds the downside and answers whether CE has *any* value here. | hours–days | Likely the highest-value change in this section |
-| 2 | **Use CE as a filter, not an orderer** (`RERANK_ORDER=recall` already exists, `config.py:181-194`): drop low-CE candidates, keep the fused order. | hours | Safe, cheap |
+| 2 | **Use CE as a filter, not an orderer** (`RERANK_ORDER=recall` already exists, `config.py:324`): drop low-CE candidates, keep the fused order. | hours | Safe, cheap |
 | 3 | **Route the second stage per corpus.** `tools/beir_routing.py` already selects channels on a calibration half; extend it to CE on/off and λ. | hours–days | Recovers CE where it helps, no loss elsewhere |
 | 4 | **Right model class for the relation.** Listwise (RankZephyr-style) or pairwise CE; for ArguAna, train/pick on the opposition convention. | weeks | Addresses the actual failure mode |
 | 5 | **Late-interaction second stage** (ColBERT / `answerai-colbert-small-v1`): term-level interaction handles negation/opposition better than a pooled pointwise CE. | days–weeks | Strong for relational relevance |
@@ -219,15 +225,15 @@ depth is the problem — depth 100 is already the literature setting.
 - `VectorIndex` holds `_chunks` (full chunk text) and `_vectors` (fp32) in RAM
   (`src/laya_rag/index_store.py:55-63`, `:101-130`); `save` writes every chunk's text into
   `index.json` (`:216-232`). `RagEngine.index_paths` accumulates every embedding in a Python
-  list and then `np.vstack`s it (`src/laya_rag/engine.py:302-311`) — two to three live copies.
+  list and then `np.vstack`s it (`src/laya_rag/engine.py:739-751`) — two to three live copies.
 - `BM25Index` keeps `_term_freqs` (a `Counter` per chunk), `_doc_freq`, and
-  `_postings: dict[str, list[tuple[int,int]]]` (`src/laya_rag/lexical.py:105-126`) — heavy
+  `_postings: dict[str, list[tuple[int,int]]]` (`src/laya_rag/lexical.py:106-126`) — heavy
   Python objects.
 - `OnDiskBM25` and `StreamingVectorIndex` are **implemented and validated** (128 MB packed
   postings for 171k TREC-COVID docs, byte-identical ranking; flat 1,249 MB streaming build)
   but live only in `tools/ondisk.py` — a grep confirms **neither is imported anywhere in
   `src/`**. The engine's build path is purely in-memory.
-- ANN is in-RAM faiss IVF, optional (`index_store.py:161-176`, `engine.py:312-314`); there is
+- ANN is in-RAM faiss IVF, optional (`index_store.py:161-176`, `engine.py:761`); there is
   no on-disk ANN. The BEIR harness is fully eager: whole `corpus.jsonl` as a string + dict
   (`tools/beir.py:131-152`), full `.npy` matrix (`:362-388`), and the CE pair list
   materialised for every query × depth at once (`:563-566`).
@@ -237,8 +243,8 @@ depth is the problem — depth 100 is already the literature setting.
 
 | # | Change | Effort | Why |
 | --- | --- | --- | --- |
-| 1 | **Move chunk text out of RAM/metadata.** `Chunk` already carries `path`, `start_char`, `end_char` (`index_store.py:220-229`), so text can live in a compressed/mmap sidecar or be re-read lazily from source. Biggest, simplest memory win; ranking unchanged. | days | Removes the largest resident object |
-| 2 | **Wire the on-disk stores into the engine** behind an index-backend setting, and make the build path stream instead of `vstack` (`engine.py:302-311`). Add an incremental update path (the tool has none — `build()` writes fresh). | days–weeks | Makes >RAM corpora buildable/queryable |
+| 1 | **Move chunk text out of RAM/metadata.** `Chunk` already carries `path`, `start_char`, `end_char` (`index_store.py:269-279`), so text can live in a compressed/mmap sidecar or be re-read lazily from source. Biggest, simplest memory win; ranking unchanged. | days | Removes the largest resident object |
+| 2 | **Wire the on-disk stores into the engine** behind an index-backend setting, and make the build path stream instead of `vstack` (`engine.py:739-751`). Add an incremental update path (the tool has none — `build()` writes fresh). | days–weeks | Makes >RAM corpora buildable/queryable |
 | 3 | **Replace/augment pure-Python BM25 with an on-disk IR engine.** SQLite FTS5 (stdlib, offline) or Tantivy gives on-disk postings, compression, and incremental update, and deletes the 2.4 GB Python-dict peak. Keep `BM25Index` for small corpora/tests. | days–weeks | Directly answers "postings are Python dicts" |
 | 4 | **Bounded external k-way merge for the term dictionary** (the documented open item) via `heapq` over sorted runs. | days | Flat-memory 10M+ lexical build |
 | 5 | **On-disk + quantized ANN.** faiss `IVFPQ`/`OPQ` (or `IVFFlat` with `OnDiskInvertedLists`), or `usearch`/`hnswlib` with mmap; scalar/binary quantization cuts 384-d to ~48–96 B/vector (16M docs ≈ 0.8–1.5 GB). Consider Matryoshka 128-d for pass 1. | weeks | Turns ANN from toy to deployable |

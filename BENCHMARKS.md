@@ -27,10 +27,21 @@ rather than dressing up:
 | Answer correctness / faithfulness | the attached LLM's | only with a generator, and then the number is mostly the LLM's |
 | Hallucination detection | nothing this system is | no |
 
-There is no local generator in the repo; the machine does have Ollama with `ornith-1.5:35b`,
-which produces correctly-cited answers at roughly 10-15 s per query. So end-to-end runs are
-*possible*, but every generation-side number below is a statement about that model, not about
-Laya.
+No generator *weights* ship in the repo. What ships is `compose.py`, an opt-in HTTP client to
+an external chat model (`LAYA_RAG_COMPOSE_MODEL`, by default a local Ollama), and this host runs
+`ornith-1.5:35b`, which produces correctly-cited answers at roughly 10-15 s per query. So
+end-to-end runs are *possible* — the Composer supplies the generator half — but every
+generation-side number below is a statement about that model, not about Laya.
+
+That is also why the four external targets are each blocked for a *different* reason, and only
+two of them turn on prose at all:
+
+| target | what it scores | why the Composer does not settle it |
+| --- | --- | --- |
+| **MTEB** | a submitted encoder's retrieval quality | scores a model artifact, not text. One *is* packaged in SentenceTransformers format (`eval/distill-nfcorpus-package/`, with a model card carrying its measured numbers) — but it sits under the gitignored `eval/`, was distilled for one corpus, and was never uploaded or submitted; the projection head is a JSON map, not a model |
+| **KILT** | entity linking + retrieval + seq2seq generation | the Composer is the seq2seq half, but there is no entity linker or submission writer — and the row would score the attached LLM |
+| **TREC RAG** | nugget recall/precision + citation support | the Composer can write cited answers; the blocker is NIST corpus and gold-nugget access plus the official AutoNuggetizer |
+| **HHEM** | hallucination-*detection* models | a generator is the wrong kind of module — it is the source of hallucination, not a detector |
 
 ## Measured: retrieval-only
 
