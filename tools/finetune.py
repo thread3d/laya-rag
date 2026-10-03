@@ -154,6 +154,50 @@ def rank_with_encoder(
     }
 
 
+def checkpoint_kwargs(args: argparse.Namespace) -> dict:
+    """The `SentenceTransformer.fit` checkpoint arguments for this run.
+
+    Empty when step checkpointing is off, so the default path is byte-for-byte the previous
+    behaviour. `resume_from_checkpoint` restores the optimiser and scheduler state, not just the
+    weights — that is the difference between resuming a run and re-starting one from a warm model,
+    which is what the pre-existing `--resume` does.
+    """
+    if args.checkpoint_steps <= 0:
+        if args.resume_checkpoint:
+            raise ValueError("--resume-checkpoint needs --checkpoint-steps > 0")
+        return {}
+    kwargs: dict[str, object] = {
+        "checkpoint_path": checkpoint_dir(args),
+        "checkpoint_save_steps": args.checkpoint_steps,
+    }
+    if args.checkpoint_keep > 0:
+        kwargs["checkpoint_save_total_limit"] = args.checkpoint_keep
+    if args.resume_checkpoint:
+        kwargs["resume_from_checkpoint"] = True
+    return kwargs
+
+
+def checkpoint_dir(args: argparse.Namespace) -> str:
+    return args.checkpoint_dir or str(ROOT / "eval" / "finetune-checkpoints" / args.dataset)
+
+
+def existing_checkpoints(path: Path | str) -> list[Path]:
+    """Step checkpoints present in `path`, oldest first (Trainer names them `checkpoint-N`).
+
+    Only numeric suffixes count: the Trainer creates `checkpoint-<step>` directories, so anything
+    else in the directory is not a resumable state and must not be picked as one.
+    """
+    path = Path(path)
+    if not path.is_dir():
+        return []
+    found: list[tuple[int, Path]] = []
+    for candidate in path.glob("checkpoint-*"):
+        suffix = candidate.name.split("-", 1)[-1]
+        if candidate.is_dir() and suffix.isdigit():
+            found.append((int(suffix), candidate))
+    return [candidate for _, candidate in sorted(found)]
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="finetune.py", description="In-domain fine-tuning")
     parser.add_argument("--dataset", default="nfcorpus")
@@ -172,6 +216,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", default=str(ROOT / "eval" / "finetune"))
     parser.add_argument("--save-model", default=str(ROOT / "eval" / "finetuned-model"))
     parser.add_argument("--resume", default=None, help="checkpoint to continue training from")
+    parser.add_argument("--checkpoint-steps", type=int, default=0,
+                        help="save an optimiser-state checkpoint every N steps (0 = off). "
+                             "A long run that is killed then resumes where it stopped rather "
+                             "than restarting the epoch")
+    parser.add_argument("--checkpoint-dir", default=None,
+                        help="where step checkpoints go (default: eval/finetune-checkpoints/<dataset>)")
+    parser.add_argument("--checkpoint-keep", type=int, default=0,
+                        help="keep only the most recent N step checkpoints (0 = keep all)")
+    parser.add_argument("--resume-checkpoint", action="store_true",
+                        help="continue from the latest step checkpoint in --checkpoint-dir, "
+                             "restoring optimiser state")
     parser.add_argument("--teacher-models", default="",
                         help="comma list of bi-encoders to distil from: their RRF-fused top "
                              "documents become the training positives instead of the qrels")
@@ -183,6 +238,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.resume_checkpoint and args.checkpoint_steps <= 0:
+        raise SystemExit("--resume-checkpoint needs --checkpoint-steps > 0")
     random.seed(args.seed)
     np.random.seed(args.seed)
     dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root))
@@ -271,6 +328,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     report["train_pairs"] = len(pairs)
     report["hard_negatives"] = len(triplets)
     report["teacher_models"] = teacher_models
+    report["checkpoint_steps"] = args.checkpoint_steps
+    report["checkpoint_dir"] = checkpoint_dir(args) if args.checkpoint_steps > 0 else None
+
+    fit_checkpoints = checkpoint_kwargs(args)
+    if args.resume_checkpoint:
+        found = existing_checkpoints(checkpoint_dir(args))
+        if not found:
+            raise SystemExit(f"--resume-checkpoint: no step checkpoints in {checkpoint_dir(args)}")
+        print(f"  resuming optimiser state from {found[-1].name}", flush=True)
+    if fit_checkpoints:
+        print(f"  step checkpoints every {args.checkpoint_steps} steps -> "
+              f"{checkpoint_dir(args)}", flush=True)
 
     started = time.perf_counter()
     model.fit(
@@ -278,6 +347,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         epochs=args.epochs,
         warmup_steps=max(1, sum(len(loader) for loader, _ in objectives) // 20),
         show_progress_bar=False,
+        **fit_checkpoints,
     )
     report["train_seconds"] = round(time.perf_counter() - started, 1)
     print(f"  trained on {len(pairs)} pairs + {len(triplets)} triplets, "

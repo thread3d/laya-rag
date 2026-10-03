@@ -87,7 +87,7 @@ half-written report can be read as a result.
 | --- | --- | --- | --- |
 | P1.1 | `tools/jobkit.py` | the module above + `tests/test_jobkit.py` (30 tests: kill/resume equivalence, shard partition and merge, fingerprint refusal, torn-line tolerance, atomic writes) | done |
 | P1.2 | `tools/multihop_ce_cache.py` | per-query checkpoint, `--fresh`, `--shard i/n`, `--merge N`; proves the pattern on the repo's most expensive single-model run. The other four tools (`multihop_official`, `multihop_diagnostics`, `engine_beir`, `beir`) are **not yet retrofitted** and still restart from scratch | partial |
-| P1.3 | `tools/finetune.py`, `tools/distill_eval.py` | `--resume` from optimizer/RNG state; checkpoint every N steps | pending |
+| P1.3 | `tools/finetune.py` | step checkpoints and optimiser-state resume: `--checkpoint-steps N`, `--checkpoint-dir`, `--checkpoint-keep`, `--resume-checkpoint`. This is distinct from the pre-existing `--resume`, which loads weights and restarts training; `--resume-checkpoint` restores the optimiser and scheduler too. `tools/distill_eval.py` has no training loop, so nothing to resume | done |
 | P1.4 | `Makefile` | `make job-status` prints every manifest (`tools/job_status.py`) | done |
 | P1.5 | `tests/test_jobkit.py` | kill-and-resume equivalence; sharded merge equals unsharded; fingerprint mismatch refuses | done |
 | P1.6 | `tools/engine_multihop.py` | the engine on MultiHop-RAG under its own chunking, resumable from the first commit (`--fresh`, `--shard`, `--merge`) | built, not yet run |
