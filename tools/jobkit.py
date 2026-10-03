@@ -285,6 +285,10 @@ class ResumableRun:
             os.fsync(fh.fileno())
         self._completed[key] = value
 
+    def _unit_count(self) -> int:
+        """Recorded rows excluding the reserved shared-state row, which is not a work unit."""
+        return len(self._completed) - (1 if META_KEY in self._completed else 0)
+
     def manifest(self, *, status: str, total: int | None = None, extra: Mapping | None = None) -> dict:
         index, count = self.shard
         payload: dict[str, Any] = {
@@ -292,7 +296,7 @@ class ResumableRun:
             "fingerprint": self.fingerprint,
             "shard_index": index,
             "shard_count": count,
-            "completed": len(self._completed),
+            "completed": self._unit_count(),
             "total": total,
             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
@@ -365,7 +369,7 @@ def merge_shards(
         "status": "complete",
         "fingerprint": next(iter(fingerprints), ""),
         "shard_count": count,
-        "completed": len(merged),
+        "completed": len([key for key in merged if key != META_KEY]),
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     report = dict(build(merged) if build is not None else {"rows": merged})

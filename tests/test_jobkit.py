@@ -133,6 +133,14 @@ def test_finish_writes_the_report_and_a_complete_manifest(tmp_path):
     assert json.loads((tmp_path / "run.manifest.json").read_text())["completed"] == 1
 
 
+def test_manifest_counts_work_units_not_the_reserved_row(tmp_path):
+    fp = jobkit.config_fingerprint(x=1)
+    run = jobkit.ResumableRun(tmp_path / "run.json", fingerprint=fp)
+    run.record(jobkit.META_KEY, {"settings": {"depth": 100}})
+    run.record("a", 1)
+    assert run.manifest(status="running", total=5)["completed"] == 1
+
+
 def test_touch_records_progress_without_a_final_report(tmp_path):
     out = tmp_path / "run.json"
     run = jobkit.ResumableRun(out, fingerprint=jobkit.config_fingerprint(x=1))
@@ -233,7 +241,7 @@ def test_merge_shards_can_rebuild_a_tool_specific_payload(tmp_path):
     merged = jobkit.merge_shards(stem, 2, build=build)
     assert merged["_settings"] == {"depth": 100}
     assert merged["queries"] == {"a": "A", "b": "B"}
-    assert merged["_job"]["completed"] == 3  # two queries plus the shared row
+    assert merged["_job"]["completed"] == 2  # the reserved shared-state row is not a work unit
 
 
 def test_merge_shards_rejects_conflicting_shared_state(tmp_path):

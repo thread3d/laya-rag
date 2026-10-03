@@ -167,20 +167,27 @@ already shown to overstate the engine by **0.0144**.
 | # | item | file | change | falsify / signal | status |
 | --- | --- | --- | --- | --- | --- |
 | 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + the CE-cache retrofit + `make job-status`; the remaining four tools are still un-retrofitted | kill/resume and shard/merge equivalence tests | done (retrofit partial) |
-| 1.2 | Engine-level MultiHop-RAG | **new** `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes; if it loses, that is the real engine number | built, **not yet run** |
+| 1.2 | Engine-level MultiHop-RAG | `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes | **done on the 400-query subset** — engine **+0.0535 MAP@10 [+0.0387, +0.0680]** over the harness hybrid, level with its reranker (+0.0071, ns), still below covquota 0.3280; full 2,255 owed |
 | 1.3 | Engine-level MuSiQue | `tools/engine_multihop.py`, `tools/musique.py` | the same under the MuSiQue adapter, where the coverage gain was falsified | the per-corpus bar is stated, not averaged | pending |
-| 1.4 | Publish the harness-vs-engine delta | `docs/findings-engine-multihop.md`, `BENCHMARKS.md` | every MultiHop row labelled by which harness produced it | — | pending |
+| 1.4 | Publish the harness-vs-engine delta | `tools/engine_vs_harness.py`, `docs/findings-engine-multihop.md`, `docs/FINDINGS.md` | paired comparison that re-derives the subset and refuses a mismatch; every MultiHop row labelled by which harness produced it | `make engine-multihop-compare` | done |
 
 **Gate:** no Phase 2 result is quoted against the engine until 1.2 has a report under `eval/`.
+That gate is now satisfied for the **400-query subset**; the full-set run is still owed, so a
+Phase 2 result may be quoted against the subset engine number (0.3057) and not against a
+full-set one.
 
-**The next long job, and how to resume it.** `1.2` is built and tested but deliberately *not*
-run in the session that wrote it — it indexes 609 articles through the real engine and is exactly
-the workload §2 exists for. The smoke, then the two real runs:
+**The run that produced 1.2, and what is still owed.**
 
 ```sh
-make engine-multihop ENGINE_MULTIHOP_ARGS="--limit 25 --embed-model BAAI/bge-small-en-v1.5 --out eval/benchmarks/multihop-rag/engine-smoke"
+# done: 400 queries, seed 17 — the same subset the harness's 0.2986/0.3280 bars are quoted on
+make engine-multihop ENGINE_MULTIHOP_ARGS="--limit 400 --sample-seed 17 \
+    --embed-model BAAI/bge-small-en-v1.5 --out eval/benchmarks/multihop-rag/engine-hybrid-400"
+make engine-multihop-compare
+
+# owed: the full 2,255 (~2 hours at the measured 3.1 s/query), and the shipped default path
 make engine-multihop ENGINE_MULTIHOP_ARGS="--out eval/benchmarks/multihop-rag/engine-default"
-make engine-multihop ENGINE_MULTIHOP_ARGS="--embed-model BAAI/bge-small-en-v1.5 --out eval/benchmarks/multihop-rag/engine-hybrid"
+make engine-multihop ENGINE_MULTIHOP_ARGS="--embed-model BAAI/bge-small-en-v1.5 \
+    --out eval/benchmarks/multihop-rag/engine-hybrid"
 ```
 
 Re-running any of those identical commands continues a killed run; `make job-status` shows how
@@ -317,3 +324,14 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   headline — is built and tested but **not yet run**: it is the first real long job, and its
   commands are in §4. Suite **961 passed, 4 deselected** (914 before; 47 new tests across
   jobkit, the CE cache and the engine harness). Next: run `1.2`, then 1.3/1.4, then Phase 2.
+- 2026-10-03 — **Phase 1 measured (1.2 on the 400-query subset, 1.4 done).** The real engine on
+  MultiHop-RAG under its own corpus-aware chunking (2,000 characters derived from the corpus,
+  4,592 chunks) is **+0.0535 MAP@10 [+0.0387, +0.0680]**, +0.0900 Hits@4, +0.1100 Hits@10 and
+  +0.0559 MRR@10 over the 256-token harness's hybrid first stage, all significant; against the
+  harness's *reranked* row it is level on MAP@10/Hits@4/MRR@10 and better on Hits@10, so the
+  reranker's +0.0464 was largely recovering what the harness chunking cost. The replica
+  **understates** the engine here — the opposite sign to BEIR's +0.0144 overstatement. The engine
+  is still below the subset's coverage-plus-quota bar (0.3057 against 0.3280), so Phase 2's
+  target survives the change. `tools/engine_vs_harness.py` makes the pairing reproducible and
+  refuses a mismatched subset. Still owed: the full 2,255 and the shipped default path. Suite
+  **973 passed, 4 deselected**. Next: 1.3/1.4 remainder, then Phase 2.

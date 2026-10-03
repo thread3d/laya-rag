@@ -37,12 +37,14 @@ ANSWERABILITY_FEATURES_ARGS ?=
 GATE_CALIBRATION_ARGS ?=
 ENGINE_BEIR_ARGS ?=
 ENGINE_MULTIHOP_ARGS ?=
+ENGINE_REPORT ?= eval/benchmarks/multihop-rag/engine-hybrid-400.json
+ENGINE_VS_HARNESS_ARGS ?=
 ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 JOB_STATUS_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -80,6 +82,7 @@ help:
 	@echo "gate-calibration  learned threshold / temperature vs fixed 0.5 and raw"
 	@echo "engine-beir    the engine itself on BEIR (not the tools replica)"
 	@echo "engine-multihop  the engine itself on MultiHop-RAG under its own chunking (resumable)"
+	@echo "engine-multihop-compare  the engine vs the 256-token harness, paired over queries"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -268,6 +271,11 @@ engine-beir:
 # `ENGINE_MULTIHOP_ARGS="--limit 25 --embed-model BAAI/bge-small-en-v1.5"` is the smoke.
 engine-multihop:
 	OMP_NUM_THREADS=16 $(PY) tools/engine_multihop.py $(ENGINE_MULTIHOP_ARGS)
+
+# Pair the engine report against a harness arm on the same subset. Requires both to have been
+# run with the same --limit/--sample-seed; the tool refuses rather than compare different queries.
+engine-multihop-compare:
+	$(PY) tools/engine_vs_harness.py --engine $(ENGINE_REPORT) $(ENGINE_VS_HARNESS_ARGS)
 
 # Does a learned gate threshold or a fitted temperature beat the fixed 0.5 and raw score?
 gate-calibration:

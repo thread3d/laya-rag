@@ -19,6 +19,7 @@ are what stops the next pass from re-trying them.
 | Fusion constant | The engine fused at `k=60` while every documented MultiHop number used `k=5`; `FUSION_K` now defaults to 5 (MAP@10 +0.0040 [+0.0012, +0.0069], p=0.008; BEIR +0.004–0.009) | [findings-fusion-k.md](findings-fusion-k.md) |
 | Learned-sparse channel | SPLADE-style sparse now ships as a third engine channel: measured +0.03–0.14 over BM25 alone and +0.004–0.023 over two-channel fusion on BEIR (SciFact 0.741 → **0.745**, NFCorpus 0.367 → **0.372**, ArguAna 0.568 → **0.591**); opt-in via `SPARSE_MODEL` | [findings-sparse-channel.md](findings-sparse-channel.md) |
 | Engine-level BEIR | The engine itself scores SciFact nDCG@10 **0.7264** and **0.7443** with sparse (**+0.0179 [+0.0028, +0.0337]**, p=0.025) — the channel's gain transfers and is larger than the replica's, while the `tools/beir.py` replica **overstates the engine by 0.0144** | [findings-engine-parity.md](findings-engine-parity.md) |
+| Engine-level MultiHop | The 256-token harness **understates** the engine, the opposite sign to BEIR: on the seed-17 400-query subset the real engine is **+0.0535 MAP@10 [+0.0387, +0.0680]** over the harness hybrid first stage and level with its reranked row (**+0.0071, ns**), on corpus-aware 2,000-character chunking and no cross-encoder; it remains below the subset's coverage-plus-quota bar of **0.3280** | [findings-engine-multihop.md](findings-engine-multihop.md) |
 | Cross-encoder + coverage at the engine | The auto coverage default is **safe on BEIR** — re-verified under the corpus-aware chunking default: 0.7417 with and without the CE (p=0.99) — and **4.3× faster** (167 s against 709 s), because the 322M decision model then only gates the kept passages | [findings-engine-cross-encoder.md](findings-engine-cross-encoder.md) |
 | Corpus-aware chunk size | The engine's chunking gap was the **chunked representation**: deriving the size from the corpus (p90, clamped to 2,000) gives **+0.0153 nDCG@10** (0.7264 → 0.7417, p=0.023, 40% fewer chunks) on SciFact and MRR **0.6429 → 0.7143** on the vendored docs; `CHUNK_CHARS_AUTO` now defaults on | [findings-chunk-merge.md](findings-chunk-merge.md) |
 | Second-stage threshold | The engine cut a substituted cross-encoder at Laya's 0.5; `RERANK_THRESHOLD` now keeps the pool, worth **+0.0801 MAP@10** [+0.0674, +0.0936] (p=0.0002) and +0.30 Hits@10 | [findings-rerank-threshold.md](findings-rerank-threshold.md) |
@@ -63,11 +64,14 @@ are what stops the next pass from re-trying them.
   under fixed chunking but only **+0.0048** (ns) once corpus-aware chunking is the default —
   both recover the same chunked-representation loss. Report each increment against the current
   default, never as a sum.
-- **Engine-level coverage is uneven.** `tools/engine_beir.py` measures the engine itself on
-  BEIR; the MultiHop rows still come from the 256-character harness
-  (`tools/multihop_official.py` and friends), so the engine's multi-hop retrieval under its own
-  corpus-aware chunking is **not measured**. That is the largest known gap in the evidence, and
-  it is stated rather than papered over.
+- **Engine-level coverage is uneven, and the multi-hop half is now measured.** `tools/engine_beir.py`
+  measures the engine itself on BEIR. The multi-hop rows came only from the 256-character harness
+  (`tools/multihop_official.py`) until `tools/engine_multihop.py` ran the real engine under its own
+  corpus-aware chunking on the harness's own 400-query seed-17 subset: the engine is **+0.0535
+  MAP@10 [+0.0387, +0.0680]** above the harness's hybrid first stage and level with its
+  cross-encoder row (**+0.0071, ns**), so the replica *understates* the engine on MultiHop-RAG,
+  the opposite of the +0.0144 overstatement on BEIR. The full 2,255-query run is still owed; see
+  [findings-engine-multihop.md](findings-engine-multihop.md).
 - **Verification.** `make test` is 746 offline tests and `make test-real` is 4 end-to-end tests
   against the real checkpoint (checkpoint load and embed, Laya relevance beating cosine on a
   probe, answerability gating, full pipeline retrieving the right file). Both pass under the
