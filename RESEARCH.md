@@ -141,11 +141,22 @@ These are different instruments for different failure modes, and conflating them
 
 ## 4. The ranked programme
 
+> **Status, 2026-10-03.** Parts of this programme have now been run, and the results are in
+> [`docs/research/08-frontier-2026.md`](docs/research/08-frontier-2026.md) and the README. In
+> short: **Tier 0.1 and 0.2 are done and decisive** (at depth 500 the pool holds 100% of the gold
+> facts while the best reorderable MAP@10 *falls* to 0.674, so "retrieve more" is refuted; the
+> comparison grid now carries permutation p-values, BH-FDR and an MDE per cell). **Tier 1.1 is
+> measured**: BridgeRAG's bridge-conditioned question is implementable here with Laya rather than
+> a 70B judge, and the conditioning is *real* (+0.0293 AUC, +0.0570 MAP@10 over a shuffled-bridge
+> control) while still losing to the cross-encoder (0.559 vs 0.796 AUC) — so the signal belongs in
+> the answerability gate, not the ranking path. **The bar to beat is now MAP@10 0.3280**
+> (coverage + document quota on the 400-query subset), not 0.2986. Tier 1.7 (atomic units) and
+> 1.8 (context prefix) are also measured and recorded.
+
 Ranked by expected value per unit of cost and risk. Every Tier 0 and Tier 1 item is
 `[offline]` except the two marked otherwise (0.6 needs `[data]`, 1.7 needs `[model]`), and
-none needs a GPU or an API. The number to beat is **MAP@10 0.2986** on MultiHop — the
-repository's own reranked row, not the 0.2835 no-rerank baseline — plus the published BEIR
-rows in §1.
+none needs a GPU or an API. The number to beat is the repository's own best measured row —
+**MAP@10 0.3280** on the 400-query subset — plus the published BEIR rows in §1.
 
 ### Tier 0 — diagnostics and claim-hardening (hours, `[offline]`)
 

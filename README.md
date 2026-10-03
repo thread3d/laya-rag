@@ -1009,6 +1009,15 @@ Recorded so they are not retried from intuition:
 | Lexical bridge-linked second-hop rescue (`rescue-0.3/0.5/0.7`) | MAP@10 0.2780 / 0.2706 / 0.2683 vs the cross-encoder's 0.2948 | rejected — readmitting low-relevance candidates because they share rare *terms* with a kept seed is a blunt proxy for the bridge relation; the cross-encoder is better without it |
 | Rank-1 guardrail before the cross-encoder | MAP@10 0.2882 vs 0.2948, but Hits@4 0.7530 vs 0.7348 | kept as a Hits@4 option, not a MAP lever — protecting rank 1 trades set coverage for early precision |
 | Bridge-conditioned relevance `s(q, b, c)` (BridgeRAG's mechanism, no LLM) | AUC 0.559 vs the shuffled-bridge control's 0.530 (**+0.0293 [+0.0112, +0.0496]**), and every rule beats its control — but the best rule reaches MAP@10 0.2687 vs the cross-encoder's 0.2986 and the coverage-quota 0.3280 | the conditioning works and the head is still the limit — a validated signal for the *gate*, not a retrieval lever. See the bridge subsection above |
+| Late interaction (MaxSim) over Laya's own token states | MAP@10 **0.1132** vs the fused order's 0.2680 (**−0.1548 [−0.1862, −0.1238]**); Hits@4 0.3250 vs 0.6850 | rejected — and the cost closes the question independently: the encoder emits **337 tokens per chunk** on average, so a multi-vector index is **1,010 KiB per chunk** (~963 GiB per million documents at fp32, 241 GiB int8) against 3 KB for one pooled vector |
+
+**On the late-interaction probe.** The token states *are* available from the shipped checkpoint
+(`agent.model.encoder(...).last_hidden_state`, 768-dim), so ColBERT-style retrieval is
+implementable here with no download — but the encoder is a decision model's, not a
+retrieval-trained one, and MaxSim over its tokens inherits exactly the weakness the pooled
+embedding has, at ~337× the storage. That combination is what closes DISCo's collective-coverage
+index as a route for this engine: the indexable submodular objective needs token-level vectors to
+be worth indexing in the first place. `make laya-maxsim-probe`, ~8 minutes on MPS.
 
 ### What would raise the score — measured
 

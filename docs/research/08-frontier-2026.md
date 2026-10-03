@@ -162,6 +162,26 @@ dependency of the highest-ceiling item in the programme. The cheap first probe i
 it is to ask whether Laya's own checkpoint exposes token states that a MaxSim head could use
 (the repo's own §4 open item), which needs no download.
 
+> **MEASURED, 2026-10-03 — the dependency is real, and it is not affordable or useful here.**
+> `tools/laya_maxsim_probe.py` (200 queries × depth 100, ~8 min on MPS) answers both halves:
+>
+> - **Token states exist**: `agent.model.encoder(...).last_hidden_state` is 768-dim per token,
+>   available from the shipped checkpoint with no download. The blocker that was "is this even
+>   implementable" is cleared.
+> - **MaxSim is far worse than the fused order**: MAP@10 **0.1132** vs **0.2680**
+>   (**−0.1548 [−0.1862, −0.1238]**), Hits@4 0.3250 vs 0.6850. The encoder is a decision model's,
+>   not retrieval-trained, and token-level matching inherits the same unadapted representation at
+>   more cost.
+> - **And the index is unaffordable at this token length**: mean **336.6 tokens per chunk**,
+>   i.e. **1,010 KiB per chunk** resident at fp32 — **963 GiB per million documents** (241 GiB
+>   int8) against ~3 KB for one pooled vector, a **337×** multiplier.
+>
+> So DISCo's indexed collective-coverage objective is closed as a route for this engine, for two
+> independent reasons. The ceiling it was meant to lift (0.7307 at depth 100) still stands, and
+> the remaining levers are the cheap model-free ones plus the coverage objective already shipped.
+> This is the DISCo row of the capability matrix below, and it is why the late-interaction item
+> drops out of the programme rather than being rescheduled.
+
 ### 2.3 RRK / compressed listwise reranking `[full text: abstract]`
 
 [Déjean & Clinchant, *Efficient Listwise Reranking with Compressed Document Representations*,
