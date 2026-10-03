@@ -32,7 +32,7 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -119,8 +119,15 @@ def score_arm(
     batch_size: int,
     started: float,
     done: dict[str, Any],
+    save: Callable[[dict[str, Any]], None],
+    save_every: int = 10,
 ) -> dict[str, Any]:
-    """Score every unresolved query for one arm, returning the extended result map."""
+    """Score every unresolved query for one arm, returning the extended result map.
+
+    The partial result is flushed every ``save_every`` queries, so an interrupted run
+    resumes from where it stopped instead of from zero — this is a multi-hour model run and
+    a docstring that promises resumability has to be true of the code, not of the intent.
+    """
     pending = [q for q in sorted(queries, key=lambda v: (len(v), v)) if q not in done]
     for n, q in enumerate(pending, start=1):
         texts = [corpus[doc_id] for doc_id in pools[q]]
@@ -128,11 +135,14 @@ def score_arm(
             queries[q], bridges[q], texts, batch_size=batch_size, wording=wording
         )
         done[q] = [round(float(s), 6) for s in scores]
+        if n % save_every == 0:
+            save(done)
         if n % 25 == 0 or n == len(pending):
             print(
                 f"    {n}/{len(pending)} ({time.perf_counter() - started:.0f}s)",
                 flush=True,
             )
+    save(done)
     return done
 
 
@@ -186,10 +196,37 @@ def main(argv=None) -> int:
             print(f"  {arm}: resuming with {len(done)} queries already scored", flush=True)
         bridges = bridge_text if arm == "real" else shuffled
         started = time.perf_counter()
+
+        def save(scores: dict[str, Any], _arm: str = arm, _out: Path = out) -> None:
+            """Flush the partial result so a kill costs at most ``save_every`` queries."""
+            _out.write_text(
+                json.dumps(
+                    {
+                        "_settings": {
+                            "arm": _arm,
+                            "wording": args.wording,
+                            "bridge_k": args.bridge_k,
+                            "batch_size": args.batch_size,
+                            "shuffle_seed": args.shuffle_seed,
+                            "ce_cache": ce_path.name,
+                            "model": settings.get("model"),
+                            "overlap": overlap,
+                            "depth": depth,
+                            "limit_queries": len(queries),
+                            "partial_queries": len(scores),
+                            "seconds": round(time.perf_counter() - started, 1),
+                        },
+                        "scores": scores,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
         print(f"  {arm}: scoring {len(queries) - len(done)} queries...", flush=True)
         scores = score_arm(
             reranker, queries, pools, corpus, bridges, args.wording,
-            args.batch_size, started, done,
+            args.batch_size, started, done, save,
         )
         payload = {
             "_settings": {
@@ -203,6 +240,7 @@ def main(argv=None) -> int:
                 "overlap": overlap,
                 "depth": depth,
                 "limit_queries": len(queries),
+                "partial_queries": len(scores),
                 "seconds": round(time.perf_counter() - started, 1),
             },
             "scores": scores,

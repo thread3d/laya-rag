@@ -177,7 +177,7 @@ a housekeeping one. Snippet-level; treat each as a lead:
 | --- | --- |
 | [Oracle: *How to Detect RAG Index Drift*](https://blogs.oracle.com/developers/how-to-detect-rag-index-drift-deleted-docs-stale-chunks-and-duplicate-embeddings) | deleted docs, **stale chunks**, and **duplicate embeddings** are three distinct drift classes needing three distinct detectors |
 | [*Measuring Retrieval Freshness and Accuracy Degradation in Continuous ETL-Driven RAG*, JISEM 2026](https://jisem-journal.com/index.php/journal/article/view/14454) | retrieval accuracy degrades measurably as an ETL-driven index ages |
-| [*Authorization-First Retrieval: Enforcing Least Privilege in Multi-Agent RAG*, TrustNLP 2026](https://aclanthology.org/2026.trustnlp-main.15.pdf) | authorisation must be a *retrieval-time predicate*, not a post-filter — which is exactly the `VectorIndex.search` metadata gap `[repo]` |
+| [*Authorization-First Retrieval: Enforcing Least Privilege in Multi-Agent RAG*, TrustNLP 2026](https://aclanthology.org/2026.trustnlp-main.15.pdf) | authorisation must be a *retrieval-time predicate*, not a post-filter — this repo already does the retrieval-time half (see the correction below) |
 | [*RAGBench*](https://arxiv.org/pdf/2407.11005), [*Bencharking LLM Faithfulness … Evolving Leaderboards*, EMNLP 2025 Industry](https://aclanthology.org/2025.emnlp-industry.54.pdf) | end-to-end RAG scoring is now a labelled, explainable harness with evolving leaderboards — the repo's `engine + <model>` labelling rule is the right response, but a *shared* harness would make it comparable |
 
 The repo is ahead of most stacks on one of these already: Phase 6.1 prunes deleted/unreadable
@@ -186,6 +186,24 @@ drift classes** — a chunk whose source changed under a stable path (incrementa
 the path, but not a *content* change detection signal), and near-duplicate embeddings
 (`RECALL_DEDUP_THRESHOLD` suppresses duplicates *at query time* `[repo]`, which is a different
 thing from detecting them in the index).
+
+> **Correction, added after reading the code (2026-10-03).** Two claims in this section were
+> wrong about the repository and are corrected here rather than left standing:
+>
+> 1. **Tenancy and authorisation are not absent.** `src/laya_rag/trust.py` implements a
+>    path-pattern trust manifest with tiers, a per-tenant allow-list and an allow-list-by-default
+>    reading; the engine applies it *before* decisions, over an over-fetched candidate set, and
+>    reports `trust_filtered` in `Result` and the manifest in `stats()`. The residual gap is
+>    narrower than "no ACL is possible": `VectorIndex.search` still takes no predicate, so
+>    filtering happens on candidates the vector search already returned, which is a recall and
+>    scaling question at very large corpora, not a missing capability.
+> 2. **The drift classes have now been implemented** — `src/laya_rag/integrity.py` detects
+>    deleted documents, exact duplicate content and (MinHash-LSH) near-duplicate chunks, exposed
+>    as `laya-rag integrity` and `GET /v1/integrity`. It reports only; it never repairs, because
+>    the one safe automatic rule already lives in `index_paths`.
+>
+> The lesson for the survey method: a claim about the code has to be read out of the code, not
+> inferred from the improvement backlog's framing of it.
 
 ### 2.6 GraphRAG vs vector RAG, measured `[snippet]`
 
@@ -215,8 +233,8 @@ the capability does not exist, not that it is weak.
 | per-claim support / adjudication | common in 2026 stacks | **present, three-state gap** | reuses `NLIAnswerability` `[repo]` |
 | provenance & citation mechanics | table stakes | **present** (`verify.py`, deterministic) | extend to numeric/negation |
 | index lifecycle: delete/prune | table stakes | **present** (Phase 6.1) | — |
-| index lifecycle: staleness & dup detection | common | **absent** | §2.5, offline |
-| query-time ACL / tenancy | required in any multi-user deployment | **absent structurally** (no metadata predicate) | `acl` on `Chunk` + over-fetch filter |
+| index lifecycle: staleness & dup detection | common | **present** — `integrity.py`, `laya-rag integrity`, `GET /v1/integrity` (added 2026-10-03) | — |
+| query-time ACL / tenancy | required in any multi-user deployment | **present** as a retrieval-time trust manifest with per-tenant ACL; the index itself still takes no predicate | push the predicate into the search for very large corpora |
 | injection defence | table stakes | **absent** (verbatim splice into composer) | survey Tier 2.8, offline |
 | temporal / recency-aware retrieval | common | **absent** | metadata + freshness-weighted fusion |
 | multimodal (image/table) | common | **absent** | a whole capability; out of scope for this host |

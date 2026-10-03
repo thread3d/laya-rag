@@ -209,6 +209,12 @@ multihop-rerank-experiment:
 multihop-tri-cache:
 	OMP_NUM_THREADS=16 $(PY) tools/multihop_tri_cache.py $(TRI_ARGS)
 
+# Is a late-interaction (MaxSim) channel worth building? Token states come from the
+# shipped checkpoint, so this answers DISCo's blocking dependency without a download
+# (RESEARCH.md 08 section 3.1). Reports MAP@10 with a paired interval and the index cost.
+laya-maxsim-probe:
+	OMP_NUM_THREADS=16 $(PY) tools/laya_maxsim_probe.py $(MAXSIM_ARGS)
+
 # Atomic-unit lexical retrieval with parent-window return (RESEARCH.md Tier 1.5).
 multihop-atom-index:
 	OMP_NUM_THREADS=16 $(PY) tools/multihop_atom_index.py $(ATOM_ARGS)

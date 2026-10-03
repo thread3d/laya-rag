@@ -186,6 +186,25 @@ def _cmd_stats(args: argparse.Namespace, config: EngineConfig) -> int:
     return 0
 
 
+def _cmd_integrity(args: argparse.Namespace, config: EngineConfig) -> int:
+    """Report index drift. Reads the index only; repairs nothing."""
+    from .integrity import audit, summarize
+
+    engine = RagEngine(config)
+    if not engine.has_index():
+        print("error: no index at {}".format(config.index_dir), file=sys.stderr)
+        return 3
+    chunks = engine.index.chunks
+    report = audit(
+        chunks,
+        near_duplicates=bool(args.near_duplicates),
+        threshold=float(args.threshold),
+        max_chunks=int(args.max_chunks),
+    )
+    _emit(report, args.json, summarize(report))
+    return 0
+
+
 def _cmd_reset(args: argparse.Namespace, config: EngineConfig) -> int:
     RagEngine(config).reset()
     _emit({"status": "ok", "index_dir": str(config.index_dir)}, args.json,
@@ -282,6 +301,24 @@ def build_parser() -> argparse.ArgumentParser:
     stats = sub.add_parser("stats", help="show configuration and corpus statistics")
     stats.add_argument("--json", action="store_true")
     stats.set_defaults(func=_cmd_stats)
+
+    integrity = sub.add_parser(
+        "integrity", help="report index drift: deleted documents, duplicate and near-duplicate chunks"
+    )
+    integrity.add_argument(
+        "--near-duplicates", action="store_true", dest="near_duplicates",
+        help="also scan for near-duplicate chunks (MinHash LSH; bounded by --max-chunks)",
+    )
+    integrity.add_argument(
+        "--threshold", type=float, default=0.85,
+        help="jaccard at or above which two chunks are near-duplicates (default 0.85)",
+    )
+    integrity.add_argument(
+        "--max-chunks", type=int, default=20000, dest="max_chunks",
+        help="bound the near-duplicate scan; a truncated scan is reported as truncated",
+    )
+    integrity.add_argument("--json", action="store_true")
+    integrity.set_defaults(func=_cmd_integrity)
 
     reset = sub.add_parser("reset", help="delete the index")
     reset.add_argument("--json", action="store_true")

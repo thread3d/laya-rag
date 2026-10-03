@@ -118,3 +118,54 @@ def test_cli_adjudicate_summarises_the_report(monkeypatch, capsys):
     assert code == 0
     assert "supported 1  unsupported 0  not measured 1  of 2" in out
     assert "[supported] Alpha is a true statement about refunds." in out
+
+
+# ── integrity ─────────────────────────────────────────────────────────────
+
+def test_integrity_parser_defaults():
+    args = cli.build_parser().parse_args(["integrity"])
+    assert args.near_duplicates is False
+    assert args.threshold == 0.85
+    assert args.max_chunks == 20000
+    assert args.func is cli._cmd_integrity
+
+
+def test_integrity_reports_drift_without_repairing_anything(tmp_path, monkeypatch, capsys):
+    """The command reads the index and prints a report; it must not mutate it."""
+    from .support import stub_engine, write_corpus
+
+    corpus = write_corpus(tmp_path / "corpus")
+    engine = stub_engine(tmp_path)
+    engine.index_paths([str(corpus)])
+    before = len(engine.index.chunks)
+
+    class _Engine:
+        def __init__(self, config):
+            pass
+
+        has_index = staticmethod(engine.has_index)
+        index = engine.index
+
+    monkeypatch.setattr(cli, "RagEngine", _Engine)
+    args = cli.build_parser().parse_args(["integrity"])
+    code = cli._cmd_integrity(args, EngineConfig())
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "deleted documents:" in out
+    assert "duplicate content:" in out
+    assert len(engine.index.chunks) == before
+
+
+def test_integrity_without_an_index_is_an_error(monkeypatch, capsys):
+    class _Engine:
+        def __init__(self, config):
+            pass
+
+        @staticmethod
+        def has_index():
+            return False
+
+    monkeypatch.setattr(cli, "RagEngine", _Engine)
+    args = cli.build_parser().parse_args(["integrity"])
+    assert cli._cmd_integrity(args, EngineConfig()) == 3
+    assert "no index" in capsys.readouterr().err

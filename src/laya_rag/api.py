@@ -28,6 +28,7 @@ from .compose import resolve_target
 from .config import EngineConfig
 from .engine import IndexNotBuiltError, RagEngine
 from .evidence import group_passages_by_document
+from .integrity import audit
 from .model import ModelUnavailableError
 from .rerank import DecisionError
 from .verify import split_claims, verify_citations
@@ -259,6 +260,30 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         """
         listing = get_engine().list_documents()
         return {"total": len(listing), "documents": listing}
+
+    @app.get("/v1/integrity")
+    def integrity(
+        near_duplicates: bool = False,
+        threshold: float = 0.85,
+        max_chunks: int = 20000,
+        _: None = Depends(authorise),
+    ) -> dict[str, Any]:
+        """Index drift: deleted documents, duplicate and near-duplicate chunks.
+
+        Reports only — nothing here mutates the index. The near-duplicate scan is opt-in
+        because it is the only part that is not linear in the corpus.
+        """
+        engine = get_engine()
+        if not engine.has_index():
+            return {"chunks": 0, "paths": 0, "clean": True, "index_present": False}
+        report = audit(
+            engine.index.chunks,
+            near_duplicates=near_duplicates,
+            threshold=threshold,
+            max_chunks=max_chunks,
+        )
+        report["index_present"] = True
+        return report
 
     @app.get("/v1/chunks")
     def chunks(

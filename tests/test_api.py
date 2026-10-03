@@ -167,3 +167,35 @@ def test_stats_report_an_absent_api_key_as_null(tmp_path, monkeypatch):
     client = TestClient(app)
 
     assert client.get("/v1/stats").json()["config"]["api_key"] is None
+
+
+# ── index integrity ──────────────────────────────────────────────────────
+
+def test_integrity_is_clean_before_indexing(ctx):
+    client, _engine, _corpus = ctx
+    body = client.get("/v1/integrity").json()
+    assert body["index_present"] is False
+    assert body["clean"] is True
+
+
+def test_integrity_reports_a_duplicate_after_indexing(ctx):
+    """Two files with identical text leave a redundant chunk the report must surface."""
+    client, _engine, corpus = ctx
+    (corpus / "refunds-copy.md").write_text(
+        (corpus / "refunds.md").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+    body = client.get("/v1/integrity").json()
+    assert body["index_present"] is True
+    assert body["chunks"] > 0
+    assert body["duplicate_content"]["clusters"] >= 1
+    assert body["duplicate_content"]["redundant_chunks"] >= 1
+    assert body["clean"] is False
+
+
+def test_integrity_can_scan_for_near_duplicates(ctx):
+    client, _engine, corpus = ctx
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+    body = client.get("/v1/integrity", params={"near_duplicates": True, "threshold": 0.8}).json()
+    assert body["near_duplicate_content"]["threshold"] == 0.8
+    assert "pairs" in body["near_duplicate_content"]
