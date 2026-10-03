@@ -849,12 +849,19 @@ of it. Both were tried on the full 2,255-query protocol:
   0.3203, neither above the 0.3280 bar.
 - The 400-query subset showed IDF-sum **+0.0150 Hits@4**; the full protocol gives **+0.0044**. The
   subset gain did not replicate, which is what the deterministic-subset bar is for.
+- **Per-question-type routing** (`tools/multihop_routing.py`), chosen under a two-direction nested
+  protocol so every query is scored by a rule picked without it: **0.3169 vs 0.3192** globally
+  selected on the same halves (**−0.0023 [−0.0056, +0.0008]**, ns). The picks are also unstable —
+  `inference_query` chooses `coverage-0.5` on one half and `covquota-3-0.5` on the other, and
+  `temporal_query` chooses `coverage-0.5` versus `blend-0.5`. Only `comparison_query` picks the
+  same rule both ways, which is the signature of fitting noise rather than routing.
 
 So the ordering headroom is **not** reachable by re-weighting or searching the atoms the selector
-already has. With the LTR null, the same conclusion now arrives from three directions: the next
-gain has to come from **new information** — a signal that separates candidates the current
-features cannot — rather than a better optimizer over the current ones. That moves the recall and
-signal work ahead of further selection-rule tuning.
+already has, nor by routing across question types. With the LTR null, four independent attempts to
+close it by optimizing over existing features have failed: the next gain has to come from **new
+information** — a signal that separates candidates the current features cannot — rather than a
+better optimizer over the current ones. That moves the recall and signal work ahead of further
+selection-rule tuning.
 
 - **Coverage is the lever, not ranking.** The cross-encoder alone is +0.040; making it serve a
   set objective that spends slots on *distinct facts*, with a document quota, is +0.065 — the new

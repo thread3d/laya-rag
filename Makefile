@@ -234,6 +234,10 @@ multihop-ltr:
 multihop-ceiling-decomp:
 	$(PY) tools/multihop_ceiling_decomp.py $(CEILING_DECOMP_ARGS)
 
+# Per-question-type routing of the selection rule under a two-direction nested protocol.
+multihop-routing:
+	$(PY) tools/multihop_routing.py $(ROUTING_ARGS)
+
 # Atomic-unit lexical retrieval with parent-window return (RESEARCH.md Tier 1.5).
 multihop-atom-index:
 	OMP_NUM_THREADS=16 $(PY) tools/multihop_atom_index.py $(ATOM_ARGS)
