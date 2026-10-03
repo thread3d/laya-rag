@@ -674,6 +674,75 @@ def tri_rankings(
     return out
 
 
+def atom_weight_rankings(
+    cache: Mapping[str, Any],
+    corpus: Mapping[str, str],
+    queries: Mapping[str, str],
+    top_k: int,
+    *,
+    lam: float = 0.7,
+    beam: bool = False,
+    beam_width: int = 4,
+) -> dict[str, dict[str, list[int]]]:
+    """Selection rules over a better atom weighting, and optionally beam search.
+
+    ``atom_index`` weights an atom by its character length. Two replacements are measured
+    here: the IDF of its terms (a gold fact is specific, so its terms are rare), either as a
+    mean over distinct terms (length-invariant) or a sum (favours more distinct terms). Beam
+    search is the other half of the estimator question — greedy commits to one marginal gain
+    at a time and never reconsiders — and it is opt-in because it costs ``beam_width`` times
+    the greedy work.
+    """
+    from multihop_coverage import (
+        atom_index,
+        beam_facility_location_select,
+        coverage_beam_order,
+        idf_atom_weight,
+        split_atoms,
+    )
+
+    atoms_by_doc = {doc_id: split_atoms(text) for doc_id, text in corpus.items()}
+    atom_ids_of, char_weight, atom_texts = atom_index(list(atoms_by_doc.values()))
+    idf_mean = idf_atom_weight(atom_texts, reduction="mean")
+    idf_sum = idf_atom_weight(atom_texts, reduction="sum")
+
+    names = [
+        f"idf-mean-{lam}", f"idf-sum-{lam}",
+        f"idf-mean-covquota-3-{lam}", f"idf-sum-covquota-3-{lam}",
+    ]
+    if beam:
+        # Two beam variants: the plain global set objective, and beam search over the
+        # *same* greedy objective (beam_width=1 == greedy), so the lookahead is attributable.
+        names += [f"beam-{lam}", f"beam-idf-{lam}", f"beam-greedy-{lam}", f"beam-greedy-idf-{lam}"]
+    out: dict[str, dict[str, list[int]]] = {name: {} for name in names}
+    for q, payload in cache["queries"].items():
+        scores = payload["ce"]
+        atoms = payload["atoms"]
+        docs = [document_of(chunk_id) for chunk_id in payload["pool"]]
+        out[f"idf-mean-{lam}"][q] = coverage_order(scores, atoms, idf_mean, top_k, lam)
+        out[f"idf-sum-{lam}"][q] = coverage_order(scores, atoms, idf_sum, top_k, lam)
+        out[f"idf-mean-covquota-3-{lam}"][q] = coverage_doc_quota_order(
+            scores, atoms, idf_mean, docs, top_k, lam, 3
+        )
+        out[f"idf-sum-covquota-3-{lam}"][q] = coverage_doc_quota_order(
+            scores, atoms, idf_sum, docs, top_k, lam, 3
+        )
+        if beam:
+            out[f"beam-{lam}"][q] = beam_facility_location_select(
+                scores, atoms, char_weight, top_k, lam, beam_width=beam_width
+            )
+            out[f"beam-idf-{lam}"][q] = beam_facility_location_select(
+                scores, atoms, idf_mean, top_k, lam, beam_width=beam_width
+            )
+            out[f"beam-greedy-{lam}"][q] = coverage_beam_order(
+                scores, atoms, char_weight, top_k, lam, beam_width=beam_width
+            )
+            out[f"beam-greedy-idf-{lam}"][q] = coverage_beam_order(
+                scores, atoms, idf_sum, top_k, lam, beam_width=beam_width
+            )
+    return out
+
+
 def truncate_pools(cache: Mapping[str, Any], limit: int | None) -> Mapping[str, Any]:
     """Truncate every cached pool to its first ``limit`` candidates, in place.
 
@@ -725,6 +794,12 @@ def parse_args(argv=None) -> argparse.Namespace:
              "the engine's historical sigmoid>=0.5 cut, omitting it is the experiments' "
              "no-threshold behaviour",
     )
+    ap.add_argument("--atom-lam", type=float, default=0.7,
+                    help="coverage weight for the IDF / beam selector variants")
+    ap.add_argument("--beam", action="store_true",
+                    help="also run beam search over the coverage objective (costs "
+                         "beam_width x the greedy work; slow on the full protocol)")
+    ap.add_argument("--beam-width", type=int, default=4)
     ap.add_argument("--samples", type=int, default=1000)
     ap.add_argument("--holdout-seed", type=int, default=17,
                     help="split for choose-on-A / report-on-B selection")
@@ -797,6 +872,10 @@ def main(argv=None) -> int:
         if x["question_type"] != "null_query"
     }
     rankings.update(coverage_query_rankings(cache, corpus, item_queries, args.top_k))
+    rankings.update(atom_weight_rankings(
+        cache, corpus, item_queries, args.top_k,
+        lam=args.atom_lam, beam=args.beam, beam_width=args.beam_width,
+    ))
     per_query: dict[str, dict[str, dict[str, float]]] = {}
     summary: dict[str, dict[str, float]] = {}
     for name, ranking in rankings.items():

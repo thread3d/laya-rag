@@ -26,9 +26,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import re
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -186,6 +188,185 @@ def doc_quota_select(rel: np.ndarray, docs: np.ndarray, top_k: int, min_docs: in
             selected.append(i)
             taken.add(i)
     return selected
+
+
+def idf_atom_weight(
+    atom_texts: Sequence[str],
+    *,
+    reduction: str = "mean",
+) -> list[float]:
+    """Weight each atom by the IDF of its terms, not by its character length.
+
+    ``atom_index`` weights an atom by ``len(text)``, so a long generic sentence counts as
+    much as a short one naming the thing asked about. A gold fact is usually *specific*, so
+    its terms are rare in the corpus — which is exactly what IDF measures. This is the
+    cheap, model-free version of "score atoms for fact-likeness" (RESEARCH.md Tier 1.4).
+
+    ``reduction="mean"`` is length-invariant (a long atom cannot win by having more terms);
+    ``"sum"`` behaves like the length weight and is kept so the two can be compared rather
+    than assumed. Texts are already lowercased and whitespace-normalised by ``atom_index``.
+
+    Both reductions are over an atom's **distinct** terms: repeating a word does not raise
+    its weight, only adding a different one does. That is deliberate — a fact is specific
+    because of which words it uses, not how many times it repeats them.
+    """
+    if reduction not in {"mean", "sum"}:
+        raise ValueError(f"reduction must be 'mean' or 'sum', got {reduction!r}")
+    total = len(atom_texts)
+    if total == 0:
+        return []
+    document_frequency: Counter = Counter()
+    token_sets: list[set[str]] = []
+    for text in atom_texts:
+        tokens = set(str(text).split())
+        token_sets.append(tokens)
+        document_frequency.update(tokens)
+    idf = {term: math.log(1.0 + total / count) for term, count in document_frequency.items()}
+    weights: list[float] = []
+    for tokens in token_sets:
+        if not tokens:
+            weights.append(0.0)
+            continue
+        values = [idf[term] for term in tokens]
+        weights.append(sum(values) / len(values) if reduction == "mean" else sum(values))
+    return weights
+
+
+def beam_facility_location_select(
+    rel: np.ndarray,
+    candidate_atom_ids: Sequence[Sequence[int]],
+    atom_weight: Sequence[float],
+    top_k: int,
+    lam: float = 0.7,
+    *,
+    beam_width: int = 4,
+) -> list[int]:
+    """Beam search over the coverage objective, instead of a single greedy pass.
+
+    Greedy commits to the best marginal gain at each step and never reconsiders; beam
+    search keeps the ``beam_width`` best partial selections and can therefore reach a set
+    greedy would not. The objective is explicit and global, so the search is well defined:
+
+        F(S) = lam * mean(normalized relevance of S)
+             + (1 - lam) * (weight of atoms covered by S / weight of all atoms)
+    """
+    scores = np.asarray(rel, dtype=float)
+    if scores.size:
+        low, high = float(scores.min()), float(scores.max())
+        normalized = (scores - low) / (high - low) if high > low else np.zeros_like(scores)
+    else:
+        normalized = scores
+    atoms = [set(ids) for ids in candidate_atom_ids]
+    total_weight = float(sum(atom_weight)) or 1.0
+    candidates = list(range(len(atoms)))
+    if top_k <= 0 or not candidates:
+        return []
+
+    # Each state: (selected tuple, covered frozenset, relevance sum).
+    beam: list[tuple[tuple[int, ...], frozenset[int], float]] = [((), frozenset(), 0.0)]
+    for _ in range(min(top_k, len(candidates))):
+        expanded: dict[tuple[int, ...], tuple[tuple[int, ...], frozenset[int], float]] = {}
+        for selected, covered, relevance_sum in beam:
+            chosen = set(selected)
+            for i in candidates:
+                if i in chosen:
+                    continue
+                new_selected = selected + (i,)
+                new_covered = covered | atoms[i]
+                new_sum = relevance_sum + float(normalized[i])
+                expanded[new_selected] = (new_selected, new_covered, new_sum)
+        if not expanded:
+            break
+        scored = [
+            (
+                lam * (relevance_sum / len(selected))
+                + (1.0 - lam) * (sum(atom_weight[a] for a in covered) / total_weight),
+                selected,
+                covered,
+                relevance_sum,
+            )
+            for selected, covered, relevance_sum in expanded.values()
+        ]
+        scored.sort(key=lambda row: (-row[0], row[1]))
+        beam = [(selected, covered, relevance_sum)
+                for _score, selected, covered, relevance_sum in scored[:beam_width]]
+
+    best = beam[0][0] if beam else ()
+    # A beam smaller than top_k (a tiny pool) still has to return a full-length list.
+    selected = list(best)
+    if len(selected) < min(top_k, len(candidates)):
+        for i in candidates:
+            if i not in set(selected):
+                selected.append(i)
+            if len(selected) >= min(top_k, len(candidates)):
+                break
+    return selected
+
+
+def coverage_beam_order(
+    rel: Sequence[float],
+    candidate_atom_ids: Sequence[Sequence[int]],
+    atom_weight: Sequence[float],
+    top_k: int,
+    lam: float = 0.5,
+    *,
+    beam_width: int = 4,
+) -> list[int]:
+    """Beam search over the *same* objective the greedy coverage rule optimizes.
+
+    The greedy rule scores each candidate at each step as
+    ``lam * normalized_relevance + (1 - lam) * (marginal_gain / best_available_gain)`` and
+    commits to the winner. That per-step normalisation is what makes the two terms
+    comparable, and it is why beam-searching a plain global set objective is a different
+    experiment, not a stronger version of this one.
+
+    This keeps the objective and adds lookahead: every beam state computes its own gains and
+    its own scale, extensions accumulate the same per-step score, and the best
+    ``beam_width`` partial selections survive. ``beam_width=1`` reproduces the greedy rule
+    exactly, which is what makes the comparison attributable to the lookahead alone.
+    """
+    values = [float(value) for value in rel]
+    low, high = (min(values), max(values)) if values else (0.0, 0.0)
+    normalized = [(v - low) / (high - low) if high > low else 0.0 for v in values]
+    atoms = [set(ids) for ids in candidate_atom_ids]
+    n = len(atoms)
+    if top_k <= 0 or n == 0:
+        return []
+
+    # state: (selected tuple, covered frozenset, cumulative per-step score)
+    beam: list[tuple[tuple[int, ...], frozenset[int], float]] = [((), frozenset(), 0.0)]
+    for _ in range(min(top_k, n)):
+        extensions: dict[tuple[int, ...], tuple[tuple[int, ...], frozenset[int], float]] = {}
+        for selected, covered, cumulative in beam:
+            chosen = set(selected)
+            remaining = [i for i in range(n) if i not in chosen]
+            if not remaining:
+                continue
+            gains = {
+                i: float(sum(atom_weight[a] for a in atoms[i] if a not in covered))
+                for i in remaining
+            }
+            scale = max(gains.values()) if gains else 0.0
+            scale = scale if scale > 0.0 else 1.0
+            for i in remaining:
+                step = lam * normalized[i] + (1.0 - lam) * (gains[i] / scale)
+                new_selected = selected + (i,)
+                extensions[new_selected] = (
+                    new_selected, covered | atoms[i], cumulative + step,
+                )
+        if not extensions:
+            break
+        ranked = sorted(extensions.values(), key=lambda row: (-row[2], row[0]))
+        beam = ranked[:beam_width]
+
+    best = list(beam[0][0]) if beam else []
+    if len(best) < min(top_k, n):  # a tiny pool still returns a full-length list
+        for i in range(n):
+            if i not in set(best):
+                best.append(i)
+            if len(best) >= min(top_k, n):
+                break
+    return best
 
 
 def split_atoms(text: str, min_chars: int = ATOM_MIN_CHARS) -> list[str]:

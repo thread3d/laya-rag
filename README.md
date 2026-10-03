@@ -836,6 +836,26 @@ p=0.001), but it does **not** beat the rules already measured — the gain over 
 the blending that `RERANK_BLEND` already does, not something the fit added. `tools/multihop_ltr.py`,
 `make multihop-ltr`.
 
+**And a second null on the same headroom, which narrows where it can come from.** If the ordering
+gap were an *optimizer* problem, a better atom weighting or a lookahead search would capture part
+of it. Both were tried on the full 2,255-query protocol:
+
+- **IDF atom weights** instead of character length — a gold fact is specific, so its terms are
+  rare. Mean-over-distinct-terms is consistently *worse* (MAP@10 0.3059 vs 0.3165);
+  sum-over-distinct-terms ties the best rule at **0.3195 vs 0.3192** (MAP **+0.0003
+  [−0.0002, +0.0007]**, p=0.26; Hits@4 +0.0044, p=0.09).
+- **Beam search** over both the global set objective and the *same* per-step objective the greedy
+  rule optimizes (`coverage_beam_order`; `beam_width=1` reproduces greedy exactly) — 0.3139 and
+  0.3203, neither above the 0.3280 bar.
+- The 400-query subset showed IDF-sum **+0.0150 Hits@4**; the full protocol gives **+0.0044**. The
+  subset gain did not replicate, which is what the deterministic-subset bar is for.
+
+So the ordering headroom is **not** reachable by re-weighting or searching the atoms the selector
+already has. With the LTR null, the same conclusion now arrives from three directions: the next
+gain has to come from **new information** — a signal that separates candidates the current
+features cannot — rather than a better optimizer over the current ones. That moves the recall and
+signal work ahead of further selection-rule tuning.
+
 - **Coverage is the lever, not ranking.** The cross-encoder alone is +0.040; making it serve a
   set objective that spends slots on *distinct facts*, with a document quota, is +0.065 — the new
   internal bar at **MAP@10 0.3192** (0.3280 on the 400-query subset). That is past the 0.2986 the
@@ -991,8 +1011,13 @@ should not be cited as a strength out of domain.
   comparison questions (0.664). The fix is to recalibrate on the target domain —
   `tools/answerability_train.py` (see `--group-by`), `LAYA_RAG_ANSWERABILITY_GATE_PATH` — not
   to trust the scalar.
-- **No text generation**, so it cannot be entered on KILT, MTEB, HHEM or the TREC RAG track at
-  all, and any end-to-end answer accuracy would belong to whichever LLM is attached.
+- **No generation of its own.** The four generation-facing targets are each blocked for a
+  *different* reason, so "no text generation" is shorthand rather than the whole story: MTEB
+  scores a submitted encoder, not text; HHEM ranks hallucination *detectors*, which the engine
+  is not; KILT and the TREC RAG track both want generated prose, which `compose.py` can
+  supply — but KILT additionally needs an entity linker, TREC needs NIST corpus and gold-nugget
+  access, and either leaderboard row would score the attached LLM. Any end-to-end answer
+  accuracy is `engine + <model>`, never the engine's.
 - **Laya's own encoder is unadapted for retrieval, not merely useless** (nDCG@10 ≈ 0.014 on
   SciFact against BM25's 0.654), so the shipped default is lexical-only and reaching competitive
   dense retrieval means supplying `bge-small`. A closed-form ridge projection distilled from

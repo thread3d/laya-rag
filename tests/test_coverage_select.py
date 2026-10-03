@@ -211,3 +211,115 @@ def test_official_metric_normalizes_average_precision_by_the_true_gold_count():
         ["alpha", "gamma"], ["alpha", "gamma"]
     )
     assert both["MAP@10"] == pytest.approx((1 + 1 / 2) / 2)
+
+
+# ── atom weighting and beam search (estimator improvements) ─────────────
+
+def test_idf_atom_weight_ranks_a_rare_atom_above_a_common_one():
+    """A specific fact uses rare terms; a generic sentence uses common ones."""
+    texts = [
+        "refunds are processed within five business days",   # rare-ish
+        "the company said this about the thing",             # generic
+        "the company said that about the thing",             # generic
+        "the company said more about the thing",             # generic
+    ]
+    weights = mc.idf_atom_weight(texts, reduction="mean")
+    assert weights[0] > weights[1]
+    assert weights[1] == pytest.approx(weights[2]) == pytest.approx(weights[3])
+
+
+def test_idf_atom_weight_counts_distinct_terms_only():
+    """Repeating a word must not raise an atom's weight; adding a rare one must."""
+    repeated = ["alpha beta"] * 3 + ["alpha beta alpha beta alpha beta"]
+    mean = mc.idf_atom_weight(repeated, reduction="mean")
+    total = mc.idf_atom_weight(repeated, reduction="sum")
+    assert mean[3] == pytest.approx(mean[0])
+    assert total[3] == pytest.approx(total[0])
+
+    # Two extra rare terms: 'sum' grows with the number of distinct terms, 'mean' need not.
+    extended = ["alpha beta"] * 3 + ["alpha beta gamma delta"]
+    assert mc.idf_atom_weight(extended, reduction="sum")[3] > \
+        mc.idf_atom_weight(extended, reduction="sum")[0]
+    assert len(mc.idf_atom_weight(extended, reduction="mean")) == 4
+
+
+def test_idf_atom_weight_handles_empty_input_and_empty_atoms():
+    assert mc.idf_atom_weight([]) == []
+    assert mc.idf_atom_weight(["", "  "]) == [0.0, 0.0]
+
+
+def test_idf_atom_weight_rejects_an_unknown_reduction():
+    with pytest.raises(ValueError, match="reduction"):
+        mc.idf_atom_weight(["a b"], reduction="max")
+
+
+def test_beam_search_returns_exactly_top_k_distinct_candidates():
+    rel = np.array([0.9, 0.8, 0.7, 0.1])
+    atoms = [[0], [1], [2], [3]]
+    weight = [1.0, 1.0, 1.0, 1.0]
+    out = mc.beam_facility_location_select(rel, atoms, weight, top_k=3, lam=0.7, beam_width=4)
+    assert len(out) == 3
+    assert len(set(out)) == 3
+    assert all(0 <= i < 4 for i in out)
+
+
+def test_beam_search_prefers_coverage_when_relevance_is_flat():
+    """With no relevance signal the objective is pure coverage, so distinct atoms win."""
+    rel = np.array([0.5, 0.5, 0.5])
+    atoms = [[0, 1], [0, 1], [2]]          # candidate 2 is the only new fact
+    weight = [1.0, 1.0, 1.0]
+    out = mc.beam_facility_location_select(rel, atoms, weight, top_k=2, lam=0.0, beam_width=4)
+    assert 2 in out
+
+
+def test_beam_search_honours_relevance_when_lambda_is_one():
+    rel = np.array([0.1, 0.9, 0.5])
+    atoms = [[0], [1], [2]]
+    weight = [1.0, 1.0, 1.0]
+    out = mc.beam_facility_location_select(rel, atoms, weight, top_k=1, lam=1.0, beam_width=4)
+    assert out == [1]
+
+
+def test_beam_search_handles_degenerate_input():
+    assert mc.beam_facility_location_select(np.array([]), [], [], top_k=3) == []
+    assert mc.beam_facility_location_select(np.array([0.5]), [[0]], [1.0], top_k=0) == []
+    # A pool smaller than top_k still returns every candidate exactly once.
+    out = mc.beam_facility_location_select(np.array([0.5, 0.4]), [[0], [1]], [1.0, 1.0], top_k=5)
+    assert sorted(out) == [0, 1]
+
+
+def _greedy(scores, atoms, weight, top_k, lam):
+    """The greedy coverage rule this module ships, with the redundancy term off."""
+    n = len(scores)
+    return mc.facility_location_select(
+        np.asarray(scores, dtype=float), atoms, weight, np.zeros((n, n)),
+        top_k, lam, use_redundancy=False,
+    )
+
+
+def test_coverage_beam_with_width_one_reproduces_greedy_exactly():
+    """The control that makes the lookahead attributable: beam(1) == the greedy rule."""
+    scores = [0.9, 0.8, 0.7, 0.2, 0.1]
+    atoms = [[0], [1], [2], [0, 1], [3]]
+    weight = [1.0, 1.0, 1.0, 2.0, 1.0]
+    assert mc.coverage_beam_order(
+        scores, atoms, weight, top_k=3, lam=0.5, beam_width=1
+    ) == _greedy(scores, atoms, weight, 3, 0.5)
+
+
+def test_coverage_beam_with_lookahead_keeps_alternatives():
+    scores = [0.9, 0.8, 0.1, 0.1]
+    atoms = [[0], [0, 1], [2], [2]]
+    weight = [1.0, 1.0, 1.0, 1.0]
+    beam = mc.coverage_beam_order(scores, atoms, weight, top_k=2, lam=0.5, beam_width=4)
+    assert len(beam) == 2
+    assert len(set(beam)) == 2
+    # With lookahead the search may leave the greedy choice, but never returns an invalid set.
+    assert all(0 <= i < len(scores) for i in beam)
+
+
+def test_coverage_beam_handles_degenerate_input():
+    assert mc.coverage_beam_order([], [], [], top_k=3) == []
+    assert mc.coverage_beam_order([0.5], [[0]], [1.0], top_k=0) == []
+    out = mc.coverage_beam_order([0.5, 0.4], [[0], [1]], [1.0, 1.0], top_k=5)
+    assert sorted(out) == [0, 1]
