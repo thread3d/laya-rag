@@ -224,6 +224,11 @@ multihop-tri-discriminate:
 multihop-pool-dedup:
 	$(PY) tools/multihop_pool_dedup.py $(POOL_DEDUP_ARGS)
 
+# Does a *fitted* combination of the cached channels beat the best hand-built rule? Half the
+# queries train, half are scored; supervised on benchmark labels, so see the caveat in the report.
+multihop-ltr:
+	$(PY) tools/multihop_ltr.py $(LTR_ARGS)
+
 # Atomic-unit lexical retrieval with parent-window return (RESEARCH.md Tier 1.5).
 multihop-atom-index:
 	OMP_NUM_THREADS=16 $(PY) tools/multihop_atom_index.py $(ATOM_ARGS)

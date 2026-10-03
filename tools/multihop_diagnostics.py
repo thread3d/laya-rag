@@ -378,6 +378,10 @@ def main(argv=None) -> int:
                 overlap[: min(depth, len(pool))],
                 matches[:depth],
                 args.top_k,
+                # The true gold count, not the facts this depth happens to match: the
+                # denominator has to match official_metrics or the ceiling is inflated for
+                # the very queries whose pool is incomplete (see pool_ceiling_map).
+                gold_count=len(golds[n]),
             )
             row[f"hop1_fact_recall@{depth}"] = recall_at_depth(matches, depth, first)
             row[f"hop2_fact_recall@{depth}"] = recall_at_depth(matches, depth, second)

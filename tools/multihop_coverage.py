@@ -283,14 +283,29 @@ def facility_location_select(
     return selected
 
 
-def pool_ceiling_map(rel: np.ndarray, gold_matches, top_k: int) -> float:
+def pool_ceiling_map(
+    rel: np.ndarray,
+    gold_matches,
+    top_k: int,
+    *,
+    gold_count: int,
+) -> float:
     """Best MAP@10 attainable by reordering the fused pool: the reorder ceiling.
 
     ``gold_matches[i]`` is the set of gold-fact ids matched by pool candidate ``i``.
     Greedily place the candidate with the most not-yet-found matches first, then the
-    next, and so on; AP sums ``newly_found / rank`` over the selected ranks, divided by
-    ``min(total distinct gold matches, top_k)``. Returns 0.0 when the pool matches
-    nothing.
+    next, and so on; AP sums ``newly_found / rank`` over the selected ranks.
+
+    ``gold_count`` is the query's **true** number of gold facts and the denominator is
+    ``min(gold_count, top_k)`` — the same normalisation ``official_metrics_one`` and
+    ``tools/multihop_rerank_experiment.metrics_from_matches`` use. It is required, and
+    deliberately has no default, because the obvious alternative is wrong in a way that
+    is invisible: dividing by the number of facts *the pool happens to match* shrinks the
+    denominator for exactly the queries whose pool is incomplete, which *inflates* the
+    ceiling precisely where recall is failing. Measured on MultiHop-RAG at depth 100, that
+    mistake reports **0.7307** where the correctly normalised ceiling is **0.6072**, and
+    it made the ceiling look flat across depth 10/100 (0.731/0.731) when it actually rises
+    (0.397/0.607). Returns 0.0 when the pool matches nothing.
     """
     matches = [set(g) for g in gold_matches]
     total = len(set().union(*matches)) if matches else 0
@@ -314,7 +329,7 @@ def pool_ceiling_map(rel: np.ndarray, gold_matches, top_k: int) -> float:
         newly = matches[i] - found
         ap += len(newly) / rank
         found |= newly
-    return ap / min(total, top_k)
+    return ap / min(max(int(gold_count), 1), top_k)
 
 
 # ── experiment ──────────────────────────────────────────────────────────
@@ -436,7 +451,9 @@ def main(argv=None) -> int:
             text_norm = corpus[d].replace(" ", "").replace("\n", "")
             gold_matches.append({j for j, g in enumerate(norm_gold[q]) if g in text_norm})
         pool_matches[q] = dict(zip(cand, gold_matches))
-        pool_ceiling[q] = pool_ceiling_map(rel, gold_matches, args.top_k)
+        pool_ceiling[q] = pool_ceiling_map(
+            rel, gold_matches, args.top_k, gold_count=len(norm_gold[q])
+        )
         if n and n % 500 == 0:
             print(f"  {n}/{total}", flush=True)
 

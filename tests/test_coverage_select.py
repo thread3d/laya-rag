@@ -151,15 +151,36 @@ def test_facility_location_select_can_drop_the_redundancy_penalty():
 
 def test_pool_ceiling_map_places_the_largest_new_match_first():
     # Greedy picks candidate 1 (two new facts) at rank 1 -> AP = 2/1 / min(2,2) = 1.0.
-    assert mc.pool_ceiling_map(None, [{0}, {0, 1}], 2) == pytest.approx(1.0)
+    assert mc.pool_ceiling_map(None, [{0}, {0, 1}], 2, gold_count=2) == pytest.approx(1.0)
 
 
 def test_pool_ceiling_map_hand_computed_partial_coverage():
     # pool [[g1],[g2],[g3]] top_k=2: ranks find one new fact each ->
     # AP = (1/1 + 1/2) / min(3, 2) = 0.75.
-    assert mc.pool_ceiling_map(None, [{0}, {1}, {2}], 2) == pytest.approx(0.75)
+    assert mc.pool_ceiling_map(None, [{0}, {1}, {2}], 2, gold_count=3) == pytest.approx(0.75)
 
 
 def test_pool_ceiling_map_is_zero_without_matches():
-    assert mc.pool_ceiling_map(None, [set(), set()], 2) == 0.0
-    assert mc.pool_ceiling_map(None, [], 10) == 0.0
+    assert mc.pool_ceiling_map(None, [set(), set()], 2, gold_count=2) == 0.0
+    assert mc.pool_ceiling_map(None, [], 10, gold_count=0) == 0.0
+
+
+def test_pool_ceiling_map_divides_by_the_true_gold_count_not_the_pool_matches():
+    """The bug this signature exists to prevent.
+
+    Three gold facts, but the pool only contains one of them. The ceiling normalises by the
+    true count (3), so the single reachable fact at rank 1 gives 1/1 / 3 = 0.333 — not
+    1/1 / 1 = 1.0, which is what dividing by the pool's own matched facts would report. The
+    wrong denominator *inflates* the ceiling on exactly the queries where recall is failing.
+    """
+    assert mc.pool_ceiling_map(None, [{0}, set(), set()], 10, gold_count=3) == pytest.approx(1 / 3)
+    # Denominator is capped at top_k, matching the official metric.
+    assert mc.pool_ceiling_map(
+        None, [{i} for i in range(20)], 10, gold_count=20
+    ) == pytest.approx(sum(1 / r for r in range(1, 11)) / 10)
+
+
+def test_pool_ceiling_map_requires_a_gold_count():
+    """No default: the only obvious default is the one that silently overstates."""
+    with pytest.raises(TypeError):
+        mc.pool_ceiling_map(None, [{0}], 10)
