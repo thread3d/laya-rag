@@ -824,6 +824,16 @@ Five things to take from this, and the first is the least flattering:
   pool while first-hop facts are at 0.950. The hop linked only through a bridge entity is what
   relevance-based selection discards, and it is the specific recall gap a hop-2 expansion would
   target.
+- **And hop-2 expansion via term mining barely moves it.** `tools/multihop_hop2.py` mines the rare
+  terms of the best-ranked candidates that the query does not already contain — the model-free
+  proxy for the bridge entity — issues them as extra BM25 probes, and measures candidate-pool fact
+  recall before and after. The gain is **real and significant, and marginal**: recall
+  0.8480 → 0.8524, **+0.0044 [+0.0029, +0.0059]**, p=0.0010, from **32** of 2,255 queries improving
+  (none worsened, 32 gold facts added of ~6,000). Set against 811 incomplete pools, the proxy
+  recovers about one case in twenty-five. So recall is a live lever but not a cheap one: the
+  bridge signal is validated and the *entity proxy* for it is too weak to close a third of the
+  headroom, which is the argument for a model-based hop-2 over a term-based one — not for
+  spending a cross-encoder on a pool this proxy barely grows.
 
 Against that ceiling, the selection rules, all on the same cached pool (`bge-reranker-base`,
 depth 100, `chunk_overlap=200`) and all paired against the fused baseline:

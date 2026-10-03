@@ -169,30 +169,54 @@ def main(argv=None) -> int:
     atom_ids_by_doc = dict(zip(atoms_by_doc, atom_ids_of))
 
     ce_path = ROOT_BENCH / f"ce-scores-{args.split}{'' if not args.limit_queries else '-limit'}.json"
+    settings = {
+        "split": args.split, "model": model_id, "depth": args.depth, "rrf_k": args.rrf_k,
+        "rerank_model": args.rerank_model, "atom_weight": atom_weight,
+        "limit_queries": args.limit_queries,
+    }
+    per_query: dict[str, Any] = {}
     if ce_path.is_file():
+        # Resume rather than restart. This cache is ~1.7 h of cross-encoder work on the full
+        # validation split, and this job has already been killed twice mid-run by external
+        # crashes; a partial file whose settings match is used as a starting point, and a
+        # file whose settings do not match is ignored rather than mixed in.
         payload = json.loads(ce_path.read_text(encoding="utf-8"))
-        per_query = payload["queries"]
-        print(f"  reusing {ce_path.name}", flush=True)
-    else:
+        stored = payload.get("_settings") or {}
+        if all(stored.get(key) == value for key, value in settings.items()):
+            per_query = dict(payload.get("queries") or {})
+            print(f"  resuming {ce_path.name}: {len(per_query)} queries already scored",
+                  flush=True)
+        else:
+            print(f"  ignoring {ce_path.name}: its settings do not match this run", flush=True)
+
+    if len(per_query) < len(queries):
         cross_encoder = beir.CrossEncoder(args.rerank_model, batch_size=args.batch_size)
-        print(f"  scoring with {args.rerank_model}...", flush=True)
+        print(f"  scoring with {args.rerank_model} ({len(queries) - len(per_query)} to go)...",
+              flush=True)
         started = time.perf_counter()
-        per_query = {}
-        for n, (q, text) in enumerate(queries.items()):
+
+        def flush() -> None:
+            evalkit.write_json(ce_path, {
+                "_settings": {**settings, "seconds": round(time.perf_counter() - started, 1)},
+                "queries": per_query,
+            })
+
+        for n, (q, text) in enumerate(queries.items(), start=1):
+            if q in per_query:
+                continue
             pool = list(fused[q])[: args.depth]
             scores = cross_encoder.score([(text, corpus[doc_id]) for doc_id in pool],
                                          fixed_length=True)
             per_query[q] = {"pool": pool,
                             "ce": [round(float(s), 4) for s in scores],
                             "atoms": [list(atom_ids_by_doc[doc_id]) for doc_id in pool]}
-            if n and n % 50 == 0:
-                print(f"    {n}/{len(queries)} ({time.perf_counter() - started:.0f}s)", flush=True)
-        evalkit.write_json(ce_path, {
-            "_settings": {"split": args.split, "model": model_id, "depth": args.depth,
-                          "rrf_k": args.rrf_k, "rerank_model": args.rerank_model,
-                          "atom_weight": atom_weight, "seconds": round(time.perf_counter() - started, 1)},
-            "queries": per_query,
-        })
+            # Flush often: the crash that prompted this cost a full embedding pass and a
+            # long scoring run, and the cost of a flush is trivial next to the model call.
+            if n % 25 == 0:
+                flush()
+                print(f"    {len(per_query)}/{len(queries)} "
+                      f"({time.perf_counter() - started:.0f}s)", flush=True)
+        flush()
         print(f"wrote {ce_path.name} in {time.perf_counter() - started:.0f}s", flush=True)
 
     per_query_metrics: dict[str, dict[str, dict[str, float]]] = {}
