@@ -172,7 +172,13 @@ def _save(fig, outdir: Path, name: str, plt) -> None:
     fig.tight_layout()
     fig.savefig(path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
-    print(f"  wrote {path.relative_to(ROOT)}  ({path.stat().st_size // 1024} KB)")
+    # Print a repo-relative path when the output is inside the checkout, and the absolute
+    # one otherwise — a temp directory in a test is not a subpath of ROOT.
+    try:
+        shown = path.resolve().relative_to(ROOT)
+    except ValueError:
+        shown = path
+    print(f"  wrote {shown}  ({path.stat().st_size // 1024} KB)")
 
 
 def chart_beir_ranking(outdir: Path, best: float, ci, deploy: float, ensemble, ensemble_ci, plt) -> None:
@@ -325,6 +331,103 @@ def chart_overlap(outdir: Path, official: dict, plt) -> None:
     _save(fig, outdir, "chunk_overlap.png", plt)
 
 
+def chart_second_stage(outdir: Path, plt) -> None:
+    """Second-stage strategies: absolute MAP@10 and the paired delta against the baseline.
+
+    Two panels, because they answer different questions. The left one is the level (a dot
+    with its 95% bootstrap interval, not a bar from zero — the differences are a few points
+    and a truncated bar would misrepresent them). The right one is the question a reader
+    actually has: *is this better than the baseline by more than the noise?* That needs a
+    **paired** interval on the per-query difference, so each candidate is compared on the
+    same queries, and a whisker that crosses zero is a null result whatever the means say.
+    """
+    candidates = [
+        MH_DIR / "rerank-experiment-full.json",
+        MH_DIR / "rerank-experiment.json",
+    ]
+    report_path = next((path for path in candidates if path.is_file()), None)
+    if report_path is None:
+        print(f"  (no second-stage report in {MH_DIR}; skipping that chart)")
+        return
+    report = json.loads(report_path.read_text())
+    per_query = report.get("per_query") or {}
+    if not per_query:
+        print(f"  ({report_path.name} has no per-query scores; skipping that chart)")
+        return
+
+    # A readable subset: the first stages, the measured best, and every conditional rule.
+    wanted = ["fused", "ce", "coverage-0.7", "covquota-3-0.7"]
+    names = [n for n in wanted if n in per_query]
+    names += sorted(n for n in per_query if n.startswith("tri") or n.startswith("pit-"))
+    names = list(dict.fromkeys(names))
+    if not names:
+        return
+
+    means = {name: float(np.mean(list(per_query[name].values()))) for name in names}
+    baseline = "fused" if "fused" in means else min(means, key=means.get)
+    rows = []
+    for name in names:
+        values = [float(v) for v in per_query[name].values()]
+        mean, low, high = bootstrap_ci(values)
+        rows.append((name, mean, mean - low, high - mean))
+    rows.sort(key=lambda row: row[1])
+    order = [row[0] for row in rows]
+    position = {name: index for index, name in enumerate(order)}
+
+    fig, (left, right) = plt.subplots(
+        1, 2, figsize=(12.4, 0.4 * len(rows) + 2.0), gridspec_kw={"width_ratios": [1, 1]}
+    )
+    ys = np.arange(len(rows))
+    conditional = [name.startswith(("tri", "pit")) for name in order]
+    colors = [ACCENT if flag else OURS for flag in conditional]
+    left.errorbar(
+        [row[1] for row in rows], ys,
+        xerr=np.vstack([[row[2] for row in rows], [row[3] for row in rows]]),
+        fmt="none", elinewidth=1.2, capsize=3, ecolor="#444",
+    )
+    for row, y, color in zip(rows, ys, colors):
+        left.plot([row[1]], [y], "o", ms=7, color=color)
+    left.set_yticks(ys)
+    left.set_yticklabels(order, fontsize=8)
+    left.set_xlabel("MAP@10 (95% bootstrap interval)")
+    left.set_title("level", fontsize=10)
+    lo = min(row[1] - row[2] for row in rows)
+    hi = max(row[1] + row[3] for row in rows)
+    pad = max(0.005, (hi - lo) * 0.35)
+    left.set_xlim(lo - pad, hi + pad)
+    left.grid(axis="x", alpha=0.25, lw=0.6)
+
+    baseline_values = per_query[baseline]
+    deltas, lows, highs = [], [], []
+    for name in order:
+        stats = evalkit.paired_bootstrap(baseline_values, per_query[name])
+        deltas.append(float(stats["delta"]))
+        lows.append(float(stats["delta"]) - float(stats["ci_low"]))
+        highs.append(float(stats["ci_high"]) - float(stats["delta"]))
+    right.axvline(0.0, color=PUBLISHED_DARK, lw=0.9, ls="--")
+    right.errorbar(
+        deltas, ys, xerr=np.vstack([lows, highs]), fmt="none",
+        elinewidth=1.2, capsize=3, ecolor="#444",
+    )
+    for name, y, delta, color in zip(order, ys, deltas, colors):
+        right.plot([delta], [y], "o", ms=7, color=color)
+    right.set_yticks(ys)
+    right.set_yticklabels([])
+    right.set_xlabel(f"MAP@10 delta vs `{baseline}` (95% paired interval)")
+    right.set_title("does it beat the baseline beyond the noise?", fontsize=10)
+    right.set_xlim(min(-0.01, min(deltas) - max(lows) - 0.005), max(deltas) + max(highs) + 0.005)
+    right.grid(axis="x", alpha=0.25, lw=0.6)
+
+    left.set_ylim(-0.6, len(rows) - 0.4)
+    right.set_ylim(-0.6, len(rows) - 0.4)
+    fig.suptitle(
+        f"Second-stage selection — {report.get('_settings', {}).get('limit_queries', '?')} "
+        "MultiHop-RAG queries (orange: bridge-conditioned decisions)",
+        fontsize=11,
+    )
+    _save(fig, outdir, "second_stage.png", plt)
+
+
 def make_charts(outdir: Path, best: float, ci, deploy: float, ensemble, ensemble_ci, official: dict) -> None:
     plt = _plt_mod()
     chart_beir_ranking(outdir, best, ci, deploy, ensemble, ensemble_ci, plt)
@@ -332,6 +435,7 @@ def make_charts(outdir: Path, best: float, ci, deploy: float, ensemble, ensemble
     chart_multihop(outdir, official, plt)
     chart_abstention(outdir, plt)
     chart_overlap(outdir, official, plt)
+    chart_second_stage(outdir, plt)
 
 
 def main(argv=None) -> int:
