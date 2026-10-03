@@ -229,6 +229,11 @@ multihop-pool-dedup:
 multihop-ltr:
 	$(PY) tools/multihop_ltr.py $(LTR_ARGS)
 
+# Signal or algorithm? The oracle restricted to the cross-encoder's own top-N separates what a
+# better *scorer* could reach from what a better *selector* could reach on the list it already has.
+multihop-ceiling-decomp:
+	$(PY) tools/multihop_ceiling_decomp.py $(CEILING_DECOMP_ARGS)
+
 # Atomic-unit lexical retrieval with parent-window return (RESEARCH.md Tier 1.5).
 multihop-atom-index:
 	OMP_NUM_THREADS=16 $(PY) tools/multihop_atom_index.py $(ATOM_ARGS)
