@@ -421,10 +421,25 @@ def test_tri_rankings_names_every_conditional_rule():
     rankings = exp.tri_rankings(cache, {"0": [0.1, 0.9, 0.5]}, top_k=2, rrf_k=60, name="tri")
     assert set(rankings) == {
         "tri", "tri-coverage-0.5", "tri-coverage-0.7",
-        "tri-covquota-3-0.5", "tri-covquota-3-0.7", "pit-tri-ce",
+        "tri-covquota-3-0.5", "tri-covquota-3-0.7",
+        "tri-filter-0.3", "tri-filter-0.5", "pit-tri-ce",
     }
     for name in rankings:
         assert len(rankings[name]["0"]) == 2
+
+
+def test_bridge_filter_keeps_pool_order_among_survivors():
+    """The filter use, not the ranker use: survivors keep their first-stage order."""
+    scores = [0.2, 0.9, 0.8, 0.1]
+    assert exp.bridge_filter_order(scores, top_k=10, threshold=0.5) == [1, 2]
+    # Candidates below the threshold are dropped, and the fused order is preserved.
+    assert exp.bridge_filter_order(scores, top_k=10, threshold=0.05) == [0, 1, 2, 3]
+
+
+def test_bridge_filter_respects_top_k_and_can_drop_everything():
+    scores = [0.2, 0.9, 0.8]
+    assert exp.bridge_filter_order(scores, top_k=1, threshold=0.5) == [1]
+    assert exp.bridge_filter_order(scores, top_k=10, threshold=0.99) == []
 
 
 def test_tri_rule_orders_by_the_bridge_conditioned_score():

@@ -584,6 +584,27 @@ def pit_order(
     return sorted(range(n), key=lambda i: (-fused[i], i))[:top_k]
 
 
+def bridge_filter_order(
+    scores: Sequence[float],
+    top_k: int,
+    threshold: float,
+) -> list[int]:
+    """Keep candidates whose bridge-conditioned score clears ``threshold``, in pool order.
+
+    This is the *filter* use of the decision, and it is a different hypothesis from ranking by
+    the same number. The repository's own measured prior is that Laya's relevance decision is
+    a stronger filter than an orderer — reordering BM25's candidates by it lowered nDCG@10 on
+    both BEIR datasets (SciFact 0.654 -> 0.470), while thresholding by it is what the engine
+    ships. Asking the conditional question is the same decision asked a question that is not
+    structurally blind to the bridge, so if the score carries signal at all, this is where the
+    prior says it should show up.
+
+    Pool positions are already in fused order, so returning them ascending preserves the
+    first-stage ranking among the survivors.
+    """
+    return [i for i, score in enumerate(scores) if float(score) >= threshold][:top_k]
+
+
 def tri_rankings(
     cache: Mapping[str, Any],
     tri_scores: Mapping[str, Sequence[float]],
@@ -606,6 +627,8 @@ def tri_rankings(
         f"{name}-coverage-0.7",
         f"{name}-covquota-3-0.5",
         f"{name}-covquota-3-0.7",
+        f"{name}-filter-0.3",
+        f"{name}-filter-0.5",
         f"pit-{name}-ce",
     ]
     out: dict[str, dict[str, list[int]]] = {key: {} for key in names}
@@ -626,6 +649,10 @@ def tri_rankings(
             )
             out[f"{name}-covquota-3-{lam}"][q] = coverage_doc_quota_order(
                 scores, atoms, atom_weight, docs, top_k, lam, 3
+            )
+        for threshold in (0.3, 0.5):
+            out[f"{name}-filter-{threshold}"][q] = bridge_filter_order(
+                scores, top_k, threshold
             )
         out[f"pit-{name}-ce"][q] = pit_order(
             [scores, payload["ce"]], [1.0, 1.0], top_k
