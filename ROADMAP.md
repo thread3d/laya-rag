@@ -86,7 +86,7 @@ half-written report can be read as a result.
 | item | target | change | status |
 | --- | --- | --- | --- |
 | P1.1 | `tools/jobkit.py` | the module above + `tests/test_jobkit.py` (30 tests: kill/resume equivalence, shard partition and merge, fingerprint refusal, torn-line tolerance, atomic writes) | done |
-| P1.2 | `tools/multihop_ce_cache.py` | per-query checkpoint, `--fresh`, `--shard i/n`, `--merge N`; proves the pattern on the repo's most expensive single-model run. The other four tools (`multihop_official`, `multihop_diagnostics`, `engine_beir`, `beir`) are **not yet retrofitted** and still restart from scratch | partial |
+| P1.2 | `multihop_ce_cache.py`, `multihop_diagnostics.py`, `engine_beir.py`, `engine_multihop.py`, `engine_musique.py` | per-query checkpoint, `--fresh`, `--shard i/n`, `--merge N`. These are the tools whose cost is per-unit and independent. **Deferred, with reasons:** `tools/multihop_official.py` — its expensive step is the cross-encoder rerank, which `multihop_ce_cache.py` already checkpoints, so retrofitting it would duplicate the cache rather than add resumability; `tools/beir.py` — a replica, and `engine_beir.py` is the jobkit-backed harness for the claims that matter | done |
 | P1.3 | `tools/finetune.py` | step checkpoints and optimiser-state resume: `--checkpoint-steps N`, `--checkpoint-dir`, `--checkpoint-keep`, `--resume-checkpoint`. This is distinct from the pre-existing `--resume`, which loads weights and restarts training; `--resume-checkpoint` restores the optimiser and scheduler too. `tools/distill_eval.py` has no training loop, so nothing to resume | done |
 | P1.4 | `Makefile` | `make job-status` prints every manifest (`tools/job_status.py`) | done |
 | P1.5 | `tests/test_jobkit.py` | kill-and-resume equivalence; sharded merge equals unsharded; fingerprint mismatch refuses | done |
@@ -365,3 +365,12 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   **+0.086**, and depth-500 recall **0.9811** — so "every gold fact is in the pool at depth 500"
   is false. `claim_check` now pins the recall rows too (39 checks). Suite **991 passed,
   4 deselected**. The gate caught a real error, including one of mine.
+- 2026-10-03 — **Phase 1 infrastructure complete (P1.1–P1.5).** `engine_beir.py` and
+  `finetune.py` joined `multihop_ce_cache.py`, `multihop_diagnostics.py` and the two engine
+  harnesses on jobkit; training runs get step checkpoints and optimiser-state resume, distinct
+  from the pre-existing weight-only `--resume`. `multihop_official.py` and `beir.py` are
+  deliberately not retrofitted — the first's expensive step is the CE rerank the cache already
+  checkpoints, and the second is a replica with a jobkit-backed engine counterpart — and that
+  reasoning is recorded rather than left as an omission. Suite **1009 passed, 4 deselected**.
+  Phase 1 is complete on the 400/200-query subsets; the full 2,255/2,417 runs and the
+  shipped-default paths are the next long jobs, and Phase 2 is next.

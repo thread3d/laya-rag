@@ -23,7 +23,7 @@ from typing import Any, Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
-import beir, evalkit  # noqa: E402
+import beir, evalkit, jobkit  # noqa: E402
 
 DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 DEFAULT_SPARSE = "opensearch-project/opensearch-neural-sparse-encoding-v1"
@@ -94,14 +94,82 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None, help="cap the number of test queries")
     ap.add_argument("--out", default=str(ROOT / "eval" / "engine-beir"))
+    ap.add_argument("--shard", default="0/1", help="run one contiguous slice, 'i/n'")
+    ap.add_argument("--fresh", action="store_true", help="discard any existing checkpoint")
+    ap.add_argument("--merge", type=int, default=0, metavar="N",
+                    help="only fold N finished shards into the report, then exit")
     return ap.parse_args(argv)
+
+
+def report_stem(args: argparse.Namespace) -> Path:
+    return Path(args.out) / f"{args.dataset}-{args.tag}"
+
+
+def _fingerprint(args: argparse.Namespace) -> str:
+    return jobkit.config_fingerprint(
+        tool="engine_beir",
+        dataset=args.dataset,
+        tag=args.tag,
+        embed_model=args.embed_model,
+        sparse=args.sparse,
+        sparse_model=args.sparse_model if args.sparse else None,
+        rerank_model=args.rerank_model,
+        rerank_coverage_lambda=args.rerank_coverage_lambda,
+        min_docs=args.min_docs,
+        chunk_chars=args.chunk_chars,
+        chunk_overlap=args.chunk_overlap,
+        chunk_auto=args.chunk_auto,
+        context_prefix=args.context_prefix,
+        retrieve_k=args.retrieve_k,
+        top_k=args.top_k,
+        limit=args.limit,
+    )
+
+
+def _build_report(rows: dict, args: argparse.Namespace, qrels: Mapping[str, Any],
+                  corpus_size: int) -> dict:
+    """Rebuild the report from merged rankings; the metrics need every query at once."""
+    if jobkit.META_KEY not in rows:
+        raise RuntimeError("no shard checkpoints found — run the shards before --merge")
+    rows.pop(jobkit.META_KEY)
+    rankings = {qid: value["ranking"] for qid, value in rows.items()}
+    evaluation = evalkit.evaluate_rankings(rankings, qrels, k_values=(10,),
+                                           ignore_identical_ids=True)
+    return {
+        "_settings": vars(args),
+        "documents": corpus_size,
+        "queries": len(rankings),
+        "summary": evaluation["summary"],
+        "per_query": evalkit.per_query_metric(evaluation["per_query"], "nDCG@10"),
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    shard_index, shard_count = jobkit.parse_shard(args.shard)
+    fingerprint = _fingerprint(args)
     out = Path(args.out)
     index_dir = out / "index" / f"{args.dataset}-{args.tag}"
     docs_dir = out / "docs" / args.dataset
+
+    dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root), download=False)
+    corpus = beir.load_corpus(dataset_dir, include_titles=True)
+    queries = beir.load_queries(dataset_dir)
+    qrels = beir.load_qrels(dataset_dir, split="test")
+
+    if args.merge:
+        try:
+            merged = jobkit.merge_shards(
+                report_stem(args), args.merge, fingerprint=fingerprint,
+                build=lambda rows: _build_report(rows, args, qrels, len(corpus)),
+            )
+        except (RuntimeError, jobkit.FingerprintMismatch) as exc:
+            print(f"merge failed: {exc}", file=sys.stderr)
+            return 2
+        print(f"merged {args.merge} shard(s) -> {report_stem(args)}.json "
+              f"({merged['queries']} queries)")
+        return 0
+
     os.environ["LAYA_RAG_INDEX_DIR"] = str(index_dir)
     os.environ["LAYA_RAG_EMBED_MODEL"] = args.embed_model
     # Nothing may be filtered, so the returned order is the engine's retrieval order.
@@ -155,10 +223,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     from laya_rag.config import EngineConfig
     from laya_rag.engine import RagEngine
 
-    dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root), download=False)
-    corpus = beir.load_corpus(dataset_dir, include_titles=True)
-    queries = beir.load_queries(dataset_dir)
-    qrels = beir.load_qrels(dataset_dir, split="test")
     test_queries = {qid: text for qid, text in queries.items() if qid in qrels}
     if args.limit:
         test_queries = dict(list(test_queries.items())[: args.limit])
@@ -173,29 +237,47 @@ def main(argv: Sequence[str] | None = None) -> int:
               f"{time.perf_counter() - started:.0f}s", flush=True)
     print(f"sparse configured: {config.sparse_enabled}", flush=True)
 
-    rankings: dict[str, list[str]] = {}
+    stem = jobkit.shard_stem(report_stem(args), shard_index, shard_count)
+    if args.fresh:
+        for suffix in (".jsonl", ".manifest.json"):
+            Path(str(stem) + suffix).unlink(missing_ok=True)
+    run = jobkit.ResumableRun(str(stem) + ".json", fingerprint=fingerprint,
+                              shard=(shard_index, shard_count))
+    if jobkit.META_KEY not in run:
+        run.record(jobkit.META_KEY, {"_settings": vars(args), "sparse": config.sparse_enabled})
+
+    mine = jobkit.shard_items(list(test_queries), shard_index, shard_count)
+    todo = run.pending(mine)
+    print(f"  {len(todo)} of {len(mine)} queries to score ({len(run) - 1} checkpointed)",
+          flush=True)
+
     started = time.perf_counter()
-    for position, (query_id, text) in enumerate(test_queries.items(), start=1):
-        result = engine.query(text, top_k=args.top_k)
-        rankings[query_id] = ranking_from_passages(result.passages, doc_ids)
+    for position, query_id in enumerate(todo, start=1):
+        result = engine.query(test_queries[query_id], top_k=args.top_k)
+        run.record(query_id, {"ranking": ranking_from_passages(result.passages, doc_ids)})
         if position % 50 == 0:
-            print(f"  {position}/{len(test_queries)} in {time.perf_counter() - started:.0f}s", flush=True)
+            run.touch(total=len(mine))
+            print(f"  {position}/{len(todo)} in {time.perf_counter() - started:.0f}s", flush=True)
     seconds = time.perf_counter() - started
 
+    rankings = {qid: value["ranking"] for qid, value in run.values().items()
+                if qid != jobkit.META_KEY}
     evaluation = evalkit.evaluate_rankings(rankings, qrels, k_values=(10,), ignore_identical_ids=True)
     payload = {
         "_settings": vars(args),
         "documents": len(corpus),
-        "queries": len(test_queries),
+        "queries": len(rankings),
         "sparse": config.sparse_enabled,
         "seconds": round(seconds, 1),
         "summary": evaluation["summary"],
         "per_query": evalkit.per_query_metric(evaluation["per_query"], "nDCG@10"),
     }
-    evalkit.write_json(out / f"{args.dataset}-{args.tag}.json", payload)
+    run.finish(payload, total=len(mine))
     print(f"{args.dataset} {args.tag}: nDCG@10 {evaluation['summary']['nDCG@10']:.4f} "
-          f"over {len(test_queries)} queries in {seconds:.0f}s")
-    print("wrote", out / f"{args.dataset}-{args.tag}.json")
+          f"over {len(rankings)} queries in {seconds:.0f}s")
+    print("wrote", str(stem) + ".json")
+    if shard_count > 1:
+        print(f"  run all {shard_count} shards, then: --merge {shard_count}")
     return 0
 
 
