@@ -1452,6 +1452,26 @@ class RagEngine:
                 payload["index_error"] = str(exc)
         else:
             payload["index"] = {"chunks": 0, "documents": 0, "paths": 0}
+        # Freshness is a retrieval-quality property, not housekeeping: a deleted document
+        # still indexed, or a passage indexed twice, changes what a query returns. Only the
+        # linear detectors run here — the near-duplicate scan stays opt-in on
+        # `laya-rag integrity` — and a failure is reported rather than raised, because a
+        # status endpoint must not fail because a check did.
+        if payload["index_present"]:
+            try:
+                from .integrity import audit
+
+                report = audit(self.index.chunks, near_duplicates=False)
+                payload["index"]["integrity"] = {
+                    "stale_paths": report["stale_paths"]["count"],
+                    "stale_chunks": report["stale_paths"]["stale_chunks"],
+                    "duplicate_clusters": report["duplicate_content"]["clusters"],
+                    "redundant_chunks": report["duplicate_content"]["redundant_chunks"],
+                    "clean": report["clean"],
+                    "near_duplicates_scanned": False,
+                }
+            except Exception as exc:  # noqa: BLE001 - see above
+                payload["index"]["integrity_error"] = str(exc)
         payload["answerability_gate"] = {
             "configured": bool((self.config.answerability_gate_path or "").strip()),
             "loaded": self.answerability_gate is not None,

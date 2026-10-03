@@ -199,3 +199,27 @@ def test_integrity_can_scan_for_near_duplicates(ctx):
     body = client.get("/v1/integrity", params={"near_duplicates": True, "threshold": 0.8}).json()
     assert body["near_duplicate_content"]["threshold"] == 0.8
     assert "pairs" in body["near_duplicate_content"]
+
+
+def test_stats_surface_index_drift(ctx):
+    """Freshness belongs in stats: a stale or duplicated index silently changes results."""
+    client, _engine, corpus = ctx
+    (corpus / "refunds-copy.md").write_text(
+        (corpus / "refunds.md").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+    body = client.get("/v1/stats").json()
+    integrity = body["index"]["integrity"]
+    assert integrity["stale_paths"] == 0
+    assert integrity["duplicate_clusters"] >= 1
+    assert integrity["redundant_chunks"] >= 1
+    assert integrity["clean"] is False
+    # The non-linear scan stays opt-in; stats must say so rather than imply it ran.
+    assert integrity["near_duplicates_scanned"] is False
+
+
+def test_stats_are_clean_before_indexing(ctx):
+    client, _engine, _corpus = ctx
+    body = client.get("/v1/stats").json()
+    assert body["index"]["chunks"] == 0
+    assert "integrity" not in body["index"] or body["index"]["integrity"]["clean"] is True
