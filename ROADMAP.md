@@ -74,21 +74,23 @@ half-written report can be read as a result.
 | `write_json_atomic(path, payload)` | write a sibling `*.tmp`, `flush`+`fsync`, `os.replace`; readers never see a partial file |
 | `config_fingerprint(**kwargs)` | sha256 over sorted JSON of model ids, chunking, overlap, depth, split, and a `CODE_VERSION` constant; a changed fingerprint invalidates loudly instead of silently mixing |
 | `ResumableRun(root, name, fingerprint, shard=(i, n))` | loads `<name>.jsonl`; exposes `completed: set[str]`, `pending(items)`, `record(key, value)`, `finish(summary)`, `manifest()` |
-| work key | stable, human-readable: `f"{dataset}:{split}:{query_id}:{fingerprint[:12]}"` |
+| work key | caller-chosen and stable (`str(query_id)` in the retrofit), never a loop index |
 | `record` | append one JSON line, `flush`+`fsync`, then return — a kill loses at most one unit |
-| `shard_items(items, i, n)` | contiguous over a deterministically sorted key, so concatenating shards restores order |
-| `merge_runs(root, name, n)` | refuses to merge mismatched fingerprints; writes the merged report atomically |
-| manifest | `<name>.manifest.json`: per-shard completion, unit counts, timestamps, git rev |
+| `shard_items(items, i, n)` / `parse_shard("i/n")` | contiguous over a deterministically ordered sequence, so concatenating shards restores order |
+| `merge_shards(stem, n, build=...)` | folds sequential shards, refuses mismatched fingerprints, and lets a tool rebuild its own payload shape |
+| `META_KEY` | reserved row for shared, non-per-unit state, so a sharded job needs no sidecar |
+| manifest | `<stem>.manifest.json`: status, fingerprint, shard, unit counts, timestamp; `iter_manifests` powers `make job-status` |
 
 ### Retrofit and Makefile
 
-| item | target | change |
-| --- | --- | --- |
-| P1.1 | `tools/jobkit.py` | the module above + `tests/test_jobkit.py` |
-| P1.2 | `tools/multihop_official.py`, `multihop_ce_cache.py`, `multihop_diagnostics.py`, `engine_beir.py`, `beir.py` | per-query checkpoint; `--resume` (default on), `--fresh`, `--shard i/n`; skip completed work keys |
-| P1.3 | `tools/finetune.py`, `tools/distill_eval.py` | `--resume` from optimizer/RNG state; checkpoint every N steps to `eval/distill-*/step-*.pt` |
-| P1.4 | `Makefile` | `make job-status` prints every manifest; long targets consult it and exit 0 when complete unless `FORCE=1` |
-| P1.5 | `tests/test_jobkit.py` | kill-and-resume equivalence: a run interrupted at unit *k* and resumed equals the uninterrupted run; sharded merge equals unsharded; fingerprint mismatch refuses |
+| item | target | change | status |
+| --- | --- | --- | --- |
+| P1.1 | `tools/jobkit.py` | the module above + `tests/test_jobkit.py` (30 tests: kill/resume equivalence, shard partition and merge, fingerprint refusal, torn-line tolerance, atomic writes) | done |
+| P1.2 | `tools/multihop_ce_cache.py` | per-query checkpoint, `--fresh`, `--shard i/n`, `--merge N`; proves the pattern on the repo's most expensive single-model run. The other four tools (`multihop_official`, `multihop_diagnostics`, `engine_beir`, `beir`) are **not yet retrofitted** and still restart from scratch | partial |
+| P1.3 | `tools/finetune.py`, `tools/distill_eval.py` | `--resume` from optimizer/RNG state; checkpoint every N steps | pending |
+| P1.4 | `Makefile` | `make job-status` prints every manifest (`tools/job_status.py`) | done |
+| P1.5 | `tests/test_jobkit.py` | kill-and-resume equivalence; sharded merge equals unsharded; fingerprint mismatch refuses | done |
+| P1.6 | `tools/engine_multihop.py` | the engine on MultiHop-RAG under its own chunking, resumable from the first commit (`--fresh`, `--shard`, `--merge`) | built, not yet run |
 
 ### Session protocol for a long job
 
@@ -164,12 +166,26 @@ already shown to overstate the engine by **0.0144**.
 
 | # | item | file | change | falsify / signal | status |
 | --- | --- | --- | --- | --- | --- |
-| 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + retrofit + `make job-status` | kill/resume and shard/merge equivalence tests | planned |
-| 1.2 | Engine-level MultiHop-RAG | **new** `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own defaults (`CHUNK_CHARS_AUTO`, shipped backend, sparse channel, coverage auto); report Hits@10/Hits@4/MAP@10/MRR@10 **and** fact recall@10 beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes; if it loses, that is the real engine number | planned |
-| 1.3 | Engine-level MuSiQue | `tools/engine_multihop.py`, `tools/musique.py` | the same under the MuSiQue adapter, where the coverage gain was falsified | the per-corpus bar is stated, not averaged | planned |
-| 1.4 | Publish the harness-vs-engine delta | `docs/findings-engine-multihop.md`, `BENCHMARKS.md` | every MultiHop row labelled by which one produced it | — | planned |
+| 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + the CE-cache retrofit + `make job-status`; the remaining four tools are still un-retrofitted | kill/resume and shard/merge equivalence tests | done (retrofit partial) |
+| 1.2 | Engine-level MultiHop-RAG | **new** `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes; if it loses, that is the real engine number | built, **not yet run** |
+| 1.3 | Engine-level MuSiQue | `tools/engine_multihop.py`, `tools/musique.py` | the same under the MuSiQue adapter, where the coverage gain was falsified | the per-corpus bar is stated, not averaged | pending |
+| 1.4 | Publish the harness-vs-engine delta | `docs/findings-engine-multihop.md`, `BENCHMARKS.md` | every MultiHop row labelled by which harness produced it | — | pending |
 
-**Gate:** no Phase 2 result is quoted against the engine until 1.2 exists.
+**Gate:** no Phase 2 result is quoted against the engine until 1.2 has a report under `eval/`.
+
+**The next long job, and how to resume it.** `1.2` is built and tested but deliberately *not*
+run in the session that wrote it — it indexes 609 articles through the real engine and is exactly
+the workload §2 exists for. The smoke, then the two real runs:
+
+```sh
+make engine-multihop ENGINE_MULTIHOP_ARGS="--limit 25 --embed-model BAAI/bge-small-en-v1.5 --out eval/benchmarks/multihop-rag/engine-smoke"
+make engine-multihop ENGINE_MULTIHOP_ARGS="--out eval/benchmarks/multihop-rag/engine-default"
+make engine-multihop ENGINE_MULTIHOP_ARGS="--embed-model BAAI/bge-small-en-v1.5 --out eval/benchmarks/multihop-rag/engine-hybrid"
+```
+
+Re-running any of those identical commands continues a killed run; `make job-status` shows how
+far it got. The report is not written until the run is whole, so a `running` manifest is never a
+quotable number.
 
 ---
 
@@ -293,3 +309,11 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   five hand-typed derived numbers (0.451, 0.695, 0.155, 0.310, +0.086) are replaced with
   0.4469, 0.6845, 0.1498, 0.3052 and +0.076. Suite **914 passed, 4 deselected**. Next: Phase 1,
   starting with the resumability contract.
+- 2026-10-03 — **Phase 1 infrastructure landed.** `tools/jobkit.py` (append+fsync per unit,
+  atomic finish, fingerprint refusal, contiguous shards, `META_KEY` for shared state,
+  `merge_shards(build=...)`), `make job-status` over the manifests, and the first retrofit:
+  `tools/multihop_ce_cache.py` now checkpoints per query and takes `--fresh`/`--shard`/`--merge`.
+  `tools/engine_multihop.py` — the engine on MultiHop-RAG under its own chunking, the Phase 1
+  headline — is built and tested but **not yet run**: it is the first real long job, and its
+  commands are in §4. Suite **961 passed, 4 deselected** (914 before; 47 new tests across
+  jobkit, the CE cache and the engine harness). Next: run `1.2`, then 1.3/1.4, then Phase 2.

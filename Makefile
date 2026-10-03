@@ -36,11 +36,13 @@ ADVERSARIAL_ARGS ?=
 ANSWERABILITY_FEATURES_ARGS ?=
 GATE_CALIBRATION_ARGS ?=
 ENGINE_BEIR_ARGS ?=
+ENGINE_MULTIHOP_ARGS ?=
 ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
+JOB_STATUS_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir ondisk bench-lexical adversarial-audit charts claim-check lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -77,6 +79,7 @@ help:
 	@echo "distill-eval  distilled student vs zero-shot vs teacher ensemble"
 	@echo "gate-calibration  learned threshold / temperature vs fixed 0.5 and raw"
 	@echo "engine-beir    the engine itself on BEIR (not the tools replica)"
+	@echo "engine-multihop  the engine itself on MultiHop-RAG under its own chunking (resumable)"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -84,6 +87,7 @@ help:
 	@echo "multihop-answerability-grouped  leave-one-question-type-out transfer"
 	@echo "charts       cross-system tables, error bars and the README charts"
 	@echo "claim-check  do the numbers quoted in prose resolve against the reports?"
+	@echo "job-status   every resumable job's manifest: running, complete, or half-finished"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
 
@@ -259,6 +263,12 @@ answerability-features:
 engine-beir:
 	$(PY) tools/engine_beir.py $(ENGINE_BEIR_ARGS)
 
+# The engine itself on MultiHop-RAG under its own corpus-aware chunking (the stated largest
+# evidence gap). Resumable: re-running the identical command continues a killed run.
+# `ENGINE_MULTIHOP_ARGS="--limit 25 --embed-model BAAI/bge-small-en-v1.5"` is the smoke.
+engine-multihop:
+	OMP_NUM_THREADS=16 $(PY) tools/engine_multihop.py $(ENGINE_MULTIHOP_ARGS)
+
 # Does a learned gate threshold or a fitted temperature beat the fixed 0.5 and raw score?
 gate-calibration:
 	$(PY) tools/gate_calibration.py $(GATE_CALIBRATION_ARGS)
@@ -306,6 +316,10 @@ charts:
 # checkout has nothing to check against until `make multihop-diagnostics` has run.
 claim-check:
 	$(PY) tools/claim_check.py
+
+# What resumable work is in flight? Reads the `<stem>.manifest.json` sidecars jobkit writes.
+job-status:
+	$(PY) tools/job_status.py $(JOB_STATUS_ARGS)
 
 lint:
 	$(PY) -m compileall -q src/ tests/

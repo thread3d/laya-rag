@@ -9,7 +9,15 @@ it makes all of those experiments cheap and exactly reproducible, instead of re-
 The subset is the one `tools/multihop_official.py --limit-queries 400 --sample-seed 17`
 uses, so its cross-encoder row (MAP@10 0.2986) is the bar.
 
+This is the repository's first jobkit-backed long run (`tools/jobkit.py`): every query's scores
+are appended to `<out>.jsonl` and fsynced as they finish, so a kill costs at most the query in
+flight and re-running the identical command resumes rather than restarting. `--fresh` discards
+the checkpoint; `--shard i/n` runs one contiguous slice, and re-running with `--merge` folds the
+shards into `<out>.json`.
+
     .venv/bin/python tools/multihop_ce_cache.py --limit-queries 400
+    .venv/bin/python tools/multihop_ce_cache.py --shard 1/4
+    .venv/bin/python tools/multihop_ce_cache.py --merge 4
 
 Writes ``<out>.json`` (gitignored) with, per query: the fused pool ids in order, the
 cross-encoder score for each, the atom ids each candidate covers, the global atom
@@ -29,6 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 import beir  # noqa: E402
+import jobkit  # noqa: E402
 from multihop_coverage import atom_index, split_atoms  # noqa: E402
 from multihop_official import chunk_text  # noqa: E402
 
@@ -51,12 +60,57 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--limit-queries", type=int, default=400)
     ap.add_argument("--sample-seed", type=int, default=17)
     ap.add_argument("--out", default=str(ROOT_BENCH / "ce-scores"))
+    ap.add_argument("--shard", default="0/1", help="run one contiguous slice, 'i/n'")
+    ap.add_argument("--fresh", action="store_true", help="discard any existing checkpoint")
+    ap.add_argument("--merge", type=int, default=0, metavar="N",
+                    help="only fold N finished shards into <out>.json, then exit")
     return ap.parse_args(argv)
+
+
+def _fingerprint(args, model_id: str) -> str:
+    return jobkit.config_fingerprint(
+        tool="multihop_ce_cache",
+        model=model_id,
+        overlap=args.overlap,
+        depth=args.depth,
+        rrf_k=args.rrf_k,
+        rerank_model=args.rerank_model,
+        limit_queries=args.limit_queries,
+        sample_seed=args.sample_seed,
+    )
+
+
+def _build_report(rows: dict) -> dict:
+    """Rebuild the report shape from merged rows, using the reserved shared-state row."""
+    if jobkit.META_KEY not in rows:
+        raise RuntimeError("no shard checkpoints found — run the shards before --merge")
+    meta = rows.pop(jobkit.META_KEY)
+    return {"_settings": meta["_settings"], "golds": meta["golds"], "queries": rows}
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    shard_index, shard_count = jobkit.parse_shard(args.shard)
     model_id = MODELS.get(args.model, args.model)
+    fingerprint = _fingerprint(args, model_id)
+
+    if args.merge:
+        try:
+            merged = jobkit.merge_shards(args.out, args.merge, fingerprint=fingerprint,
+                                         build=_build_report)
+        except (RuntimeError, jobkit.FingerprintMismatch) as exc:
+            print(f"merge failed: {exc}", file=sys.stderr)
+            return 2
+        print(f"merged {args.merge} shard(s) -> {args.out}.json "
+              f"({merged['_job']['completed']} rows)")
+        return 0
+
+    stem = jobkit.shard_stem(args.out, shard_index, shard_count)
+    if args.fresh:
+        for suffix in (".jsonl", ".manifest.json"):
+            Path(str(stem) + suffix).unlink(missing_ok=True)
+    run = jobkit.ResumableRun(str(stem) + ".json", fingerprint=fingerprint,
+                              shard=(shard_index, shard_count))
 
     raw = json.load(open(ROOT_BENCH / "corpus.json"))
     items_all = json.load(open(ROOT_BENCH / "MultiHopRAG.json"))
@@ -98,48 +152,53 @@ def main(argv=None) -> int:
     atom_ids_of, atom_weight, _ = atom_index(list(atoms_by_doc.values()))
     atom_ids_by_doc = dict(zip(atoms_by_doc, atom_ids_of))
 
+    # Shared state travels as one reserved row so the shard merge needs no sidecar.
+    if jobkit.META_KEY not in run:
+        run.record(jobkit.META_KEY, {
+            "golds": {str(i): gold for (i, _), gold in zip(ev_items, golds)},
+            "_settings": {
+                "model": model_id, "overlap": args.overlap, "depth": args.depth,
+                "rrf_k": args.rrf_k, "rerank_model": args.rerank_model,
+                "limit_queries": args.limit_queries, "sample_seed": args.sample_seed,
+                "corpus_chunks": len(corpus), "atom_weight": atom_weight,
+            },
+        })
+
+    mine = jobkit.shard_items(list(queries), shard_index, shard_count)
+    todo = run.pending(mine)
+    print(f"  {len(todo)} of {len(mine)} queries to score "
+          f"({len(run) - 1} already checkpointed)", flush=True)
+
     cross_encoder = beir.CrossEncoder(args.rerank_model, batch_size=args.batch_size)
-    print(f"  scoring with {args.rerank_model}...", flush=True)
     started = time.perf_counter()
-    per_query: dict[str, dict] = {}
-    for n, (q, text) in enumerate(queries.items()):
+    for n, q in enumerate(todo, 1):
+        text = queries[q]
         pool = list(fused[q])[: args.depth]
         pairs = [(text, corpus[doc_id]) for doc_id in pool]
         scores = cross_encoder.score(pairs, fixed_length=True)
-        per_query[q] = {
+        run.record(q, {
             "pool": pool,
             "ce": [round(float(s), 4) for s in scores],
             "atoms": [list(atom_ids_by_doc[doc_id]) for doc_id in pool],
-        }
-        if n and n % 50 == 0:
-            print(f"    {n}/{len(queries)} ({time.perf_counter() - started:.0f}s)", flush=True)
+        })
+        if n % 50 == 0:
+            run.touch(total=len(mine))
+            print(f"    {n}/{len(todo)} ({time.perf_counter() - started:.0f}s)", flush=True)
 
+    shared = run.get(jobkit.META_KEY)
     payload = {
-        "_settings": {
-            "model": model_id,
-            "overlap": args.overlap,
-            "depth": args.depth,
-            "rrf_k": args.rrf_k,
-            "rerank_model": args.rerank_model,
-            "limit_queries": args.limit_queries,
-            "sample_seed": args.sample_seed,
-            "corpus_chunks": len(corpus),
-            "atom_weight": atom_weight,
-            "seconds": round(time.perf_counter() - started, 1),
-        },
-        "golds": {str(i): gold for (i, _), gold in zip(ev_items, golds)},
-        "queries": per_query,
+        "_settings": {**shared["_settings"], "seconds": round(time.perf_counter() - started, 1)},
+        "golds": shared["golds"],
+        "queries": {k: v for k, v in run.values().items() if k != jobkit.META_KEY},
     }
-    out = Path(str(args.out) + ".json")
-    evalkit_write(out, payload)
-    print(f"wrote {out} in {payload['_settings']['seconds']}s", flush=True)
+    run.finish(payload, total=len(mine))
+    print(f"wrote {stem}.json in {payload['_settings']['seconds']}s "
+          f"({len(payload['queries'])} queries)", flush=True)
+    if shard_count > 1:
+        print(f"  run all {shard_count} shards, then: --merge {shard_count}")
     return 0
-
-
-def evalkit_write(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
