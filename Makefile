@@ -203,6 +203,12 @@ multihop-ce-cache:
 multihop-rerank-experiment:
 	$(PY) tools/multihop_rerank_experiment.py $(RERANK_EXPERIMENT_ARGS)
 
+# Bridge-conditioned Laya scores over the cached pool: relevance asked as s(q, b, c)
+# instead of s(q, c), with a shuffled-bridge control arm (RESEARCH.md 08 section 2.1).
+# Expensive model run once; then pass the files to multihop-rerank-experiment --tri-cache.
+multihop-tri-cache:
+	OMP_NUM_THREADS=16 $(PY) tools/multihop_tri_cache.py $(TRI_ARGS)
+
 # Atomic-unit lexical retrieval with parent-window return (RESEARCH.md Tier 1.5).
 multihop-atom-index:
 	OMP_NUM_THREADS=16 $(PY) tools/multihop_atom_index.py $(ATOM_ARGS)

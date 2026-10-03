@@ -34,6 +34,60 @@ ANSWERABILITY_QUESTION: dict[str, Any] = {
     "instructions": "Can `query` be answered using only `evidence`?",
 }
 
+# Bridge-conditioned relevance: `s(q, b, c)` rather than `s(q, c)`.
+#
+# A second-hop passage is, by construction, only weakly aligned with the *query*; it is
+# strongly aligned with the entity the first hop resolved. The two-way relevance question
+# therefore cannot separate the active reasoning chain from a wrong one that shares the
+# query's surface entity, which is the measured "second-hop tax"
+# (docs/research/08-frontier-2026.md section 2.1, arXiv:2604.03384). These instructions
+# name a third state key, `bridge`, so the decision is conditioned on what hop 1 found.
+#
+# UNLIKE RELEVANCE_QUESTION, **none of these wordings comes from Laya's own benchmark.**
+# They are ours and unvalidated, and Laya's calibrated head is phrasing-sensitive, so a
+# wording that reads better can measure worse. `bridge` is the default only because it is
+# the one the sweep in tools/multihop_tri_cache.py evaluates; it has to earn its place in
+# a held-out comparison before anything depends on it.
+BRIDGE_RELEVANCE_QID = "relevant"
+
+BRIDGE_RELEVANCE_WORDINGS: dict[str, dict[str, Any]] = {
+    "bridge": {
+        "type": "noul",
+        "instructions": (
+            "Does `passage` help answer `query`, given that `query` is about `bridge`?"
+        ),
+    },
+    "conditional": {
+        "type": "noul",
+        "instructions": (
+            "Given `bridge` as context, does `passage` help answer `query`?"
+        ),
+    },
+    "chain": {
+        "type": "noul",
+        "instructions": (
+            "Does `passage` contain information needed to answer `query`, "
+            "in the context of `bridge`?"
+        ),
+    },
+}
+
+#: The wording used when a caller does not name one.
+BRIDGE_RELEVANCE_QUESTION: dict[str, Any] = BRIDGE_RELEVANCE_WORDINGS["bridge"]
+
+
+def bridge_question(wording: str) -> dict[str, Any]:
+    """The bridge-conditioned question for a named wording; unknown names raise.
+
+    Raising rather than falling back keeps a typo from silently measuring the default
+    wording under the name of the one that was asked for.
+    """
+    try:
+        return BRIDGE_RELEVANCE_WORDINGS[wording]
+    except KeyError as exc:
+        known = ", ".join(sorted(BRIDGE_RELEVANCE_WORDINGS))
+        raise ValueError(f"unknown bridge wording {wording!r}; expected one of {known}") from exc
+
 
 class DecisionError(RuntimeError):
     """Raised when Laya returns a result the engine cannot interpret."""
@@ -165,6 +219,40 @@ class LayaReranker:
         for result in results:
             _merge_usage(usage, result.get("usage") or {})
         return [_noul_value(result, RELEVANCE_QID) for result in results], usage
+
+    def score_relevance_conditioned(
+        self,
+        query: str,
+        bridge: str,
+        texts: Sequence[str],
+        batch_size: int = 8,
+        wording: str = "bridge",
+    ) -> tuple[list[float], dict[str, Any]]:
+        """Score passages with the bridge-conditioned decision ``s(q, b, c)``.
+
+        The same batched call as :meth:`score_relevance`, with a third state key: the
+        bridge passage resolved by the first hop. This is the one piece of the BridgeRAG
+        pipeline that needs no generator — Laya already answers typed questions over
+        arbitrary state, so conditioning is a question and a state key, not a model.
+
+        ``bridge`` may be empty, which degrades to the two-way question with different
+        wording; callers that want a control arm should pass a *shuffled* bridge instead,
+        so the instruction text is held fixed and only the conditioning varies.
+        """
+        if not texts:
+            return [], {}
+        states = [
+            {"query": query, "bridge": bridge, "passage": text} for text in texts
+        ]
+        results = self.model.predict_many(
+            states, {BRIDGE_RELEVANCE_QID: bridge_question(wording)}, batch_size=batch_size
+        )
+        if len(results) != len(texts):
+            raise DecisionError(f"Laya returned {len(results)} results for {len(texts)} passages")
+        usage: dict[str, Any] = {}
+        for result in results:
+            _merge_usage(usage, result.get("usage") or {})
+        return [_noul_value(result, BRIDGE_RELEVANCE_QID) for result in results], usage
 
     def check_answerability(
         self,

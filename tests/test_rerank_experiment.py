@@ -349,3 +349,110 @@ def test_coverage_query_rankings_returns_the_boost_strategies():
     rankings = exp.coverage_query_rankings(cache, corpus, {"0": "refund policy"}, top_k=1)
     assert set(rankings) == {"coverage-q-1.0", "coverage-q-3.0"}
     assert len(rankings["coverage-q-3.0"]["0"]) == 1
+
+
+# ── percentile-rank (PIT) fusion ─────────────────────────────────────────
+
+def test_pit_order_single_channel_is_descending_with_index_tie_break():
+    assert exp.pit_order([[0.1, 0.9, 0.5, 0.9]], [1.0], top_k=4) == [1, 3, 2, 0]
+
+
+def test_pit_order_percentiles_do_not_move_with_score_magnitude():
+    """The property that separates percentile-rank from min-max: an outlier cannot compress.
+
+    Candidate 1 is last in a channel whose top score is enormous. Min-max would squeeze
+    every other candidate towards 0; percentile-rank still gives candidate 0 the top
+    percentile and candidate 1 the bottom one.
+    """
+    plain = exp.pit_order([[1.0, 2.0, 3.0]], [1.0], top_k=3)
+    with_outlier = exp.pit_order([[1.0, 2.0, 1e9]], [1.0], top_k=3)
+    assert plain == with_outlier == [2, 1, 0]
+
+
+def test_pit_order_fuses_by_weight():
+    # Channel A prefers index 0, channel B prefers index 1; the heavier weight decides.
+    a = [1.0, 0.0]
+    b = [0.0, 1.0]
+    assert exp.pit_order([a, b], [2.0, 1.0], top_k=2)[0] == 0
+    assert exp.pit_order([a, b], [1.0, 2.0], top_k=2)[0] == 1
+
+
+def test_pit_order_respects_top_k_and_empty_input():
+    assert exp.pit_order([], [], top_k=5) == []
+    assert exp.pit_order([[0.3, 0.2, 0.1]], [1.0], top_k=0) == []
+    assert len(exp.pit_order([[0.3, 0.2, 0.1]], [1.0], top_k=2)) == 2
+
+
+def test_pit_order_rejects_a_channel_weight_mismatch():
+    try:
+        exp.pit_order([[1.0, 2.0], [1.0, 2.0]], [1.0], top_k=2)
+    except ValueError as exc:
+        assert "weights" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("a channel without a weight should raise")
+
+
+def test_pit_order_rejects_channels_of_different_length():
+    try:
+        exp.pit_order([[1.0, 2.0], [1.0]], [1.0, 1.0], top_k=2)
+    except ValueError as exc:
+        assert "same number" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("mismatched channels should raise")
+
+
+# ── bridge-conditioned (tripartite) selection ────────────────────────────
+
+def _tri_cache(n: int = 3) -> dict:
+    return {
+        "_settings": {"atom_weight": [1.0] * n},
+        "queries": {
+            "0": {
+                "pool": ["a#0", "a#1", "b#0"][:n],
+                "ce": [0.9, 0.7, 0.8][:n],
+                "atoms": [[0], [1], [2]][:n],
+            }
+        },
+    }
+
+
+def test_tri_rankings_names_every_conditional_rule():
+    cache = _tri_cache()
+    rankings = exp.tri_rankings(cache, {"0": [0.1, 0.9, 0.5]}, top_k=2, rrf_k=60, name="tri")
+    assert set(rankings) == {
+        "tri", "tri-coverage-0.5", "tri-coverage-0.7",
+        "tri-covquota-3-0.5", "tri-covquota-3-0.7", "pit-tri-ce",
+    }
+    for name in rankings:
+        assert len(rankings[name]["0"]) == 2
+
+
+def test_tri_rule_orders_by_the_bridge_conditioned_score():
+    cache = _tri_cache()
+    rankings = exp.tri_rankings(cache, {"0": [0.1, 0.9, 0.5]}, top_k=2, rrf_k=60, name="tri")
+    # Index 1 has the highest conditional score, then index 2 (0.5) over index 0 (0.1).
+    assert rankings["tri"]["0"] == [1, 2]
+
+
+def test_tri_rankings_rejects_a_score_pool_length_mismatch():
+    """A short score vector would silently misalign scores with candidates."""
+    cache = _tri_cache()
+    try:
+        exp.tri_rankings(cache, {"0": [0.1, 0.9]}, top_k=2, rrf_k=60, name="tri")
+    except ValueError as exc:
+        assert "caches disagree" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("a mismatched score vector should raise")
+
+
+def test_tri_rankings_uses_the_shared_document_and_atom_machinery():
+    """The conditional rules must be the same rules, with a different relevance term."""
+    cache = _tri_cache()
+    scores = [0.9, 0.8, 0.1]
+    rankings = exp.tri_rankings(cache, {"0": scores}, top_k=3, rrf_k=60, name="tri")
+    expected = exp.coverage_doc_quota_order(
+        scores, cache["queries"]["0"]["atoms"], cache["_settings"]["atom_weight"],
+        [exp.document_of(c) for c in cache["queries"]["0"]["pool"]],
+        top_k=3, lam=0.7, min_docs=3,
+    )
+    assert rankings["tri-covquota-3-0.7"]["0"] == expected

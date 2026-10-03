@@ -13,6 +13,13 @@ differs is the selection rule:
 * ``coverage-l`` — sentence-atom max-coverage selection using the cross-encoder score as
   the relevance term, so the top-10 spends its slots on distinct facts.
 
+With ``--tri-cache`` (from ``tools/multihop_tri_cache.py``) it adds the bridge-conditioned
+second stage: Laya's relevance decision asked as ``s(q, b, c)`` rather than ``s(q, c)``, where
+``b`` is the passage hop 1 found. That is the one piece of BridgeRAG (arXiv:2604.03384) this
+engine can run without a generator, and the shuffled-bridge arm is the control that says
+whether a gain is conditioning or just a longer instruction. ``pit-<name>-ce`` fuses the two
+channels by percentile rank, which is the fusion BridgeRAG prefers over min-max.
+
 It reads the cache written by ``tools/multihop_ce_cache.py`` (no model, no network) and
 reports paired bootstrap intervals and permutation p-values against both the fused
 baseline and the full cross-encoder.
@@ -530,6 +537,102 @@ def coverage_query_rankings(
     return out
 
 
+def pit_order(
+    score_lists: Sequence[Sequence[float]],
+    weights: Sequence[float],
+    top_k: int,
+) -> list[int]:
+    """Fuse channels by percentile-rank (PIT), not by their raw scores.
+
+    Each channel is mapped to the empirical percentile of each candidate — best candidate
+    1.0, worst 0.0, ties sharing their average rank — and the weighted sum of percentiles
+    orders the pool. BridgeRAG reports percentile-rank fusion as directionally more robust
+    than min-max normalisation on multi-hop benchmarks (arXiv:2604.03384, citing Bacellar
+    2026), which matters here because the relevance decision, the cross-encoder logit and
+    the fused recall score live on three different scales: min-max lets one outlier set the
+    scale, percentile-rank cannot.
+    """
+    if not score_lists:
+        return []
+    if len(score_lists) != len(weights):
+        raise ValueError(
+            f"got {len(score_lists)} channels for {len(weights)} weights"
+        )
+    n = len(score_lists[0])
+    if any(len(scores) != n for scores in score_lists):
+        raise ValueError("every channel must score the same number of candidates")
+    if n == 0 or top_k <= 0:
+        return []
+    fused = [0.0] * n
+    for scores, weight in zip(score_lists, weights):
+        values = [float(s) for s in scores]
+        order = sorted(range(n), key=lambda i: (-values[i], i))
+        # Average rank for ties, then a percentile in [0, 1] with the best at 1.0.
+        percentile = [0.0] * n
+        position = 0
+        while position < n:
+            end = position
+            while end + 1 < n and values[order[end + 1]] == values[order[position]]:
+                end += 1
+            average = (position + end) / 2.0
+            share = 1.0 - (average / (n - 1)) if n > 1 else 1.0
+            for k in range(position, end + 1):
+                percentile[order[k]] = share
+            position = end + 1
+        for i in range(n):
+            fused[i] += float(weight) * percentile[i]
+    return sorted(range(n), key=lambda i: (-fused[i], i))[:top_k]
+
+
+def tri_rankings(
+    cache: Mapping[str, Any],
+    tri_scores: Mapping[str, Sequence[float]],
+    top_k: int,
+    rrf_k: int,
+    name: str,
+) -> dict[str, dict[str, list[int]]]:
+    """Selection rules built on the bridge-conditioned score, keyed by strategy.
+
+    ``<name>`` orders by the conditional score alone; the blended, coverage and
+    coverage-plus-quota variants mirror the cross-encoder strategies so the two second
+    stages are compared under identical rules. ``pit-<name>-ce`` is BridgeRAG's
+    percentile-rank fusion of the two channels, which is the variant that does not have to
+    choose between them.
+    """
+    atom_weight = cache["_settings"]["atom_weight"]
+    names = [
+        name,
+        f"{name}-coverage-0.5",
+        f"{name}-coverage-0.7",
+        f"{name}-covquota-3-0.5",
+        f"{name}-covquota-3-0.7",
+        f"pit-{name}-ce",
+    ]
+    out: dict[str, dict[str, list[int]]] = {key: {} for key in names}
+    for q, payload in cache["queries"].items():
+        scores = [float(s) for s in tri_scores[q]]
+        if len(scores) != len(payload["pool"]):
+            raise ValueError(
+                f"query {q}: {len(scores)} bridge scores for "
+                f"{len(payload['pool'])} pool candidates — the caches disagree"
+            )
+        atoms = payload["atoms"]
+        docs = [document_of(chunk_id) for chunk_id in payload["pool"]]
+        positions = list(range(len(scores)))
+        out[name][q] = [int(i) for i in ce_order(positions, scores)[:top_k]]
+        for lam in (0.5, 0.7):
+            out[f"{name}-coverage-{lam}"][q] = coverage_order(
+                scores, atoms, atom_weight, top_k, lam
+            )
+            out[f"{name}-covquota-3-{lam}"][q] = coverage_doc_quota_order(
+                scores, atoms, atom_weight, docs, top_k, lam, 3
+            )
+        out[f"pit-{name}-ce"][q] = pit_order(
+            [scores, payload["ce"]], [1.0, 1.0], top_k
+        )
+    return out
+
+
 def truncate_pools(cache: Mapping[str, Any], limit: int | None) -> Mapping[str, Any]:
     """Truncate every cached pool to its first ``limit`` candidates, in place.
 
@@ -584,6 +687,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--samples", type=int, default=1000)
     ap.add_argument("--holdout-seed", type=int, default=17,
                     help="split for choose-on-A / report-on-B selection")
+    ap.add_argument(
+        "--tri-cache", action="append", default=[], metavar="PATH",
+        help="bridge-conditioned score cache from tools/multihop_tri_cache.py; repeatable. "
+             "Each file's settings name its arm and wording, and adds that arm's rules",
+    )
     ap.add_argument("--out", default=str(ROOT_BENCH / "rerank-experiment"))
     return ap.parse_args(argv)
 
@@ -626,6 +734,22 @@ def main(argv=None) -> int:
     rankings = strategy_rankings(cache, args.top_k, args.rrf_k)
     rankings.update(rescue_rankings(cache, tokens_by_query, args.top_k, args.seed_k))
     rankings.update(doc_rankings(cache, args.top_k))
+    for path in args.tri_cache:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        settings = payload.get("_settings") or {}
+        arm = str(settings.get("arm") or "real")
+        wording = str(settings.get("wording") or "bridge")
+        name = "tri" if arm == "real" else f"tri-{arm}"
+        scores = payload["scores"]
+        missing = [q for q in order if q not in scores]
+        if missing:
+            raise SystemExit(
+                f"{path}: {len(missing)} of {len(order)} queries have no bridge score "
+                f"(first missing: {sorted(missing)[:3]}); rescore with matching "
+                "--limit-queries, or narrow this experiment with --depth-limit"
+            )
+        print(f"  {name}: bridge scores for {len(scores)} queries (wording {wording})")
+        rankings.update(tri_rankings(cache, scores, args.top_k, args.rrf_k, name))
     item_queries = {
         str(i): x["query"]
         for i, x in enumerate(json.loads((ROOT_BENCH / "MultiHopRAG.json").read_text(encoding="utf-8")))
@@ -646,7 +770,11 @@ def main(argv=None) -> int:
         summary[name] = {m: round(sum(rows[m].values()) / len(rows[m]), 4) for m in METRICS}
 
     comparisons: dict[str, dict[str, Any]] = {}
-    baselines = [name for name in ("fused", "ce", "coverage-0.7") if name in rankings]
+    baselines = [
+        name
+        for name in ("fused", "ce", "coverage-0.7", "covquota-3-0.7")
+        if name in rankings
+    ]
     for baseline in baselines:
         for name in rankings:
             if name == baseline:
@@ -663,7 +791,12 @@ def main(argv=None) -> int:
                 }
 
     result = {
-        "_settings": {**cache["_settings"], "top_k": args.top_k, "rrf_k": args.rrf_k},
+        "_settings": {
+            **cache["_settings"],
+            "top_k": args.top_k,
+            "rrf_k": args.rrf_k,
+            "tri_caches": [Path(p).name for p in args.tri_cache],
+        },
         "summary": summary,
         "comparisons": comparisons,
         "holdout": holdout_selection(
