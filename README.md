@@ -298,9 +298,20 @@ and *who may see it*. Both are handled deterministically, with no model:
   (`QUERY_MIN_TRUST`) plus a tenant identity (`--tenant`, or `tenant` in the API body). The
   manifest can carry a per-tenant allow-list, and when it is configured the honest default is an
   **allow-list**: anything it does not name is untrusted. Filtering happens *before* any decision,
-  over an over-fetched candidate set, and the engine reports how many candidates it removed
-  (`trust_filtered`) so a silently shrinking pool is visible. With no manifest configured nothing
-  is filtered and the shipped behaviour is unchanged.
+  and the engine reports how many candidates it removed (`trust_filtered`) so a silently
+  shrinking pool is visible. With no manifest configured nothing is filtered and the shipped
+  behaviour is unchanged.
+  - **The filter deepens rather than shortening the result.** A fixed over-fetch factor is a
+    guess, and when it is wrong the outcome is a *short* result — the window holds fewer than
+    `retrieve_k` permitted candidates even though the index has more. The engine now widens the
+    channel search (×4, bounded by the index size) until enough survive, so filtering changes
+    *which* documents come back, never *how many*. `tests/test_trust.py` pins it with a corpus
+    where twelve disallowed documents own the whole top of the ranking.
+  - `VectorIndex.search(..., allow=predicate)` also takes the predicate **inside** the scan: the
+    exact cosine path masks disallowed rows before the top-k selection, and the ANN path
+    over-fetches and falls back to the exact scan when its window cannot refill. That is the
+    metadata-filter primitive for a caller that wants the filter to choose from the whole index;
+    the engine keeps the post-filter so `trust_filtered` stays a real count.
 - **Index drift.** An index is not correct because it was correct when it was built. `laya-rag
   integrity` (and `GET /v1/integrity`) reports three distinct classes, because they need three
   detectors: **deleted documents** still indexed, **duplicate content** (byte-identical after

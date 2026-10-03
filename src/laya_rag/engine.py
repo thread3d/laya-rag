@@ -929,42 +929,59 @@ class RagEngine:
             )
             else candidate_k
         )
-        if dense_weight == 0.0:
-            dense_hits: list[Hit] = []
-        else:
-            dense_hits = index.search(self._query_vector(query), k=recall_k)
-        lexical_hits = lexical.search(query, k=recall_k) if lexical else []
-        sparse_hits = self._sparse_hits(query, recall_k)
-        candidates = self._fuse(
-            index,
-            dense_hits,
-            lexical_hits,
-            limit=candidate_k,
-            dense_weight=dense_weight,
-            lexical_weight=self.config.lexical_weight,
-            dedup_threshold=self.config.recall_dedup_threshold,
-            coverage_lambda=self.config.recall_coverage_lambda,
-            coverage_redundancy=self.config.recall_coverage_redundancy,
-            rrf_k=self.config.fusion_k,
-            sparse_hits=sparse_hits,
-            sparse_weight=self.config.sparse_weight,
-        )
+        dense_hits: list[Hit] = []
+        lexical_hits: list[Any] = []
+        sparse_hits: list[Any] = []
+        candidates: list[Hit] = []
         trust_filtered = 0
         acl_filtered = 0
-        if trust_active:
-            before = len(candidates)
-            if acl_active:
-                allowed = [
-                    hit for hit in candidates
-                    if trust_manifest.tenant_allowed(hit.chunk.path, tenant)
-                ]
-                acl_filtered = before - len(allowed)
-                candidates = allowed
-            remaining = len(candidates)
-            candidates = filter_candidates(
-                candidates, trust_manifest, effective_min_trust, tenant
+        # A fixed over-fetch factor is a guess, and when it is wrong the result is *short*:
+        # the top-`recall_k` window may hold fewer than `candidate_k` permitted candidates
+        # even though the index has more. Deepen until enough survive (or the index is
+        # exhausted), so the filter changes *which* documents are returned, never *how many*.
+        limit = len(index) if index is not None else recall_k
+        while True:
+            if dense_weight == 0.0:
+                dense_hits = []
+            else:
+                dense_hits = index.search(self._query_vector(query), k=recall_k)
+            lexical_hits = lexical.search(query, k=recall_k) if lexical else []
+            sparse_hits = self._sparse_hits(query, recall_k)
+            candidates = self._fuse(
+                index,
+                dense_hits,
+                lexical_hits,
+                limit=candidate_k,
+                dense_weight=dense_weight,
+                lexical_weight=self.config.lexical_weight,
+                dedup_threshold=self.config.recall_dedup_threshold,
+                coverage_lambda=self.config.recall_coverage_lambda,
+                coverage_redundancy=self.config.recall_coverage_redundancy,
+                rrf_k=self.config.fusion_k,
+                sparse_hits=sparse_hits,
+                sparse_weight=self.config.sparse_weight,
             )
-            trust_filtered = remaining - len(candidates)
+            trust_filtered = 0
+            acl_filtered = 0
+            if trust_active:
+                pre_filter = list(candidates)
+                if acl_active:
+                    allowed = [
+                        hit for hit in pre_filter
+                        if trust_manifest.tenant_allowed(hit.chunk.path, tenant)
+                    ]
+                    acl_filtered = len(pre_filter) - len(allowed)
+                    pre_filter = allowed
+                remaining = len(pre_filter)
+                pre_filter = filter_candidates(
+                    pre_filter, trust_manifest, effective_min_trust, tenant
+                )
+                trust_filtered = remaining - len(pre_filter)
+                candidates = pre_filter
+            # Enough survived, nothing more to fetch, or the window already covers the index.
+            if (not trust_active) or len(candidates) >= candidate_k or recall_k >= limit:
+                break
+            recall_k = min(limit, max(recall_k * 4, candidate_k))
         retrieval_seconds = time.perf_counter() - retrieve_started
 
         # An index written before the lexical channel existed, or one whose

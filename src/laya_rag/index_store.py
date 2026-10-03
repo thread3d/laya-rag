@@ -15,7 +15,7 @@ import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 import numpy as np
 
@@ -180,8 +180,25 @@ class VectorIndex:
         return self._ann is not None
 
     # -- query -----------------------------------------------------------
-    def search(self, query_vector: np.ndarray, k: int = 10) -> list[Hit]:
-        """Return the ``k`` nearest chunks by cosine similarity."""
+    def search(
+        self,
+        query_vector: np.ndarray,
+        k: int = 10,
+        *,
+        allow: Callable[[str | None], bool] | None = None,
+    ) -> list[Hit]:
+        """Return the ``k`` nearest chunks by cosine similarity.
+
+        ``allow`` is a path predicate applied **inside** the search — the metadata filter
+        the engine needs for trust tiers and tenant ACLs. Filtering after the search can
+        only return what the unfiltered top-k happened to contain, so a caller that
+        over-fetches by a fixed factor gets a short result whenever enough of that window
+        is excluded; here the filter chooses from the whole index instead.
+
+        With the exact scan this is free: the scores of disallowed rows are masked before
+        the top-k selection. An ANN index cannot take a predicate, so it over-fetches and
+        falls back to the exact scan when the filtered window comes up short.
+        """
         if k < 1:
             raise ValueError(f"k must be positive, got {k}")
         if not len(self) or not self._vectors.size:
@@ -191,6 +208,21 @@ class VectorIndex:
             raise IndexError_(
                 f"query vector has {query.shape[0]} dimensions but the index holds {self.dim}"
             )
+        if allow is not None and self._ann is not None:
+            window = min(len(self._chunks), max(k * 8, k + 32))
+            self._ann.nprobe = min(self.ann_nprobe, self._ann.nlist)
+            similarities, positions = self._ann.search(
+                query.reshape(1, -1).astype(np.float32), window
+            )
+            kept = [
+                Hit(chunk=self._chunks[int(position)], score=float(similarity))
+                for similarity, position in zip(similarities[0], positions[0])
+                if position >= 0 and allow(self._chunks[int(position)].path)
+            ]
+            if len(kept) >= k or window >= len(self._chunks):
+                return kept[:k]
+            # The ANN window was too narrow to refill: the exact scan is the correct answer.
+            return self._search_exact(query, k, allow)
         if self._ann is not None:
             self._ann.nprobe = min(self.ann_nprobe, self._ann.nlist)
             similarities, positions = self._ann.search(
@@ -201,13 +233,32 @@ class VectorIndex:
                 for similarity, position in zip(similarities[0], positions[0])
                 if position >= 0
             ]
+        return self._search_exact(query, k, allow)
 
+    def _search_exact(
+        self,
+        query: np.ndarray,
+        k: int,
+        allow: Callable[[str | None], bool] | None,
+    ) -> list[Hit]:
+        """The exact cosine scan, optionally restricted by a path predicate."""
         scores = self._vectors @ query
+        if allow is not None:
+            mask = np.fromiter(
+                (allow(chunk.path) for chunk in self._chunks), dtype=bool, count=len(self._chunks)
+            )
+            if not mask.any():
+                return []
+            scores = np.where(mask, scores, -np.inf)
         take = min(k, scores.shape[0])
         # argpartition selects the top-k unordered; sort those k for a stable ranking.
         top = np.argpartition(-scores, take - 1)[:take]
         ordered = top[np.argsort(-scores[top], kind="stable")]
-        return [Hit(chunk=self._chunks[int(i)], score=float(scores[int(i)])) for i in ordered]
+        return [
+            Hit(chunk=self._chunks[int(i)], score=float(scores[int(i)]))
+            for i in ordered
+            if np.isfinite(scores[int(i)])
+        ]
 
     # -- persistence -----------------------------------------------------
     def save(self, directory: Path) -> None:

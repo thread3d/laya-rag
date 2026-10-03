@@ -300,3 +300,48 @@ def test_adjudicate_claims_denies_an_anonymous_caller_when_an_acl_exists(tmp_pat
     report = engine.adjudicate_claims(["acme secret codename is falcon-nine"])
     assert report["acl_filtered"] > 0
     assert all(not claim.get("sources") for claim in report["claims"])
+
+
+def test_filtering_deepens_instead_of_returning_a_short_result(tmp_path):
+    """Excluding documents must change *which* are returned, never *how many*.
+
+    A fixed over-fetch factor is a guess: build a corpus where the disallowed documents
+    own the entire top of the ranking and a naive window comes back short even though the
+    index holds enough permitted ones deeper down.
+    """
+    root = tmp_path / "corpus"
+    root.mkdir(parents=True, exist_ok=True)
+    # Twelve poison documents that all match the query, and two trusted ones that do not
+    # match it nearly as well.
+    for i in range(12):
+        (root / f"poison{i}.md").write_text(
+            f"# Poison {i}\n\nThe launch sequence code is alpha-bravo-{i} and is restricted.\n",
+            encoding="utf-8",
+        )
+    for i in range(2):
+        (root / f"trusted{i}.md").write_text(
+            f"# Trusted {i}\n\nThe launch sequence code policy is reviewed annually.\n",
+            encoding="utf-8",
+        )
+    manifest = tmp_path / "trust.json"
+    manifest.write_text(json.dumps({
+        "default": "untrusted",
+        "rules": {"*/trusted*.md": "trusted"},
+    }), encoding="utf-8")
+    config = make_config(
+        tmp_path,
+        trust_manifest=str(manifest),
+        query_min_trust="trusted",
+        retrieve_k=3,
+        rerank_k=3,
+        relevance_threshold=0.0,
+        answerability_threshold=0.0,
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([str(root)])
+    result = engine.query("what is the launch sequence code")
+    assert result.trust_filtered > 0, "the poison documents must have been filtered"
+    assert result.passages, "filtering must not empty the result"
+    assert all("trusted" in passage["path"] for passage in result.passages), (
+        [passage["path"] for passage in result.passages]
+    )

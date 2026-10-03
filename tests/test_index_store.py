@@ -189,3 +189,76 @@ def test_wipe_removes_the_directory(tmp_path):
     (target / "f").write_text("x")
     wipe(target)
     assert not target.exists()
+
+
+# ── the metadata predicate (trust / ACL pushdown) ───────────────────────
+
+def _tenant_index() -> VectorIndex:
+    """Six chunks, three per tenant, with tenant A ranked ahead of tenant B."""
+    index = VectorIndex()
+    chunks, vectors = [], []
+    for i in range(3):
+        chunks.append(make_chunk(f"a{i}", f"alpha {i}", path="a.md", index=i))
+        vectors.append([1.0, i * 0.01])
+    for i in range(3):
+        chunks.append(make_chunk(f"b{i}", f"beta {i}", path="b.md", index=i))
+        vectors.append([0.9, 0.1 + i * 0.01])
+    index.add(chunks, np.array(vectors, dtype=np.float32))
+    return index
+
+
+def test_search_predicate_refills_from_deeper_candidates():
+    """A predicate must change *which* chunks come back, not how many.
+
+    Filtering the unfiltered top-2 would return one hit; filtering inside the search
+    reaches past the excluded rows and still fills the requested k.
+    """
+    index = _tenant_index()
+    query = np.array([1.0, 0.0], dtype=np.float32)
+    unfiltered = index.search(query, k=2)
+    assert all(hit.chunk.path == "a.md" for hit in unfiltered)
+
+    filtered = index.search(query, k=2, allow=lambda path: path == "b.md")
+    assert len(filtered) == 2
+    assert all(hit.chunk.path == "b.md" for hit in filtered)
+
+
+def test_search_predicate_returns_fewer_when_the_index_has_fewer():
+    """Exhausting the permitted set is the only reason to return short."""
+    index = _tenant_index()
+    hits = index.search(np.array([1.0, 0.0], dtype=np.float32), k=10,
+                        allow=lambda path: path == "b.md")
+    assert len(hits) == 3
+    assert all(hit.chunk.path == "b.md" for hit in hits)
+
+
+def test_search_predicate_excluding_everything_returns_nothing():
+    index = _tenant_index()
+    hits = index.search(np.array([1.0, 0.0], dtype=np.float32), k=5,
+                        allow=lambda path: False)
+    assert hits == []
+
+
+def test_search_predicate_matches_the_unfiltered_ranking_order():
+    """Filtering must not reorder: permitted hits keep their cosine order."""
+    index = _tenant_index()
+    query = np.array([1.0, 0.0], dtype=np.float32)
+    unfiltered = [hit.chunk.chunk_id for hit in index.search(query, k=6)]
+    filtered = [hit.chunk.chunk_id for hit in index.search(query, k=6, allow=lambda path: True)]
+    assert filtered == unfiltered
+
+
+def test_search_predicate_falls_back_to_the_exact_scan_with_ann():
+    """An ANN index cannot take a predicate, so it must still return the right answer.
+
+    The ANN window is fetched wide, and when it cannot refill the requested k the exact
+    scan decides — the result must equal the exact filtered result.
+    """
+    query = np.array([1.0, 0.0], dtype=np.float32)
+    exact = _tenant_index().search(query, k=2, allow=lambda path: path == "b.md")
+    index = _tenant_index()
+    if not index.build_ann(nlist=1):
+        pytest.skip("faiss is not installed, so there is no ANN path to fall back from")
+    index.ann_nprobe = 1
+    approx = index.search(query, k=2, allow=lambda path: path == "b.md")
+    assert [hit.chunk.chunk_id for hit in approx] == [hit.chunk.chunk_id for hit in exact]
