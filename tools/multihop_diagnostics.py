@@ -40,7 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
-import beir, evalkit  # noqa: E402
+import beir, evalkit, jobkit  # noqa: E402
 from multihop_coverage import pool_ceiling_map  # noqa: E402
 
 from laya_rag.lexical import STOPWORDS, reciprocal_rank_fusion, tokenize  # noqa: E402
@@ -318,24 +318,76 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--limit-queries", type=int, default=None, help="smoke runs only")
     ap.add_argument("--bootstrap-samples", type=int, default=10_000)
     ap.add_argument("--out", default=str(ROOT_BENCH / "diagnostics"))
+    ap.add_argument("--shard", default="0/1", help="run one contiguous slice, 'i/n'")
+    ap.add_argument("--fresh", action="store_true", help="discard any existing checkpoint")
+    ap.add_argument("--merge", type=int, default=0, metavar="N",
+                    help="only fold N finished shards into <out>.json, then exit")
     return ap.parse_args(argv)
+
+
+def _fingerprint(args, model_id: str, depths: list[int]) -> str:
+    return jobkit.config_fingerprint(
+        tool="multihop_diagnostics",
+        model=model_id,
+        overlap=args.overlap,
+        max_depth=args.max_depth,
+        depths=depths,
+        top_k=args.top_k,
+        rrf_k=args.rrf_k,
+        limit_queries=args.limit_queries,
+    )
+
+
+def _build_report(rows: dict) -> dict:
+    """Rebuild the report shape from merged rows, using the reserved shared-state row."""
+    if jobkit.META_KEY not in rows:
+        raise RuntimeError("no shard checkpoints found — run the shards before --merge")
+    meta = rows.pop(jobkit.META_KEY)
+    per_query = [rows[key] for key in meta["query_order"] if key in rows]
+    return {
+        "_settings": meta["_settings"],
+        "summary": summarize(per_query, meta["_settings"]["depths"]),
+        "per_query": per_query,
+    }
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    shard_index, shard_count = jobkit.parse_shard(args.shard)
     depths = sorted({int(v) for v in str(args.depths).split(",") if v.strip()})
     if not depths or depths[0] < 1:
         raise SystemExit("--depths must be positive integers")
     if depths[-1] > args.max_depth:
         args.max_depth = depths[-1]
     model_id = MODELS.get(args.model, args.model)
+    fingerprint = _fingerprint(args, model_id, depths)
+
+    if args.merge:
+        try:
+            merged = jobkit.merge_shards(args.out, args.merge, fingerprint=fingerprint,
+                                         build=_build_report)
+        except (RuntimeError, jobkit.FingerprintMismatch) as exc:
+            print(f"merge failed: {exc}", file=sys.stderr)
+            return 2
+        out = Path(args.out)
+        evalkit.write_text(Path(str(out) + ".md"), render_markdown(merged))
+        print(f"merged {args.merge} shard(s) -> {args.out}.json "
+              f"({merged['_job']['completed']} queries)")
+        return 0
+
+    stem = jobkit.shard_stem(args.out, shard_index, shard_count)
+    if args.fresh:
+        for suffix in (".jsonl", ".manifest.json"):
+            Path(str(stem) + suffix).unlink(missing_ok=True)
+    run = jobkit.ResumableRun(str(stem) + ".json", fingerprint=fingerprint,
+                              shard=(shard_index, shard_count))
 
     raw = json.load(open(ROOT_BENCH / "corpus.json"))
     items_all = json.load(open(ROOT_BENCH / "MultiHopRAG.json"))
     items = [(i, x) for i, x in enumerate(items_all) if x["question_type"] != "null_query"]
     if args.limit_queries:
         items = items[: args.limit_queries]
-    golds = [[e["fact"] for e in x["evidence_list"]] for _, x in items]
+    golds_by_index = {i: [e["fact"] for e in x["evidence_list"]] for i, x in items}
 
     corpus: dict[str, str] = {}
     titles: dict[str, str] = {}
@@ -368,14 +420,30 @@ def main(argv=None) -> int:
     print("  retrieval done; scoring candidates...", flush=True)
     from multihop_official import official_metrics  # noqa: E402  (circular-safe import)
 
+    if jobkit.META_KEY not in run:
+        run.record(jobkit.META_KEY, {
+            "_settings": {
+                "model": model_id, "overlap": args.overlap, "max_depth": args.max_depth,
+                "depths": depths, "top_k": args.top_k, "limit_queries": args.limit_queries,
+                "corpus_chunks": len(corpus), "rrf_k": args.rrf_k,
+            },
+            "query_order": list(queries),
+        })
+
+    mine = jobkit.shard_items(list(queries), shard_index, shard_count)
+    todo = run.pending(mine)
+    print(f"  {len(todo)} of {len(mine)} queries to score ({len(run) - 1} checkpointed)",
+          flush=True)
+
     started = time.perf_counter()
-    per_query: list[dict] = []
-    for n, (q, text) in enumerate(queries.items()):
+    for n, q in enumerate(todo, 1):
+        text = queries[q]
+        gold = golds_by_index[int(q)]
         fused = reciprocal_rank_fusion(
             [dense[q], lexical[q]], k=args.rrf_k, limit=args.max_depth, weights=[1.0, 1.0]
         )
         pool = [doc_id for doc_id, _ in fused]
-        matches = gold_matches(corpus, pool, golds[n], norm=norm_corpus)
+        matches = gold_matches(corpus, pool, gold, norm=norm_corpus)
         qterms = {t for t in tokenize(text, stem=True) if t not in STOPWORDS}
         overlap = candidate_overlap(corpus, pool, qterms, token_sets=tokens_of)
         first, second = split_hops(matches, overlap)
@@ -383,7 +451,7 @@ def main(argv=None) -> int:
 
         row: dict = {"query": q}
         top = [corpus[d] for d in pool[: args.top_k]]
-        metrics, _ = official_metrics([top], [golds[n]])
+        metrics, _ = official_metrics([top], [gold])
         row.update({f"fused_{k}": v for k, v in metrics.items()})
         row["hop2_size"] = len(second)
         row["hop_gap"] = round(hop_grounding_gap(matches, overlap), 4)
@@ -393,7 +461,7 @@ def main(argv=None) -> int:
         full_second = second
         for depth in depths:
             row[f"pool_fact_recall@{depth}"] = recall_at_depth(
-                matches, depth, gold_count=len(golds[n])
+                matches, depth, gold_count=len(gold)
             )
             row[f"pool_ceiling_MAP@10@{depth}"] = pool_ceiling_map(
                 overlap[: min(depth, len(pool))],
@@ -402,7 +470,7 @@ def main(argv=None) -> int:
                 # The true gold count, not the facts this depth happens to match: the
                 # denominator has to match official_metrics or the ceiling is inflated for
                 # the very queries whose pool is incomplete (see pool_ceiling_map).
-                gold_count=len(golds[n]),
+                gold_count=len(gold),
             )
             row[f"hop1_fact_recall@{depth}"] = recall_at_depth(matches, depth, first)
             row[f"hop2_fact_recall@{depth}"] = recall_at_depth(matches, depth, second)
@@ -411,24 +479,26 @@ def main(argv=None) -> int:
             row[f"hop2_retention@{depth}"] = (
                 None if base in (None, 0.0) or here is None else round(here / base, 4)
             )
-        per_query.append(row)
-        if n and n % 500 == 0:
-            print(f"  {n}/{len(queries)}", flush=True)
+        run.record(q, row)
+        if n % 500 == 0:
+            run.touch(total=len(mine))
+            print(f"  {n}/{len(todo)}", flush=True)
 
+    shared = run.get(jobkit.META_KEY)
+    per_query = [run.get(q) for q in shared["query_order"] if run.get(q) is not None]
     report = {
-        "_settings": {
-            "model": model_id, "overlap": args.overlap, "max_depth": args.max_depth,
-            "depths": depths, "top_k": args.top_k, "limit_queries": args.limit_queries,
-            "corpus_chunks": len(corpus), "seconds": round(time.perf_counter() - started, 1),
-        },
+        "_settings": {**shared["_settings"], "seconds": round(time.perf_counter() - started, 1)},
         "summary": summarize(per_query, depths),
         "per_query": per_query,
     }
-    out = Path(args.out)
-    evalkit.write_json(Path(str(out) + ".json"), report)
-    evalkit.write_text(Path(str(out) + ".md"), render_markdown(report))
+    run.finish(report, total=len(mine))
+    # `finish` already wrote `<stem>.json` atomically; the markdown is a rendering of it, and
+    # both carry the shard stem so a sharded run never clobbers the merged report path.
+    evalkit.write_text(Path(str(stem) + ".md"), render_markdown(report))
     print("\n" + render_markdown(report))
-    print("wrote", str(out) + ".json", "and", str(out) + ".md")
+    print("wrote", str(stem) + ".json", "and", str(stem) + ".md")
+    if shard_count > 1:
+        print(f"  run all {shard_count} shards, then: --merge {shard_count}")
     return 0
 
 

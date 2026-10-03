@@ -110,6 +110,6 @@ Test suite: **481 passed, 4 deselected**.
 
 **Correction (2026-10-03).** The ceiling quoted as 0.7307 was mis-normalised — it divided by the gold
 facts the pool matched, not the query's true gold count — and is **0.609** corrected. It also *rises*
-with pool depth (0.659 at 500) rather than falling, and 31.9% of depth-100 pools are missing a gold
+with pool depth (0.659 at 500) rather than falling, and 35.4% of depth-100 pools are missing a gold
 fact. The conclusion below that the gap is purely selection therefore overstates it: recall is a live
 lever. See the README diagnostics subsection.

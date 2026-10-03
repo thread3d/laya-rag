@@ -135,67 +135,83 @@ DIAG = "docs/findings-multihop-diagnostics.md"
 README = "README.md"
 
 CHECKS: list[Claim] = [
-    # The source report: the headline table and the paired comparisons.
+    # The source report: the headline table and the paired comparisons. The recall rows are
+    # pinned too, because the denominator behind them was changed by `8f7feb6` *after* this
+    # report was first generated, and a stale report is how the project's own Phase 0 came to
+    # "correct" correct numbers to worse ones.
+    Claim("diag recall @10", DIAG, r"^\|\s*10\s*\|", 0.4647, _D + ("10", "pool_fact_recall", "mean")),
+    Claim("diag recall @100", DIAG, r"^\|\s*100\s*\|", 0.8509, _D + ("100", "pool_fact_recall", "mean")),
+    Claim("diag recall @500", DIAG, r"^\|\s*500\s*\|", 0.9811, _D + ("500", "pool_fact_recall", "mean")),
     Claim("diag ceiling @10", DIAG, r"^\|\s*10\s*\|", 0.3970, _D + ("10", "pool_ceiling_MAP@10", "mean")),
     Claim("diag ceiling @100", DIAG, r"^\|\s*100\s*\|", 0.6088, _D + ("100", "pool_ceiling_MAP@10", "mean")),
     Claim("diag ceiling @500", DIAG, r"^\|\s*500\s*\|", 0.6592, _D + ("500", "pool_ceiling_MAP@10", "mean")),
-    Claim("diag fact recall @100", DIAG, r"^\|\s*100\s*\|", 0.8666, _D + ("100", "pool_fact_recall", "mean")),
     Claim("diag 10->100 paired", DIAG, r"depth 10 → 100", 0.2118,
           _PAIRED + ("pool_ceiling_MAP@10:100-10", "delta")),
     Claim("diag 100->500 paired", DIAG, r"100 → 500", 0.0505,
           _PAIRED + ("pool_ceiling_MAP@10:500-100", "delta")),
-    Claim("diag incomplete share", DIAG, r"depth-100 pools", 31.9,
+    Claim("diag incomplete share", DIAG, r"depth-100 pools", 35.4,
           "incomplete_100_share", scale=100.0, decimals=1, tol=0.05),
-    Claim("diag incomplete count", DIAG, r"depth-100 pools", 719,
+    Claim("diag incomplete count", DIAG, r"depth-100 pools", 799,
           "incomplete_100_count", decimals=0, tol=0.5),
-    Claim("diag ceiling, incomplete pools", DIAG, r"complete ones", 0.4469,
+    Claim("diag ceiling, incomplete pools", DIAG, r"complete ones", 0.4511,
           "ceiling_100_incomplete"),
-    Claim("diag ceiling, complete pools", DIAG, r"complete ones", 0.6845,
+    Claim("diag ceiling, complete pools", DIAG, r"complete ones", 0.6952,
           "ceiling_100_complete"),
-    Claim("diag fused, incomplete pools", DIAG, r"fused order reaches", 0.1498,
+    Claim("diag fused, incomplete pools", DIAG, r"fused order reaches", 0.1564,
           "fused_map_incomplete"),
-    Claim("diag fused, complete pools", DIAG, r"fused order reaches", 0.3052,
+    Claim("diag fused, complete pools", DIAG, r"fused order reaches", 0.3102,
           "fused_map_complete"),
-    Claim("diag headroom from completing", DIAG, r"Making every pool complete", 0.076,
+    Claim("diag headroom from completing", DIAG, r"Making every pool complete", 0.086,
           "headroom_completing", decimals=3, tol=1e-3),
 
-    # README: the diagnostics table and the two derived claims.
-    Claim("readme ceiling @10", README, r"^\|\s*10\s*\|", 0.397, _D + ("10", "pool_ceiling_MAP@10", "mean"),
-          decimals=3, tol=1e-3),
-    Claim("readme ceiling @100", README, r"^\|\s*100\s*\|", 0.609, _D + ("100", "pool_ceiling_MAP@10", "mean"),
-          decimals=3, tol=1e-3),
-    Claim("readme ceiling @500", README, r"^\|\s*500\s*\|", 0.659, _D + ("500", "pool_ceiling_MAP@10", "mean"),
-          decimals=3, tol=1e-3),
-    Claim("readme incomplete share", README, r"depth-100 pools", 31.9,
+    # README: the diagnostics table and the two derived claims. The table rounds to 3dp.
+    Claim("readme recall @10", README, r"^\|\s*10\s*\|", 0.465,
+          _D + ("10", "pool_fact_recall", "mean"), decimals=3, tol=1e-3),
+    Claim("readme recall @100", README, r"^\|\s*100\s*\|", 0.851,
+          _D + ("100", "pool_fact_recall", "mean"), decimals=3, tol=1e-3),
+    Claim("readme recall @500", README, r"^\|\s*500\s*\|", 0.981,
+          _D + ("500", "pool_fact_recall", "mean"), decimals=3, tol=1e-3),
+    Claim("readme ceiling @10", README, r"^\|\s*10\s*\|", 0.397,
+          _D + ("10", "pool_ceiling_MAP@10", "mean"), decimals=3, tol=1e-3),
+    Claim("readme ceiling @100", README, r"^\|\s*100\s*\|", 0.609,
+          _D + ("100", "pool_ceiling_MAP@10", "mean"), decimals=3, tol=1e-3),
+    Claim("readme ceiling @500", README, r"^\|\s*500\s*\|", 0.659,
+          _D + ("500", "pool_ceiling_MAP@10", "mean"), decimals=3, tol=1e-3),
+    Claim("readme incomplete share", README, r"depth-100 pools", 35.4,
           "incomplete_100_share", scale=100.0, decimals=1, tol=0.05),
-    Claim("readme incomplete count", README, r"depth-100 pools", 719,
+    Claim("readme incomplete count", README, r"depth-100 pools", 799,
           "incomplete_100_count", decimals=0, tol=0.5),
-    Claim("readme headroom from completing", README, r"depth-100 ceiling from", 0.076,
+    Claim("readme headroom from completing", README, r"depth-100 ceiling from", 0.086,
           "headroom_completing", decimals=3, tol=1e-3),
 
     # RESEARCH.md: the standing table row.
     Claim("research ceiling", "RESEARCH.md", r"MultiHop pool-reorder oracle", 0.609,
           _D + ("100", "pool_ceiling_MAP@10", "mean"), decimals=3, tol=1e-3),
-    Claim("research incomplete share", "RESEARCH.md", r"MultiHop pool-reorder oracle", 31.9,
+    Claim("research incomplete share", "RESEARCH.md", r"MultiHop pool-reorder oracle", 35.4,
           "incomplete_100_share", scale=100.0, decimals=1, tol=0.05),
 
     # docs/FINDINGS.md: the one-line index entry.
     Claim("findings ceiling", "docs/FINDINGS.md", r"Multi-hop selection", 0.6088,
           _D + ("100", "pool_ceiling_MAP@10", "mean")),
-    Claim("findings incomplete share", "docs/FINDINGS.md", r"Multi-hop selection", 31.9,
+    Claim("findings incomplete share", "docs/FINDINGS.md", r"Multi-hop selection", 35.4,
           "incomplete_100_share", scale=100.0, decimals=1, tol=0.05),
 ]
 
 FORBIDDEN: list[Forbidden] = [
+    # The pre-`c415ece` mis-normalised ceilings: never again.
     Forbidden("stale depth-10 ceiling", DIAG, r"^\|\s*10\s*\|", 0.7321),
     Forbidden("stale depth-100 ceiling", DIAG, r"^\|\s*100\s*\|", 0.7304),
     Forbidden("stale depth-500 ceiling", DIAG, r"^\|\s*500\s*\|", 0.6741),
-    Forbidden("stale incomplete share", DIAG, r"depth-100 pools", 36.0, decimals=0),
-    Forbidden("stale incomplete share", README, r"depth-100 pools", 36.0, decimals=0),
+    # The recall rows as they read under the pre-`8f7feb6` denominator, which made depth-500
+    # recall trivially 1.0 and under-counted the incomplete pools.
+    Forbidden("stale recall @10", DIAG, r"^\|\s*10\s*\|", 0.4747),
+    Forbidden("stale recall @100", DIAG, r"^\|\s*100\s*\|", 0.8666),
+    Forbidden("stale recall @10", README, r"^\|\s*10\s*\|", 0.475, decimals=3),
+    Forbidden("stale recall @100", README, r"^\|\s*100\s*\|", 0.867, decimals=3),
+    # The count and share the pre-`8f7feb6` report implied.
     Forbidden("stale incomplete count", README, r"depth-100 pools", 811.0, decimals=0),
-    Forbidden("stale incomplete ceiling", README, r"depth-100 pools", 0.451),
-    Forbidden("stale complete ceiling", README, r"depth-100 pools", 0.695),
-    Forbidden("stale headroom", README, r"depth-100 ceiling from", 0.086, decimals=3),
+    Forbidden("stale incomplete share", README, r"depth-100 pools", 36.0, decimals=0),
+    Forbidden("stale incomplete share", DIAG, r"depth-100 pools", 36.0, decimals=0),
     Forbidden("stale incomplete share", "RESEARCH.md", r"MultiHop pool-reorder oracle", 36.0, decimals=0),
 ]
 

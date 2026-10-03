@@ -20,7 +20,7 @@ Quoted from `RESEARCH.md` §1 and `IMPROVEMENTS.md`; not re-derived:
 | axis | bar to beat | why |
 | --- | --- | --- |
 | MultiHop-RAG MAP@10 | **0.2986** (the repo's own reranked 400-query subset) | the 0.479 comparison is a *reranked* published number; 0.2835 is the un-reranked baseline |
-| MultiHop-RAG pool-reorder oracle | **0.609** at depth 100 `[repo]`, corrected 2026-10-03 (was 0.7307) | 31.9% of depth-100 pools lack a gold fact and the ceiling rises to 0.659 at depth 500, so the loss is **recall *and* set-construction** |
+| MultiHop-RAG pool-reorder oracle | **0.609** at depth 100 `[repo]`, corrected 2026-10-03 (was 0.7307) | 35.4% of depth-100 pools lack a gold fact and the ceiling rises to 0.659 at depth 500, so the loss is **recall *and* set-construction** |
 | BEIR retrieval (5 datasets) | 0.452 single / **0.495** 3-model ensemble | already above published BGE-large; cost, not quality |
 | Answerability out of domain | scalar AUC 0.51; in-domain feature gate **0.815** | no portable calibrated abstention |
 | Cross-encoder | −0.027…−0.318 BEIR; **+0.0464** MultiHop | route it, never global |
@@ -404,7 +404,7 @@ verification memos stay separate from `IMPROVEMENTS.md` (diagnosis) and `PLAN.md
 
 > **Correction, 2026-10-03.** The pool-reorder ceiling of 0.7307 this document builds on was
 > mis-normalised: it divided by the gold facts *the pool matched* rather than the query's true gold
-> count. Corrected it is **0.609** at depth 100, it **rises** with depth (0.659 at 500), and 31.9% of
+> count. Corrected it is **0.609** at depth 100, it **rises** with depth (0.659 at 500), and 35.4% of
 > depth-100 pools are missing a gold fact — so recall is a live lever, not a solved one. The bridge
 > argument below is unaffected (it was measured separately), but the "the pool already contains
 > everything" framing is not.

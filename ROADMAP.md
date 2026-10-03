@@ -136,16 +136,24 @@ The stale and inconsistent figures still in circulation:
 | 0.3 | Reconcile the two corrected ceilings | `tools/multihop_ceiling_decomp.py` | the renderer now names its pool (the cross-encoder's depth-100 list) and states that diagnostics' 0.6088 is the *fused* pool, so the two are complementary and must not be added | `tests/test_ceiling_decomp.py` | done |
 | 0.4 | Record the `0.6741` history | `docs/findings-multihop-diagnostics.md` | the correction block states that 0.6741 was the pre-fix depth-500 value and 0.6592 is correct | `make claim-check` | done |
 | 0.5 | Claim-drift check | **new** `tools/claim_check.py`, `tests/test_claim_check.py`, `make claim-check` | an explicit registry of claim → document → report path, with derived statistics for the figures the report does not store; a table row must carry its own number, prose is matched per paragraph, known-stale values are asserted absent, and a missing report skips rather than fails | 13 new tests | done |
-| 0.6 | Audit the remaining prose | `README.md`, `RESEARCH.md`, `PLAN.md`, `IMPROVEMENTS.md`, `docs/research/01,03,07,08` | every "36% of depth-100 pools" replaced with the derived **31.9% (719 of 2,255)**, and "about a third of the remaining headroom" with "about a quarter" | `make claim-check` | done |
-| 0.7 | Correct the README's derived cluster | `README.md` | found by 0.6 and worse than expected: the README carried **five** hand-typed numbers with no derivation — 811 pools, ceilings 0.451/0.695, fused 0.155/0.310, and +0.086. All replaced with the derived 719, 0.4469/0.6845, 0.1498/0.3052 and **+0.076** | `make claim-check` | done |
+| 0.6 | Audit the remaining prose | `README.md`, `RESEARCH.md`, `PLAN.md`, `IMPROVEMENTS.md`, `docs/research/01,03,07,08` | every "36% of depth-100 pools" aligned to the report's derived figure | `make claim-check` | done, **then reversed — see 0.8** |
+| 0.7 | Correct the README's derived cluster | `README.md` | the README carried **five** hand-typed numbers with no derivation — 811 pools, ceilings 0.451/0.695, fused 0.155/0.310, +0.086 | `make claim-check` | done, **then reversed — see 0.8** |
+| 0.8 | Regenerate the report, and re-derive everything from it | `tools/multihop_diagnostics.py`, `tools/claim_check.py`, all prose | Phase 1's diagnostics retrofit made the report reproducible again, and regenerating it showed that 0.6/0.7 had aligned the prose to a **stale** `diagnostics.json` — generated before `8f7feb6` fixed the recall denominator. Re-derived: incomplete pools **799 / 35.4%** (not 719 / 31.9%), ceilings **0.4511 / 0.6952**, fused **0.1564 / 0.3102**, headroom **+0.086**, and depth-500 recall **0.9811**, not 1.000 | `make claim-check` (39 checks) | done |
 
-**What 0.6 actually found.** Two things, and the second was not in the plan. First, the
-"36%" figure was a hand-copy of the commit message rather than of the report — the regenerated
-data give **31.9%**. Second, the README's follow-on sentence (811 pools, the 0.451/0.695
-ceilings, the 0.155/0.310 achieved values, and the +0.086 headroom) was likewise never derived
-from a committed report and disagreed with the report on *every* figure. That cluster is now
-item 0.7 and is pinned by `claim_check`, so the next correction cannot pass through the prose
-without failing a test.
+**What 0.6/0.7 got wrong, and how 0.8 caught it.** The lesson is worth more than the numbers.
+`8f7feb6` changed `recall_at_depth`'s denominator from "the facts the deepest pool matched" —
+which made `pool_fact_recall@500` equal to **1.0000 by construction** — to the query's true gold
+count. The `diagnostics.json` in `eval/` was never regenerated afterwards, so it carried the
+*pre-fix* recall rows while the ceilings were current. Phase 0's prose pass read those recall
+rows, derived 719 incomplete pools from them, and "corrected" the README's approximately-right
+36% / 0.451 / 0.695 / +0.086 cluster to a worse 31.9% / 0.4469 / 0.6845 / +0.076. `claim_check`
+then pinned the wrong values, because it read the same stale report.
+
+It was the Phase 1 retrofit that exposed it: making `multihop_diagnostics` resumable meant
+re-running it, and the fresh report's derived cluster differed from the pinned one. **The gate
+caught the error, which is the point — but the gate is only as good as the report it reads.**
+`make multihop-diagnostics` is now the first step of any claim audit, and `claim_check` pins the
+recall rows as well as the ceilings so a stale report fails loudly.
 
 **Measured.** `make claim-check` — 33 checks passed against `diagnostics.json`. Suite
 **914 passed, 4 deselected** (901 before; 13 new claim-check tests).
@@ -308,13 +316,15 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
 
 - 2026-10-03 — roadmap created. Phase 0 items 0.1–0.6 and the Phase 1 resumability contract are
   the immediate work. No item is measured yet.
-- 2026-10-03 — **Phase 0 done (0.1–0.7).** The source finding, the findings index and every
-  prose site now carry the corrected, reproducible numbers; `tools/claim_check.py` pins 33 of
-  them against `diagnostics.json` and the gate is `make claim-check`. Two figures from the
-  correction commit were themselves wrong and are fixed here: the depth-500 ceiling is 0.6592
-  (not 0.6741) and pool incompleteness is 31.9% / 719 of 2,255 (not 36% / 811); the README's
-  five hand-typed derived numbers (0.451, 0.695, 0.155, 0.310, +0.086) are replaced with
-  0.4469, 0.6845, 0.1498, 0.3052 and +0.076. Suite **914 passed, 4 deselected**. Next: Phase 1,
+- 2026-10-03 — **Phase 0 done (0.1–0.8).** The source finding, the findings index and every
+  prose site carry the corrected numbers; `tools/claim_check.py` pins 39 of them against
+  `diagnostics.json` and the gate is `make claim-check`. The depth-500 ceiling is 0.6592 (not
+  0.6741). The 0.6/0.7 prose pass then had to be **reversed by 0.8**: it had aligned the prose to
+  a `diagnostics.json` generated before `8f7feb6` fixed the recall denominator, so 719 / 31.9% /
+  0.4469 / 0.6845 / 0.1498 / 0.3052 / +0.076 were all wrong and the README's original
+  36% / 0.451 / 0.695 / +0.086 cluster was approximately right. Reproducible values now:
+  incomplete **799 (35.4%)**, ceilings **0.4511 / 0.6952**, fused **0.1564 / 0.3102**, headroom
+  **+0.086**, depth-500 recall **0.9811**. Suite **914 passed, 4 deselected**. Next: Phase 1,
   starting with the resumability contract.
 - 2026-10-03 — **Phase 1 infrastructure landed.** `tools/jobkit.py` (append+fsync per unit,
   atomic finish, fingerprint refusal, contiguous shards, `META_KEY` for shared state,
@@ -345,3 +355,13 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   deficit significant. The engine does beat the harness's `ce` and `covquota` rules on the same
   subset. Suite **985 passed, 4 deselected**. Both Phase 1 gates now have reports; the full
   2,255/2,417 runs and the shipped-default paths remain owed. Next: Phase 2.
+- 2026-10-03 — **Phase 0.8: the diagnostics report was regenerated, and Phase 0's own prose pass
+  was reversed.** Retrofitting `tools/multihop_diagnostics.py` onto jobkit required re-running it,
+  and the fresh report disagreed with the pinned derived cluster. Cause: the `diagnostics.json` in
+  `eval/` predated `8f7feb6`'s recall-denominator fix, so it carried recall rows computed with a
+  denominator that makes `pool_fact_recall@500` equal to 1.0000 by construction. Phase 0 had read
+  those rows and written 719 / 31.9% / 0.4469 / 0.6845 / 0.1498 / 0.3052 / +0.076 into ten
+  documents. Reproducible values: **799 (35.4%)**, **0.4511 / 0.6952**, **0.1564 / 0.3102**,
+  **+0.086**, and depth-500 recall **0.9811** — so "every gold fact is in the pool at depth 500"
+  is false. `claim_check` now pins the recall rows too (39 checks). Suite **991 passed,
+  4 deselected**. The gate caught a real error, including one of mine.
