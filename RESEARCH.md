@@ -150,15 +150,29 @@ These are different instruments for different failure modes, and conflating them
 
 > **Status, 2026-10-03.** Parts of this programme have now been run, and the results are in
 > [`docs/research/08-frontier-2026.md`](docs/research/08-frontier-2026.md) and the README. In
-> short: **Tier 0.1 and 0.2 are done and decisive** (at depth 500 the pool holds 100% of the gold
-> facts while the best reorderable MAP@10 *falls* to 0.674, so "retrieve more" is refuted; the
-> comparison grid now carries permutation p-values, BH-FDR and an MDE per cell). **Tier 1.1 is
-> measured**: BridgeRAG's bridge-conditioned question is implementable here with Laya rather than
-> a 70B judge, and the conditioning is *real* (+0.0293 AUC, +0.0570 MAP@10 over a shuffled-bridge
-> control) while still losing to the cross-encoder (0.559 vs 0.796 AUC) — so the signal belongs in
-> the answerability gate, not the ranking path. **The bar to beat is now MAP@10 0.3280**
-> (coverage + document quota on the 400-query subset), not 0.2986. Tier 1.7 (atomic units) and
-> 1.8 (context prefix) are also measured and recorded.
+> short:
+>
+> - **Tier 0.1 and 0.2 are done and decisive.** The reorder ceiling is **0.609** at depth 100 and
+>   **rises** to 0.659 at depth 500 — the 0.7307 quoted here was mis-normalised (it divided by the
+>   gold facts the pool matched, not the query's true gold count) — so "retrieve more" is *not*
+>   refuted: 36% of depth-100 pools miss a gold fact and roughly a third of the remaining headroom
+>   is recall. The comparison grid carries permutation p-values, BH-FDR and an MDE per cell.
+> - **Tier 1.1 is measured.** BridgeRAG's bridge-conditioned question is implementable here with
+>   Laya rather than a 70B judge, and the conditioning is *real* (+0.0293 AUC, +0.0570 MAP@10 over
+>   a shuffled-bridge control) while still losing to the cross-encoder (0.559 vs 0.796 AUC) — so
+>   the signal belongs in the answerability gate, not the ranking path.
+> - **Four attempts to improve the ranking *objective* are null**: a fitted logistic combination
+>   over the cached channels, IDF atom weights, beam search over both the global and the greedy
+>   objective, and per-question-type routing (whose picks were unstable across halves). The
+>   ordering gap needs new information, not a better optimizer over the current features.
+> - **Tier 0.6 — the replication — is done, and it falsifies the headline.** On MuSiQue (2,417
+>   questions) the sentence-atom coverage objective is significantly **worse** than the fused
+>   first stage (**−0.0109 [−0.0181, −0.0038]**) where on MultiHop-RAG it was the largest single
+>   win (+0.0619). What travels is the cross-encoder (+0.0180) and the document quota, which turns
+>   coverage from −0.0109 into +0.0132; the best MuSiQue rule is a plain `blend-0.75`,
+>   **+0.0167 [+0.0133, +0.0201]** above the coverage-plus-quota rule that leads on MultiHop-RAG.
+>   The bar has to be stated per corpus, and "coverage is the lever" is a MultiHop-RAG statement.
+> - Tier 1.7 (atomic units) and 1.8 (context prefix) are also measured and recorded.
 
 Ranked by expected value per unit of cost and risk. Every Tier 0 and Tier 1 item is
 `[offline]` except the two marked otherwise (0.6 needs `[data]`, 1.7 needs `[model]`), and

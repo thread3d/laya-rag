@@ -946,6 +946,50 @@ retrieval and evidence-shape features; adding a bridge-conditioned column there 
 step and is **not yet measured**. Cost of the whole experiment: ~1.5 GPU-hours, no download, no
 training, no LLM.
 
+### Replication on MuSiQue — the coverage gain does not travel
+
+Every multi-hop number above rests on one dataset, so the obvious test is a second one.
+MuSiQue (`tools/musique.py`, 2,417 validation questions over 21,098 paragraphs) is harder by
+construction — its questions are built so the two supporting paragraphs cannot both be found by
+matching the question's own terms — and it is the reason `tools/fetch_musique.py` exists. Gold
+is the two `is_supporting` paragraphs, so MAP@10 measures the same set-coverage property.
+
+Change in MAP@10 against each corpus's own fused first stage:
+
+| rule | MultiHop-RAG (2,255) | MuSiQue (2,417) |
+| --- | --- | --- |
+| cross-encoder re-sort | +0.0401 [+0.0321, +0.0484] | +0.0180 [+0.0114, +0.0246] |
+| `blend-0.75` (first stage + CE, RRF) | +0.0504 | **+0.0299 [+0.0242, +0.0357]** |
+| sentence-atom coverage (`λ=0.7`) | **+0.0619 [+0.0537, +0.0701]** | **−0.0109 [−0.0181, −0.0038]** |
+| coverage + 3-document quota | **+0.0646 [+0.0560, +0.0734]** | +0.0132 [+0.0063, +0.0199] |
+
+**The coverage objective flips sign.** It is the largest single retrieval win on MultiHop-RAG and
+significantly *worse than doing nothing* on MuSiQue. On MuSiQue the best rule is the plain
+`blend-0.75` — by **+0.0167 [+0.0133, +0.0201]** over the coverage-plus-quota rule that leads on
+MultiHop-RAG. So "coverage is the lever" is a statement about one dataset, not about multi-hop
+retrieval, and the README's earlier framing of it as the general fix was too strong.
+
+What does travel is the *second stage* and the *quota*:
+
+- **The cross-encoder generalises** (+0.0180, significant) — worth noting because on BEIR the same
+  class of model lost on all five corpora. Its value is corpus-dependent in sign there and
+  positive here.
+- **The document quota is what makes coverage robust.** Removing it takes coverage from −0.0109 to
+  +0.0132 on MuSiQue, and on MuSiQue the quota wins on *both* MAP@10 and Hits@4
+  (covquota vs coverage: **+0.0241 [+0.0204, +0.0279]**). On MultiHop-RAG the same swap buys MAP
+  (+0.0027 [+0.0002, +0.0052]) and costs Hits@4 (−0.0106 [−0.0195, −0.0018]) — which is the trade
+  that keeps `RERANK_COVERAGE_MIN_DOCS` at `0` by default.
+- On MuSiQue, 2 of the 4 rules beat the first stage and 1 is significantly worse; on MultiHop-RAG
+  all 4 win. The direction of a selection rule is not a property of the task, it is a property of
+  the corpus.
+
+**The practical consequence.** `RERANK_COVERAGE_LAMBDA` auto-resolves to `0.7` — plain coverage —
+when a cross-encoder is configured, and that default is a bet on MultiHop-RAG-shaped corpora. A
+deployment on MuSiQue-shaped data (small gold sets, harder second hops) would be better served by
+`RERANK_COVERAGE_MIN_DOCS=3`, which is positive on both corpora. The default is left as it is
+because changing it costs Hits@4 where the project's headline numbers live, but it is a
+documented trade rather than a settled answer.
+
 ### Negative rejection — the claim that did not survive
 
 This is the one that should change how the project describes itself. MultiHop-RAG's 301
@@ -1015,9 +1059,13 @@ should not be cited as a strength out of domain.
 
 ### Where this RAG is worse
 
-- **Coverage on multi-hop queries.** MAP@10 **0.3192** against 0.479 published, after a
-  coverage-plus-quota pass over cross-encoder scores lifts it **+0.0646 [+0.0560, +0.0734]**
-  over the fused baseline (0.2546). It still finds *an* answer passage far more reliably than
+- **Coverage on multi-hop queries — and it does not replicate.** MAP@10 **0.3192** against 0.479
+  published, after a coverage-plus-quota pass over cross-encoder scores lifts it
+  **+0.0646 [+0.0560, +0.0734]** over the fused baseline (0.2546) *on MultiHop-RAG*. On MuSiQue
+  the same coverage pass is significantly **worse** than the fused first stage
+  (**−0.0109 [−0.0181, −0.0038]**) and the best rule is a plain cross-encoder blend. The
+  dataset-robust part is the second stage and the document quota, not the coverage objective —
+  see the replication subsection above. It still finds *an* answer passage far more reliably than
   *the set*. **The gap is partly recall and partly selection, and the split is now measured:**
   the achievable MAP@10 by reordering the fused pool is **0.609** at depth 100 (not the 0.730
   quoted before — see the diagnostics subsection for the normalisation fix), and it **rises** to
