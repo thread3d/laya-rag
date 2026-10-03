@@ -105,10 +105,30 @@ No LLM, no graph, no training run, no network — `[offline]`, days. This is the
 expected-value item in this document, because it uses the system's *differentiator* to attack
 its *headline gap*, and because it is falsifiable in one harness run.
 
-The counter-prior it must respect: Laya's 2-way relevance used as a *ranker* lost on both BEIR
-datasets (SciFact 0.654 → 0.470) `[repo]`. The hypothesis is not "Laya ranks well"; it is "Laya
-ranks well *when asked a question that is not structurally blind to the bridge*." Ship it behind
-`RERANK_BLEND` and the proposed rank-1 guardrail so the downside is bounded.
+> **MEASURED, 2026-10-03 — the mechanism transfers and the head is still the limit.** The run is
+> in `eval/benchmarks/multihop-rag/{rerank-bridge,tri-discriminate}.json` and the README's
+> bridge subsection; 400 queries × 100 candidates, with a **shuffled-bridge control** that holds
+> the instruction text fixed and swaps in another query's bridge.
+>
+> - **The conditioning is real.** Per-query discrimination AUC of the true bridge **0.559** vs
+>   the control's **0.530**: **+0.0293 [+0.0112, +0.0496]**, p=0.0010. Every ordering and filter
+>   rule built on it beats its shuffled counterpart (e.g. MAP@10 **+0.0570 [+0.0383, +0.0747]**).
+>   So "second-hop relevance is conditional on the bridge" is confirmed *on this engine*, with no
+>   LLM, no graph and no training — which is the part of BridgeRAG worth keeping.
+> - **It does not improve retrieval.** The conditional decision discriminates at 0.559 against
+>   the cross-encoder's **0.796** (−0.237 [−0.258, −0.214]), and the best conditional rule reaches
+>   MAP@10 **0.2687** against the plain cross-encoder's 0.2986 and the coverage-plus-quota bar
+>   **0.3280**. This is the repository's existing verdict restated at a better question: Laya's
+>   decision head is a strong gate and a weak retriever.
+> - **What follows.** The validated signal belongs in the **answerability gate** (in-domain AUC
+>   0.815 from retrieval and evidence-shape features today), as an additional column — not in the
+>   ranking path. That is not yet measured.
+>
+> The counter-prior it had to respect, before the run: Laya's 2-way relevance used as a *ranker*
+> lost on both BEIR datasets (SciFact 0.654 → 0.470). The hypothesis was that the head ranks well
+> when asked a question that is not structurally blind to the bridge. **It does not** — it ranks
+> better than a wrong bridge, and still worse than a trained cross-encoder. Both halves of that
+> sentence are the result.
 
 ### 2.2 DISCo — coverage as an *index*, which is how you escape the 0.7307 ceiling `[full text]`
 

@@ -215,6 +215,15 @@ multihop-tri-cache:
 laya-maxsim-probe:
 	OMP_NUM_THREADS=16 $(PY) tools/laya_maxsim_probe.py $(MAXSIM_ARGS)
 
+# Does the true bridge discriminate gold facts better than the shuffled control? AUC, which
+# is invariant to the ordering weakness that hides the signal in a ranking metric.
+multihop-tri-discriminate:
+	$(PY) tools/multihop_tri_discriminate.py $(TRI_DISCRIMINATE_ARGS)
+
+# Does duplication in the cached pool cost top-10 slots? Pure NumPy over the CE cache.
+multihop-pool-dedup:
+	$(PY) tools/multihop_pool_dedup.py $(POOL_DEDUP_ARGS)
+
 # Atomic-unit lexical retrieval with parent-window return (RESEARCH.md Tier 1.5).
 multihop-atom-index:
 	OMP_NUM_THREADS=16 $(PY) tools/multihop_atom_index.py $(ATOM_ARGS)

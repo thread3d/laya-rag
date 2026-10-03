@@ -816,6 +816,10 @@ def main(argv=None) -> int:
         for name in ("fused", "ce", "coverage-0.7", "covquota-3-0.7")
         if name in rankings
     ]
+    # The conditional arms are baselines too: `tri` asks whether any rule beats the treatment,
+    # and `tri-shuffled` is the control that says whether the treatment is the bridge or just
+    # the longer instruction. Without it in the list the report cannot answer its own question.
+    baselines += [name for name in ("tri", "tri-shuffled") if name in rankings]
     for baseline in baselines:
         for name in rankings:
             if name == baseline:

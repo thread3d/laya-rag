@@ -829,6 +829,45 @@ also run through a sign-flip permutation test with Benjamini–Hochberg control
 (`tools/eval_significance.py`): of 32 cells, 16 are significant after FDR, and each cell reports
 the minimum detectable effect so a small non-significant delta is not read as a proven absence.
 
+#### Bridge-conditioned relevance: the mechanism transfers, the head does not
+
+A second-hop passage is only weakly aligned with the *query* and strongly aligned with the
+entity the first hop resolved, so a relevance question asked of the query alone cannot separate
+the active reasoning chain from a wrong one that shares the query's surface entity. BridgeRAG
+(arXiv:2604.03384) conditions the decision on the bridge — `s(q, b, c)` instead of `s(q, c)` —
+and buys it with a 70B LLM judge. This engine already owns a calibrated decision head that
+answers typed questions over arbitrary state, so the same conditioning costs a third state key
+and a question (`src/laya_rag/rerank.py`). It was measured, with a control arm that matters:
+the same instruction text, but each query's bridge replaced by **another query's** bridge, so a
+gain can be attributed to the bridge rather than to the longer prompt.
+
+![Bridge-conditioned strategies against the baselines and the shuffled-bridge control](docs/charts/bridge_stage.png)
+
+**The conditioning is real.** Over 400 queries and 40,000 pool candidates (2,664 of them
+gold-matching), the true bridge separates gold facts from the rest at mean per-query **AUC
+0.559** against the shuffled bridge's **0.530** — a paired difference of **+0.0293
+[+0.0112, +0.0496]**, p=0.0010. Every ordering rule built on it is better than its shuffled
+counterpart by the same margin, e.g. MAP@10 **+0.0570 [+0.0383, +0.0747]** for the score
+ordering and **+0.164** for the threshold filter. Conditioning on what hop 1 found carries
+information; a wrong bridge does not.
+
+**And it is still not enough to beat the cross-encoder.** The conditional decision discriminates
+at AUC 0.559 against the cross-encoder's **0.796** (−0.237 [−0.258, −0.214]), and the best rule
+built on it — cross-encoder order restricted to conditional survivors — reaches MAP@10
+**0.2687**, below the plain cross-encoder's **0.2986** and far below the coverage-plus-quota
+**0.3280**. This is the same verdict the repository already reached for the two-way question:
+Laya's decision is a good *gate* and a weak *retriever*, and asking it a better question does
+not change which of those it is.
+
+So the honest reading is a measured negative for retrieval with a positive mechanism inside it:
+BridgeRAG's claim survives contact with this engine — the bridge is the right conditioning
+variable — but the head that consumes it is the limiting factor, and no amount of prompt
+engineering substitutes for a retrieval-trained cross-encoder. The place the validated signal
+*should* pay is the answerability gate, where this engine already reaches AUC 0.815 from
+retrieval and evidence-shape features; adding a bridge-conditioned column there is the next
+step and is **not yet measured**. Cost of the whole experiment: ~1.5 GPU-hours, no download, no
+training, no LLM.
+
 ### Negative rejection — the claim that did not survive
 
 This is the one that should change how the project describes itself. MultiHop-RAG's 301
@@ -969,6 +1008,7 @@ Recorded so they are not retried from intuition:
 | Document-level MMR (`doc-mmr`) | MAP@10 0.255 → 0.274 | kept as a lever, but below cluster-dedup's 0.279 |
 | Lexical bridge-linked second-hop rescue (`rescue-0.3/0.5/0.7`) | MAP@10 0.2780 / 0.2706 / 0.2683 vs the cross-encoder's 0.2948 | rejected — readmitting low-relevance candidates because they share rare *terms* with a kept seed is a blunt proxy for the bridge relation; the cross-encoder is better without it |
 | Rank-1 guardrail before the cross-encoder | MAP@10 0.2882 vs 0.2948, but Hits@4 0.7530 vs 0.7348 | kept as a Hits@4 option, not a MAP lever — protecting rank 1 trades set coverage for early precision |
+| Bridge-conditioned relevance `s(q, b, c)` (BridgeRAG's mechanism, no LLM) | AUC 0.559 vs the shuffled-bridge control's 0.530 (**+0.0293 [+0.0112, +0.0496]**), and every rule beats its control — but the best rule reaches MAP@10 0.2687 vs the cross-encoder's 0.2986 and the coverage-quota 0.3280 | the conditioning works and the head is still the limit — a validated signal for the *gate*, not a retrieval lever. See the bridge subsection above |
 
 ### What would raise the score — measured
 
