@@ -846,10 +846,15 @@ gain can be attributed to the bridge rather than to the longer prompt.
 **The conditioning is real.** Over 400 queries and 40,000 pool candidates (2,664 of them
 gold-matching), the true bridge separates gold facts from the rest at mean per-query **AUC
 0.559** against the shuffled bridge's **0.530** — a paired difference of **+0.0293
-[+0.0112, +0.0496]**, p=0.0010. Every ordering rule built on it is better than its shuffled
-counterpart by the same margin, e.g. MAP@10 **+0.0570 [+0.0383, +0.0747]** for the score
-ordering and **+0.164** for the threshold filter. Conditioning on what hop 1 found carries
-information; a wrong bridge does not.
+[+0.0112, +0.0496]**, p=0.0010. Every ordering and absolute-threshold rule built on it is better
+than **its own** shuffled counterpart by a similar margin, compared arm-for-arm rather than
+against the wrong control: MAP@10 **+0.0570 [+0.0383, +0.0747]** for the score ordering,
+**+0.0450 [+0.0298, +0.0609]** for the threshold filter, and **+0.0479 [+0.0311, +0.0642]** for
+the cross-encoder order restricted to conditional survivors. Conditioning on what hop 1 found
+carries information; a wrong bridge does not. One rule is the exception and it is instructive:
+the *relative* top-40 cut shows no bridge effect at all (**+0.0046 [−0.0140, +0.0229]**, p=0.64),
+because keeping 40 of 100 candidates barely filters anything — the effect lives in the absolute
+threshold, not in a generous relative cut.
 
 **And it is still not enough to beat the cross-encoder.** The conditional decision discriminates
 at AUC 0.559 against the cross-encoder's **0.796** (−0.237 [−0.258, −0.214]), and the best rule

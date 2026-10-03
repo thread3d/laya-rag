@@ -111,10 +111,14 @@ its *headline gap*, and because it is falsifiable in one harness run.
 > the instruction text fixed and swaps in another query's bridge.
 >
 > - **The conditioning is real.** Per-query discrimination AUC of the true bridge **0.559** vs
->   the control's **0.530**: **+0.0293 [+0.0112, +0.0496]**, p=0.0010. Every ordering and filter
->   rule built on it beats its shuffled counterpart (e.g. MAP@10 **+0.0570 [+0.0383, +0.0747]**).
->   So "second-hop relevance is conditional on the bridge" is confirmed *on this engine*, with no
->   LLM, no graph and no training — which is the part of BridgeRAG worth keeping.
+>   the control's **0.530**: **+0.0293 [+0.0112, +0.0496]**, p=0.0010. Every ordering and
+>   absolute-threshold rule beats **its own** shuffled counterpart — MAP@10 **+0.0570
+>   [+0.0383, +0.0747]** for the score ordering and **+0.0479 [+0.0311, +0.0642]** for the
+>   cross-encoder order restricted to conditional survivors. (Compare arm-for-arm: the plain
+>   `tri` arm against the plain shuffled arm is *not* the control for a filtered rule. The one
+>   rule with no effect is the relative top-40 cut, +0.0046 [−0.0140, +0.0229].) So "second-hop
+>   relevance is conditional on the bridge" is confirmed *on this engine*, with no LLM, no graph
+>   and no training — which is the part of BridgeRAG worth keeping.
 > - **It does not improve retrieval.** The conditional decision discriminates at 0.559 against
 >   the cross-encoder's **0.796** (−0.237 [−0.258, −0.214]), and the best conditional rule reaches
 >   MAP@10 **0.2687** against the plain cross-encoder's 0.2986 and the coverage-plus-quota bar
