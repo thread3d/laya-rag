@@ -422,10 +422,36 @@ def test_tri_rankings_names_every_conditional_rule():
     assert set(rankings) == {
         "tri", "tri-coverage-0.5", "tri-coverage-0.7",
         "tri-covquota-3-0.5", "tri-covquota-3-0.7",
-        "tri-filter-0.3", "tri-filter-0.5", "pit-tri-ce",
+        "tri-filter-0.3", "tri-filter-0.5",
+        "ce-tri-filter-0.3", "ce-tri-filter-0.5", "ce-tri-top40",
+        "pit-tri-ce",
     }
     for name in rankings:
         assert len(rankings[name]["0"]) == 2
+
+
+def test_ce_order_among_conditional_survivors_is_the_real_filter_shape():
+    """The cross-encoder orders, the decision only decides what is eligible."""
+    cache = _tri_cache()
+    # CE prefers index 0 (0.9), then 2 (0.8), then 1 (0.7); tri keeps only 1 and 2.
+    rankings = exp.tri_rankings(cache, {"0": [0.1, 0.9, 0.5]}, top_k=3, rrf_k=60, name="tri")
+    assert rankings["ce-tri-filter-0.3"]["0"] == [2, 1]
+    # A threshold nothing clears leaves the strategy empty rather than falling back.
+    assert rankings["ce-tri-filter-0.5"]["0"] == [2, 1]
+    assert exp.bridge_filter_order([0.1, 0.2], top_k=5, threshold=0.9) == []
+
+
+def test_ce_top40_keeps_the_cross_encoder_order_within_a_relative_cut():
+    scores = [0.9, 0.1, 0.8, 0.7, 0.6]
+    cache = {
+        "_settings": {"atom_weight": [1.0] * 5},
+        "queries": {"0": {"pool": ["a#0", "b#0", "c#0", "d#0", "e#0"],
+                          "ce": [0.1, 0.2, 0.9, 0.8, 0.7],
+                          "atoms": [[0], [1], [2], [3], [4]]}},
+    }
+    rankings = exp.tri_rankings(cache, {"0": scores}, top_k=3, rrf_k=60, name="tri")
+    # tri order is 0,2,3,4,1 and the relative cut keeps all five, so CE order wins.
+    assert rankings["ce-tri-top40"]["0"] == [2, 3, 4]
 
 
 def test_bridge_filter_keeps_pool_order_among_survivors():

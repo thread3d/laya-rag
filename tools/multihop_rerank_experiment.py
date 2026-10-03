@@ -629,6 +629,9 @@ def tri_rankings(
         f"{name}-covquota-3-0.7",
         f"{name}-filter-0.3",
         f"{name}-filter-0.5",
+        f"ce-{name}-filter-0.3",
+        f"ce-{name}-filter-0.5",
+        f"ce-{name}-top40",
         f"pit-{name}-ce",
     ]
     out: dict[str, dict[str, list[int]]] = {key: {} for key in names}
@@ -642,6 +645,7 @@ def tri_rankings(
         atoms = payload["atoms"]
         docs = [document_of(chunk_id) for chunk_id in payload["pool"]]
         positions = list(range(len(scores)))
+        ce_positions = [int(i) for i in ce_order(positions, payload["ce"])]
         out[name][q] = [int(i) for i in ce_order(positions, scores)[:top_k]]
         for lam in (0.5, 0.7):
             out[f"{name}-coverage-{lam}"][q] = coverage_order(
@@ -651,9 +655,19 @@ def tri_rankings(
                 scores, atoms, atom_weight, docs, top_k, lam, 3
             )
         for threshold in (0.3, 0.5):
+            # Fused order among the conditional survivors, then the cross-encoder order among
+            # them — the engine's real filter shape is the second one, and it is a different
+            # hypothesis from "the decision orders the list".
             out[f"{name}-filter-{threshold}"][q] = bridge_filter_order(
                 scores, top_k, threshold
             )
+            out[f"ce-{name}-filter-{threshold}"][q] = [
+                i for i in ce_positions if scores[i] >= threshold
+            ][:top_k]
+        # A *relative* cut, because an absolute calibrated probability is exactly the thing the
+        # repo measured as not transferring across domains.
+        top40 = set(sorted(positions, key=lambda i: (-scores[i], i))[:40])
+        out[f"ce-{name}-top40"][q] = [i for i in ce_positions if i in top40][:top_k]
         out[f"pit-{name}-ce"][q] = pit_order(
             [scores, payload["ce"]], [1.0, 1.0], top_k
         )
