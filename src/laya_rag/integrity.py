@@ -245,11 +245,13 @@ def audit(
     """
     chunk_list = list(chunks)
     paths = sorted({chunk.path for chunk in chunk_list})
+    # The path check and the exact-duplicate clustering are linear and always complete; only
+    # the near-duplicate LSH is bounded. Reporting one global "truncated" flag would imply the
+    # exact counts were sampled when they were not, so the bound is reported where it applies.
     report: dict[str, Any] = {
         "chunks": len(chunk_list),
         "paths": len(paths),
-        "scanned_chunks": min(len(chunk_list), int(max_chunks)),
-        "truncated": len(chunk_list) > int(max_chunks),
+        "near_duplicate_max_chunks": int(max_chunks),
     }
 
     if check_paths:
@@ -289,6 +291,8 @@ def audit(
             "threshold": threshold,
             "shingle_size": shingle_size,
             "pairs": len(pairs),
+            "scanned_chunks": min(len(chunk_list), int(max_chunks)),
+            "truncated": len(chunk_list) > int(max_chunks),
             "examples": [
                 {"chunk_ids": [left, right], "jaccard": score}
                 for left, right, score in pairs[:examples]
@@ -307,11 +311,12 @@ def audit(
 
 
 def summarize(report: dict[str, Any]) -> str:
-    """One human-readable line per drift class, for a CLI or a log."""
-    lines = [
-        f"chunks: {report['chunks']} across {report['paths']} paths"
-        + (" (scan truncated)" if report.get("truncated") else "")
-    ]
+    """One human-readable line per drift class, for a CLI or a log.
+
+    The exact classes (deleted paths, duplicate content) are always complete; only the
+    near-duplicate line can be truncated, and it says so on its own line.
+    """
+    lines = [f"chunks: {report['chunks']} across {report['paths']} paths"]
     stale = report["stale_paths"]
     lines.append(
         f"deleted documents: {stale['count']} path(s) gone, {stale['stale_chunks']} chunk(s) still indexed"
@@ -325,9 +330,14 @@ def summarize(report: dict[str, Any]) -> str:
     if near is None:
         lines.append("near-duplicate content: not scanned (pass --near-duplicates)")
     else:
+        suffix = (
+            f" (scan truncated to the first {near['scanned_chunks']} chunks)"
+            if near.get("truncated")
+            else ""
+        )
         lines.append(
             f"near-duplicate content: {near['pairs']} pair(s) at jaccard >= {near['threshold']}"
-            + (" (scan truncated)" if report.get("truncated") else "")
+            + suffix
         )
     lines.append("clean" if report["clean"] else "drift detected")
     return "\n".join(lines)

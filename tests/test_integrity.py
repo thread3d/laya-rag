@@ -217,12 +217,20 @@ def test_audit_reports_near_duplicates_only_when_requested():
     assert with_scan["near_duplicate_content"]["pairs"] == 1
 
 
-def test_audit_marks_a_truncated_scan_rather_than_reporting_it_complete():
-    chunks = [chunk(f"p{i}#0", f"body {i}") for i in range(5)]
-    report = audit(chunks, exists=lambda path: True, max_chunks=2)
-    assert report["truncated"] is True
-    assert report["scanned_chunks"] == 2
+def test_audit_marks_a_truncated_near_duplicate_scan_rather_than_calling_it_complete():
+    body = " ".join(f"w{i}" for i in range(50))
+    chunks = [chunk(f"p{i}#0", body) for i in range(5)]
+    report = audit(
+        chunks, exists=lambda path: True, near_duplicates=True,
+        threshold=0.5, shingle_size=4, max_chunks=2,
+    )
+    near = report["near_duplicate_content"]
+    assert near["truncated"] is True
+    assert near["scanned_chunks"] == 2
+    assert "scan truncated to the first 2 chunks" in summarize(report)
+    # The exact classes were complete and must not be labelled truncated.
     assert report["chunks"] == 5
+    assert report["duplicate_content"]["clusters"] >= 1
 
 
 def test_audit_of_an_empty_index_is_clean():

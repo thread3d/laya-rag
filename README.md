@@ -110,12 +110,17 @@ Verify everything is wired up:
 
 # Ask Laya whether the whole corpus supports each claim in an answer
 .venv/bin/laya-rag adjudicate --answer-file answer.txt --tenant acme
+
+# Report index drift: deleted documents, duplicate and near-duplicate chunks
+.venv/bin/laya-rag integrity --near-duplicates
 ```
 
 `query` prints Laya's calibrated verdict, the passages it selected with their sources, and which
 recall channel found each one. `verify` is model-free and checks citations and quoted spans
 only; `adjudicate` re-retrieves across the corpus and reuses the measured answerability
-question. Use `--json` for machine-readable output on any of them.
+question. `integrity` reads the index and reports; it never repairs, because the one safe
+automatic rule (prune the paths of a directory being re-indexed) already lives in `index`.
+Use `--json` for machine-readable output on any of them.
 
 ### HTTP service
 
@@ -130,6 +135,7 @@ question. Use `--json` for machine-readable output on any of them.
 | `GET /v1/stats` | config, model and corpus statistics |
 | `GET /v1/documents` | every indexed document with its chunk and character counts |
 | `GET /v1/chunks` | indexed chunks in document order, optionally `?path=` one file |
+| `GET /v1/integrity` | index drift: deleted documents, duplicate and near-duplicate chunks (`?near_duplicates=true&threshold=0.85`) |
 | `POST /v1/index` | `{paths: [...], rebuild?: bool}` |
 | `POST /v1/index/stream` | the same body, but streams running counters as NDJSON (`progress` events, then one `done` carrying the report) |
 | `POST /v1/query` | `{query, top_k?, retrieve_k?, relevance_threshold?, answerability_threshold?, max_passage_chars?}` |
@@ -281,6 +287,53 @@ Two small things worth knowing. The page itself loads without a token so it can 
 `LAYA_RAG_API_KEY` is set, paste it under **Connection** and it is kept in this browser's local
 storage only, then sent as a bearer token. And the GUI needs no restart to reflect a change on disk —
 it re-reads engine and corpus state, and has a **Refresh** button besides.
+
+### Operating the index: trust, authorisation and drift
+
+Retrieval quality is not only a ranking question; it is also a question of *what is in the index*
+and *who may see it*. Both are handled deterministically, with no model:
+
+- **Trust and tenancy.** A trust manifest (`TRUST_MANIFEST`) maps path patterns to a tier —
+  `quarantined`, `untrusted`, `trusted` — and a query may set a minimum tier
+  (`QUERY_MIN_TRUST`) plus a tenant identity (`--tenant`, or `tenant` in the API body). The
+  manifest can carry a per-tenant allow-list, and when it is configured the honest default is an
+  **allow-list**: anything it does not name is untrusted. Filtering happens *before* any decision,
+  over an over-fetched candidate set, and the engine reports how many candidates it removed
+  (`trust_filtered`) so a silently shrinking pool is visible. With no manifest configured nothing
+  is filtered and the shipped behaviour is unchanged.
+- **Index drift.** An index is not correct because it was correct when it was built. `laya-rag
+  integrity` (and `GET /v1/integrity`) reports three distinct classes, because they need three
+  detectors: **deleted documents** still indexed, **duplicate content** (byte-identical after
+  whitespace normalisation), and **near-duplicate chunks** (MinHash-LSH candidates, exact
+  shingle Jaccard deciding). The near-duplicate scan is opt-in because it is the only non-linear
+  part, and it is bounded by `--max-chunks`; a truncated scan is *reported as truncated* rather
+  than presented as complete. The audit reports only — it never repairs, because the one safe
+  automatic rule (pruning the paths of a directory being re-indexed, `--no-prune` to opt out)
+  already lives in `index`.
+
+```sh
+.venv/bin/laya-rag integrity --near-duplicates
+```
+
+Run on this repository's own default index — 26,360 chunks across 2,030 files — it reports the
+drift that was invisible before:
+
+```
+chunks: 26360 across 2030 paths
+deleted documents: 0 path(s) gone, 0 chunk(s) still indexed
+duplicate content: 690 cluster(s), 1095 redundant chunk(s)
+near-duplicate content: 513 pair(s) at jaccard >= 0.85 (scan truncated to the first 5000 chunks)
+drift detected
+```
+
+1,095 of 26,360 chunks — **4.2% of the index — are byte-identical duplicates of another chunk**,
+and a bounded scan of the first 5,000 already finds 513 near-duplicate pairs. Those are retrievable
+slots competing with each other, which is why a quota-based selector and `RECALL_DEDUP_THRESHOLD`
+both exist: the detectors here are what make the problem measurable instead of assumed.
+
+Both the trust layer and the drift audit are the same shape of defence as the rest of the engine:
+a deterministic predicate decided before the model sees anything, with the count reported rather
+than assumed.
 
 ## Configuration
 
@@ -695,49 +748,86 @@ paper's Table 5. All rows are the `chunk_overlap=200` setting the official harne
 | voyage-02 + rerank (published) | 0.747 | 0.662 | 0.479 | 0.586 |
 | bge-large + rerank (published) | 0.718 | 0.636 | 0.476 | 0.563 |
 | bge-large, no rerank (published) | 0.672 | 0.522 | 0.342 | 0.430 |
-| hybrid + coverage dedup (ours) | **0.864** | **0.712** | **0.279** | **0.567** |
-| hybrid, `bge-large` + BM25 (ours) | 0.810 | 0.672 | 0.255 | 0.545 |
-| hybrid, `bge-small` + BM25 (ours) | 0.802 | 0.686 | 0.251 | 0.540 |
-| hybrid, `bge-base` + BM25 (ours) | 0.799 | 0.668 | 0.249 | 0.530 |
-| BM25 (ours) | 0.782 | 0.638 | 0.253 | 0.550 |
-| `bge-large` dense (ours) | 0.735 | 0.561 | 0.197 | 0.435 |
-| `bge-small` dense (ours) | 0.708 | 0.537 | 0.186 | 0.407 |
-| `bge-base` dense (ours) | 0.683 | 0.515 | 0.182 | 0.400 |
+| **ours: coverage + document quota, reranked** | **0.896** | 0.759 | **0.319** | **0.619** |
+| ours: reranked + coverage (`λ=0.7`) | 0.897 | **0.769** | 0.316 | 0.626 |
+| ours: reranked + blended order (`blend=0.75`) | 0.868 | 0.748 | 0.305 | 0.632 |
+| ours: cross-encoder rerank | 0.858 | 0.735 | 0.295 | 0.611 |
+| ours: hybrid + coverage dedup | 0.864 | 0.712 | 0.279 | 0.567 |
+| ours: hybrid, `bge-small` + BM25 | 0.802 | 0.686 | 0.251 | 0.540 |
+| ours: BM25 | 0.782 | 0.638 | 0.253 | 0.550 |
+| ours: `bge-small` dense | 0.708 | 0.537 | 0.186 | 0.407 |
 
 ![MultiHop-RAG: four metrics, this system against the paper's published systems](docs/charts/multihop_rag.png)
 
+The second stage is where MAP@10 actually moved, and the chart below is the comparison with a
+paired interval on every delta — the only way to read a few points on a 2,255-query set:
+
+![Second-stage selection: level and paired delta against the fused baseline](docs/charts/second_stage.png)
+
 Five things to take from this, and the first is the least flattering:
 
-- **Most of the win is lexical, not Laya.** Plain BM25 scores 0.782, above every published
-  *dense* system including the reranked ones — because Table 5 contains no lexical baseline at
-  all. On news text with strong term overlap, that is most of the story.
-- **Hits@10 and Hits@4 beat the published reranked pipelines** (0.810 vs 0.747; 0.712 with
-  coverage dedup vs 0.662), from a 33M dense model with no cross-encoder. The published figures
-  carry no interval, so the precise claim is that our **lower** bound is above their point
+- **Most of the win over the published table is lexical, not Laya.** Plain BM25 scores 0.782, above
+  every published *dense* system including the reranked ones — because Table 5 contains no lexical
+  baseline at all. On news text with strong term overlap, that is most of the story.
+- **Hits@10 and Hits@4 beat the published reranked pipelines** from a 33M dense model. The published
+  figures carry no interval, so the precise claim is that our **lower** bound is above their point
   estimate.
-- **The `bge-large` head-to-head is now done, and encoder size is not the remaining lever.**
-  `bge-large` dense beats `bge-small` dense on every metric (Hits@10 +0.027 [+0.009, +0.045],
-  Hits@4 +0.025, MAP@10 +0.011, MRR@10 +0.028, all significant), but once BM25 is fused the
-  difference vanishes: `bge-large` hybrid vs `bge-small` hybrid is Hits@10 **+0.008
-  [−0.004, +0.020]**, Hits@4 −0.014, MAP +0.004, MRR +0.005 — none of those intervals excludes
-  zero, and
-  `bge-base` hybrid is significantly *worse* than `bge-small` hybrid on Hits@4. Fusion absorbs
-  the encoder-quality gain, which is the same saturation `RANKINGS.md` measured on ArguAna.
-- **MAP@10 still loses badly** (0.279 vs 0.479). Hits@10 asks "was at least one piece of evidence
-  found"; MAP@10 asks "was *all* of it found, and early". The hybrid is good at the first and weak
-  at the second — the classic multi-hop failure of a lexical channel that locks onto one
-  strongly-matching article. **The coverage objective is where that gap actually narrows**: taking
-  the fused top-100 and skipping any candidate whose embedding cosine to an already-chosen chunk
-  is ≥ 0.9 lifts MAP@10 from 0.2546 to 0.2790 (+0.0244 [+0.0223, +0.0265]) and Hits@10 from 0.812
-  to 0.864 (+0.052 [+0.040, +0.065]) — model-free, and the setting was chosen on a held-out half
-  (both halves picked 0.9). See `tools/multihop_coverage.py`. **Which coverage objective wins
-  depends on the chunking**, and that is measured too: at `chunk_overlap=0`, where chunks no longer
-  duplicate each other, cluster dedup is neutral-to-worse (0.2653 vs 0.2668) and query-term
-  coverage is the better objective (0.2796, +0.013 over its baseline). The 200-overlap setting in
-  the table is the official one, and it is where dedup pays.
-- **`bge-small` is still not a fair proxy for the published `bge-large` row** — it is *better* on
-  this protocol — so the published comparison is now a real head-to-head rather than a suggestive
-  one.
+- **Encoder size is not the remaining lever.** `bge-large` dense beats `bge-small` dense
+  (Hits@10 +0.027 [+0.009, +0.045]), but once BM25 is fused the difference vanishes:
+  `bge-large` hybrid vs `bge-small` hybrid is Hits@10 **+0.008 [−0.004, +0.020]**, and `bge-base`
+  hybrid is significantly *worse* on Hits@4. Fusion absorbs the encoder-quality gain.
+- **MAP@10 still loses to the published reranked rows (0.319 vs 0.479) — but the gap is
+  selection, and the pool proves it.** See the next subsection: at depth 500 the fused pool
+  contains **100%** of the gold facts, yet the best any reordering of it can reach is
+  MAP@10 0.674. The evidence is retrieved; ranking the *set* is what is hard.
+- **`bge-small` is not a fair proxy for the published `bge-large` row** — it is *better* on this
+  protocol — so the published comparison is a real head-to-head rather than a suggestive one.
+
+#### Second-stage selection: the pool is not the problem
+
+`tools/multihop_diagnostics.py` answers the question the whole programme depends on, over all
+2,255 queries:
+
+| depth | pool fact recall | best possible MAP@10 by reordering | second-hop retention |
+| --- | --- | --- | --- |
+| 10 | 0.475 | **0.732** | 0.241 |
+| 100 | 0.867 | **0.730** | 0.719 |
+| 500 | **1.000** | 0.674 | **1.000** |
+
+- **Retrieving more is not the answer.** At depth 500 every gold fact is in the pool, so recall is
+  solved — and the achievable MAP@10 is *lower* than at depth 100, because a bigger pool gives the
+  selector more distractors to sort through. The fused top-100 is already the right pool.
+- **The second-hop tax is real and measured.** Second-hop facts are retained at 0.719 in the
+  depth-100 pool while first-hop facts are at 0.950. The hop linked only through a bridge entity
+  is what relevance-based selection discards.
+
+Against that ceiling, the selection rules, all on the same cached pool (`bge-reranker-base`,
+depth 100, `chunk_overlap=200`) and all paired against the fused baseline:
+
+| rule | MAP@10 | Δ vs fused | Hits@4 |
+| --- | --- | --- | --- |
+| fused first stage | 0.2546 | — | 0.6825 |
+| cross-encoder re-sort | 0.2948 | +0.0401 [+0.0321, +0.0484] | 0.7348 |
+| cross-encoder + sentence-atom coverage (`λ=0.7`) | 0.3165 | +0.0619 [+0.0537, +0.0701] | 0.7694 |
+| **coverage + a 3-document quota** | **0.3192** | **+0.0646 [+0.0560, +0.0734]** | 0.7588 |
+| lexical bridge-linked rescue (`β=0.3`) | 0.2780 | +0.0234 | 0.7126 |
+| rank-1 guardrail, then cross-encoder | 0.2882 | +0.0336 | 0.7530 |
+
+- **Coverage is the lever, not ranking.** The cross-encoder alone is +0.040; making it serve a
+  set objective that spends slots on *distinct facts*, with a document quota, is +0.065 — above
+  the published reranked `bge-large` row's *first* stage and past the 0.2986 the project quoted as
+  its own bar. The winner was chosen on one half of the queries and scored on the other:
+  **held-out MAP@10 0.3302** against 0.3046 for the plain cross-encoder.
+- **Lexical bridge rescue does not work** — readmitting low-relevance candidates that share rare
+  terms with a kept seed scored 0.278 at its best, *below* the plain cross-encoder. The bridge
+  matters, but a term-overlap proxy for it is too blunt.
+- **The rank-1 guardrail buys Hits@4, not MAP** (0.7530 vs 0.7348): protecting the top rank from
+  a second stage helps "was anything found early" and not "was the whole set found".
+
+Every delta above is a paired bootstrap over the same queries, and the whole comparison family is
+also run through a sign-flip permutation test with Benjamini–Hochberg control
+(`tools/eval_significance.py`): of 32 cells, 16 are significant after FDR, and each cell reports
+the minimum detectable effect so a small non-significant delta is not read as a proven absence.
 
 ### Negative rejection — the claim that did not survive
 
@@ -808,15 +898,18 @@ should not be cited as a strength out of domain.
 
 ### Where this RAG is worse
 
-- **Coverage on multi-hop queries.** MAP@10 **0.2850** against 0.479 published, after a
-  sentence-atom submodular coverage pass lifts it **+0.0304** over the fused baseline
-  (0.2546); dropping the dense-gram redundancy term at `λ=0.5` adds a further +0.0015 MAP and
-  +0.013 Hits@4. It still finds *an* answer passage far more reliably than *the set* — the
-  fused top-100 already contains enough evidence that an oracle reordering reaches MAP@10
-  **0.7307**, so the remaining gap is selection, not recall. The published 0.479 is a
-  *reranked* number; this engine's own reranked configuration is cross-encoder scores plus the
-  same coverage objective, which reaches MAP@10 **0.3165** (`RERANK_COVERAGE_LAMBDA=0.7`).
-  Reports: `eval/benchmarks/multihop-rag/coverage-nored.json`, `coverage-set.json`.
+- **Coverage on multi-hop queries.** MAP@10 **0.3192** against 0.479 published, after a
+  coverage-plus-quota pass over cross-encoder scores lifts it **+0.0646 [+0.0560, +0.0734]**
+  over the fused baseline (0.2546). It still finds *an* answer passage far more reliably than
+  *the set*. **The gap is selection, not recall, and that is now proven rather than assumed:**
+  at depth 500 the fused pool contains 100% of the gold facts, so an oracle reordering could
+  reach MAP@10 0.674 — lower than the 0.730 reachable from the depth-100 pool, because a bigger
+  pool gives the selector more distractors. Second-hop facts are retained at 0.719 in that pool
+  against 0.950 for first-hop facts, which is the mechanism the remaining work has to attack.
+  The published 0.479 is a *reranked* number; this engine's best reranked configuration is 0.3192
+  (`RERANK_COVERAGE_LAMBDA=0.7` plus a 3-document quota), held-out on the unseen half at 0.3302.
+  Reports: `eval/benchmarks/multihop-rag/coverage-nored.json`, `coverage-set.json`,
+  `rerank-experiment-full.json`, `diagnostics.json`.
 - **Answerability's shipped single scalar out of domain** — AUC 0.51 at the best, and a
   recalibration split fitted on MultiHop-RAG itself transfers at chance. The signal is not
   absent, though: a feature gate over the retrieval and evidence signals the engine already
@@ -874,6 +967,8 @@ Recorded so they are not retried from intuition:
 | Calibrated abstention, out of domain | AUC 0.509; half-split transfer 0.511 balanced accuracy | does not transfer — no signal to recalibrate |
 | Full-split fine-tuning (110,575 pairs + 5,180 mined hard negatives) | NFCorpus 0.3385 → 0.3285 (−0.0100) | rejected — scaling the 20k run up with naively mined negatives hurt |
 | Document-level MMR (`doc-mmr`) | MAP@10 0.255 → 0.274 | kept as a lever, but below cluster-dedup's 0.279 |
+| Lexical bridge-linked second-hop rescue (`rescue-0.3/0.5/0.7`) | MAP@10 0.2780 / 0.2706 / 0.2683 vs the cross-encoder's 0.2948 | rejected — readmitting low-relevance candidates because they share rare *terms* with a kept seed is a blunt proxy for the bridge relation; the cross-encoder is better without it |
+| Rank-1 guardrail before the cross-encoder | MAP@10 0.2882 vs 0.2948, but Hits@4 0.7530 vs 0.7348 | kept as a Hits@4 option, not a MAP lever — protecting rank 1 trades set coverage for early precision |
 
 ### What would raise the score — measured
 
