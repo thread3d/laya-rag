@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import sys
 import time
 from pathlib import Path
@@ -59,6 +60,25 @@ def answerable_items(items: Sequence[Mapping[str, Any]]) -> list[tuple[int, Mapp
 
 def gold_facts(item: Mapping[str, Any]) -> list[str]:
     return [e["fact"] for e in item["evidence_list"]]
+
+
+def select_items(
+    items: Sequence[Any], limit: int | None = None, sample_seed: int | None = None
+) -> list[Any]:
+    """Limit the scored records, reproducing the harness's sampling when a seed is given.
+
+    `tools/multihop_official.py` samples by position over the answerable records and sorts the
+    result; with the same `--limit` and `--sample-seed` this returns exactly that subset, which
+    is what makes an engine number comparable to the harness's 400-query bar. Without a seed the
+    limit is a plain prefix, which is fine for a smoke and not for a comparison.
+    """
+    items = list(items)
+    if not limit:
+        return items
+    if sample_seed is not None and limit < len(items):
+        sampled = sorted(random.Random(sample_seed).sample(range(len(items)), limit))
+        return [items[i] for i in sampled]
+    return items[:limit]
 
 
 def summarize_rows(rows: Sequence[Mapping[str, float]]) -> dict[str, float]:
@@ -90,6 +110,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--rerank-model", default=None)
     ap.add_argument("--tag", default="", help="suffix for the engine's index directory")
     ap.add_argument("--limit", type=int, default=None, help="cap the number of queries (smoke)")
+    ap.add_argument("--sample-seed", type=int, default=None,
+                    help="with --limit, sample this seed's subset instead of the first N — "
+                         "matching tools/multihop_official.py's --sample-seed, so the engine "
+                         "number is comparable to the harness's 400-query bar")
     ap.add_argument("--shard", default="0/1", help="run one contiguous slice, 'i/n'")
     ap.add_argument("--fresh", action="store_true", help="discard any existing checkpoint")
     ap.add_argument("--merge", type=int, default=0, metavar="N",
@@ -100,10 +124,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def configure_engine(args: argparse.Namespace) -> Path:
     """Apply the run's knobs through the environment, as `tools/engine_beir.py` does.
 
-    The index directory is derived from the report stem and tag so the two configurations do
-    not share one index — the failure mode `engine_beir`'s `--tag` exists to prevent.
+    The index directory is derived from the report stem and tag, so the two configurations do
+    not share one index — reusing a dense index built with a different encoder is the failure
+    mode `engine_beir`'s `--tag` exists to prevent.
     """
-    index_dir = Path(args.out).parent / "index" / f"multihop{'-' + args.tag if args.tag else ''}"
+    report_stem = Path(args.out)
+    index_dir = report_stem.parent / "index" / f"{report_stem.name}{'-' + args.tag if args.tag else ''}"
     os.environ["LAYA_RAG_INDEX_DIR"] = str(index_dir)
     if args.embed_model:
         os.environ["LAYA_RAG_EMBED_MODEL"] = args.embed_model
@@ -148,6 +174,7 @@ def _fingerprint(args: argparse.Namespace) -> str:
         sparse_model=args.sparse_model if args.sparse else None,
         rerank_model=args.rerank_model,
         limit=args.limit,
+        sample_seed=args.sample_seed,
     )
 
 
@@ -190,9 +217,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     raw = json.load(open(ROOT_BENCH / "corpus.json"))
     items_all = json.load(open(ROOT_BENCH / "MultiHopRAG.json"))
-    items = answerable_items(items_all)
-    if args.limit:
-        items = items[: args.limit]
+    items = select_items(answerable_items(items_all), args.limit, args.sample_seed)
 
     index_dir = configure_engine(args)
     from laya_rag.config import EngineConfig

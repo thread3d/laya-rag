@@ -50,6 +50,37 @@ def test_gold_facts_reads_every_evidence_fact():
     assert em.gold_facts(ITEMS[1]) == []
 
 
+def test_select_items_without_a_seed_is_a_plain_prefix():
+    assert em.select_items(list("abcdef"), limit=3) == list("abc")
+    assert em.select_items(list("abc")) == list("abc")
+
+
+def test_select_items_with_a_seed_reproduces_the_harness_subset():
+    import random as _random
+
+    items = list(range(50))
+    expected = sorted(_random.Random(17).sample(range(50), 10))
+    assert em.select_items(items, limit=10, sample_seed=17) == expected
+
+
+def test_select_items_seed_is_ignored_when_the_limit_covers_everything():
+    items = list(range(5))
+    assert em.select_items(items, limit=9, sample_seed=17) == items
+
+
+def test_select_items_seed_samples_positions_like_the_harness():
+    """`multihop_official` samples *positions* in the answerable list, then takes those records.
+
+    Getting this wrong is invisible on a list of ints and wrong on the real `(index, record)`
+    pairs, so it is pinned on records whose value differs from their position.
+    """
+    import random as _random
+
+    records = [(i * 10, f"q{i}") for i in range(30)]
+    positions = sorted(_random.Random(17).sample(range(30), 6))
+    assert em.select_items(records, limit=6, sample_seed=17) == [records[p] for p in positions]
+
+
 def test_summarize_rows_averages_each_metric():
     rows = [
         {"Hits@10": 1.0, "Hits@4": 1.0, "MAP@10": 0.5, "MRR@10": 1.0},
@@ -82,7 +113,8 @@ def test_configure_engine_sets_the_shipped_default_when_no_model_is_given(monkey
         monkeypatch.setenv(key, "stale")
     args = em.parse_args(["--out", str(ROOT / "eval" / "benchmarks" / "multihop-rag" / "engine-x")])
     index_dir = em.configure_engine(args)
-    assert index_dir.name == "multihop"
+    # The index is keyed by the report stem, so two configurations cannot share one index.
+    assert index_dir.name == "engine-x"
     assert "LAYA_RAG_EMBED_MODEL" not in os.environ
     assert "LAYA_RAG_RERANK_MODEL" not in os.environ
     assert "LAYA_RAG_SPARSE_MODEL" not in os.environ
