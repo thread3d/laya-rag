@@ -814,10 +814,12 @@ depth 100, `chunk_overlap=200`) and all paired against the fused baseline:
 | rank-1 guardrail, then cross-encoder | 0.2882 | +0.0336 | 0.7530 |
 
 - **Coverage is the lever, not ranking.** The cross-encoder alone is +0.040; making it serve a
-  set objective that spends slots on *distinct facts*, with a document quota, is +0.065 — above
-  the published reranked `bge-large` row's *first* stage and past the 0.2986 the project quoted as
-  its own bar. The winner was chosen on one half of the queries and scored on the other:
-  **held-out MAP@10 0.3302** against 0.3046 for the plain cross-encoder.
+  set objective that spends slots on *distinct facts*, with a document quota, is +0.065 — the new
+  internal bar at **MAP@10 0.3192** (0.3280 on the 400-query subset). That is past the 0.2986 the
+  project previously quoted as its own bar, and **still below every published row, including
+  `bge-large`'s un-reranked 0.342** — the remaining gap is real and is not closed by any of the
+  selection rules measured here. The winner was chosen on one half of the queries and scored on
+  the other: **held-out MAP@10 0.3302** against 0.3046 for the plain cross-encoder.
 - **Lexical bridge rescue does not work** — readmitting low-relevance candidates that share rare
   terms with a kept seed scored 0.278 at its best, *below* the plain cross-encoder. The bridge
   matters, but a term-overlap proxy for it is too blunt.
