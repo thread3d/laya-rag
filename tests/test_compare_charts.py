@@ -100,3 +100,45 @@ def test_second_stage_chart_handles_a_report_without_per_query_scores(
     (tmp_path / "rerank-experiment-full.json").write_text(json.dumps({"_settings": {}}))
     compare.chart_second_stage(tmp_path / "charts", plt)
     assert "no per-query scores" in capsys.readouterr().out
+
+
+def test_bridge_chart_renders_the_treatment_and_its_control(tmp_path, monkeypatch):
+    plt = _plt_or_skip()
+    monkeypatch.setattr(compare, "MH_DIR", tmp_path)
+    (tmp_path / "rerank-bridge.json").write_text(
+        json.dumps(_report({
+            "fused": 0.25,
+            "ce": 0.30,
+            "covquota-3-0.7": 0.33,
+            "tri": 0.13,
+            "tri-shuffled": 0.11,
+            "ce-tri-filter-0.3": 0.27,
+            "ce-tri-shuffled-filter-0.3": 0.26,
+            "pit-tri-ce": 0.24,
+        }))
+    )
+    outdir = tmp_path / "charts"
+    compare.chart_bridge_stage(outdir, plt)
+    written = outdir / "bridge_stage.png"
+    assert written.is_file()
+    assert written.stat().st_size > 1000
+
+
+def test_bridge_chart_skips_when_the_report_is_absent(tmp_path, monkeypatch, capsys):
+    plt = _plt_or_skip()
+    monkeypatch.setattr(compare, "MH_DIR", tmp_path)
+    compare.chart_bridge_stage(tmp_path / "charts", plt)
+    assert "skipping the bridge chart" in capsys.readouterr().out
+
+
+def test_second_stage_panels_skips_a_report_with_no_requested_strategy(
+    tmp_path, monkeypatch, capsys
+):
+    plt = _plt_or_skip()
+    report = tmp_path / "rerank-bridge.json"
+    report.write_text(json.dumps(_report({"unrelated": 0.2})))
+    ok = compare.second_stage_panels(
+        tmp_path / "charts", plt, report, ["tri", "fused"], "x.png", "title"
+    )
+    assert ok is False
+    assert "none of the requested strategies" in capsys.readouterr().out

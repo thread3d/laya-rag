@@ -331,37 +331,28 @@ def chart_overlap(outdir: Path, official: dict, plt) -> None:
     _save(fig, outdir, "chunk_overlap.png", plt)
 
 
-def chart_second_stage(outdir: Path, plt) -> None:
-    """Second-stage strategies: absolute MAP@10 and the paired delta against the baseline.
+def second_stage_panels(
+    outdir: Path,
+    plt,
+    report_path: Path,
+    names: list[str],
+    filename: str,
+    title: str,
+) -> bool:
+    """Render the two-panel comparison for one report and a named strategy subset.
 
-    Two panels, because they answer different questions. The left one is the level (a dot
-    with its 95% bootstrap interval, not a bar from zero — the differences are a few points
-    and a truncated bar would misrepresent them). The right one is the question a reader
-    actually has: *is this better than the baseline by more than the noise?* That needs a
-    **paired** interval on the per-query difference, so each candidate is compared on the
-    same queries, and a whisker that crosses zero is a null result whatever the means say.
+    Left panel: the level, as a dot with its 95% bootstrap interval — not a bar from zero,
+    because the differences are a few points and a truncated bar would misrepresent them.
+    Right panel: the question a reader actually has, *is this better than the baseline by
+    more than the noise?*, answered with a **paired** interval on the per-query difference,
+    so a whisker crossing zero reads as the null result it is.
     """
-    candidates = [
-        MH_DIR / "rerank-experiment-full.json",
-        MH_DIR / "rerank-experiment.json",
-    ]
-    report_path = next((path for path in candidates if path.is_file()), None)
-    if report_path is None:
-        print(f"  (no second-stage report in {MH_DIR}; skipping that chart)")
-        return
     report = json.loads(report_path.read_text())
     per_query = report.get("per_query") or {}
-    if not per_query:
-        print(f"  ({report_path.name} has no per-query scores; skipping that chart)")
-        return
-
-    # A readable subset: the first stages, the measured best, and every conditional rule.
-    wanted = ["fused", "ce", "coverage-0.7", "covquota-3-0.7"]
-    names = [n for n in wanted if n in per_query]
-    names += sorted(n for n in per_query if n.startswith("tri") or n.startswith("pit-"))
-    names = list(dict.fromkeys(names))
+    names = [name for name in dict.fromkeys(names) if name in per_query]
     if not names:
-        return
+        print(f"  ({report_path.name} has none of the requested strategies; skipping {filename})")
+        return False
 
     means = {name: float(np.mean(list(per_query[name].values()))) for name in names}
     baseline = "fused" if "fused" in means else min(means, key=means.get)
@@ -421,11 +412,61 @@ def chart_second_stage(outdir: Path, plt) -> None:
     left.set_ylim(-0.6, len(rows) - 0.4)
     right.set_ylim(-0.6, len(rows) - 0.4)
     fig.suptitle(
-        f"Second-stage selection — {report.get('_settings', {}).get('limit_queries', '?')} "
+        f"{title} — {report.get('_settings', {}).get('limit_queries', '?')} "
         "MultiHop-RAG queries (orange: bridge-conditioned decisions)",
         fontsize=11,
     )
-    _save(fig, outdir, "second_stage.png", plt)
+    _save(fig, outdir, filename, plt)
+    return True
+
+
+def chart_second_stage(outdir: Path, plt) -> None:
+    """The broad second-stage comparison, over the largest report available."""
+    candidates = [
+        MH_DIR / "rerank-experiment-full.json",
+        MH_DIR / "rerank-experiment.json",
+    ]
+    report_path = next((path for path in candidates if path.is_file()), None)
+    if report_path is None:
+        print(f"  (no second-stage report in {MH_DIR}; skipping that chart)")
+        return
+    report = json.loads(report_path.read_text())
+    per_query = report.get("per_query") or {}
+    if not per_query:
+        print(f"  ({report_path.name} has no per-query scores; skipping that chart)")
+        return
+    wanted = ["fused", "ce", "coverage-0.7", "covquota-3-0.7"]
+    names = [n for n in wanted if n in per_query]
+    names += sorted(n for n in per_query if n.startswith("tri") or n.startswith("pit-"))
+    second_stage_panels(
+        outdir, plt, report_path, names, "second_stage.png", "Second-stage selection"
+    )
+
+
+def chart_bridge_stage(outdir: Path, plt) -> None:
+    """The bridge-conditioned comparison: the treatment, its control, and the two baselines."""
+    report_path = MH_DIR / "rerank-bridge.json"
+    if not report_path.is_file():
+        print(f"  ({report_path.name} absent; skipping the bridge chart)")
+        return
+    wanted = [
+        "fused",
+        "ce",
+        "covquota-3-0.7",
+        "tri",
+        "tri-covquota-3-0.7",
+        "ce-tri-filter-0.3",
+        "ce-tri-top40",
+        "tri-shuffled",
+        "tri-shuffled-covquota-3-0.7",
+        "ce-tri-shuffled-filter-0.3",
+        "pit-tri-ce",
+        "pit-tri-shuffled-ce",
+    ]
+    second_stage_panels(
+        outdir, plt, report_path, wanted, "bridge_stage.png",
+        "Bridge-conditioned relevance asked of Laya's decision head",
+    )
 
 
 def make_charts(outdir: Path, best: float, ci, deploy: float, ensemble, ensemble_ci, official: dict) -> None:
@@ -436,6 +477,7 @@ def make_charts(outdir: Path, best: float, ci, deploy: float, ensemble, ensemble
     chart_abstention(outdir, plt)
     chart_overlap(outdir, official, plt)
     chart_second_stage(outdir, plt)
+    chart_bridge_stage(outdir, plt)
 
 
 def main(argv=None) -> int:
