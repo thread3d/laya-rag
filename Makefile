@@ -40,7 +40,7 @@ ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir ondisk bench-lexical adversarial-audit charts lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir ondisk bench-lexical adversarial-audit charts claim-check lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -83,6 +83,7 @@ help:
 	@echo "answerability-features  raw gate features vs engineered features"
 	@echo "multihop-answerability-grouped  leave-one-question-type-out transfer"
 	@echo "charts       cross-system tables, error bars and the README charts"
+	@echo "claim-check  do the numbers quoted in prose resolve against the reports?"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
 
@@ -299,6 +300,12 @@ adversarial-audit:
 charts:
 	OMP_NUM_THREADS=16 $(PY) tools/compare.py --charts $(CHARTS_DIR)
 	$(PY) tools/diagram.py --out $(DIAGRAM)
+
+# Do the numbers quoted in prose still resolve against the reports that produced them?
+# Skips (exit 0) when the report is absent: eval/ is gitignored and regenerable, so a fresh
+# checkout has nothing to check against until `make multihop-diagnostics` has run.
+claim-check:
+	$(PY) tools/claim_check.py
 
 lint:
 	$(PY) -m compileall -q src/ tests/

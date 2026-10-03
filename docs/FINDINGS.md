@@ -12,7 +12,7 @@ are what stops the next pass from re-trying them.
 
 | area | headline result | document |
 | --- | --- | --- |
-| Multi-hop selection | The MAP@10 gap is **selection, not recall**: the fused top-100 oracle ceiling is 0.7307 while recall reaches 1.000 by depth 500; hop-2 recall is 0.24 at depth 10 | [findings-multihop-diagnostics.md](findings-multihop-diagnostics.md) |
+| Multi-hop selection | The MAP@10 gap is **recall *and* selection**: the corrected fused top-100 ceiling is **0.6088** and **rises** to 0.6592 at depth 500, while **31.9%** of depth-100 pools (719 of 2,255) are missing a gold fact; hop-2 recall is 0.2407 at depth 10 | [findings-multihop-diagnostics.md](findings-multihop-diagnostics.md) |
 | Fact recall (partial credit) | The shipped coverage config covers **55.2%** of gold facts in its top-10 vs 46.4% for the baseline (+0.0880 [+0.0797, +0.0964], p<0.0001) | [findings-multihop-diagnostics.md](findings-multihop-diagnostics.md) |
 | Cross-encoder × coverage | Coverage over the CE-scored pool beats a full CE re-sort on the full protocol: MAP@10 **0.2948 → 0.3165**, Hits@4 0.7348 → 0.7694; `auto` enables 0.7 when a CE is configured | [findings-rerank-selection.md](findings-rerank-selection.md) |
 | Fused coverage objective | Dropping the dense-gram redundancy term at λ=0.5: MAP@10 0.2835 → **0.2850**, Hits@4 0.7197 → 0.7326 | [findings-rerank-selection.md](findings-rerank-selection.md) |

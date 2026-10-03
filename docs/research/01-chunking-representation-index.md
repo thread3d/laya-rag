@@ -161,5 +161,5 @@ held-out paired bootstrap each.
 > **Correction, 2026-10-03.** The ceiling quoted here (0.7307 at depth 100) divided the oracle AP by the
 > gold facts *the pool matched* rather than by the query's true gold count, which inflated it on exactly
 > the queries whose recall was failing. Corrected it is **0.609**, and it **rises** with depth
-> (0.397 / 0.609 / 0.659 at depth 10 / 100 / 500). 36% of depth-100 pools are missing a gold fact, so
+> (0.397 / 0.609 / 0.659 at depth 10 / 100 / 500). 31.9% of depth-100 pools are missing a gold fact, so
 > recall is a live lever, not a solved one. See the README diagnostics subsection.

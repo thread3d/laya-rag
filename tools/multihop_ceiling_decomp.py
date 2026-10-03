@@ -204,6 +204,10 @@ def render_markdown(result: Mapping[str, Any]) -> str:
         "",
         f"- {settings['queries']} queries, top-k {settings['top_k']}, "
         f"coverage lambda {settings['coverage_lambda']}, document quota {settings['min_docs']}",
+        f"- **pool**: the cross-encoder's own depth-100 list from the CE cache. "
+        "`tools/multihop_diagnostics.py` reports the *fused* depth-100 pool separately "
+        "(0.6088); the two artifacts are built differently, so the figures are complementary "
+        "rather than interchangeable and must not be averaged or added",
         "",
         "| level | MAP@10 |",
         "| --- | --- |",

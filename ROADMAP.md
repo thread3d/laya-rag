@@ -1,0 +1,295 @@
+# Roadmap — the six steps toward a winnable "best in the world"
+
+Companion to [`PLAN.md`](PLAN.md) (the closed seven-gap programme), [`RESEARCH.md`](RESEARCH.md)
+(the outward survey) and [`IMPROVEMENTS.md`](IMPROVEMENTS.md) (the in-repo diagnosis). This
+document is the **forward** plan: what is done next, in what order, how each item is verified,
+how long jobs survive interruption, and what is explicitly not attempted.
+
+Status is updated as work lands. Nothing here is measured yet; every row is `planned` until it
+has a report under `eval/`.
+
+---
+
+## 0. The target, stated so it can be falsified
+
+"Best RAG system in the world" is not winnable on the axes the field currently grades:
+
+| axis | 2026 leader | this host |
+| --- | --- | --- |
+| MTEB/BEIR-18 retrieval | `Gemini Embedding 2` 67.71, `NV-Embed-v2` 62.65, `Qwen3-Embedding-8B` ~62 nDCG@10 — API or multi-GPU | CPU-only, 33M–478M encoders |
+| Multi-hop | iterative retrieve–read–decide (`CoRAG-8B`) | single-pass, no owned generator |
+| End-to-end | answer accuracy + faithfulness + cost (TREC RAG, RAGPerf, BrowseComp-Plus, MTRAGEval) | **no end-to-end row at all** |
+| Multilingual / multimodal | MMTEB, MIRACL-VISION, ViDoRe V3 | text-only, English-measured |
+
+So the target is narrowed to one that the architecture can actually win:
+
+> **The best fully-local, CPU-only, no-API-key RAG system — with the most honest,
+> reproducible evaluation in the field — graded on retrieval, multi-hop set coverage,
+> one labelled end-to-end row, and a deterministic trust report.**
+
+Three bars, all stated before the work so a regression cannot read as a gain:
+
+1. **Own best rows** — BEIR-5 ensemble+BM25 **0.495** (single config 0.507); MultiHop
+   covquota-3-0.7 **0.3192** full / **0.3280** subset with paired CIs; `ceiling-decomp.md`
+   headroom (ordering **+0.1254**, selection **+0.0634**, signal **+0.0992**).
+2. **Published rows** — MultiHop `voyage-02` + reranker MAP@10 **0.480**; BEIR-4 matrix
+   BGE-large-v1.5 **0.491**.
+3. **Cost** — latency, peak RSS, and index size per query, reported beside every quality number
+   (RAGPerf's axis), because "best per unit of compute" is the actual claim.
+
+---
+
+## 1. Operating rules (non-negotiable)
+
+- **Sequential, one long job at a time.** No `&`, no process pools, no concurrent agents on the
+  same corpus, index or cache. A job that must be split runs as sequential shards, never
+  concurrently. `bench_index_parallel.py` and `bench_biencoder_parallel.py` measure parallelism;
+  they are not an execution strategy.
+- **Resumable by construction.** Every long job checkpoints per unit of work and is re-run by
+  repeating the exact same command. Killing a job may lose at most the unit in flight.
+- **Every code change ships with an offline test**, and new behaviour is opt-in and defaults to
+  the current behaviour, so existing numbers stay comparable.
+- **Differences carry a paired bootstrap over queries**; a family of cells carries permutation
+  p-values with BH-FDR and an MDE. No bare point estimates.
+- **Negatives are recorded**, not deleted — the do-not-retry ledger is
+  [`RESEARCH.md`](RESEARCH.md) §2 plus [`docs/FINDINGS.md`](docs/FINDINGS.md).
+- **A replica is not the system.** Any claim about the engine is measured by the engine
+  (`tools/engine_beir.py` pattern), never only by `tools/beir.py`.
+- **Generator-attributed numbers are labelled** `engine + <model>` and never presented as the
+  engine's.
+
+---
+
+## 2. The resumability contract (new shared infrastructure)
+
+**This is Phase 1's first item and a prerequisite for every long job in Phases 2–5.** The
+current caches are all-or-nothing (`beir.cached_embed` writes one `.npy` keyed by the doc-id
+list) and `tools/evalkit.write_json` is not atomic, so an interrupted run can lose hours and a
+half-written report can be read as a result.
+
+### New module: `tools/jobkit.py`
+
+| piece | contract |
+| --- | --- |
+| `write_json_atomic(path, payload)` | write a sibling `*.tmp`, `flush`+`fsync`, `os.replace`; readers never see a partial file |
+| `config_fingerprint(**kwargs)` | sha256 over sorted JSON of model ids, chunking, overlap, depth, split, and a `CODE_VERSION` constant; a changed fingerprint invalidates loudly instead of silently mixing |
+| `ResumableRun(root, name, fingerprint, shard=(i, n))` | loads `<name>.jsonl`; exposes `completed: set[str]`, `pending(items)`, `record(key, value)`, `finish(summary)`, `manifest()` |
+| work key | stable, human-readable: `f"{dataset}:{split}:{query_id}:{fingerprint[:12]}"` |
+| `record` | append one JSON line, `flush`+`fsync`, then return — a kill loses at most one unit |
+| `shard_items(items, i, n)` | contiguous over a deterministically sorted key, so concatenating shards restores order |
+| `merge_runs(root, name, n)` | refuses to merge mismatched fingerprints; writes the merged report atomically |
+| manifest | `<name>.manifest.json`: per-shard completion, unit counts, timestamps, git rev |
+
+### Retrofit and Makefile
+
+| item | target | change |
+| --- | --- | --- |
+| P1.1 | `tools/jobkit.py` | the module above + `tests/test_jobkit.py` |
+| P1.2 | `tools/multihop_official.py`, `multihop_ce_cache.py`, `multihop_diagnostics.py`, `engine_beir.py`, `beir.py` | per-query checkpoint; `--resume` (default on), `--fresh`, `--shard i/n`; skip completed work keys |
+| P1.3 | `tools/finetune.py`, `tools/distill_eval.py` | `--resume` from optimizer/RNG state; checkpoint every N steps to `eval/distill-*/step-*.pt` |
+| P1.4 | `Makefile` | `make job-status` prints every manifest; long targets consult it and exit 0 when complete unless `FORCE=1` |
+| P1.5 | `tests/test_jobkit.py` | kill-and-resume equivalence: a run interrupted at unit *k* and resumed equals the uninterrupted run; sharded merge equals unsharded; fingerprint mismatch refuses |
+
+### Session protocol for a long job
+
+```sh
+# one job, one log, re-run the identical command to resume
+mkdir -p eval/logs
+make <target> 2>&1 | tee eval/logs/<target>.log
+.venv/bin/python tools/... --shard 3/10      # a bounded sequential unit
+```
+
+Within an agent session, a long step is **one** background `bash` job; the next step starts only
+after it is collected. `make job-status` is the first command of any resumed session.
+
+---
+
+## 3. Phase 0 — repair the claim ledger (hours)
+
+Commit `c415ece` corrected the mis-normalised reorder ceiling in the tool, the README, `RESEARCH.md`,
+`PLAN.md`, `IMPROVEMENTS.md` and the research briefs — but **not in the findings index or its
+source report**, and the correction it left behind is not internally consistent.
+
+The authoritative regenerated report is `eval/benchmarks/multihop-rag/diagnostics.md`:
+
+| depth | fact recall | corrected ceiling |
+| --- | --- | --- |
+| 10 | 0.4747 | **0.3970** |
+| 100 | 0.8666 | **0.6088** |
+| 500 | 1.0000 | **0.6592** |
+
+The stale and inconsistent figures still in circulation:
+
+| where | value | problem |
+| --- | --- | --- |
+| `docs/findings-multihop-diagnostics.md` | 0.7321 / 0.7304 / 0.6741 | pre-fix, mis-normalised; title and implications assert the refuted "selection, not recall" |
+| `docs/FINDINGS.md:15` | 0.7307, "selection, not recall" | the index of every measurement contradicts its own report |
+| `commit c415ece` message | "500 … already correct: 0.6741" | wrong: 0.6741 was the broken depth-500 figure, corrected to **0.6592** |
+| `eval/benchmarks/multihop-rag/ceiling-decomp.md` | 0.6072 (CE top-100) | a *different pool* from diagnostics' 0.6088 (fused depth-100) — both may be right, neither is labelled |
+
+| # | item | file | change | test | status |
+| --- | --- | --- | --- | --- | --- |
+| 0.1 | Correct the source report | `docs/findings-multihop-diagnostics.md` | retitled "recall **and** selection"; corrected table 0.3970/0.6088/0.6592; "widening the pool does not raise the ceiling" rewritten as **+0.2118** (10→100) and **+0.0505** (100→500), both significant; implications 1–2 rewritten; a `Correction, 2026-10-03` block records the normalisation bug | `make claim-check` | done |
+| 0.2 | Correct the index | `docs/FINDINGS.md` | the Multi-hop selection row now says the gap is recall *and* selection, with the corrected ceiling and the 719/2,255 completeness figure | `make claim-check` | done |
+| 0.3 | Reconcile the two corrected ceilings | `tools/multihop_ceiling_decomp.py` | the renderer now names its pool (the cross-encoder's depth-100 list) and states that diagnostics' 0.6088 is the *fused* pool, so the two are complementary and must not be added | `tests/test_ceiling_decomp.py` | done |
+| 0.4 | Record the `0.6741` history | `docs/findings-multihop-diagnostics.md` | the correction block states that 0.6741 was the pre-fix depth-500 value and 0.6592 is correct | `make claim-check` | done |
+| 0.5 | Claim-drift check | **new** `tools/claim_check.py`, `tests/test_claim_check.py`, `make claim-check` | an explicit registry of claim → document → report path, with derived statistics for the figures the report does not store; a table row must carry its own number, prose is matched per paragraph, known-stale values are asserted absent, and a missing report skips rather than fails | 13 new tests | done |
+| 0.6 | Audit the remaining prose | `README.md`, `RESEARCH.md`, `PLAN.md`, `IMPROVEMENTS.md`, `docs/research/01,03,07,08` | every "36% of depth-100 pools" replaced with the derived **31.9% (719 of 2,255)**, and "about a third of the remaining headroom" with "about a quarter" | `make claim-check` | done |
+| 0.7 | Correct the README's derived cluster | `README.md` | found by 0.6 and worse than expected: the README carried **five** hand-typed numbers with no derivation — 811 pools, ceilings 0.451/0.695, fused 0.155/0.310, and +0.086. All replaced with the derived 719, 0.4469/0.6845, 0.1498/0.3052 and **+0.076** | `make claim-check` | done |
+
+**What 0.6 actually found.** Two things, and the second was not in the plan. First, the
+"36%" figure was a hand-copy of the commit message rather than of the report — the regenerated
+data give **31.9%**. Second, the README's follow-on sentence (811 pools, the 0.451/0.695
+ceilings, the 0.155/0.310 achieved values, and the +0.086 headroom) was likewise never derived
+from a committed report and disagreed with the report on *every* figure. That cluster is now
+item 0.7 and is pinned by `claim_check`, so the next correction cannot pass through the prose
+without failing a test.
+
+**Measured.** `make claim-check` — 33 checks passed against `diagnostics.json`. Suite
+**914 passed, 4 deselected** (901 before; 13 new claim-check tests).
+
+**Why this is first.** The project's whole moat is that its claims are checkable. A findings
+index that contradicts its own regenerated report is the single cheapest credibility loss
+available, and item 0.1 is direction-changing: the refuted conclusion de-prioritised the recall
+programme that `ceiling-decomp.md` now says is worth +0.0992.
+
+---
+
+## 4. Phase 1 — measure the engine where the claim is about the engine (days)
+
+[`docs/FINDINGS.md`](docs/FINDINGS.md) names this itself: *"the engine's multi-hop retrieval under
+its own corpus-aware chunking is **not measured**. That is the largest known gap in the evidence."*
+The 256-character harness (`tools/multihop_official.py`) is a replica, and the BEIR replica was
+already shown to overstate the engine by **0.0144**.
+
+| # | item | file | change | falsify / signal | status |
+| --- | --- | --- | --- | --- | --- |
+| 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + retrofit + `make job-status` | kill/resume and shard/merge equivalence tests | planned |
+| 1.2 | Engine-level MultiHop-RAG | **new** `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own defaults (`CHUNK_CHARS_AUTO`, shipped backend, sparse channel, coverage auto); report Hits@10/Hits@4/MAP@10/MRR@10 **and** fact recall@10 beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes; if it loses, that is the real engine number | planned |
+| 1.3 | Engine-level MuSiQue | `tools/engine_multihop.py`, `tools/musique.py` | the same under the MuSiQue adapter, where the coverage gain was falsified | the per-corpus bar is stated, not averaged | planned |
+| 1.4 | Publish the harness-vs-engine delta | `docs/findings-engine-multihop.md`, `BENCHMARKS.md` | every MultiHop row labelled by which one produced it | — | planned |
+
+**Gate:** no Phase 2 result is quoted against the engine until 1.2 exists.
+
+---
+
+## 5. Phase 2 — a trained, set-aware ordering head (weeks; the real lever)
+
+`ceiling-decomp.md` measures the headroom and it is mostly ordering (**+0.1254**), then signal
+(**+0.0992**), then selection (**+0.0634**). Every model-free optimiser over the *current*
+features is already null (LTR, IDF weights, beam search, per-question-type routing), so the next
+movement must come from **new information in the scorer**. This is the first phase that needs a
+training run or a model download.
+
+| # | item | needs | change | falsify | status |
+| --- | --- | --- | --- | --- | --- |
+| 2.1 | Late interaction done properly | `[model]` (~130 MB, CPU-viable) | `answerai-colbert-small-v1` (33M) MaxSim over the CE top-10, CPU via MUVERA/SLIM-style pooling if needed; `tools/multihop_ordering.py` | beats covquota **0.3192** with a paired CI; note this differs from the rejected Laya-token probe, whose failure was the *untrained* token states | planned |
+| 2.2 | Train on bridge conventions | `[model]` GPU-preferred | cross-encoder trained on multi-hop pairs mined from *train* splits (MuSiQue / 2Wiki / HotpotQA), positives from gold facts, hard negatives from the pool — not MS MARCO points; `tools/order_train.py` | held-out MAP@10 over the trained vs zero-shot ranker; label the result **adapted** | planned |
+| 2.3 | Route by relation | `[model]` | pointwise for topical, pairwise/NLI-stance for opposition (ArguAna); route per corpus/query, never a global swap | ArguAna recovers toward the dense 0.596 without losing BEIR-5 | planned |
+| 2.4 | Listwise fallback | `[dep]` | `jina-reranker-v3` is **CC BY-NC 4.0, non-commercial** — reproduce on the five sets + MultiHop before believing any self-reported row | if it does not beat 2.2 on this host, drop it | planned |
+| 2.5 | Report ordering vs signal vs selection | `docs/findings-ordering-head.md` | state each new rule's number against the decomposition, so an ordering gain is never read as a recall gain | — | planned |
+
+**Do not retry:** any pointwise MS MARCO reranker at depth 100 (loss on all five BEIR datasets;
+ArguAna 0.568 → 0.250), full-split fine-tuning with naive mined negatives (below zero-shot),
+BM25 PRF, or another optimiser over the cached channels.
+
+---
+
+## 6. Phase 3 — one labelled end-to-end row (weeks)
+
+"There is no end-to-end RAG ranking, because no end-to-end benchmark has been run to completion
+here." That is the largest credibility hole, and the project's own `engine + <model>` rule already
+solves the attribution problem.
+
+| # | item | change | falsify / signal | status |
+| --- | --- | --- | --- | --- |
+| 3.1 | FRAMES adapter | **new** `tools/frames.py`; 824 questions, ~0.5 MB, ships the Wikipedia links needed to build the corpus; report retrieval recall@k and exact-match accuracy with a **labelled** local generator | if the generator dominates the variance, report retrieval-only and say so | planned |
+| 3.2 | MultiHop answer accuracy + rejection | extend `tools/engine_multihop.py` under the benchmark's own answer protocol, judge labelled | the gate's rejection rate is reported beside accuracy, with the AUC and the transfer caveat | planned |
+| 3.3 | Citation precision/recall | `verify.py` over composed answers: does every cited span exist, and does the answer cite the evidence that supports it? | this is the engine's own number, not the generator's; ship only with a labelled corpus of composed answers | planned |
+| 3.4 | Cost axis | latency, throughput, peak RSS per query, index bytes/query, beside quality | makes "best per unit of compute" measurable rather than asserted | planned |
+| 3.5 | Publish the row | `BENCHMARKS.md` | replace "cannot be claimed" with the labelled row and its limits | planned |
+
+---
+
+## 7. Phase 4 — scale to 18 datasets, and own the encoder (weeks; mixed)
+
+| # | item | needs | change | falsify | status |
+| --- | --- | --- | --- | --- | --- |
+| 4.1 | On-disk term dictionary + chunk-id list | `[offline]` | SQLite FTS5 with `contentless_delete=1` (stdlib, no dep) or a bounded external merge; removes the residual 10M-document lexical wall | ranking parity against the in-memory index; RSS flat as corpus grows | planned |
+| 4.2 | The 13 remaining BEIR datasets | `[data]` disk | build sequentially, one dataset at a time, each a resumable job; record Robust04/TREC-NEWS mirror stubs as blocked rather than skipped silently | full BEIR-18 average, stated with its dataset list | planned |
+| 4.3 | Multi-corpus distillation | `[model]` | extend `tools/finetune.py` / `distill_eval.py` beyond NFCorpus (where the 33M student already recovers **~29%** of the 478M ensemble, 0.3385 → 0.3505); package in SentenceTransformers format; upload | the packaged student beats zero-shot on every training corpus, or the artefact is not shipped | planned |
+| 4.4 | MTEB submission | network, external | the leaderboard wants a **model**, and one is now packageable; submit the distilled encoder | an external row with the model card's measured numbers | external |
+| 4.5 | ANN quality at scale | `[offline]` | `index_store.py`/`ondisk.py`: verify IVF+PQ / RaBitQ recall against exact at 1M+ with fp32 rescore | recall retained and RSS reduced, measured not cited | planned |
+
+**Do not** chase MTEB nDCG@10 with a 33M encoder against API-scale models. 4.4 is about having a
+submittable artefact and a full-dataset average, not about winning the top row.
+
+---
+
+## 8. Phase 5 — make trust the headline (days–weeks; the moat)
+
+This is the axis no 8B API model leads on, and the one a CPU-only system can win outright.
+
+| # | item | file | change | test | status |
+| --- | --- | --- | --- | --- | --- |
+| 5.1 | Trust report | **new** `tools/trust_report.py`, `make trust-report` | one deterministic, offline report: citation precision/recall, abstention risk–coverage + AURC, poison exclusion, injection flags, tenant-isolation checks — in-domain and labelled out-of-domain | `make trust-report --check` gates | planned |
+| 5.2 | Three-state adjudication | `src/laya_rag/verify.py` | a claim about an unmentioned topic becomes `no_coverage`/`contradicted`, not `not_measured`, via the shipped `NLIAnswerability` hook; report no-coverage recall on hand-labelled pairs | `tests/test_verify_states.py` | planned |
+| 5.3 | Numeric / negation / unit / date checks | `src/laya_rag/verify.py` | deterministic span checks; ship only at precision ≥ ~0.9 on 200 labelled composed answers | `tests/test_verify_numeric.py` | planned |
+| 5.4 | Grow the adversarial suite | `tools/adversarial_audit.py`, `eval/` | poison / noise / negative rejection / injection with frozen seeds; poison 5 documents → ASR measured, never cited | `make adversarial-audit --check` | planned |
+| 5.5 | Trust as the README claim | `README.md`, `BENCHMARKS.md` | lead with the measured trust report, not with a retrieval rank the hardware cannot hold | `make claim-check` | planned |
+
+---
+
+## 9. Execution order and session protocol
+
+Strictly sequential. A phase starts only when the one before it has a report under `eval/`.
+
+1. **Phase 0** (hours) → `make claim-check` green.
+2. **Phase 1** (days) → jobkit + engine-level MultiHop/MuSiQue. *Everything after this resumes
+   from a manifest.*
+3. **Phase 2** (weeks) → ordering head; the first `[model]` work.
+4. **Phase 3** (weeks) → the end-to-end row.
+5. **Phase 4** (parallel across sessions, but sequential within each) → BEIR-18, distillation,
+   MTEB.
+6. **Phase 5** (days) → trust report; can run whenever a slot is free, since it depends on
+   nothing in 2–4.
+
+Every phase ends with:
+
+```sh
+make test            # offline suite, must stay green
+make lint
+make claim-check     # the numbers quoted in prose resolve against the reports
+make job-status      # nothing half-finished is left as a result
+```
+
+and a report under `eval/` plus a `docs/findings-*.md` entry added to
+[`docs/FINDINGS.md`](docs/FINDINGS.md) — updated in the same commit as the code, per `PLAN.md`'s rule.
+
+---
+
+## 10. What is external, and stated as remaining
+
+| item | blocked by |
+| --- | --- |
+| MTEB submission (4.4) | upload + submission; no code blocker left once 4.3 packages the student |
+| TREC RAG, KILT | NIST corpus/gold-nugget access; an entity linker and a full submission stack |
+| BioASQ / FEVER / NQ at full size | disk — 28 GB free against 14.9M / 5.4M / 2.7M documents |
+| MIRACL / MMTEB | per-language Wikipedia indexes; the multilingual encoder would need measuring |
+| ViDoRe / MIRACL-VISION | the engine is text-only: no OCR or vision path |
+| An LLM decomposer / agentic loop | `[llm]`; every resulting number belongs to the generator, not the engine |
+
+---
+
+## 11. Status log
+
+- 2026-10-03 — roadmap created. Phase 0 items 0.1–0.6 and the Phase 1 resumability contract are
+  the immediate work. No item is measured yet.
+- 2026-10-03 — **Phase 0 done (0.1–0.7).** The source finding, the findings index and every
+  prose site now carry the corrected, reproducible numbers; `tools/claim_check.py` pins 33 of
+  them against `diagnostics.json` and the gate is `make claim-check`. Two figures from the
+  correction commit were themselves wrong and are fixed here: the depth-500 ceiling is 0.6592
+  (not 0.6741) and pool incompleteness is 31.9% / 719 of 2,255 (not 36% / 811); the README's
+  five hand-typed derived numbers (0.451, 0.695, 0.155, 0.310, +0.086) are replaced with
+  0.4469, 0.6845, 0.1498, 0.3052 and +0.076. Suite **914 passed, 4 deselected**. Next: Phase 1,
+  starting with the resumability contract.

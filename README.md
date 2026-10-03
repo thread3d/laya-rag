@@ -790,8 +790,8 @@ Five things to take from this, and the first is the least flattering:
 - **MAP@10 still loses to the published reranked rows (0.319 vs 0.479), and the gap is now known
   to be *two* gaps.** See the next subsection: the achievable MAP@10 by reordering the fused pool
   is **0.609** at depth 100 — well below the 0.730 this project previously quoted, because that
-  number divided by the wrong gold count. 36% of depth-100 pools are missing a gold fact, so
-  roughly a third of the remaining headroom is recall rather than ordering. Both levers are open.
+  number divided by the wrong gold count. 31.9% of depth-100 pools (719 of 2,255) are missing a
+  gold fact, so roughly a quarter of the remaining headroom is recall rather than ordering. Both levers are open.
 - **`bge-small` is not a fair proxy for the published `bge-large` row** — it is *better* on this
   protocol — so the published comparison is a real head-to-head rather than a suggestive one.
 
@@ -815,11 +815,12 @@ Five things to take from this, and the first is the least flattering:
   is complete, so the error inflated the ceiling on exactly the queries whose recall was failing.
   Corrected (`pool_ceiling_map(..., gold_count=...)`, with a test pinning the difference), the
   ceiling is **0.609 at depth 100** and it **rises** to 0.659 at depth 500.
-- **So recall is not solved: 36% of depth-100 pools are missing at least one gold fact.** Those
-  811 queries have a ceiling of **0.451** against the complete-pool queries' **0.695**, and the
-  fused order achieves 0.155 on them against 0.310 on the rest. Making every pool complete would
-  raise the overall ceiling from 0.609 to about 0.695 — roughly **a third of the remaining
-  headroom is recall, not ordering** — which is the opposite of what the old number implied.
+- **So recall is not solved: 31.9% of depth-100 pools (719 of 2,255) are missing at least one
+  gold fact.** Those queries have a ceiling of **0.4469** against the complete-pool queries'
+  **0.6845**, and the fused order achieves 0.1498 on them against 0.3052 on the rest. Making every
+  pool complete would raise the depth-100 ceiling from 0.6088 to about 0.6845 — **+0.076**, roughly
+  **a quarter of the remaining headroom is recall, not ordering** — which is the opposite of what
+  the old number implied.
 - **The second-hop tax is still real.** Second-hop facts are retained at 0.719 in the depth-100
   pool while first-hop facts are at 0.950. The hop linked only through a bridge entity is what
   relevance-based selection discards, and it is the specific recall gap a hop-2 expansion would
@@ -829,8 +830,8 @@ Five things to take from this, and the first is the least flattering:
   proxy for the bridge entity — issues them as extra BM25 probes, and measures candidate-pool fact
   recall before and after. The gain is **real and significant, and marginal**: recall
   0.8480 → 0.8524, **+0.0044 [+0.0029, +0.0059]**, p=0.0010, from **32** of 2,255 queries improving
-  (none worsened, 32 gold facts added of ~6,000). Set against 811 incomplete pools, the proxy
-  recovers about one case in twenty-five. So recall is a live lever but not a cheap one: the
+  (none worsened, 32 gold facts added of ~6,000). Set against 719 incomplete pools, the proxy
+  recovers about one case in twenty-two. So recall is a live lever but not a cheap one: the
   bridge signal is validated and the *entity proxy* for it is too weak to close a third of the
   headroom, which is the argument for a model-based hop-2 over a term-based one — not for
   spending a cross-encoder on a pool this proxy barely grows.
@@ -1069,9 +1070,9 @@ should not be cited as a strength out of domain.
   *the set*. **The gap is partly recall and partly selection, and the split is now measured:**
   the achievable MAP@10 by reordering the fused pool is **0.609** at depth 100 (not the 0.730
   quoted before — see the diagnostics subsection for the normalisation fix), and it **rises** to
-  0.659 at depth 500. **36% of depth-100 pools are missing at least one gold fact** (ceiling
-  **0.451** for those 811 queries against **0.695** for the complete ones), so making every pool
-  complete would add roughly **+0.086** to the ceiling — about a third of the remaining headroom.
+  0.659 at depth 500. **31.9% of depth-100 pools (719 of 2,255) are missing at least one gold
+  fact** (ceiling **0.4469** for those queries against **0.6845** for the complete ones), so making
+  every pool complete would add roughly **+0.076** to the ceiling — about a quarter of the rest.
   Second-hop facts are retained at 0.719 in that pool against 0.950 for first-hop facts, which is
   the specific recall gap a hop-2 expansion targets. The published 0.479 is a *reranked* number;
   this engine's best reranked configuration is 0.3192 (`RERANK_COVERAGE_LAMBDA=0.7` plus a

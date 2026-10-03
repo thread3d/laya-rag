@@ -38,7 +38,7 @@ re-derived here.
 | BEIR retrieval (5 datasets) | 0.452 single `bge-small`+BM25; **0.495** 3-model ensemble | already above published BGE-large; headroom is cost, not quality |
 | MultiHop-RAG Hits@10 / Hits@4 | **0.864 / 0.712** with coverage dedup | already above every published row including reranked ones |
 | MultiHop-RAG MAP@10 | **0.2835**; **0.2986** with the reranker on the 400-query subset | the headline retrieval gap |
-| MultiHop pool-reorder oracle | **0.609** at depth 100 (corrected, 2026-10-03) | the pool is **not** sufficient: 36% of queries lack a gold fact, and the ceiling rises to 0.659 at depth 500 |
+| MultiHop pool-reorder oracle | **0.609** at depth 100 (corrected, 2026-10-03) | the pool is **not** sufficient: 31.9% of depth-100 pools lack a gold fact, and the ceiling rises to 0.659 at depth 500 |
 | Answerability, out of domain | AUC **0.51** scalar; in-domain feature gate **0.81** | no portable calibrated abstention |
 | Cross-encoder (BEIR vs MultiHop) | −0.027…−0.318 on BEIR; **+0.0464 MAP@10** on MultiHop | a second stage must be *routed*, not global |
 | Scale | 5 of 18 BEIR datasets buildable; BioASQ 14.9M blocked | ingestion is the wall, not query time |
@@ -58,8 +58,9 @@ re-derived here.
    the normalisation every rule it was compared against uses. The corrected reorder ceiling is
    **0.609 at depth 100**, and because it was inflated precisely where recall fails, the
    conclusion drawn from it was backwards: the ceiling **rises** with pool depth (0.397 → 0.609
-   → 0.659 at depth 10/100/500, each step significant), **36% of depth-100 pools are missing a
-   gold fact**, and roughly a third of the remaining headroom is **recall**, not selection.
+   → 0.659 at depth 10/100/500, each step significant), **31.9% of depth-100 pools (719 of
+   2,255) are missing a gold fact**, and roughly a quarter of the remaining headroom is
+   **recall**, not selection.
    "Retrieve more" is back on the table; "embed better" still is not. See
    [`docs/research/08`](docs/research/08-frontier-2026.md) and the README diagnostics subsection.
 
@@ -111,7 +112,7 @@ MultiHop on average (it promotes the first hop and some co-relevant passages) wh
 taxing the bridge; the coverage pass recovers some of the loss by spending slots on distinct
 facts. The reorder ceiling that remains after the tax is **0.609** at depth 100 (corrected
 2026-10-03; the 0.7307 previously quoted here divided by the wrong gold count), and part of
-the residual is recall — 36% of depth-100 pools are missing a gold fact.
+the residual is recall — 31.9% of depth-100 pools are missing a gold fact.
 
 The source's own honest limits, which bound the proposal: the rescue signal is **lexical**, so
 a second hop sharing no surface tokens with its first hop (pure paraphrase linkage) is not
@@ -155,8 +156,8 @@ These are different instruments for different failure modes, and conflating them
 > - **Tier 0.1 and 0.2 are done and decisive.** The reorder ceiling is **0.609** at depth 100 and
 >   **rises** to 0.659 at depth 500 — the 0.7307 quoted here was mis-normalised (it divided by the
 >   gold facts the pool matched, not the query's true gold count) — so "retrieve more" is *not*
->   refuted: 36% of depth-100 pools miss a gold fact and roughly a third of the remaining headroom
->   is recall. The comparison grid carries permutation p-values, BH-FDR and an MDE per cell.
+>   refuted: 31.9% of depth-100 pools miss a gold fact and roughly a quarter of the remaining
+>   headroom is recall. The comparison grid carries permutation p-values, BH-FDR and an MDE per cell.
 > - **Tier 1.1 is measured.** BridgeRAG's bridge-conditioned question is implementable here with
 >   Laya rather than a 70B judge, and the conditioning is *real* (+0.0293 AUC, +0.0570 MAP@10 over
 >   a shuffled-bridge control) while still losing to the cross-encoder (0.559 vs 0.796 AUC) — so

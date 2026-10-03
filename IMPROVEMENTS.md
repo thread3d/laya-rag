@@ -72,7 +72,7 @@ gain, not a recall gain. That is exactly why it is a small fraction of the 0.20 
 | # | Change | Effort | Expected | How to falsify |
 | --- | --- | --- | --- | --- |
 | 1 | **Run the cross-encoder under the official protocol.** `--rerank` exists (`multihop_official.py:111`) but `eval/benchmarks/multihop-rag/official.json` contains **no reranked rows** — the published 0.479 is a *reranked* number and the like-for-like was never run. Try `bge-reranker-base`/`large` and `bge-reranker-v2-m3` at depth 100 on the fused stage. | hours | Unknown; this is the one direct comparison missing | If it reproduces the BEIR loss, close it permanently |
-| 2 | **Measure the pool-recall ceiling.** Score "best achievable MAP@10 by reordering the fused top-100" and again at depth 500. | hours | Diagnostic — **done, and it settled both**: ceiling 0.609 at depth 100 and 0.659 at 500 (each step significant), with 36% of depth-100 pools missing a gold fact | selection is the larger lever; recall is not solved |
+| 2 | **Measure the pool-recall ceiling.** Score "best achievable MAP@10 by reordering the fused top-100" and again at depth 500. | hours | Diagnostic — **done, and it settled both**: ceiling 0.609 at depth 100 and 0.659 at 500 (each step significant), with 31.9% of depth-100 pools (719 of 2,255) missing a gold fact | selection is the larger lever; recall is not solved |
 | 3 | **Query decomposition / second hop (model-free first).** After pass 1, take the top documents' salient entities/phrases (not in the query), issue hop-2 dense+BM25 queries, fuse with RRF. Laya's relevance head scores hop-2 candidates as a filter. This is IRCoT without a generator. | days | The largest MAP lever, because it is the only one that raises pool recall | If pool-recall ceiling (2) was already high, this adds little |
 | 4 | **Fact-level set coverage (submodular max-coverage).** Split candidates into sentence "fact atoms", score atoms for query relevance (Laya relevance head), and greedily select chunks maximising *distinct query-relevant atom* coverage with a redundancy penalty — a facility-location objective that matches MAP's definition. | 1–2 wks | Attacks the objective directly rather than by proxy | Compare against (1)/(3) on a held-out half |
 | 5 | **Two-level document→passage selection with a document quota.** Force ≥k distinct documents into the top-10 (best chunk per doc), then fill. `doc-mmr@0.7` already reaches 0.274 from the same pool, so a hard quota should beat it. | hours–days | +0.005–0.02 MAP over dedup | Paired bootstrap on the held-out half |
@@ -430,6 +430,6 @@ truncates the state and the best passage is read first.
 
 **Correction (2026-10-03).** The ceiling quoted as 0.7307 was mis-normalised — it divided by the gold
 facts the pool matched, not the query's true gold count — and is **0.609** corrected. It also *rises*
-with pool depth (0.659 at 500) rather than falling, and 36% of depth-100 pools are missing a gold
+with pool depth (0.659 at 500) rather than falling, and 31.9% of depth-100 pools are missing a gold
 fact. The conclusion below that the gap is purely selection therefore overstates it: recall is a live
 lever. See the README diagnostics subsection.
