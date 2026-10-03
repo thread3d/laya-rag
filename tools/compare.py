@@ -369,8 +369,16 @@ def second_stage_panels(
         1, 2, figsize=(12.4, 0.4 * len(rows) + 2.0), gridspec_kw={"width_ratios": [1, 1]}
     )
     ys = np.arange(len(rows))
-    conditional = [name.startswith(("tri", "pit")) for name in order]
-    colors = [ACCENT if flag else OURS for flag in conditional]
+    # The shuffled-bridge control must not share a colour with the treatment it controls for:
+    # reading a control as a treatment is the mistake this whole comparison exists to prevent.
+    def series_color(name: str) -> str:
+        if "shuffled" in name:
+            return PUBLISHED_DARK
+        if name.startswith(("tri", "pit-")):
+            return ACCENT
+        return OURS
+
+    colors = [series_color(name) for name in order]
     left.errorbar(
         [row[1] for row in rows], ys,
         xerr=np.vstack([[row[2] for row in rows], [row[3] for row in rows]]),
@@ -413,7 +421,7 @@ def second_stage_panels(
     right.set_ylim(-0.6, len(rows) - 0.4)
     fig.suptitle(
         f"{title} — {report.get('_settings', {}).get('limit_queries', '?')} "
-        "MultiHop-RAG queries (orange: bridge-conditioned decisions)",
+        "MultiHop-RAG queries (orange: bridge-conditioned, grey: shuffled-bridge control)",
         fontsize=11,
     )
     _save(fig, outdir, filename, plt)
