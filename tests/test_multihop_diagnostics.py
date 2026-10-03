@@ -10,6 +10,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
@@ -106,6 +108,24 @@ def test_recall_at_depth_is_none_for_an_empty_wanted_set():
     assert diag.recall_at_depth(matches, 3, {0}) == 1.0
     assert diag.recall_at_depth(matches, 1, {1}) == 0.0
     assert diag.recall_at_depth(matches, 3, set()) is None
+
+
+def test_recall_at_depth_divides_by_the_true_gold_count_when_given_one():
+    """The absolute normalisation, and why the relative one is not a substitute.
+
+    Three gold facts, one reachable in the top-1. Relative to the facts the pool matched
+    (one) that is 1.0; relative to the query's true three it is 1/3. Only the second is
+    stable if the pool is incomplete — the `pool_ceiling_map` failure mode.
+    """
+    matches = [{0}, set(), set()]
+    assert diag.recall_at_depth(matches, 1) == 1.0
+    assert diag.recall_at_depth(matches, 1, gold_count=3) == pytest.approx(1 / 3)
+    # The denominator does not move when the pool deepens, which is the point.
+    assert diag.recall_at_depth(matches + [{1}, {2}], 1, gold_count=3) == pytest.approx(1 / 3)
+
+
+def test_recall_at_depth_with_a_gold_count_of_zero_is_undefined():
+    assert diag.recall_at_depth([{0}], 1, gold_count=0) is None
 
 
 def test_hop_grounding_gap_reports_zero_without_facts():

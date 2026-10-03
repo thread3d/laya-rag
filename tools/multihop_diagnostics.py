@@ -160,12 +160,31 @@ def facts_present(matches) -> set[int]:
     return {fact_id for row in matches for fact_id in row}
 
 
-def recall_at_depth(matches, depth: int, wanted: set[int] | None = None) -> float | None:
+def recall_at_depth(
+    matches,
+    depth: int,
+    wanted: set[int] | None = None,
+    *,
+    gold_count: int | None = None,
+) -> float | None:
     """Fraction of ``wanted`` facts matched within the first ``depth`` candidates.
 
     ``None`` when ``wanted`` is empty, because "recall of nothing" is undefined rather
     than zero.
+
+    Two normalisations, and the difference matters. With ``wanted`` given the denominator
+    is that set (used for the hop-1/hop-2 splits, which are themselves derived from the
+    pool's grounding). With ``wanted`` None and ``gold_count`` given the denominator is
+    the query's **true** number of gold facts, which is the official metrics'
+    normalisation and is stable under ``--max-depth``. With neither, the denominator is
+    the number of facts the *deepest* pool matched — correct only while that pool is
+    complete, and the same shape of error that inflated ``pool_ceiling_map`` by 0.12
+    before it was fixed. Callers measuring recall should pass ``gold_count``.
     """
+    if wanted is None and gold_count is not None:
+        if gold_count <= 0:
+            return None
+        return len(facts_present(matches[:depth])) / gold_count
     if wanted is None:
         wanted = facts_present(matches)
     if not wanted:
@@ -373,7 +392,9 @@ def main(argv=None) -> int:
         max_depth = max(depths)
         full_second = second
         for depth in depths:
-            row[f"pool_fact_recall@{depth}"] = recall_at_depth(matches, depth)
+            row[f"pool_fact_recall@{depth}"] = recall_at_depth(
+                matches, depth, gold_count=len(golds[n])
+            )
             row[f"pool_ceiling_MAP@10@{depth}"] = pool_ceiling_map(
                 overlap[: min(depth, len(pool))],
                 matches[:depth],

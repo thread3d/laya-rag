@@ -184,3 +184,30 @@ def test_pool_ceiling_map_requires_a_gold_count():
     """No default: the only obvious default is the one that silently overstates."""
     with pytest.raises(TypeError):
         mc.pool_ceiling_map(None, [{0}], 10)
+
+
+# ── metric-definition audit ─────────────────────────────────────────────
+
+def test_official_metric_scoring_examines_exactly_the_top_k():
+    """A retrieved list longer than k must not have its k+1-th item examined at all.
+
+    The metric sliced ``retrieved[:11]`` while guarding on ``rank <= 10``: the extra item
+    was discarded, so the number was right, but any edit to the guard would have let rank
+    11 score. The slice is now exactly k, and this pins it.
+    """
+    gold = ["refunds take five business days"]
+    hit_at_11 = ["filler"] * 10 + ["refunds take five business days"]
+    assert mc.official_metrics_one(hit_at_11, gold)["Hits@10"] == 0.0
+    hit_at_10 = ["filler"] * 9 + ["refunds take five business days"]
+    assert mc.official_metrics_one(hit_at_10, gold)["Hits@10"] == 1.0
+
+
+def test_official_metric_normalizes_average_precision_by_the_true_gold_count():
+    """MAP divides by the query's gold facts, not the ones the list happened to match."""
+    # Two gold facts, only one ever retrieved: AP 1/1 over min(2, 10).
+    one = mc.official_metrics_one(["alpha beta"], ["alpha", "gamma"])
+    assert one["MAP@10"] == pytest.approx(0.5)
+    both = mc.official_metrics_one(
+        ["alpha", "gamma"], ["alpha", "gamma"]
+    )
+    assert both["MAP@10"] == pytest.approx((1 + 1 / 2) / 2)

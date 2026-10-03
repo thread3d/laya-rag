@@ -64,7 +64,9 @@ def official_metrics(retrieved_lists, gold_lists):
         ap = 0.0
         first = None
         found = []
-        for rank, item in enumerate(retrieved[:11], start=1):
+        for rank, item in enumerate(retrieved[:10], start=1):
+            # Exactly the metric's top-k: slicing 11 examined a rank the guard then
+            # discarded, which is a trap for anyone who edits the guard.
             if any(g in item for g in gold):
                 if rank <= 10:
                     f10 = True
@@ -82,7 +84,10 @@ def official_metrics(retrieved_lists, gold_lists):
             {
                 "Hits@10": float(f10),
                 "Hits@4": float(f4),
-                "MAP@10": ap / min(len(gold), 10),
+                # A query with no gold facts would divide by zero and abort the whole run; the
+                # denominator is floored at 1 (which scores it 0.0), matching
+                # metrics_from_matches in tools/multihop_rerank_experiment.py.
+                "MAP@10": ap / min(max(len(gold), 1), 10),
                 "MRR@10": 1 / first if first else 0.0,
             }
         )
