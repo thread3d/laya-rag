@@ -349,6 +349,7 @@ paper — treat it as a hypothesis with a clear test in Tier 0.1).
 | [05](docs/research/05-security-privacy-robustness.md) | security, privacy, robustness | trust tiers + spotlighting + provenance-bound verification |
 | [06](docs/research/06-scale-storage-vector-search.md) | scale, storage, vector search | BM25S + on-disk term dict; FAISS RaBitQ + quantization |
 | [07](docs/research/07-evaluation-benchmarks.md) | evaluation, benchmarks, rigor | permutation + FDR; selective prediction; MuSiQue/2Wiki replication |
+| [08](docs/research/08-frontier-2026.md) | **frontier delta, 2026-10-03** | Laya as the bridge-conditioned tripartite judge `s(q,b,c)`; DISCo to escape the 0.7307 reorder ceiling; index-lifecycle integrity as a retrieval concern |
 
 **Verification memos** (the serial primary-source pass behind §7) live beside the briefs:
 [01 chunking](docs/research/verification/01-chunking-verification.md),
