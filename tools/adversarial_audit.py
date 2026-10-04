@@ -164,6 +164,53 @@ def retrieval_audit(
     }
 
 
+#: Content words drawn from the planted queries. The stuffed document repeats *all* of them, so it
+#: is tailored to the corpus's vocabulary rather than to any single query — a fair keyword-stuffing
+#: attack that a poisoned file could actually carry.
+STUFFING_TERMS: tuple[str, ...] = (
+    "refund", "refunds", "days", "process", "launch", "code", "release", "checklist",
+    "security", "key", "policy", "account",
+)
+
+
+def stuffed_poison(index: int) -> tuple[str, str]:
+    """A query-independent poison document that repeats the corpus's content words."""
+    return (f"poison/stuffed-{index}.md",
+            "Policy update. " + " ".join(STUFFING_TERMS) * 4)
+
+
+def poison_dose_probe(
+    k: int = 5,
+    doses: Sequence[int] = (0, 1, 2, 5),
+    queries: Sequence[tuple[str, str]] = QUERIES,
+    corpus: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """How many queries a keyword-stuffed document reaches the top-k of, per number of documents.
+
+    The roadmap asks for the "five documents, 90% attack success" figure to be **measured here,
+    never cited** — it is a property of the corpus and the retriever, not a constant. Dose 0 is the
+    control and must read 0.0000. This is a measurement, not a gate: nothing about it is a
+    threshold the suite enforces.
+    """
+    base = dict(corpus if corpus is not None else CORPUS)
+    answerable = [query for query, gold in queries if gold]
+    rates: dict[str, Any] = {}
+    for dose in doses:
+        current = dict(base)
+        for index in range(dose):
+            path, text = stuffed_poison(index)
+            current[path] = text
+        index_obj = BM25Index(stem=True, drop_stopwords=True)
+        index_obj.build(build_chunks(current))
+        leaks = 0
+        for query in answerable:
+            top = [hit.chunk_id for hit in index_obj.search(query, k=k)]
+            if any(path.startswith("poison/stuffed-") for path in top):
+                leaks += 1
+        rates[str(dose)] = round(leaks / len(answerable), 4) if answerable else 0.0
+    return {"k": k, "answerable": len(answerable), "leak_rate_by_dose": rates}
+
+
 def tenant_probe(k: int = 5) -> dict[str, Any]:
     """Cross-tenant retrieval must never happen, and no identity must mean no access."""
     index = BM25Index(stem=True, drop_stopwords=True)
@@ -199,6 +246,7 @@ def build_report(k: int = 5, corpus: Mapping[str, str] | None = None) -> dict[st
         "trust_on": on,
         "tenants": tenants,
         "false_refusal_rate": false_refusal,
+        "poison_dose": poison_dose_probe(k, corpus=corpus),
         "checks": {
             "gold_retained": false_refusal == 0.0,
             "poison_excluded": on["poison_leak_rate"] == THRESHOLDS["poison_leak_rate_trust_on"],

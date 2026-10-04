@@ -126,6 +126,18 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"beta sees alpha = {audit['tenants']['beta_sees_alpha']}, "
         f"anonymous passages = {audit['tenants']['anonymous_passages']}",
         "",
+        "### Poison dose response",
+        "",
+        "A keyword-stuffed document tailored to the corpus's vocabulary, not to any query. "
+        "**Measured here, never cited**: the leak rate is a property of this corpus and retriever, "
+        "and dose 0 is the control.",
+        "",
+        "| poison documents | " + " | ".join(
+            audit["poison_dose"]["leak_rate_by_dose"]) + " |",
+        "| --- | " + " | ".join("---" for _ in audit["poison_dose"]["leak_rate_by_dose"]) + " |",
+        "| share of answerable queries leaked | " + " | ".join(
+            f"{value:.4f}" for value in audit["poison_dose"]["leak_rate_by_dose"].values()) + " |",
+        "",
         "## Deterministic verification (fabricated answer)",
         "",
         f"- citation mechanics clean: **{verification['citation_mechanics_clean']}**",

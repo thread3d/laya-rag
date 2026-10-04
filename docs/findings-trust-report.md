@@ -27,6 +27,20 @@ The false-refusal cost of enabling trust is **0.0000** — the poison is exclude
 is lost. Tenant probes: alpha never sees beta, beta never sees alpha, an anonymous caller gets
 **0** passages, and a shared document is still visible to a tenant.
 
+**Poison dose response** — a keyword-stuffed document tailored to the *corpus's* vocabulary, not to
+any query, measured at several doses because the roadmap asks for the "five documents → 90% attack
+success" figure to be measured here rather than cited:
+
+| poison documents | 0 (control) | 1 | 2 | 5 |
+| --- | --- | --- | --- | --- |
+| share of answerable queries whose top-5 contains a poison document | **0.0000** | **0.2000** | **0.2000** | **0.2000** |
+
+The dose curve is **flat after one document**: on this planted corpus, a single stuffed file
+already reaches the top-5 of 20% of the answerable queries, and four more change nothing. That is
+the honest local answer to the citation — the attack saturates immediately at this corpus size, so
+the published 90% figure is a property of *their* corpus and retriever, not a constant this project
+may quote. It is recorded as a measurement, not a gate: no threshold depends on it.
+
 **Deterministic verification** on a fabricated answer that cites the poison passage: citation
 mechanics clean, the fabricated number flagged (`number_not_in_evidence`), the injection marker
 flagged.

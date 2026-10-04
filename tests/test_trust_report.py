@@ -68,6 +68,8 @@ def _synthetic_report():
                         "anonymous_passages": 0},
             "false_refusal_rate": 0.0,
             "checks": {"poison_excluded": True},
+            "poison_dose": {"k": 5, "answerable": 2,
+                            "leak_rate_by_dose": {"0": 0.0, "1": 0.5}},
         },
         "verification": {"citation_mechanics_clean": True, "number_flagged": True,
                          "injection_flagged": True, "content_kinds": ["number_not_in_evidence"]},
