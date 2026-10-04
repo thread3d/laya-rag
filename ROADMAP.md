@@ -176,7 +176,7 @@ already shown to overstate the engine by **0.0144**.
 | --- | --- | --- | --- | --- | --- |
 | 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + the CE-cache retrofit + `make job-status`; the remaining four tools are still un-retrofitted | kill/resume and shard/merge equivalence tests | done (retrofit partial) |
 | 1.2 | Engine-level MultiHop-RAG | `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes | **done, full 2,255 in both configurations** — shipped default MAP@10 **0.3128** (**+0.0618 [+0.0547, +0.0688]** over the harness hybrid) and `bge-small` hybrid **0.3009** (+0.0499); the dense channel is a measured trade, costing 0.0119 MAP@10 and 0.0187 MRR to leave off. The first full run read 0.2216 against a **partial index** (fixed engine bug) |
-| 1.3 | Engine-level MuSiQue | `tools/engine_musique.py` | run `RagEngine` on the MuSiQue validation split under its own chunking, full corpus, queries optionally narrowed; pair MAP@10 against the harness by qid | the per-corpus bar is stated, not averaged | **both configurations done on 200 queries**; the **full 2,417 hybrid run is in flight at 525/2417** (checkpointed, complete index, resumes on re-run). Hybrid **−0.0097 MAP@10 [−0.0190, −0.0007]** vs the harness `fused` on 200 (pool depth not the cause, +0.0019 at depth 100); the shipped default is a further **−0.0540 [−0.0718, −0.0363]** below the hybrid, so the dense channel **reverses** between corpora |
+| 1.3 | Engine-level MuSiQue | `tools/engine_musique.py` | run `RagEngine` on the MuSiQue validation split under its own chunking, full corpus, queries optionally narrowed; pair MAP@10 against the harness by qid | the per-corpus bar is stated, not averaged | **done, full 2,417** — hybrid MAP@10 **0.3761** against the harness `fused`'s 0.3852, **−0.0091 [−0.0120, −0.0062]**, and below every harness arm (`blend-0.75` −0.0390, `ce` −0.0271, `covquota` −0.0223); it replicates the 200-query −0.0097. Shipped default on 200: a further **−0.0540**, so the dense channel **reverses** between corpora |
 | 1.4 | Publish the harness-vs-engine delta | `tools/engine_vs_harness.py`, `docs/findings-engine-multihop.md`, `docs/FINDINGS.md` | paired comparison that re-derives the subset and refuses a mismatch; every MultiHop row labelled by which harness produced it | `make engine-multihop-compare` | done |
 
 **Gate:** no Phase 2 result is quoted against the engine until 1.2 has a report under `eval/`.
@@ -430,6 +430,15 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
 
   `make job-status` shows `running 525/2417`; a `running` manifest is never a quotable number, and
   the report is not written until the run is whole.
+- 2026-10-04 — **Phase 1 complete: the full MuSiQue run finished and confirms the subset.** All
+  2,417 validation queries, engine hybrid: MAP@10 **0.3761** against the harness `fused`'s 0.3852,
+  **−0.0091 [−0.0120, −0.0062]** — the 200-query subset read −0.0097, so the finding replicates.
+  Paired against the harness's other arms on the same queries it is below all of them:
+  `blend-0.75` −0.0390, `ce` −0.0271, `covquota-3-0.7` −0.0223, every interval excluding zero. So
+  the engine beats the harness on MultiHop-RAG (+0.0499 to +0.0618) and loses to it on MuSiQue
+  (−0.0091 to −0.0390) — **the gain is corpus-specific in both directions**, which is the case for
+  routing. **Phase 1 is now complete on both corpora, both configurations, at full size or the
+  documented subset.** Suite **1085 passed, 5 deselected**. Next: Phase 4.
 - 2026-10-03 — **Phase 1.3 done, and it falsifies the generalisation.** `tools/engine_musique.py`
   runs the engine on the full 21,098-paragraph MuSiQue validation corpus with only the queries
   narrowed (never the corpus — `tools/musique.py --limit-queries` shrinks the corpus too, which

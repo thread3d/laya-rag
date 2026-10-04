@@ -46,6 +46,32 @@ Three readings:
    (0.4634) and `covquota-3.7` (0.4529) on this subset, and below `fused` and `blend-0.75`. So
    the second stage is not what the harness is winning with — its first stage is.
 
+## Full set — 2,417 queries, and it confirms the subset
+
+The whole validation split, engine hybrid at the same depth-20 pool:
+
+| metric | harness `fused` (2,417) | **engine (2,417)** | delta |
+| --- | --- | --- | --- |
+| MAP@10 | 0.3852 | **0.3761** | **−0.0091 [−0.0120, −0.0062]** |
+| Hits@4 | 0.8879 | 0.8771 | — |
+| Hits@10 | 0.9520 | 0.9421 | — |
+| MRR@10 | 0.7824 | 0.7665 | — |
+
+Paired on MAP@10 against the harness's *other* arms over the same 2,417 queries — all significant,
+all negative:
+
+| harness arm | harness | engine | delta |
+| --- | --- | --- | --- |
+| `blend-0.75` | 0.4151 | 0.3761 | **−0.0390 [−0.0450, −0.0331]** |
+| `ce` | 0.4032 | 0.3761 | **−0.0271 [−0.0338, −0.0202]** |
+| `covquota-3-0.7` | 0.3984 | 0.3761 | **−0.0223 [−0.0292, −0.0153]** |
+| `fused` | 0.3852 | 0.3761 | **−0.0091 [−0.0120, −0.0062]** |
+
+**The 200-query result replicates** (−0.0097 there, −0.0091 here) and the full set sharpens it: the
+engine is below *every* harness arm on this corpus, including the plain fused first stage it beats
+comfortably on MultiHop-RAG. So the Phase 1.2 gain is corpus-specific in both directions — the
+engine wins on MultiHop-RAG and loses on MuSiQue, and neither result generalises.
+
 ## The dense channel helps here and hurts on MultiHop-RAG
 
 The same 200 queries with **no `--embed-model`** — Laya's encoder resolving to a dense weight of
