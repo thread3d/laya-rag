@@ -85,6 +85,48 @@ def build_once(docs: int, vocab: int, tokens: int, block_tokens: int = 1_000_000
             shutil.rmtree(directory, ignore_errors=True)
 
 
+def profile_once(docs: int, vocab: int, tokens: int, block_tokens: int = 1_000_000,
+                 top: int = 12) -> dict:
+    """What is still *held* when the build finishes, by allocation site.
+
+    `tracemalloc` sees Python-level allocations — the vocabulary dict, the id and length
+    lists — but not numpy buffers, which are allocated outside Python's allocator. That is
+    enough to separate the *persistent* accumulators from a *transient* peak: if almost
+    nothing is live at the end, the peak is the block or the merge, not the accumulators.
+    """
+    import shutil
+    import tempfile
+    import tracemalloc
+    from collections import Counter
+
+    from laya_rag.ondisk import OnDiskBM25
+
+    directory = Path(tempfile.mkdtemp(prefix="ondisk-profile-"))
+    try:
+        index = OnDiskBM25(directory)
+        tracemalloc.start()
+        index.build(synthetic_corpus(docs, vocab, tokens), block_tokens=block_tokens)
+        snapshot = tracemalloc.take_snapshot()
+        tracemalloc.stop()
+        by_site = Counter()
+        for stat in snapshot.statistics("traceback"):
+            frame = stat.traceback[0]
+            by_site[f"{Path(frame.filename).name}:{frame.lineno}"] += stat.size
+        return {
+            "docs": docs,
+            "vocab": vocab,
+            "tokens": tokens,
+            "block_tokens": block_tokens,
+            "terms": len(index.terms),
+            "live_mb": round(sum(by_site.values()) / 1e6, 1),
+            "peak_rss_mb": peak_rss_mb(),
+            "top_sites": [{"site": site, "mb": round(size / 1e6, 2)}
+                          for site, size in by_site.most_common(top)],
+        }
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
+
+
 def run_point(docs: int, vocab: int, tokens: int, block_tokens: int) -> dict:
     """One point, in its own process, so the peak belongs to that build alone."""
     completed = subprocess.run(
@@ -126,6 +168,8 @@ def render_markdown(rows: Sequence[dict], tokens: int) -> str:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="ondisk_scale.py")
     ap.add_argument("--child", action="store_true", help="run one point and print it")
+    ap.add_argument("--profile", action="store_true",
+                    help="report the live allocations by site after one build")
     ap.add_argument("--docs", type=int, default=50_000)
     ap.add_argument("--vocab", type=int, default=50_000)
     ap.add_argument("--tokens", type=int, default=100)
@@ -137,6 +181,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.profile:
+        result = profile_once(args.docs, args.vocab, args.tokens, args.block_tokens)
+        print(json.dumps(result, indent=2))
+        return 0
     if args.child:
         print(json.dumps(build_once(args.docs, args.vocab, args.tokens, args.block_tokens)))
         return 0

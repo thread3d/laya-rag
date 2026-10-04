@@ -266,7 +266,7 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
-| 4.1 | On-disk term dictionary + chunk-id list | `tools/ondisk_scale.py`, `make ondisk-scale` | bound the build state that outlives every block, so the 10M+ corpora become buildable | ranking parity against the in-memory index; peak RSS flat as the corpus grows | **evidence gathered, and it corrects the target.** Peak build RSS is **flat in vocabulary to 400k terms** (an 8× vocabulary increase moves it 0.8%) and grows with **documents** (~3.8 KB/doc) — so the dictionary is *not* the wall the plan named; the per-document state and the merge are. Peak is also controllable today: `block_tokens` 250k → 4M moves it 399.9 → 808.1 MB at a fixed corpus. An unbounded component remains (peak grows with corpus size even at fixed block size, and 491 → 1,032 MB with one block), but **which structure dominates is not yet separated** — profile before changing the format |
+| 4.1 | Cheaper per-block build state | `src/laya_rag/ondisk.py`, `tools/ondisk_scale.py` | bound the build's *transient* peak: a block is one Python `dict` per document today | ranking parity against the in-memory index (runs must stay byte-identical); peak RSS lower at fixed `block_tokens` | **profiled, and the target is corrected again.** `tracemalloc` at 100k docs: **live state 7.4 MB against a 943 MB peak**, so the dictionary and id lists are *not* the cost (the largest live site is the tokenizer's stopword set at 2.74 MB; the dict plus its document frequencies are 3.3 MB). The peak is **transient** — the block (which `block_tokens` controls: 399.9 → 808.1 MB across a 16× cap range) plus retention across blocks. The fix is a flat per-block representation (doc offsets + term/tf arrays) instead of one dict per document, which writes **byte-identical runs** and is therefore parity-testable. Not implemented |
 | 4.2 | The 13 remaining BEIR datasets | `[data]` disk | build sequentially, one dataset at a time; record mirror stubs as blocked rather than skipped silently | full BEIR-18 average, stated with its dataset list | **in progress — 6 of 18.** `quora` measured (bm25-engine 0.7689, dense 0.8876, fused 0.8629; the fused mean moves **0.4515 → 0.5201**, so the membership is recorded with it). `webis-touche2020` **downloaded and extracted** (702 MB) but **not evaluated**: the lexical pass over 382k long documents is single-threaded and the 382k-document embedding is still ahead, so it was stopped rather than left running; a re-run skips the fetch. `specter`/`signal1m` are **404 on this mirror**; Robust04/TREC-NEWS still stubs; BioASQ/FEVER/NQ await Phase 4.1 |
 | 4.3 | Multi-corpus distillation | `[model]` | extend `tools/finetune.py` / `distill_eval.py` beyond NFCorpus (where the 33M student already recovers **~29%** of the 478M ensemble, 0.3385 → 0.3505); package in SentenceTransformers format; upload | the packaged student beats zero-shot on every training corpus, or the artefact is not shipped | planned |
 | 4.4 | MTEB submission | network, external | the leaderboard wants a **model**, and one is now packageable; submit the distilled encoder | an external row with the model card's measured numbers | external |
@@ -477,6 +477,18 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   guessed at. **No index format was changed:** the bounded rewrite stays deferred until it is
   profiled, because it is parity-critical and the 20/20 and 300/300 ranking checks must stay green.
   Suite **1113 passed, 5 deselected**.
+- 2026-10-04 — **Phase 4.1 profiled, and the target moved a second time.** `tools/ondisk_scale.py
+  --profile` runs a build under `tracemalloc` at 100k documents: **live Python state when it finishes
+  is 7.4 MB against a 943 MB peak** (inflated by tracemalloc itself). The largest live site is the
+  *tokenizer's stopword set* at 2.74 MB; the term dictionary and its document frequencies are 3.3 MB
+  together. So the dictionary, the chunk-id list and the length list — everything the plan named — are
+  a few megabytes at 100k documents. **The peak is transient**: the block, which `block_tokens`
+  already controls (399.9 → 808.1 MB across a 16× cap range), plus retention across blocks (peak rises
+  312 → 418 → 596 MB with corpus size at a *fixed* cap, where the block is constant and the live state
+  is 7 MB). The tractable fix is therefore to make the per-block representation cheaper — today a block
+  is `list[tuple[doc_id, dict[term, tf]]]`, one Python dict per document — replaced by doc offsets plus
+  parallel term/tf arrays, which writes **byte-identical runs** and is parity-testable with the
+  existing 20/20 and 300/300 checks. No format change was made. Suite **1114 passed, 5 deselected**.
 - 2026-10-04 — **Phase 1 complete: the full MuSiQue run finished and confirms the subset.** All
   2,417 validation queries, engine hybrid: MAP@10 **0.3761** against the harness `fused`'s 0.3852,
   **−0.0091 [−0.0120, −0.0062]** — the 200-query subset read −0.0097, so the finding replicates.

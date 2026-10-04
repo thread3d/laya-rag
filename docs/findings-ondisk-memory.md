@@ -83,10 +83,52 @@ open question, not papered over.
   natural corpus; a Zipfian vocabulary would make the dictionary term larger than it is here, though
   the 400k-term point bounds how much.
 
+## The profile: the peak is transient, not the accumulators
+
+The sweep said the cost tracks documents and not vocabulary. It did not say *which* structure, so the
+build was profiled with `tracemalloc` at 100,000 documents, `block_tokens=1M`:
+
+| reading | value |
+| --- | --- |
+| **live Python allocations when the build finished** | **7.4 MB** |
+| peak RSS | 942.8 MB (inflated by tracemalloc's own overhead) |
+| largest live site | `lexical.py:72` — the tokenizer's stopword set, **2.74 MB** |
+| next two | `ondisk.py:132/133` — the term dictionary and its document frequencies, **3.3 MB together** |
+| the rest | under 0.5 MB each |
+
+**The accumulators are negligible.** The vocabulary, its document frequencies, the id list and the
+length list together are a few megabytes at 100,000 documents — against a peak approaching a
+gigabyte. Whatever costs the memory is *transient*: held during a block or the merge and freed
+before the build returns.
+
+Combined with the sweep, the two transient contributors are:
+
+1. **The block, which `block_tokens` already controls** — 399.9 → 808.1 MB across a 16× range of the
+   cap at a fixed corpus, and 491.4 → 1,031.9 MB when the cap is scaled to hold a whole corpus in one
+   block.
+2. **Retention across blocks** — peak still rises with the corpus at a *fixed* cap (312 → 418 → 596 MB
+   for 25k → 50k → 100k documents), where the block size is constant and the persistent state is
+   ~7 MB. More blocks means more freed-but-retained arenas.
+
+## What 4.1 should therefore do
+
+Not an external merge for the dictionary — that would move a few megabytes. The tractable change is
+to make the **per-block representation cheaper**: today a block is
+`list[tuple[doc_id, dict[term, tf]]]`, i.e. one Python dict per document, ~10,000 of them per block
+at these settings. A flat per-block form — doc offsets plus parallel term/tf arrays — holds the same
+information without the per-document dicts, and the *runs it writes would be byte-identical*, which
+is what makes it parity-testable rather than a format migration.
+
+That is the next step, and it is a much smaller change than the plan's: no format bump, no on-disk
+dictionary, and the 20/20 and 300/300 ranking-parity checks apply directly.
+
 ## What this does not show
 
-- **Not a fix.** No index format changed. The bounded external merge / on-disk chunk-id list is a
-  separate, parity-critical change (the 20/20 and 300/300 ranking-parity checks must stay green).
-- **Not a profile.** Which structure dominates the unbounded component is unseparated, as above.
+- **Not a fix.** No index format changed. The cheaper per-block representation above is the next
+  step and is parity-testable (identical runs), but it is not implemented here.
+- **Not a full memory profile.** `tracemalloc` tracks Python-level allocations only, so numpy and
+  mmap buffers are invisible to it. That is enough to show the accumulators are negligible and the
+  peak is transient, but it does not attribute the transient peak between the block's dicts, the
+  run/merge arrays, and allocator retention.
 - **Not natural text.** Uniform document length and a uniform term distribution; the tokenizer's
   stemming and stopword behaviour does apply, since the real `OnDiskBM25` build is what runs.

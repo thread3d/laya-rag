@@ -77,3 +77,14 @@ def test_the_default_sweep_holds_one_axis_fixed_each_way():
     docs_axis = [v for d, v in points if v == 50_000]
     vocab_axis = [d for d, v in points if d == 50_000]
     assert len(docs_axis) >= 3 and len(vocab_axis) >= 3
+
+
+def test_profile_reports_live_allocations_by_site():
+    """The profile is what separates a persistent accumulator from a transient peak."""
+    result = scale.profile_once(150, 80, 20, block_tokens=100_000, top=3)
+    assert result["docs"] == 150
+    assert result["live_mb"] >= 0.0
+    assert result["peak_rss_mb"] > 0
+    assert result["top_sites"], "a build allocates something"
+    for row in result["top_sites"]:
+        assert "site" in row and row["mb"] >= 0.0
