@@ -175,7 +175,7 @@ already shown to overstate the engine by **0.0144**.
 | # | item | file | change | falsify / signal | status |
 | --- | --- | --- | --- | --- | --- |
 | 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + the CE-cache retrofit + `make job-status`; the remaining four tools are still un-retrofitted | kill/resume and shard/merge equivalence tests | done (retrofit partial) |
-| 1.2 | Engine-level MultiHop-RAG | `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes | **done on the 400-query subset** — engine **+0.0535 MAP@10 [+0.0387, +0.0680]** over the harness hybrid, level with its reranker (+0.0071, ns), still below covquota 0.3280; full 2,255 owed |
+| 1.2 | Engine-level MultiHop-RAG | `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes | **done on the full 2,255 queries** — engine MAP@10 **0.3009** against the harness's 0.2510, **+0.0499 [+0.0432, +0.0566]**, +0.0772 Hits@4, +0.1060 Hits@10, all significant, and it replicates the subset's +0.0535. The first full run read 0.2216 against a **partial index** (fixed engine bug). Shipped-default path still owed |
 | 1.3 | Engine-level MuSiQue | `tools/engine_musique.py` | run `RagEngine` on the MuSiQue validation split under its own chunking, full corpus, queries optionally narrowed; pair MAP@10 against the harness by qid | the per-corpus bar is stated, not averaged | **done on 200 queries** — engine **−0.0097 MAP@10 [−0.0190, −0.0007]** vs the harness `fused`, and raising the pool to depth 100 moves it only +0.0019, so the MultiHop win does not travel and pool depth is not the cause |
 | 1.4 | Publish the harness-vs-engine delta | `tools/engine_vs_harness.py`, `docs/findings-engine-multihop.md`, `docs/FINDINGS.md` | paired comparison that re-derives the subset and refuses a mismatch; every MultiHop row labelled by which harness produced it | `make engine-multihop-compare` | done |
 
@@ -368,6 +368,15 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   target survives the change. `tools/engine_vs_harness.py` makes the pairing reproducible and
   refuses a mismatched subset. Still owed: the full 2,255 and the shipped default path. Suite
   **973 passed, 4 deselected**. Next: 1.3/1.4 remainder, then Phase 2.
+- 2026-10-04 — **Phase 1.2 completes on the full set, and it replicates.** The engine over all
+  **2,255** MultiHop answerable queries, corpus-aware 2,000-character chunking, `bge-small` hybrid,
+  no cross-encoder: MAP@10 **0.3009** against the 256-token harness's 0.2510 —
+  **+0.0499 [+0.0432, +0.0566]** — with Hits@4 **+0.0772**, Hits@10 **+0.1060** and MRR@10
+  **+0.0587**, every interval excluding zero. That matches the 400-query subset's +0.0535, so the
+  finding is not a sampling artefact. The first full run read **0.2216** — below the harness — and
+  the cause was a **partial index** missing `lexical.json`, reused because `has_index()` accepted
+  the dense half; that is a fixed engine bug with six tests. Suite **1066 passed, 5 deselected**.
+  Still owed: the shipped-default (Laya-encoder, dense-weight-zero) path.
 - 2026-10-03 — **Phase 1.3 done, and it falsifies the generalisation.** `tools/engine_musique.py`
   runs the engine on the full 21,098-paragraph MuSiQue validation corpus with only the queries
   narrowed (never the corpus — `tools/musique.py --limit-queries` shrinks the corpus too, which

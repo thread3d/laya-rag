@@ -50,12 +50,35 @@ Three readings:
    coverage-plus-quota bar of **0.3280**, so the multi-hop MAP@10 gap the roadmap's Phase 2
    targets is real at the engine level too — it is not an artefact of the harness.
 
+## Full set — 2,255 queries, and a defect it caught
+
+The subset above is now backed by the whole answerable set, run against a complete index:
+
+| metric | harness `hybrid` (2,255) | **engine (2,255)** | delta |
+| --- | --- | --- | --- |
+| MAP@10 | 0.2510 | **0.3009** | **+0.0499 [+0.0432, +0.0566]** |
+| Hits@4 | 0.6860 | **0.7632** | **+0.0772 [+0.0590, +0.0949]** |
+| Hits@10 | 0.8022 | **0.9082** | **+0.1060 [+0.0918, +0.1202]** |
+| MRR@10 | 0.5396 | **0.5983** | **+0.0587 [+0.0451, +0.0724]** |
+
+All four intervals exclude zero, and the full-set gain (+0.0499) matches the 400-query subset's
+(+0.0535) — **the result replicates**. The engine's MAP@10 is now 0.3009 on the full protocol
+without a cross-encoder, against the harness's 0.2510 and the coverage-plus-quota rule's 0.3192.
+
+**It did not replicate the first time.** The first full run reported MAP@10 **0.2216**, *below* the
+harness, which would have overturned this finding. The cause was not sampling: the two indexes'
+dense vectors are **byte-identical** (max abs diff `0.0`) and `index/engine-hybrid/` was missing
+`lexical.json`, because the run that built it was killed mid-save and the re-run reused it.
+`RagEngine.has_index()` accepted the dense half as complete, so every query silently degraded to
+dense-only recall. That is now a fixed engine bug with a test
+(`tests/test_index_completeness.py`), and it is why the full-set number had to be re-run with
+`--fresh`: jobkit's fingerprint covers a run's *settings*, not the index it was measured against.
+
 ## What this does not show
 
-- **Not the full set.** 400 of 2,255 queries (seed 17). The full engine run is ~2 hours
-  (3.1 s/query measured) and is the next long job; `make job-status` tracks it. The subset is the
-  same one the project's own bar is quoted on, so the comparison is like-for-like, but the
-  headline number is still a 400-query number.
+- **Not the shipped default path.** Both runs use `--embed-model bge-small` so the dense channel is
+  on; the engine's shipped default resolves Laya's encoder to a dense weight of zero and uses
+  lexical recall only, and that configuration is still unmeasured.
 - **Not that the engine's model is better.** The delta bundles the chunking change with the
   engine's channel wiring; the engine did not use a cross-encoder, coverage or a document quota
   here, so this is a statement about the *system under its own defaults* versus a replica of it.

@@ -98,8 +98,28 @@ def test_main_refuses_a_report_without_a_recorded_seed(tmp_path, monkeypatch):
         "queries": {"0": "q0"},
         "per_query": {},
     }))
-    with pytest.raises(SystemExit, match="limit/--sample-seed"):
+    with pytest.raises(SystemExit, match="must record its --sample-seed"):
         evh.main(["--engine", str(engine_path)])
+
+
+def test_main_accepts_a_full_set_report(tmp_path, capsys):
+    """A run with no `--limit` pairs over every answerable record, in order."""
+    items_path = tmp_path / "items.json"
+    items_path.write_text(json.dumps(_items(6, nulls=(1, 4))))
+    keys = ["0", "2", "3", "5"]
+    engine_path = tmp_path / "engine.json"
+    engine_path.write_text(json.dumps({
+        "_settings": {"limit": None, "sample_seed": None},
+        "queries": {k: f"q{k}" for k in keys},
+        "per_query": {k: {"metrics": {m: 1.0 for m in evh.METRICS}} for k in keys},
+    }))
+    harness_path = tmp_path / "harness.json"
+    harness_path.write_text(json.dumps({
+        "arm": {"_per_query": [{m: 0.0 for m in evh.METRICS} for _ in keys]}
+    }))
+    assert evh.main(["--engine", str(engine_path), "--harness", str(harness_path),
+                     "--arm", "arm", "--items", str(items_path)]) == 0
+    assert "paired over **4**" in capsys.readouterr().out
 
 
 def test_main_refuses_engine_keys_that_are_not_the_reconstructed_subset(tmp_path):

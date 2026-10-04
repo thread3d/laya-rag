@@ -34,16 +34,19 @@ ROOT_BENCH = ROOT / "eval" / "benchmarks" / "multihop-rag"
 METRICS = ("MAP@10", "Hits@4", "Hits@10", "MRR@10")
 
 
-def subset_keys(items: Sequence[Mapping[str, Any]], limit: int, sample_seed: int) -> list[str]:
-    """The engine's work keys for a `--limit/--sample-seed` subset, in report order.
+def subset_keys(items: Sequence[Mapping[str, Any]], limit: int | None,
+                sample_seed: int | None) -> list[str]:
+    """The engine's work keys for a run, in report order.
 
     Mirrors `engine_multihop.select_items`: sample *positions* in the answerable list, sort, and
-    keep each record's original index — which is the key the engine report records.
+    keep each record's original index — which is the key the engine report records. With no limit
+    (a full-set run) the keys are every answerable record, in order.
     """
     answerable = [(i, x) for i, x in enumerate(items) if x["question_type"] != "null_query"]
-    if limit >= len(answerable):
+    if not limit or limit >= len(answerable):
         return [str(i) for i, _ in answerable]
-    sampled = sorted(random.Random(sample_seed).sample(range(len(answerable)), limit))
+    seed = 17 if sample_seed is None else sample_seed
+    sampled = sorted(random.Random(seed).sample(range(len(answerable)), limit))
     return [str(answerable[p][0]) for p in sampled]
 
 
@@ -122,17 +125,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     settings = engine.get("_settings", {})
     limit = settings.get("limit")
     sample_seed = settings.get("sample_seed")
-    if not limit or sample_seed is None:
-        raise SystemExit("the engine report must be a --limit/--sample-seed subset run; "
-                         f"got limit={limit!r}, sample_seed={sample_seed!r}")
+    if limit and sample_seed is None:
+        raise SystemExit("a --limit engine run must record its --sample-seed so the same queries "
+                         f"can be reconstructed; got limit={limit!r}, sample_seed={sample_seed!r}")
     items = json.loads(Path(args.items).read_text(encoding="utf-8"))
     keys = subset_keys(items, limit, sample_seed)
 
     # Assert the pairing instead of trusting it: the report's own keys must be this subset.
     recorded = list(engine["queries"])
     if recorded != keys:
+        described = "full answerable set" if not limit else f"limit={limit} seed={sample_seed} subset"
         raise SystemExit(
-            f"the engine report's queries are not the limit={limit} seed={sample_seed} subset "
+            f"the engine report's queries are not the {described} "
             f"({len(recorded)} keys, first mismatch at "
             f"{next((n for n, (a, b) in enumerate(zip(recorded, keys)) if a != b), 'length')})"
         )
