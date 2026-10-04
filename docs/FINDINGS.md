@@ -67,6 +67,14 @@ are what stops the next pass from re-trying them.
 
 ## Method notes worth carrying forward
 
+- **Memoise the pure-Python stemmer.** `snowballstemmer` is implemented in Python and a corpus
+  repeats its words heavily — 6.2M tokens in a 20,000-document sample collapsed to **74,334 distinct
+  stems** — so the same token was being stemmed over and over. Caching by token took a lexical build
+  from **165.1 s to 5.5 s (30×, 39k → 1,131k tokens/s)** with byte-identical tokens, which turned a
+  ~54-minute corpus build into ~2 minutes. The memo is bounded by *vocabulary*, not corpus length, so
+  it does not reintroduce the unbounded accumulator the build was just cleaned of.
+
+
 - **Checkpoint before the marker, and verify on load.** A checkpoint written before its `.done` marker is
   untrusted if interrupted; a part *with* a marker but corrupt contents must still be re-read defensively,
   or a torn write is trusted forever. A test caught the second case in a change written to handle the first.

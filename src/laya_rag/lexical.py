@@ -53,6 +53,12 @@ B = 0.75
 # different terms; `LAYA_RAG_LEXICAL_STEM=true` turns it on. The setting is stored with
 # the index, so a query is always stemmed the way its corpus was.
 _stemmer: Any | None = None
+#: memo for `_stem_word`. `snowballstemmer` is pure Python and a corpus repeats its words
+#: heavily, so the same token is stemmed over and over: caching by token is what turns a
+#: 54-minute single-threaded build measured on a 382k-document corpus into a short one. The
+#: cache is bounded by the corpus *vocabulary*, not its length, and it cannot change a
+#: result — the stemmer is fixed to English and keyed by the exact token.
+_stem_cache: dict[str, str] = {}
 
 
 def _stem_word(token: str) -> str:
@@ -60,11 +66,16 @@ def _stem_word(token: str) -> str:
     global _stemmer
     if not token.isascii() or not token.isalpha():
         return token
+    cached = _stem_cache.get(token)
+    if cached is not None:
+        return cached
     if _stemmer is None:
         import snowballstemmer
 
         _stemmer = snowballstemmer.stemmer("english")
-    return _stemmer.stemWord(token)
+    stemmed = _stemmer.stemWord(token)
+    _stem_cache[token] = stemmed
+    return stemmed
 
 
 def tokenize(text: str, stem: bool = False) -> list[str]:
