@@ -35,6 +35,7 @@ are what stops the next pass from re-trying them.
 | BRIGHT retrieval | Six subsets, macro mean nDCG@10: hybrid **0.1436** > BM25 0.1324 > dense 0.0991; dense alone is significantly worse than BM25 on pony and biology | [findings-bright.md](findings-bright.md) |
 | Encoder distillation | The 3-model ensemble (478M) distils into one 33M `bge-small`: NFCorpus **0.3385 → 0.3505** (+0.0120 [+0.0022, +0.0216], significant), recovering ~29% of the ensemble's +0.0413 — adapted, not zero-shot | [findings-distillation.md](findings-distillation.md) |
 | Trust report | One deterministic, offline artefact (`make trust-report`, `--check` gates a change): **12 checks pass** — poison leak 0.20 → **0.00** at **zero** false refusals, tenant isolation and anonymous denial hold, a fabricated number and an injection marker are flagged; and the abstention gate halves the shipped scalar's false-accept rate at 80% coverage (**0.4069** vs 0.5099, AUC 0.8146 vs 0.5199) | [findings-trust-report.md](findings-trust-report.md) |
+| End-to-end pilot | The first `engine + <generator>` row: 12 answerable + 8 null records through the engine at shipped defaults with local `ornith-1.5:35b`. **EM 0.000 against gold-contained 0.667** on the same answers — prose against short entity golds — and **~36 s/query**, i.e. the full 2,255-record row is a ~22–25 h job on this host | [findings-endtoend-pilot.md](findings-endtoend-pilot.md) |
 
 ## Recorded negatives
 

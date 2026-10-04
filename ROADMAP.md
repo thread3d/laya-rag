@@ -251,11 +251,17 @@ solves the attribution problem.
 
 | # | item | change | falsify / signal | status |
 | --- | --- | --- | --- | --- |
-| 3.1 | FRAMES adapter | **new** `tools/frames.py`; 824 questions, ~0.5 MB, ships the Wikipedia links needed to build the corpus; report retrieval recall@k and exact-match accuracy with a **labelled** local generator | if the generator dominates the variance, report retrieval-only and say so | planned |
-| 3.2 | MultiHop answer accuracy + rejection | extend `tools/engine_multihop.py` under the benchmark's own answer protocol, judge labelled | the gate's rejection rate is reported beside accuracy, with the AUC and the transfer caveat | planned |
-| 3.3 | Citation precision/recall | `verify.py` over composed answers: does every cited span exist, and does the answer cite the evidence that supports it? | this is the engine's own number, not the generator's; ship only with a labelled corpus of composed answers | planned |
-| 3.4 | Cost axis | latency, throughput, peak RSS per query, index bytes/query, beside quality | makes "best per unit of compute" measurable rather than asserted | planned |
-| 3.5 | Publish the row | `BENCHMARKS.md` | replace "cannot be claimed" with the labelled row and its limits | planned |
+| 3.1 | FRAMES adapter | **new** `tools/frames.py`; 824 questions, ~0.5 MB, ships the Wikipedia links needed to build the corpus; report retrieval recall@k and exact-match accuracy with a **labelled** local generator | if the generator dominates the variance, report retrieval-only and say so | pending — at ~36 s/query the corpus download plus a full run is an `[llm]` job |
+| 3.2 | MultiHop answer accuracy + rejection | `tools/endtoend_multihop.py` at the engine's shipped defaults with a labelled local generator | the gate's rejection rate is reported beside accuracy, with the AUC and the transfer caveat | **done as a pilot** — 12 answerable + 8 null, `ornith-1.5:35b`; EM 0.000 against **gold-contained 0.667**, abstention 25% vs rejection 37.5% (n=20, not evidence) |
+| 3.3 | Citation precision/recall | `verify.py` over composed answers: does every cited span exist, and does the answer cite the evidence that supports it? | this is the engine's own number, not the generator's; ship only with a labelled corpus of composed answers | pending — the pilot records answers; scoring citation precision needs a labelled span set |
+| 3.4 | Cost axis | latency, throughput, peak RSS per query, index bytes/query, beside quality | makes "best per unit of compute" measurable rather than asserted | **partly done** — per-query seconds are recorded and extrapolate to **~22–25 h** for the full 2,255-record row; RSS and index bytes per query are still owed |
+| 3.5 | Publish the row | `BENCHMARKS.md`, `docs/findings-endtoend-pilot.md` | replace "cannot be claimed" with the labelled row and its limits | **partly done** — the pilot and its limits are written up; `BENCHMARKS.md`'s "no end-to-end row" line now needs the pilot linked once 3.2 is a full run |
+
+**Phase 3 verdict: the harness exists, the row is a pilot, and the blocker is the generator.** The
+first `engine + <model>` row is produced and labelled, and the two things it establishes are that
+(a) EM against short entity golds is the wrong metric for a prose answer — 0.000 EM beside a 0.667
+containment rate on the same answers — and (b) at **~36 s/query** the full 2,255-record row is a
+22–25 h job on this host, so it belongs in the external list rather than the local one.
 
 ---
 
@@ -437,3 +443,13 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   the output: the first full run silently **resumed a smoke run's checkpoint** — step checkpoints
   now carry a jobkit fingerprint and refuse a mismatch. Suite **1045 passed, 5 deselected**. Next:
   Phase 3 (an end-to-end row; Ollama is running on this host).
+- 2026-10-04 — **Phase 3.2 done as a pilot, and the cost is the finding.** `tools/endtoend_multihop.py`
+  runs the engine at its **shipped defaults** (gates active, so abstention is a decision) and composes
+  only when it chooses to answer, reusing the Phase 1.2 index so the retrieval half is the measured
+  system. 12 answerable + 8 null records with local `ornith-1.5:35b`: **EM 0.000, F1 0.026, gold
+  contained 0.667** on the same nine answers — prose against short entity golds, so any end-to-end row
+  must report containment or a judge and not EM alone. Abstention 25% on answerables against 37.5% on
+  nulls, which on n=20 is consistent with the properly measured 30.9%/28.7% and is not evidence. The
+  decisive number is **~36 s/query**, extrapolating the full 2,255-record row to **22–25 h** on this
+  host, so the remainder of Phase 3 (FRAMES, citation precision, RSS/index cost) is an `[llm]` job.
+  Suite **1053 passed, 5 deselected**.
