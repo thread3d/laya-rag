@@ -176,7 +176,7 @@ already shown to overstate the engine by **0.0144**.
 | --- | --- | --- | --- | --- | --- |
 | 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + the CE-cache retrofit + `make job-status`; the remaining four tools are still un-retrofitted | kill/resume and shard/merge equivalence tests | done (retrofit partial) |
 | 1.2 | Engine-level MultiHop-RAG | `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes | **done, full 2,255 in both configurations** — shipped default MAP@10 **0.3128** (**+0.0618 [+0.0547, +0.0688]** over the harness hybrid) and `bge-small` hybrid **0.3009** (+0.0499); the dense channel is a measured trade, costing 0.0119 MAP@10 and 0.0187 MRR to leave off. The first full run read 0.2216 against a **partial index** (fixed engine bug) |
-| 1.3 | Engine-level MuSiQue | `tools/engine_musique.py` | run `RagEngine` on the MuSiQue validation split under its own chunking, full corpus, queries optionally narrowed; pair MAP@10 against the harness by qid | the per-corpus bar is stated, not averaged | **done on 200 queries, both configurations** — hybrid **−0.0097 MAP@10 [−0.0190, −0.0007]** vs the harness `fused` (pool depth not the cause, +0.0019 at depth 100); the shipped default is a further **−0.0540 [−0.0718, −0.0363]** below the hybrid, so the dense channel **reverses** between corpora (hurts on MultiHop, helps here). Full 2,417 owed |
+| 1.3 | Engine-level MuSiQue | `tools/engine_musique.py` | run `RagEngine` on the MuSiQue validation split under its own chunking, full corpus, queries optionally narrowed; pair MAP@10 against the harness by qid | the per-corpus bar is stated, not averaged | **both configurations done on 200 queries**; the **full 2,417 hybrid run is in flight at 525/2417** (checkpointed, complete index, resumes on re-run). Hybrid **−0.0097 MAP@10 [−0.0190, −0.0007]** vs the harness `fused` on 200 (pool depth not the cause, +0.0019 at depth 100); the shipped default is a further **−0.0540 [−0.0718, −0.0363]** below the hybrid, so the dense channel **reverses** between corpora |
 | 1.4 | Publish the harness-vs-engine delta | `tools/engine_vs_harness.py`, `docs/findings-engine-multihop.md`, `docs/FINDINGS.md` | paired comparison that re-derives the subset and refuses a mismatch; every MultiHop row labelled by which harness produced it | `make engine-multihop-compare` | done |
 
 **Gate:** no Phase 2 result is quoted against the engine until 1.2 has a report under `eval/`.
@@ -416,6 +416,20 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   cost *and* on MAP@10 (0.3128 against 0.3009) — there is no trade to make — and the ~7 GiB is
   Laya's 322M decision head, not the retriever. Suite **1085 passed, 5 deselected**. Still owed:
   the full 2,417 MuSiQue runs and Phase 4.
+- 2026-10-04 — **The full MuSiQue run is checkpointed mid-flight at 525/2417.** It was stopped
+  deliberately rather than left running: the query rate degraded from 3.3 to **4.2 s/query** as the
+  run progressed, putting the remaining 1,892 queries at roughly two more hours, and the jobkit
+  checkpoint means **no work is lost**. `index/engine-musique/engine-hybrid/` holds all three
+  artifacts (`index.json`, `lexical.json`, `vectors.npy`), so a re-run resumes scoring without
+  re-indexing:
+
+  ```sh
+  make engine-musique ENGINE_MUSIQUE_ARGS="--embed-model BAAI/bge-small-en-v1.5 \
+      --out eval/benchmarks/musique/engine-hybrid"
+  ```
+
+  `make job-status` shows `running 525/2417`; a `running` manifest is never a quotable number, and
+  the report is not written until the run is whole.
 - 2026-10-03 — **Phase 1.3 done, and it falsifies the generalisation.** `tools/engine_musique.py`
   runs the engine on the full 21,098-paragraph MuSiQue validation corpus with only the queries
   narrowed (never the corpus — `tools/musique.py --limit-queries` shrinks the corpus too, which
