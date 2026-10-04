@@ -88,6 +88,33 @@ def recall_at_k(approximate: np.ndarray, exact: np.ndarray, k: int) -> float:
     return hits / (len(exact) * k)
 
 
+def rescored_search(index: Any, vectors: np.ndarray, queries: np.ndarray, k: int,
+                    candidates: int) -> np.ndarray:
+    """An ANN candidate list, re-ranked by exact inner product on the fp32 vectors.
+
+    This is the shape the engine uses: a quantized index proposes candidates and the exact
+    vectors — mmapped, so not resident — decide the order. Without the rescore the order is
+    whatever the compressed codes said, which is where quantized search loses its recall.
+
+    ``index`` is anything exposing faiss's ``search(queries, n) -> (scores, ids)``.
+    """
+    _, ids = index.search(queries, candidates)
+    out = np.full((len(queries), k), -1, dtype=np.int64)
+    for row_index, (query, candidate_ids) in enumerate(zip(queries, ids)):
+        keep = np.asarray([i for i in candidate_ids if i >= 0], dtype=np.int64)
+        if not len(keep):
+            continue
+        order = np.argsort(-(vectors[keep] @ query))
+        selected = keep[order][:k]
+        out[row_index, : len(selected)] = selected
+    return out
+
+
+def pq_index_mb(count: int, m: int, nlist: int, dim: int) -> float:
+    """PQ codes plus the coarse quantiser's centroids — the index, not the vectors."""
+    return round((count * m + nlist * dim * 4) / 1e6, 1)
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="ann_bench.py", description="ANN vs exhaustive at scale")
     parser.add_argument("--sizes", default="10000,100000,1000000")
@@ -97,6 +124,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--clusters", type=int, default=2000)
     parser.add_argument("--out", default=str(ROOT / "eval" / "ann-bench"))
     parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument("--pq-m", type=int, default=48,
+                        help="PQ sub-quantisers: bytes per vector in the index")
+    parser.add_argument("--pq-nbits", type=int, default=8)
+    parser.add_argument("--pq-candidates", default="10,50,100",
+                        help="candidate list sizes the fp32 rescore is measured at")
+    parser.add_argument("--pq-nprobe", type=int, default=8,
+                        help="IVF cells probed for the PQ arm; the candidate set's recall is "
+                             "bounded by this, and the rescore can only reorder what it receives")
     return parser.parse_args(argv)
 
 
@@ -153,8 +188,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         row["hnsw_ms_per_query"] = round(1000 * seconds, 3)
         row["hnsw_speedup_vs_exhaustive"] = round(exact_seconds / max(seconds, 1e-9), 1)
 
+        # IVF-PQ with an fp32 rescore: the index holds `pq_m`-byte codes instead of the
+        # 1.5 KB vectors, and the exact order is restored from the vectors themselves --
+        # which the engine keeps mmapped and therefore non-resident. This is the arm the
+        # scale claim rests on: how much index shrinks, and what recall that costs.
+        ivfpq = faiss.IndexIVFPQ(faiss.IndexFlatIP(args.dim), args.dim, nlist,
+                                 args.pq_m, args.pq_nbits, faiss.METRIC_INNER_PRODUCT)
+        started = time.perf_counter()
+        ivfpq.train(vectors)
+        ivfpq.add(vectors)
+        row["ivfpq_build_s"] = round(time.perf_counter() - started, 2)
+        row["ivfpq_m"] = args.pq_m
+        row["ivfpq_index_mb"] = pq_index_mb(count, args.pq_m, nlist, args.dim)
+        row["ivfpq_bytes_per_vector"] = args.pq_m
+        row["ivfpq_nprobe"] = args.pq_nprobe
+        ivfpq.nprobe = args.pq_nprobe
+        for candidates in (int(v) for v in str(args.pq_candidates).split(",") if v.strip()):
+            result, seconds = time_queries(
+                lambda q: rescored_search(ivfpq, vectors, q, args.k, candidates), queries
+            )
+            row[f"ivfpq_rescore{candidates}_recall@{args.k}"] = round(
+                recall_at_k(result, exact, args.k), 4)
+            row[f"ivfpq_rescore{candidates}_ms"] = round(1000 * seconds, 3)
         rows.append(row)
-        del vectors, flat, ivf, hnsw
+        del vectors, flat, ivf, hnsw, ivfpq
         print(f"  {count} vectors done", flush=True)
 
     out = Path(args.out)

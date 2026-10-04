@@ -270,7 +270,7 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 | 4.2 | The 13 remaining BEIR datasets | `[data]` disk | build sequentially, one dataset at a time; record mirror stubs as blocked rather than skipped silently | full BEIR-18 average, stated with its dataset list | **in progress — 6 of 18.** `quora` measured (bm25-engine 0.7689, dense 0.8876, fused 0.8629; the fused mean moves **0.4515 → 0.5201**, so the membership is recorded with it). `webis-touche2020` **downloaded and extracted** (702 MB) but **not evaluated**: the lexical pass over 382k long documents is single-threaded and the 382k-document embedding is still ahead, so it was stopped rather than left running; a re-run skips the fetch. `specter`/`signal1m` are **404 on this mirror**; Robust04/TREC-NEWS still stubs; BioASQ/FEVER/NQ await Phase 4.1 |
 | 4.3 | Multi-corpus distillation | `[model]` | extend `tools/finetune.py` / `distill_eval.py` beyond NFCorpus (where the 33M student already recovers **~29%** of the 478M ensemble, 0.3385 → 0.3505); package in SentenceTransformers format; upload | the packaged student beats zero-shot on every training corpus, or the artefact is not shipped | planned |
 | 4.4 | MTEB submission | network, external | the leaderboard wants a **model**, and one is now packageable; submit the distilled encoder | an external row with the model card's measured numbers | external |
-| 4.5 | ANN quality at scale | `[offline]` | `index_store.py`/`ondisk.py`: verify IVF+PQ / RaBitQ recall against exact at 1M+ with fp32 rescore | recall retained and RSS reduced, measured not cited | planned |
+| 4.5 | ANN quality at scale | `tools/ann_bench.py`, `make ann-bench` | verify IVF+PQ recall against exact at 1M+ with fp32 rescore | recall retained and index reduced, measured not cited | **done at 1M** — IVF-PQ (m=48) is **49.5 MB against the flat index's 1,536 MB (31× smaller, 48 B/vector)** and, with `nprobe=32` and **500 candidates rescored**, retains **recall@10 0.998** at 0.51 ms against the exhaustive scan's 10.45 ms (1.000 at 1,000 candidates, 0.838 ms). **The candidate set, not the rescore, is the constraint**: at `nprobe=8`/100 candidates recall is only 0.37–0.41, and a fixed `nprobe` is not scale-invariant |
 
 **Do not** chase MTEB nDCG@10 with a 33M encoder against API-scale models. 4.4 is about having a
 submittable artefact and a full-dataset average, not about winning the top row.
@@ -452,6 +452,17 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   answerable ones — the deterministic verifier catching a fabricated quotation on exactly the
   questions the corpus could not answer, with no weights and no thresholds. The null side is 2
   quotes, so that is recorded as a direction rather than a rate. Suite **1100 passed, 5 deselected**.
+- 2026-10-04 — **Phase 4.5 done: quantized ANN at 1M, and the knob is not the reranker.** IVF-PQ
+  (`m=48`) holds **49.5 MB against the flat index's 1,536 MB** — 31× smaller, 48 bytes per vector
+  instead of 1,536 — and with `nprobe=32` and **500 candidates rescored by the fp32 vectors** it
+  retains **recall@10 0.998 at 0.51 ms/query** against the exhaustive scan's 10.45 ms (1.000 at
+  1,000 candidates). The first run told a worse story and is recorded because it is the mistake the
+  design invites: at `nprobe=8` with 100 candidates, recall is only **0.370** — a rescore can only
+  reorder what it is given, and the PQ codes had ranked the true neighbours out of the candidate
+  list. So the tuning knob is the **candidate set**, and a fixed `nprobe` is not scale-invariant
+  (`nlist` grows with √n, so the same setting scores 0.646 / 1.000 / 0.370 at 10k / 100k / 1M).
+  Synthetic vectors, so the mechanics and the arithmetic are established rather than a corpus
+  recall. Suite **1106 passed, 5 deselected**.
 - 2026-10-04 — **Phase 1 complete: the full MuSiQue run finished and confirms the subset.** All
   2,417 validation queries, engine hybrid: MAP@10 **0.3761** against the harness `fused`'s 0.3852,
   **−0.0091 [−0.0120, −0.0062]** — the 200-query subset read −0.0097, so the finding replicates.
