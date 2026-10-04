@@ -251,7 +251,7 @@ solves the attribution problem.
 | 3.1 | FRAMES adapter | **new** `tools/frames.py`; 824 questions, ~0.5 MB, ships the Wikipedia links needed to build the corpus; report retrieval recall@k and exact-match accuracy with a **labelled** local generator | if the generator dominates the variance, report retrieval-only and say so | pending — at ~36 s/query the corpus download plus a full run is an `[llm]` job |
 | 3.2 | MultiHop answer accuracy + rejection | `tools/endtoend_multihop.py` at the engine's shipped defaults with a labelled local generator | the gate's rejection rate is reported beside accuracy, with the AUC and the transfer caveat | **done as a pilot** — 12 answerable + 8 null, `ornith-1.5:35b`; EM 0.000 against **gold-contained 0.667**, abstention 25% vs rejection 37.5% (n=20, not evidence) |
 | 3.3 | Citation precision/recall | `verify.py` over composed answers: does every cited span exist, and does the answer cite the evidence that supports it? | this is the engine's own number, not the generator's; ship only with a labelled corpus of composed answers | pending — the pilot records answers; scoring citation precision needs a labelled span set |
-| 3.4 | Cost axis | latency, throughput, peak RSS per query, index bytes/query, beside quality | makes "best per unit of compute" measurable rather than asserted | **partly done** — per-query seconds are recorded and extrapolate to **~22–25 h** for the full 2,255-record row; RSS and index bytes per query are still owed |
+| 3.4 | Cost axis | `tools/cost_report.py`, `make cost-report` | latency, throughput, peak RSS per query, index bytes/query, beside quality | **done** — against an existing index, the shipped default is **1.66 s mean / 2.14 s p95 / 0.60 q/s**, peak RSS **7.0 GiB**, index 31.2 MiB (7,132 B/chunk); the hybrid is 1.88 s / 2.41 s / 0.53 q/s at 7.8 GiB. The default wins on cost **and** MAP@10 here, and the ~7 GiB is Laya's decision head rather than the retriever |
 | 3.5 | Publish the row | `BENCHMARKS.md`, `README.md` | replace "cannot be claimed" with the labelled row and its limits | **done for the pilot** — both claim documents now describe the pilot, its EM-versus-containment trap, and the 22–25 h full-run cost, and no longer say "no end-to-end benchmark has been run" |
 
 **Phase 3 verdict: the harness exists, the row is a pilot, and the blocker is the generator.** The
@@ -407,6 +407,15 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   untouched and the existing adjudication tests pass unchanged; nine tests pin the states. **Owed:**
   the ~300 hand-labelled pairs and a no-coverage recall — the demonstration is three constructed
   claims, not a labelled evaluation. Suite **1076 passed, 5 deselected**.
+- 2026-10-04 — **Phase 3.4 done: the cost axis, which is the axis this project can win.**
+  `make cost-report` measures latency, throughput, peak RSS and index bytes against an **existing**
+  index, so nothing is rebuilt and the system measured is the one the quality numbers describe.
+  MultiHop-RAG, 4,592 chunks, 60 timed queries after warm-up: the **shipped default** is
+  **1.66 s mean / 2.14 s p95 / 0.60 q/s**, peak RSS **7.0 GiB**, index **31.2 MiB** (7,132 B/chunk);
+  the **hybrid** is 1.88 s / 2.41 s / 0.53 q/s at 7.8 GiB. So on this corpus the default wins on
+  cost *and* on MAP@10 (0.3128 against 0.3009) — there is no trade to make — and the ~7 GiB is
+  Laya's 322M decision head, not the retriever. Suite **1085 passed, 5 deselected**. Still owed:
+  the full 2,417 MuSiQue runs and Phase 4.
 - 2026-10-03 — **Phase 1.3 done, and it falsifies the generalisation.** `tools/engine_musique.py`
   runs the engine on the full 21,098-paragraph MuSiQue validation corpus with only the queries
   narrowed (never the corpus — `tools/musique.py --limit-queries` shrinks the corpus too, which
