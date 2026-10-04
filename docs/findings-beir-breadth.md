@@ -42,8 +42,11 @@ configure globally.
 
 ## What this does not show
 
-- **Not the 18-dataset average.** Six of eighteen. Robust04 and TREC-NEWS return stubs on this
-  mirror, `specter` and `signal1m` are not served, and the largest (BioASQ 14.9M, FEVER 5.4M,
+- **Not the 18-dataset average.** Six of eighteen. `webis-touche2020` is **downloaded and extracted**
+  (702 MB, 382,545 documents, 49 scored queries) but not evaluated: its lexical pass is
+  single-threaded over long documents and the 382k-document embedding is still ahead, so it was
+  stopped rather than left running — a re-run skips the fetch. `specter` and `signal1m` are **404 on
+  this mirror**, Robust04 and TREC-NEWS return stubs, and the largest (BioASQ 14.9M, FEVER 5.4M,
   NQ 2.7M) are past the ingestion work in Phase 4.1.
 - **Not an ensemble row.** The three-model dense ensemble is not extended to quora; only the
   shipped single-encoder configuration is.
