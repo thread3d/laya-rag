@@ -45,12 +45,18 @@ ENGINE_MUSIQUE_COMPARE_ARGS ?=
 ORDERING_ARGS ?=
 STANCE_ARGS ?=
 TRUST_ARGS ?=
+ORDER_TRAIN_ARGS ?=
+ORDER_EVAL_ARGS ?=
+ORDER_CE_BASE ?= cross-encoder/ms-marco-MiniLM-L-6-v2
+ORDER_CE_ADAPTED ?= eval/order-ce-musique
+ORDER_ZERO_SHOT_REPORT ?= eval/benchmarks/musique/order-zero-shot
+ORDER_ADAPTED_REPORT ?= eval/benchmarks/musique/order-adapted
 ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 JOB_STATUS_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -94,6 +100,8 @@ help:
 	@echo "multihop-ordering  late interaction as an ordering head over the cached pool"
 	@echo "arguana-stance  NLI contradiction-entailment reranking on ArguAna"
 	@echo "trust-report  one deterministic report: poisoning, verification, abstention"
+	@echo "order-train  adapt a cross-encoder on MuSiQue's own relevance conventions (2.2)"
+	@echo "order-eval-zero-shot / order-eval-adapted / order-compare  the adapted-vs-zero-shot test"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -310,6 +318,23 @@ arguana-stance:
 # Phase 5.1: the deterministic trust surfaces in one report. `TRUST_ARGS="--check"` gates a change.
 trust-report:
 	OMP_NUM_THREADS=16 $(PY) tools/trust_report.py $(TRUST_ARGS)
+
+# ROADMAP 2.2: mine pairs from MuSiQue's train split and adapt a cross-encoder on them.
+order-train:
+	OMP_NUM_THREADS=16 $(PY) tools/order_train.py $(ORDER_TRAIN_ARGS)
+
+# The same architecture zero-shot and adapted, over the same MuSiQue pool, then paired.
+order-eval-zero-shot:
+	OMP_NUM_THREADS=16 $(PY) tools/order_eval.py --cross-encoder $(ORDER_CE_BASE) \
+		--out $(ORDER_ZERO_SHOT_REPORT) $(ORDER_EVAL_ARGS)
+
+order-eval-adapted:
+	OMP_NUM_THREADS=16 $(PY) tools/order_eval.py --cross-encoder $(ORDER_CE_ADAPTED) \
+		--out $(ORDER_ADAPTED_REPORT) $(ORDER_EVAL_ARGS)
+
+order-compare:
+	$(PY) tools/order_eval.py --compare-against $(ORDER_ZERO_SHOT_REPORT).json \
+		--out $(ORDER_ADAPTED_REPORT)
 
 # Does a learned gate threshold or a fitted temperature beat the fixed 0.5 and raw score?
 gate-calibration:

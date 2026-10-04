@@ -215,10 +215,19 @@ training run or a model download.
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
 | 2.1 | Late interaction done properly | `[model]` (~130 MB, MPS) | `answerai-colbert-small-v1` (33M) MaxSim over the cached pool, plus a recall-fixed arm that reorders the CE's own top-10; `tools/multihop_ordering.py` | beats covquota **0.3280** with a paired CI | **done, negative** — MaxSim is below even the unordered `fused` first stage (−0.0430 MAP@10), and reordering the CE's own top-10 still costs −0.0257, so the +0.1254 ordering headroom is not reachable by this instrument |
-| 2.2 | Train on bridge conventions | `[model]` GPU-preferred | cross-encoder trained on multi-hop pairs mined from *train* splits (MuSiQue / 2Wiki / HotpotQA), positives from gold facts, hard negatives from the pool — not MS MARCO points; `tools/order_train.py` | held-out MAP@10 over the trained vs zero-shot ranker; label the result **adapted** | planned |
+| 2.2 | Train on bridge conventions | `[model]` MPS | cross-encoder adapted on pairs mined from the MuSiQue **train** split — positives from gold supporting paragraphs, negatives as same-record distractors; `tools/order_train.py` + `tools/order_eval.py` | held-out MAP@10 over the adapted vs zero-shot ranker; label the result **adapted** | **done, negative** — the adapted model is **worse than its own zero-shot base** on MAP@10 (−0.0334 [−0.0395, −0.0273]), Hits@4 and MRR, and below plain `fused` on MAP@10 and MRR |
 | 2.3 | Route by relation | `[model]` (~180 MB) | `cross-encoder/nli-deberta-v3-base` scored as `P(contradiction) − P(entailment)` over the dense pool; `tools/arguana_stance.py` | ArguAna recovers toward the dense 0.596 without losing BEIR-5; loses to BM25 → hypothesis wrong | **done, negative** — nDCG@10 **0.3767 vs the dense order's 0.6467** (−0.2700 [−0.2921, −0.2474]), below BM25's ~0.417, so the roadmap's own falsification criterion fires |
-| 2.4 | Listwise fallback | `[dep]` | `jina-reranker-v3` is **CC BY-NC 4.0, non-commercial** — reproduce on the five sets + MultiHop before believing any self-reported row | if it does not beat 2.2 on this host, drop it | planned |
-| 2.5 | Report ordering vs signal vs selection | `docs/findings-ordering-head.md` | state each new rule's number against the decomposition, so an ordering gain is never read as a recall gain | — | done for 2.1 |
+| 2.4 | Listwise fallback | `[dep]` | `jina-reranker-v3` is **CC BY-NC 4.0, non-commercial** | if it does not beat 2.2 on this host, drop it | **not adopted, on licence** — a non-commercial 0.6B model is not a shippable dependency for this project, and Phase 2.2's negative removes the reason to spend the reproduction budget. Recorded as a decision, not a measurement |
+| 2.5 | Report ordering vs signal vs selection | `docs/findings-ordering-head.md`, `docs/findings-relational-rerank.md`, `docs/findings-adapted-scorer.md` | state each new rule's number against the decomposition, so an ordering gain is never read as a recall gain | — | done |
+
+**Phase 2 verdict: negative, and coherently so.** All three ordering heads tested — topical late
+interaction (2.1), relational NLI (2.3), and a cross-encoder adapted on the corpus's own train split
+(2.2) — lose to the existing first-stage-plus-coverage rule, and two of the three lose to the
+simplest baseline available. The **+0.1254** ordering headroom the decomposition measures is real,
+but none of these instruments reaches it. Two of the three also repeat the project's oldest prior:
+the failures are "use a stronger borrowed model or objective", the wins are "change the objective
+or the routing". What is *not* falsified: cross-corpus training, hard negatives mined from the
+retrieval pool, a pairwise/listwise objective, or a GPU-scale run — see the per-finding write-ups.
 
 **Do not retry:** any pointwise MS MARCO reranker at depth 100 (loss on all five BEIR datasets;
 ArguAna 0.568 → 0.250), full-split fine-tuning with naive mined negatives (below zero-shot),
@@ -227,8 +236,10 @@ late-interaction reranker** — `answerai-colbert-small-v1` MaxSim is below the 
 first stage on MultiHop-RAG and makes the CE's own top-10 worse when it only reorders it
 (Phase 2.1, `docs/findings-ordering-head.md`) — or a **relational NLI stance score as a
 replacement** for similarity on ArguAna, which is worse than the dense order it reorders and
-below BM25 (Phase 2.3, `docs/findings-relational-rerank.md`). Both negatives point the same way:
-the next ordering head must be trained on this task's own relevance conventions, not borrowed.
+below BM25 (Phase 2.3, `docs/findings-relational-rerank.md`), or **adapting a cross-encoder on the
+corpus's own train pairs**, which loses to its own zero-shot base and to the plain first stage
+(Phase 2.2, `docs/findings-adapted-scorer.md`). All three point the same way: on this task the
+ordering headroom is not reachable by these instruments.
 
 ---
 
@@ -414,3 +425,15 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   at 80% coverage **0.4069 vs 0.5099**, ECE 0.065 vs 0.271. It aggregates existing tools and
   re-measures nothing, which the write-up says plainly. Suite **1034 passed, 5 deselected**. Next:
   2.2 (the data path exists — `tools/fetch_musique.py --split train`), then Phase 3.
+- 2026-10-04 — **Phase 2.2 done, negative; Phase 2 is complete.** Adapted
+  `cross-encoder/ms-marco-MiniLM-L-6-v2` on 20,000 pairs mined from 4,000 MuSiQue train queries
+  (gold supporting paragraphs as positives, same-record distractors as negatives; 594 steps,
+  held-out loss 0.1813) and evaluated it against its own zero-shot base over the same validation
+  pool: MAP@10 **0.4035 → 0.3701** (**−0.0334 [−0.0395, −0.0273]**), Hits@4 −0.0236, MRR@10
+  −0.0635, and the adapted model is below plain `fused` on MAP@10 (−0.0151) and MRR (−0.0313).
+  `fused` reproduces the harness's 0.3852 exactly, so the evaluator is faithful. **All three
+  Phase 2 ordering heads are now falsified** (topical late interaction, relational NLI, adapted
+  cross-encoder); 2.4 is not adopted on licence (CC BY-NC). Also fixed a real trainer bug found in
+  the output: the first full run silently **resumed a smoke run's checkpoint** — step checkpoints
+  now carry a jobkit fingerprint and refuse a mismatch. Suite **1045 passed, 5 deselected**. Next:
+  Phase 3 (an end-to-end row; Ollama is running on this host).
