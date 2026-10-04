@@ -250,7 +250,7 @@ solves the attribution problem.
 | --- | --- | --- | --- | --- |
 | 3.1 | FRAMES adapter | **new** `tools/frames.py`; 824 questions, ~0.5 MB, ships the Wikipedia links needed to build the corpus; report retrieval recall@k and exact-match accuracy with a **labelled** local generator | if the generator dominates the variance, report retrieval-only and say so | pending — at ~36 s/query the corpus download plus a full run is an `[llm]` job |
 | 3.2 | MultiHop answer accuracy + rejection | `tools/endtoend_multihop.py` at the engine's shipped defaults with a labelled local generator | the gate's rejection rate is reported beside accuracy, with the AUC and the transfer caveat | **done as a pilot** — 12 answerable + 8 null, `ornith-1.5:35b`; EM 0.000 against **gold-contained 0.667**, abstention 25% vs rejection 37.5% (n=20, not evidence) |
-| 3.3 | Citation precision/recall | `verify.py` over composed answers: does every cited span exist, and does the answer cite the evidence that supports it? | this is the engine's own number, not the generator's; ship only with a labelled corpus of composed answers | pending — the pilot records answers; scoring citation precision needs a labelled span set |
+| 3.3 | Citation precision/recall | `tools/citation_report.py`, `make citation-report` | `verify.py` over composed answers: does every cited span exist, and does the answer cite the evidence that supports it? | this is the engine's own number, not the generator's | **done on the pilot's 14 answers** — **no answer meets the deterministic citation bar**, dominated by **39 of 81 sentences carrying no citation**; and quote validity is **0/2 on the null records against 20/23 (0.870) on the answerable ones**, so the verifier catches fabricated quotes where the corpus had nothing to quote. The null side is 2 quotes, recorded as a direction rather than a rate |
 | 3.4 | Cost axis | `tools/cost_report.py`, `make cost-report` | latency, throughput, peak RSS per query, index bytes/query, beside quality | **done** — against an existing index, the shipped default is **1.66 s mean / 2.14 s p95 / 0.60 q/s**, peak RSS **7.0 GiB**, index 31.2 MiB (7,132 B/chunk); the hybrid is 1.88 s / 2.41 s / 0.53 q/s at 7.8 GiB. The default wins on cost **and** MAP@10 here, and the ~7 GiB is Laya's decision head rather than the retriever |
 | 3.5 | Publish the row | `BENCHMARKS.md`, `README.md` | replace "cannot be claimed" with the labelled row and its limits | **done for the pilot** — both claim documents now describe the pilot, its EM-versus-containment trap, and the 22–25 h full-run cost, and no longer say "no end-to-end benchmark has been run" |
 
@@ -442,6 +442,16 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   update the write-up with it. **Owed:** the ~200 hand-labelled composed answers; this set is
   constructed, and the number must not be quoted as if it were that. Suite **1092 passed,
   5 deselected**.
+- 2026-10-04 — **Phase 3.3 done: the engine's half of the end-to-end row, measured.** `make
+  citation-report` re-retrieves the evidence for the pilot's 14 composed answers (deterministically,
+  so it is the evidence the generator saw) and runs `verify.py` over them. **No answer meets the
+  deterministic citation bar**, and the dominant cause is uncited sentences rather than wrong ones:
+  **39 of 81 sentences carry no citation** — 22 of 52 on answerable records, 17 of 29 on nulls. The
+  sharper result is quote validity: **0 of 2 quotes on the null `null_query` records** were in the
+  evidence (one fabricated, one taken from the question), against **20 of 23 (0.870)** on the
+  answerable ones — the deterministic verifier catching a fabricated quotation on exactly the
+  questions the corpus could not answer, with no weights and no thresholds. The null side is 2
+  quotes, so that is recorded as a direction rather than a rate. Suite **1100 passed, 5 deselected**.
 - 2026-10-04 — **Phase 1 complete: the full MuSiQue run finished and confirms the subset.** All
   2,417 validation queries, engine hybrid: MAP@10 **0.3761** against the harness `fused`'s 0.3852,
   **−0.0091 [−0.0120, −0.0062]** — the 200-query subset read −0.0097, so the finding replicates.
