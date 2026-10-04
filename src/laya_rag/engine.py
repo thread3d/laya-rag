@@ -465,13 +465,27 @@ class RagEngine:
         return self._index
 
     def has_index(self) -> bool:
+        """Whether a *complete* index is on disk.
+
+        The lexical artifact counts as part of the index. A build killed between saving the dense
+        vectors and saving the lexical postings leaves a directory with the dense half only, and
+        treating that as complete silently degrades every later query to dense-only recall — the
+        engine warns at query time, but by then the measurement is already wrong. A partial index
+        must be rebuilt, so this returns False for one.
+        """
         if self._index is not None:
             return True
         if self.config.resolved_index_backend == "ondisk":
-            from .ondisk import DENSE_DIRNAME, OnDiskVectorIndex
+            from .ondisk import BM25_DIRNAME, DENSE_DIRNAME, OnDiskBM25, OnDiskVectorIndex
 
-            return OnDiskVectorIndex.exists_on_disk(self.config.index_dir / DENSE_DIRNAME)
-        return VectorIndex.exists_on_disk(self.config.index_dir)
+            if not OnDiskVectorIndex.exists_on_disk(self.config.index_dir / DENSE_DIRNAME):
+                return False
+            return OnDiskBM25.exists_on_disk(self.config.index_dir / BM25_DIRNAME)
+        if not VectorIndex.exists_on_disk(self.config.index_dir):
+            return False
+        if self.config.resolved_lexical_backend == "eager":
+            return (self.config.index_dir / EAGER_LEXICAL_FILE).is_file()
+        return (self.config.index_dir / LEXICAL_FILE).is_file()
 
     @property
     def lexical(self) -> Any | None:
