@@ -46,6 +46,35 @@ Three readings:
    (0.4634) and `covquota-3.7` (0.4529) on this subset, and below `fused` and `blend-0.75`. So
    the second stage is not what the harness is winning with — its first stage is.
 
+## The dense channel helps here and hurts on MultiHop-RAG
+
+The same 200 queries with **no `--embed-model`** — Laya's encoder resolving to a dense weight of
+zero, so recall is lexical only, which is what the engine ships:
+
+| metric | engine hybrid | **engine default** | delta |
+| --- | --- | --- | --- |
+| MAP@10 | 0.4695 | 0.4156 | **−0.0540 [−0.0718, −0.0363]** |
+| Hits@4 | 0.9150 | 0.8650 | **−0.0500 [−0.0950, −0.0050]** |
+| Hits@10 | 0.9600 | 0.9050 | **−0.0550 [−0.0900, −0.0250]** |
+| MRR@10 | 0.8417 | 0.7687 | **−0.0730 [−0.1059, −0.0415]** |
+
+Every interval excludes zero, and the default is also **−0.0656 [−0.0863, −0.0456]** MAP@10 below
+the harness's fused first stage on the same queries.
+
+So the dense channel's contribution **reverses between corpora**, measured at the engine level on
+the same protocol:
+
+| corpus | leaving the dense channel off | reading |
+| --- | --- | --- |
+| MultiHop-RAG (2,255) | **+0.0119 MAP@10** [+0.0061, +0.0180] | dense **hurts** — the shipped default is the better configuration |
+| MuSiQue (200) | **−0.0540 MAP@10** [−0.0718, −0.0363] | dense **helps**, substantially |
+
+That is not a contradiction; it is the same shape as the project's per-corpus results for coverage
+and for the cross-encoder — an instrument that helps one corpus and hurts another — and it is the
+argument for **routing by corpus** rather than picking one global configuration. It also means the
+engine's shipped default is the right choice for its MultiHop-RAG behaviour and the wrong one for
+MuSiQue-style multi-hop, where roughly 0.054 MAP@10 is left on the table.
+
 ## What this does not show
 
 - **Not a mechanism.** Chunk-level retrieval can spend several of the top-10 slots on different
