@@ -285,7 +285,7 @@ This is the axis no 8B API model leads on, and the one a CPU-only system can win
 | --- | --- | --- | --- | --- | --- |
 | 5.1 | Trust report | `tools/trust_report.py`, `make trust-report` | one deterministic, offline report aggregating poison exclusion, gold retention, negative rejection, injection flags, tenant isolation, deterministic verification, and the abstention selective-prediction suite; `--check` gates a change | `make trust-report TRUST_ARGS="--check"` | done — 12/12 checks pass; poison leak 0.20 → 0.00 at zero false refusals, gate risk@80 0.4069 vs the scalar's 0.5099 |
 | 5.2 | Three-state adjudication | `src/laya_rag/engine.py`, `src/laya_rag/answerability.py` | a claim the relevance gate rejected becomes `no_coverage`/`contradicted`/`supported`, not `not_measured`, via the shipped `NLIAnswerability` hook (`verdict()` returns both NLI columns) | `tests/test_adjudicate_states.py` | **done, opt-in** — with `nli-deberta-v3-base`, one passage separates a supported claim (entailment **0.994**), a contradicted one (contradiction **0.99996**) and an unmentioned topic (~0 on both); the default path is unchanged. **The hand-labelled no-coverage recall is still owed** — the demonstration is three constructed claims, not 300 labelled pairs |
-| 5.3 | Numeric / negation / unit / date checks | `src/laya_rag/verify.py` | deterministic span checks; ship only at precision ≥ ~0.9 on 200 labelled composed answers | `tests/test_verify_numeric.py` | planned |
+| 5.3 | Numeric / negation / unit / date checks | `tools/verify_precision.py` | the four advisory detectors (`number_not_in_evidence`, `date_not_in_evidence`, `unit_mismatch`, `possible_negation_flip`) measured on a labelled set; ship only at precision ≥ ~0.9 | `make verify-precision VERIFY_ARGS="--check"` | **done on a constructed set** — all four at **precision 1.0000 / recall 1.0000**, with **0 false alarms on 200 faithful controls**; the honest limits are the hard near-misses at **0.3333 (2 of 6)**: cross-format dates (which fire *two* spurious kinds) and rounding. **Hand-labelled composed answers still owed** |
 | 5.4 | Grow the adversarial suite | `tools/adversarial_audit.py` | poison / noise / negative rejection / injection with frozen seeds; poison 5 documents → ASR measured, never cited | `make adversarial-audit --check` | **done for the dose response** — `poison_dose_probe` measures the leak rate at doses 0/1/2/5 with a query-independent stuffed document: the control reads 0.0000 and the curve is **flat at 0.2000 after one document**, so the published "5 documents → 90%" is a property of another corpus and is not quoted here. Noise and injection variants with frozen seeds remain |
 | 5.5 | Trust as the README claim | `README.md` | lead with the measured trust report, not with a retrieval rank the hardware cannot hold | `make claim-check` | **done** — the "where this RAG is better" bullet now carries the trust report's numbers (poison leak 0.20 → 0.00 at zero false refusals; gate risk@80 0.4069 against the scalar's 0.5099) and links the write-up |
 
@@ -430,6 +430,18 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
 
   `make job-status` shows `running 525/2417`; a `running` manifest is never a quotable number, and
   the report is not written until the run is whole.
+- 2026-10-04 — **Phase 5.3 done on a constructed set, with its limits named.** `make
+  verify-precision` measures the four advisory detectors on 400 constructed cases: each is at
+  **precision 1.0000 and recall 1.0000** with **0 false alarms on the 200 faithful controls**, so
+  all four clear the ≥0.9 bar on clear-cut mutations (over two unit families for the unit check).
+  A perfect score on easy cases proves little, so the harness also runs six **known-hard
+  near-misses** and reports them rather than hiding them: **2 of 6 false-alarm**. Cross-format dates
+  are the worst — `2024-03-12` against `March 12, 2024` fires *two* spurious kinds, the date and its
+  digits read as absent numbers — and rounding (`1205` vs "about 1200") is inherent to literal
+  comparison. Neither changes the `clean` verdict, and a test asserts both stay known, so a fix must
+  update the write-up with it. **Owed:** the ~200 hand-labelled composed answers; this set is
+  constructed, and the number must not be quoted as if it were that. Suite **1092 passed,
+  5 deselected**.
 - 2026-10-04 — **Phase 1 complete: the full MuSiQue run finished and confirms the subset.** All
   2,417 validation queries, engine hybrid: MAP@10 **0.3761** against the harness `fused`'s 0.3852,
   **−0.0091 [−0.0120, −0.0062]** — the 200-query subset read −0.0097, so the finding replicates.
