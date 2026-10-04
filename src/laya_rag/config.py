@@ -388,6 +388,12 @@ class EngineConfig:
     # though the query path uses the wider one.
     claim_retrieve_k: int = field(default_factory=lambda: _env_int("CLAIM_RETRIEVE_K", 10))
     claim_max: int = field(default_factory=lambda: _env_int("CLAIM_MAX", 25))
+    #: How confident the local NLI pass must be before a claim the relevance gate never reached
+    #: is called `supported` or `contradicted` rather than `no_coverage`. Only consulted when
+    #: `answerability_nli_model` is configured, so the default path is unchanged.
+    claim_nli_threshold: float = field(
+        default_factory=lambda: float(_env("CLAIM_NLI_THRESHOLD") or 0.5)
+    )
 
     # Laya emits calibrated probabilities, so these are real thresholds, not scores.
     relevance_threshold: float = field(default_factory=lambda: _env_float("RELEVANCE_THRESHOLD", 0.5))

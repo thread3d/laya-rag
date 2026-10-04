@@ -1381,23 +1381,51 @@ class RagEngine:
 
         adjudicated: list[dict[str, Any]] = []
         supported = unsupported = not_measured = 0
+        contradicted = no_coverage = 0
+        # A claim the relevance gate never reached is `not_measured` by default — but "the gate
+        # never asked" is not the same as "the corpus says nothing". When a local NLI scorer is
+        # configured it is asked anyway, over the candidates the gate rejected, which separates a
+        # claim the corpus *refutes* from one it is simply *silent* about.
+        nli = self.answerability_nli
+        nli_threshold = float(self.config.claim_nli_threshold)
         for position, (claim, kept) in enumerate(zip(cleaned, kept_per_claim)):
             measured = position in by_position
             probability = float(by_position[position]) if measured else 0.0
             is_supported = bool(measured and probability >= gate)
-            if not measured:
-                not_measured += 1
-            elif is_supported:
+            columns: dict[str, float] | None = None
+            state = "supported" if is_supported else ("unsupported" if measured else "not_measured")
+            if not measured and nli is not None:
+                candidates = per_claim_hits[position]
+                if candidates:
+                    columns = nli.verdict(claim, candidates)
+                    if columns.get("entailment", 0.0) >= nli_threshold:
+                        state, is_supported = "supported", True
+                    elif columns.get("contradiction", 0.0) >= nli_threshold:
+                        state = "contradicted"
+                    else:
+                        state = "no_coverage"
+            if state == "supported":
                 supported += 1
-            else:
+            elif state == "unsupported":
                 unsupported += 1
+            elif state == "contradicted":
+                contradicted += 1
+            elif state == "no_coverage":
+                no_coverage += 1
+            else:
+                not_measured += 1
             best = kept[0][1] if kept else 0.0
             adjudicated.append({
                 "text": claim,
                 "supported": is_supported,
                 "measured": measured,
+                "state": state,
                 "support_probability": round(probability, 4),
                 "best_relevance": round(best, 4),
+                "nli": None if columns is None else {
+                    "entailment": round(columns.get("entailment", 0.0), 4),
+                    "contradiction": round(columns.get("contradiction", 0.0), 4),
+                },
                 "considered": len(per_claim_hits[position]),
                 "kept": len(kept),
                 "sources": [
@@ -1423,6 +1451,8 @@ class RagEngine:
             "supported": supported,
             "unsupported": unsupported,
             "not_measured": not_measured,
+            "contradicted": contradicted,
+            "no_coverage": no_coverage,
             "answerability_threshold": gate,
             "relevance_threshold": relevance_bar,
             "retrieve_k": candidate_k,

@@ -284,7 +284,7 @@ This is the axis no 8B API model leads on, and the one a CPU-only system can win
 | # | item | file | change | test | status |
 | --- | --- | --- | --- | --- | --- |
 | 5.1 | Trust report | `tools/trust_report.py`, `make trust-report` | one deterministic, offline report aggregating poison exclusion, gold retention, negative rejection, injection flags, tenant isolation, deterministic verification, and the abstention selective-prediction suite; `--check` gates a change | `make trust-report TRUST_ARGS="--check"` | done — 12/12 checks pass; poison leak 0.20 → 0.00 at zero false refusals, gate risk@80 0.4069 vs the scalar's 0.5099 |
-| 5.2 | Three-state adjudication | `src/laya_rag/verify.py` | a claim about an unmentioned topic becomes `no_coverage`/`contradicted`, not `not_measured`, via the shipped `NLIAnswerability` hook; report no-coverage recall on hand-labelled pairs | `tests/test_verify_states.py` | planned |
+| 5.2 | Three-state adjudication | `src/laya_rag/engine.py`, `src/laya_rag/answerability.py` | a claim the relevance gate rejected becomes `no_coverage`/`contradicted`/`supported`, not `not_measured`, via the shipped `NLIAnswerability` hook (`verdict()` returns both NLI columns) | `tests/test_adjudicate_states.py` | **done, opt-in** — with `nli-deberta-v3-base`, one passage separates a supported claim (entailment **0.994**), a contradicted one (contradiction **0.99996**) and an unmentioned topic (~0 on both); the default path is unchanged. **The hand-labelled no-coverage recall is still owed** — the demonstration is three constructed claims, not 300 labelled pairs |
 | 5.3 | Numeric / negation / unit / date checks | `src/laya_rag/verify.py` | deterministic span checks; ship only at precision ≥ ~0.9 on 200 labelled composed answers | `tests/test_verify_numeric.py` | planned |
 | 5.4 | Grow the adversarial suite | `tools/adversarial_audit.py` | poison / noise / negative rejection / injection with frozen seeds; poison 5 documents → ASR measured, never cited | `make adversarial-audit --check` | **done for the dose response** — `poison_dose_probe` measures the leak rate at doses 0/1/2/5 with a query-independent stuffed document: the control reads 0.0000 and the curve is **flat at 0.2000 after one document**, so the published "5 documents → 90%" is a property of another corpus and is not quoted here. Noise and injection variants with frozen seeds remain |
 | 5.5 | Trust as the README claim | `README.md` | lead with the measured trust report, not with a retrieval rank the hardware cannot hold | `make claim-check` | **done** — the "where this RAG is better" bullet now carries the trust report's numbers (poison leak 0.20 → 0.00 at zero false refusals; gate risk@80 0.4069 against the scalar's 0.5099) and links the write-up |
@@ -395,6 +395,18 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   ~0.054 MAP@10 on the table for the other — which is the case for routing rather than a single
   global configuration. Suite **1067 passed, 5 deselected**. Still owed: the full 2,417 MuSiQue run
   and the MuSiQue default at full size.
+- 2026-10-04 — **Phase 5.2 done, opt-in.** A claim the relevance gate rejected used to be
+  `not_measured`, which conflates "the corpus says nothing" with "the corpus says the opposite" —
+  the limit `README.md` stated as "a fabricated claim about a topic the corpus never mentions is not
+  refuted". With `LAYA_RAG_ANSWERABILITY_NLI_MODEL` configured the rejected claims are asked about
+  anyway and become `supported`, `contradicted` or `no_coverage`; `NLIAnswerability.verdict()`
+  returns both NLI columns, and a single-label head reports **no** contradiction column (`None`)
+  rather than inventing one, which would turn silent into refutes. Demonstrated with
+  `nli-deberta-v3-base` on one passage: entailment **0.994** for a supported claim, contradiction
+  **0.99996** for a contradicted one, ~0 on both for an unmentioned topic. The default path is
+  untouched and the existing adjudication tests pass unchanged; nine tests pin the states. **Owed:**
+  the ~300 hand-labelled pairs and a no-coverage recall — the demonstration is three constructed
+  claims, not a labelled evaluation. Suite **1076 passed, 5 deselected**.
 - 2026-10-03 — **Phase 1.3 done, and it falsifies the generalisation.** `tools/engine_musique.py`
   runs the engine on the full 21,098-paragraph MuSiQue validation corpus with only the queries
   narrowed (never the corpus — `tools/musique.py --limit-queries` shrinks the corpus too, which

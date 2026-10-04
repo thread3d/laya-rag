@@ -540,6 +540,23 @@ def evaluate_gate(y_true: Any, scores: Any, threshold: float = 0.5) -> dict[str,
 
 #: Label spellings that mean "entailed" across the common NLI checkpoint families.
 _ENTAILMENT_MARKERS = ("entail", "label_2", "true")
+_CONTRADICTION_MARKERS = ("contradict", "label_0")
+
+
+def _resolve_contradiction_index(id2label: Mapping[Any, Any]) -> int | None:
+    """Pick the contradiction logit index, or ``None`` when the head has no such column.
+
+    ``None`` rather than a guess: a single-label head scores entailment only, and inventing a
+    contradiction column for it would turn "the corpus is silent about this" into "the corpus
+    refutes this", which is the opposite claim.
+    """
+    if id2label:
+        for index, label in id2label.items():
+            if any(marker in str(label).strip().lower() for marker in _CONTRADICTION_MARKERS):
+                return int(index)
+        if len(id2label) == 1:
+            return None
+    return 0
 
 
 def _resolve_entailment_index(id2label: Mapping[Any, Any]) -> int:
@@ -596,19 +613,24 @@ class NLIAnswerability:
         device: str = "auto",
         max_length: int = 512,
         scorer: Any | None = None,
+        verdict_scorer: Any | None = None,
     ) -> None:
         self.model_id = model_id
         self.device = device
         self.max_length = int(max_length)
         self._scorer = scorer
+        #: Entailment-only seam. `verdict` needs both columns, so it takes its own seam rather
+        #: than treating `1 - entailment` as a contradiction, which is not what an NLI head says.
+        self._verdict_scorer = verdict_scorer
         self._tokenizer: Any | None = None
         self._model: Any | None = None
         self._torch: Any | None = None
         self._device = device
         self.entailment_index = 2
+        self.contradiction_index: int | None = 0
 
     def ensure_loaded(self) -> "NLIAnswerability":
-        if self._scorer is not None or self._model is not None:
+        if self._scorer is not None or self._verdict_scorer is not None or self._model is not None:
             return self
         try:
             import torch
@@ -630,7 +652,46 @@ class NLIAnswerability:
         self.entailment_index = _resolve_entailment_index(
             getattr(self._model.config, "id2label", {}) or {}
         )
+        self.contradiction_index = _resolve_contradiction_index(
+            getattr(self._model.config, "id2label", {}) or {}
+        )
         return self
+
+    def verdict(self, query: str, passages: Sequence[Any]) -> dict[str, float]:
+        """Both NLI columns for the (evidence, claim) pair: entailment and contradiction.
+
+        ``score`` answers "does the evidence entail an answer to this?"; a claim the corpus
+        *refutes* and one the corpus is merely *silent* about both score low on entailment, and
+        only the contradiction column tells them apart.
+        """
+        premise = "\n\n".join(_passage_text(passage) for passage in passages)
+        if not premise.strip():
+            return {"entailment": 0.0, "contradiction": 0.0}
+        if self._verdict_scorer is not None:
+            columns = self._verdict_scorer(premise, str(query)) or {}
+            return {
+                "entailment": float(columns.get("entailment", 0.0)),
+                "contradiction": float(columns.get("contradiction", 0.0)),
+            }
+        if self._scorer is not None:
+            # The entailment-only seam has no contradiction column; report it as unknown.
+            return {"entailment": float(self._scorer(premise, str(query))), "contradiction": 0.0}
+        self.ensure_loaded()
+        torch = self._torch
+        assert torch is not None
+        encoded = self._tokenizer(
+            premise, str(query), truncation=True, max_length=self.max_length, return_tensors="pt"
+        ).to(self._device)
+        with torch.no_grad():
+            logits = self._model(**encoded, return_dict=True).logits.float().cpu().numpy()
+        probabilities = _softmax(np.asarray(logits, dtype=np.float64)).reshape(-1)
+        entailment = float(probabilities[min(self.entailment_index, probabilities.shape[-1] - 1)])
+        contradiction = 0.0
+        if self.contradiction_index is not None:
+            contradiction = float(
+                probabilities[min(self.contradiction_index, probabilities.shape[-1] - 1)]
+            )
+        return {"entailment": entailment, "contradiction": contradiction}
 
     def score(self, query: str, passages: Sequence[Any]) -> float:
         """Return ``P(entailment)`` for the query against the assembled evidence."""
