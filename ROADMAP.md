@@ -453,3 +453,15 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   decisive number is **~36 s/query**, extrapolating the full 2,255-record row to **22–25 h** on this
   host, so the remainder of Phase 3 (FRAMES, citation precision, RSS/index cost) is an `[llm]` job.
   Suite **1053 passed, 5 deselected**.
+- 2026-10-04 — **A full-set engine run was measured against a partial index, and that is now a
+  fixed engine bug.** The first full 2,255-query MultiHop hybrid run reported MAP@10 **0.2216**,
+  against **0.3057** for the same engine on a 400-query subset of the same queries. The cause was
+  not sampling: the two indexes' dense vectors are **byte-identical** (max abs diff `0.0`) and
+  `index/engine-hybrid/` was simply **missing `lexical.json`**, because the run that built it was
+  killed mid-save and the re-run reused it. `RagEngine.has_index()` accepted the dense half as a
+  complete index, so every later query degraded to dense-only recall silently — the engine already
+  warned at query time, but after the numbers were wrong. `has_index()` now requires the lexical
+  artifact (the eager or plain one matching the configured backend, and both directories on the
+  on-disk backend) and six tests pin it. The full-set measurement is re-run against a rebuilt index
+  with `--fresh`, since checkpoints from the degraded run are not reusable — jobkit's fingerprint
+  covers a run's *settings*, not the index it was measured against.

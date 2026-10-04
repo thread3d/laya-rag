@@ -89,3 +89,15 @@ are what stops the next pass from re-trying them.
 - **A metric-contract bug is silent.** `official_metrics` takes a list of per-query ranked
   lists; a flat list scored everything zero including the control, which is why the metric
   path is now a single tested helper.
+- **An index is only complete when every artifact is.** A build killed between the dense save and
+  the lexical save leaves a directory with half an index, and `has_index()` accepted it — so a
+  re-run reused a dense-only index and the full 2,255-query measurement read MAP@10 **0.2216**
+  while the same engine on a 400-query subset of the same queries read **0.3057**. The dense
+  vectors were byte-identical; only `lexical.json` was missing. `has_index()` now requires the
+  lexical artifact too, and a test pins that the channel really is absent when it is.
+- **A checkpoint's fingerprint does not cover the index it was measured against.** jobkit keys a
+  resumed run to its *settings*, so re-running after a failed attempt reuses per-query results that
+  may have been produced against a different index. When the index changes, the run needs `--fresh`.
+- **A metric that averages over the qrels dilutes a subset.** `evaluate_rankings` scores every query
+  in the qrels, so a `--limit 8` run against the full qrels read nDCG@10 **0.0045** — indistinguishable
+  from a broken retriever. Limited runs must score against the queries they ranked.
