@@ -56,12 +56,13 @@ COST_ARGS ?=
 VERIFY_ARGS ?=
 CITATION_ARGS ?=
 ANNBENCH_ARGS ?=
+ONDISK_SCALE_ARGS ?=
 ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 JOB_STATUS_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -112,6 +113,7 @@ help:
 	@echo "verify-precision  precision and recall of the advisory verifier checks (--check gates)"
 	@echo "citation-report  citation mechanics over the pilot's composed answers (engine-side)"
 	@echo "ann-bench    approximate vs exhaustive dense search, including IVF-PQ rescore"
+	@echo "ondisk-scale peak build RSS against corpus size and vocabulary (Phase 4.1 evidence)"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -366,6 +368,10 @@ citation-report:
 # Phase 4.5: approximate dense search against the exhaustive scan, at scale.
 ann-bench:
 	OMP_NUM_THREADS=16 $(PY) tools/ann_bench.py $(ANNBENCH_ARGS)
+
+# Phase 4.1 evidence: peak build RSS against the two axes, one subprocess per point.
+ondisk-scale:
+	OMP_NUM_THREADS=16 $(PY) tools/ondisk_scale.py $(ONDISK_SCALE_ARGS)
 
 # Does a learned gate threshold or a fitted temperature beat the fixed 0.5 and raw score?
 gate-calibration:

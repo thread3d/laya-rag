@@ -266,7 +266,7 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
-| 4.1 | On-disk term dictionary + chunk-id list | `[offline]` | SQLite FTS5 with `contentless_delete=1` (stdlib, no dep) or a bounded external merge; removes the residual 10M-document lexical wall | ranking parity against the in-memory index; RSS flat as corpus grows | planned |
+| 4.1 | On-disk term dictionary + chunk-id list | `tools/ondisk_scale.py`, `make ondisk-scale` | bound the build state that outlives every block, so the 10M+ corpora become buildable | ranking parity against the in-memory index; peak RSS flat as the corpus grows | **evidence gathered, and it corrects the target.** Peak build RSS is **flat in vocabulary to 400k terms** (an 8× vocabulary increase moves it 0.8%) and grows with **documents** (~3.8 KB/doc) — so the dictionary is *not* the wall the plan named; the per-document state and the merge are. Peak is also controllable today: `block_tokens` 250k → 4M moves it 399.9 → 808.1 MB at a fixed corpus. An unbounded component remains (peak grows with corpus size even at fixed block size, and 491 → 1,032 MB with one block), but **which structure dominates is not yet separated** — profile before changing the format |
 | 4.2 | The 13 remaining BEIR datasets | `[data]` disk | build sequentially, one dataset at a time; record mirror stubs as blocked rather than skipped silently | full BEIR-18 average, stated with its dataset list | **in progress — 6 of 18.** `quora` measured (bm25-engine 0.7689, dense 0.8876, fused 0.8629; the fused mean moves **0.4515 → 0.5201**, so the membership is recorded with it). `webis-touche2020` **downloaded and extracted** (702 MB) but **not evaluated**: the lexical pass over 382k long documents is single-threaded and the 382k-document embedding is still ahead, so it was stopped rather than left running; a re-run skips the fetch. `specter`/`signal1m` are **404 on this mirror**; Robust04/TREC-NEWS still stubs; BioASQ/FEVER/NQ await Phase 4.1 |
 | 4.3 | Multi-corpus distillation | `[model]` | extend `tools/finetune.py` / `distill_eval.py` beyond NFCorpus (where the 33M student already recovers **~29%** of the 478M ensemble, 0.3385 → 0.3505); package in SentenceTransformers format; upload | the packaged student beats zero-shot on every training corpus, or the artefact is not shipped | planned |
 | 4.4 | MTEB submission | network, external | the leaderboard wants a **model**, and one is now packageable; submit the distilled encoder | an external row with the model card's measured numbers | external |
@@ -463,6 +463,20 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   (`nlist` grows with √n, so the same setting scores 0.646 / 1.000 / 0.370 at 10k / 100k / 1M).
   Synthetic vectors, so the mechanics and the arithmetic are established rather than a corpus
   recall. Suite **1106 passed, 5 deselected**.
+- 2026-10-04 — **Phase 4.1 evidence gathered, and it corrects the plan's target.** `make
+  ondisk-scale` sweeps peak build RSS on two axes independently, one subprocess per point because
+  `ru_maxrss` is a high-water mark. The plan says the residual 10M-document wall is *"a bounded
+  external merge for the term dictionary"*; measured, the dictionary is **not** it — an eightfold
+  vocabulary increase (10k → 400k terms) moves peak RSS by **0.8%** and non-monotonically, while the
+  **documents** axis moves it linearly at ~**3.8 KB/doc**. The existing `block_tokens` knob already
+  controls much of the peak (**399.9 / 593.5 / 808.1 MB** at 250k / 1M / 4M tokens on a fixed
+  corpus, identical index). An unbounded component is real — peak still grows with corpus size at
+  fixed block size, and reaches **1,031.9 MB** with one block against 491.4 MB at a quarter of the
+  corpus — but **which structure dominates is not separated**, and the candidates (the accumulating
+  id/length lists, the merge buffers, allocator retention) are stated as an open question rather than
+  guessed at. **No index format was changed:** the bounded rewrite stays deferred until it is
+  profiled, because it is parity-critical and the 20/20 and 300/300 ranking checks must stay green.
+  Suite **1113 passed, 5 deselected**.
 - 2026-10-04 — **Phase 1 complete: the full MuSiQue run finished and confirms the subset.** All
   2,417 validation queries, engine hybrid: MAP@10 **0.3761** against the harness `fused`'s 0.3852,
   **−0.0091 [−0.0120, −0.0062]** — the 200-query subset read −0.0097, so the finding replicates.
