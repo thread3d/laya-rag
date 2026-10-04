@@ -489,6 +489,17 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   is `list[tuple[doc_id, dict[term, tf]]]`, one Python dict per document — replaced by doc offsets plus
   parallel term/tf arrays, which writes **byte-identical runs** and is parity-testable with the
   existing 20/20 and 300/300 checks. No format change was made. Suite **1114 passed, 5 deselected**.
+- 2026-10-04 — **Phase 4.1: the parity gate is verified green before the rewrite.** The per-block
+  change is a core-loop edit, so the gate it must pass was confirmed first rather than discovered
+  afterwards: `tests/test_ondisk_engine.py` is **15/15 green**, and three of those tests are exactly
+  what the change could break — `test_ondisk_bm25_matches_the_in_memory_ranking` (ranking parity
+  against the in-memory index), `test_ondisk_bm25_ranking_is_stable_across_build_blocks` (the same
+  ranking under different block sizes) and `test_ondisk_lexical_channel_reproduces_in_memory_ids`
+  (the chunk-id list). The plan for the rewrite: assign term ids **during** the document loop instead
+  of deferring them to `flush()`, so the per-document `counts` dict becomes transient rather than
+  held for every document in the block. Term ids are then assigned in the same
+  first-appearance order, so the spilled runs stay byte-identical and the three tests above are the
+  proof. Suite **1114 passed, 5 deselected**; no code changed this round.
 - 2026-10-04 — **Phase 1 complete: the full MuSiQue run finished and confirms the subset.** All
   2,417 validation queries, engine hybrid: MAP@10 **0.3761** against the harness `fused`'s 0.3852,
   **−0.0091 [−0.0120, −0.0062]** — the 200-query subset read −0.0097, so the finding replicates.
