@@ -175,32 +175,29 @@ already shown to overstate the engine by **0.0144**.
 | # | item | file | change | falsify / signal | status |
 | --- | --- | --- | --- | --- | --- |
 | 1.1 | Resumable job infrastructure | §2 above | `tools/jobkit.py` + the CE-cache retrofit + `make job-status`; the remaining four tools are still un-retrofitted | kill/resume and shard/merge equivalence tests | done (retrofit partial) |
-| 1.2 | Engine-level MultiHop-RAG | `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes | **done on the full 2,255 queries** — engine MAP@10 **0.3009** against the harness's 0.2510, **+0.0499 [+0.0432, +0.0566]**, +0.0772 Hits@4, +0.1060 Hits@10, all significant, and it replicates the subset's +0.0535. The first full run read 0.2216 against a **partial index** (fixed engine bug). Shipped-default path still owed |
+| 1.2 | Engine-level MultiHop-RAG | `tools/engine_multihop.py` | run `RagEngine` on MultiHop-RAG under its own corpus-aware chunking; report Hits@10/Hits@4/MAP@10/MRR@10, default path and `bge-small` hybrid, beside the harness row | if the engine beats the harness, the harness is the weak link and the headline changes | **done, full 2,255 in both configurations** — shipped default MAP@10 **0.3128** (**+0.0618 [+0.0547, +0.0688]** over the harness hybrid) and `bge-small` hybrid **0.3009** (+0.0499); the dense channel is a measured trade, costing 0.0119 MAP@10 and 0.0187 MRR to leave off. The first full run read 0.2216 against a **partial index** (fixed engine bug) |
 | 1.3 | Engine-level MuSiQue | `tools/engine_musique.py` | run `RagEngine` on the MuSiQue validation split under its own chunking, full corpus, queries optionally narrowed; pair MAP@10 against the harness by qid | the per-corpus bar is stated, not averaged | **done on 200 queries** — engine **−0.0097 MAP@10 [−0.0190, −0.0007]** vs the harness `fused`, and raising the pool to depth 100 moves it only +0.0019, so the MultiHop win does not travel and pool depth is not the cause |
 | 1.4 | Publish the harness-vs-engine delta | `tools/engine_vs_harness.py`, `docs/findings-engine-multihop.md`, `docs/FINDINGS.md` | paired comparison that re-derives the subset and refuses a mismatch; every MultiHop row labelled by which harness produced it | `make engine-multihop-compare` | done |
 
 **Gate:** no Phase 2 result is quoted against the engine until 1.2 has a report under `eval/`.
-That gate is now satisfied for the **400-query subset**; the full-set run is still owed, so a
-Phase 2 result may be quoted against the subset engine number (0.3057) and not against a
-full-set one.
+That gate is **satisfied on the full 2,255 queries**, in both configurations: the shipped default
+(MAP@10 **0.3128**) and the `bge-small` hybrid (**0.3009**), each paired against the harness.
 
-**The run that produced 1.2, and what is still owed.**
+**The runs that produced 1.2.**
 
 ```sh
-# done: 400 queries, seed 17 — the same subset the harness's 0.2986/0.3280 bars are quoted on
-make engine-multihop ENGINE_MULTIHOP_ARGS="--limit 400 --sample-seed 17 \
-    --embed-model BAAI/bge-small-en-v1.5 --out eval/benchmarks/multihop-rag/engine-hybrid-400"
-make engine-multihop-compare
-
-# owed: the full 2,255 (~2 hours at the measured 3.1 s/query), and the shipped default path
+# done: the full answerable set, shipped default — the engine's best MAP@10 (0.3128)
 make engine-multihop ENGINE_MULTIHOP_ARGS="--out eval/benchmarks/multihop-rag/engine-default"
+# done: the full set with the dense channel on (0.3009), and the 400-query seed-17 subset (0.3057)
 make engine-multihop ENGINE_MULTIHOP_ARGS="--embed-model BAAI/bge-small-en-v1.5 \
     --out eval/benchmarks/multihop-rag/engine-hybrid"
+make engine-multihop-compare
 ```
 
 Re-running any of those identical commands continues a killed run; `make job-status` shows how
 far it got. The report is not written until the run is whole, so a `running` manifest is never a
-quotable number.
+quotable number. **An index change requires `--fresh`:** jobkit's fingerprint covers a run's
+settings, not the index it was measured against.
 
 ---
 
@@ -377,6 +374,17 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   the cause was a **partial index** missing `lexical.json`, reused because `has_index()` accepted
   the dense half; that is a fixed engine bug with six tests. Suite **1066 passed, 5 deselected**.
   Still owed: the shipped-default (Laya-encoder, dense-weight-zero) path.
+- 2026-10-04 — **Phase 1 complete on the full set, in both configurations.** The **shipped
+  default** — Laya's encoder, dense weight resolves to zero, lexical recall, no cross-encoder — is
+  the engine's **best** MultiHop-RAG configuration: MAP@10 **0.3128** against the 256-token
+  harness's 0.2510, **+0.0618 [+0.0547, +0.0688]**, with Hits@4 +0.0710, Hits@10 +0.0989 and MRR@10
+  **+0.0775**. The `bge-small` hybrid scores 0.3009, and paired on the same queries the dense
+  channel is a **trade, not a gain**: leaving it off is worth **+0.0119 MAP@10** [+0.0061, +0.0180]
+  and **+0.0187 MRR@10** [+0.0062, +0.0316], while Hits@4 and Hits@10 move by −0.006 and −0.007
+  (both ns). That is the project's "the dense channel never earned its weight" finding reproduced
+  at the engine level on multi-hop. Still below the harness's coverage-plus-quota rule (0.3192), so
+  Phase 2's target stands. Suite **1067 passed, 5 deselected**. Next: the full MuSiQue engine run,
+  then Phase 4.
 - 2026-10-03 — **Phase 1.3 done, and it falsifies the generalisation.** `tools/engine_musique.py`
   runs the engine on the full 21,098-paragraph MuSiQue validation corpus with only the queries
   narrowed (never the corpus — `tools/musique.py --limit-queries` shrinks the corpus too, which

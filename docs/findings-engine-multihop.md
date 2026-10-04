@@ -74,20 +74,47 @@ dense-only recall. That is now a fixed engine bug with a test
 (`tests/test_index_completeness.py`), and it is why the full-set number had to be re-run with
 `--fresh`: jobkit's fingerprint covers a run's *settings*, not the index it was measured against.
 
+## Shipped default — the engine's best configuration
+
+Full 2,255 queries with no `--embed-model`: Laya's encoder resolves to a dense weight of zero, so
+recall is lexical only and there is no cross-encoder. This is what the engine actually ships.
+
+| metric | harness `hybrid` | harness `bm25-engine` | engine hybrid | **engine default** |
+| --- | --- | --- | --- | --- |
+| MAP@10 | 0.2510 | 0.2520 | 0.3009 | **0.3128** |
+| Hits@4 | 0.6860 | 0.6368 | **0.7632** | 0.7570 |
+| Hits@10 | 0.8022 | 0.7947 | **0.9082** | 0.9011 |
+| MRR@10 | 0.5396 | 0.5507 | 0.5983 | **0.6170** |
+
+Paired: against the harness hybrid, MAP@10 **+0.0618 [+0.0547, +0.0688]**, Hits@4 +0.0710, Hits@10
++0.0989, MRR@10 +0.0775; against the harness's stemmed lexical row, MAP@10 **+0.0608**, Hits@4
++0.1202, Hits@10 +0.1064, MRR@10 +0.0664 — every interval excluding zero.
+
+Paired against the hybrid on the same queries, the dense channel is a **trade, not a gain**:
+
+| metric | hybrid → default | delta | 95% interval | p |
+| --- | --- | --- | --- | --- |
+| MAP@10 | 0.3009 → 0.3128 | **+0.0119** | [+0.0061, +0.0180] | 0.0002 |
+| MRR@10 | 0.5983 → 0.6170 | **+0.0187** | [+0.0062, +0.0316] | 0.0032 |
+| Hits@4 | 0.7632 → 0.7570 | −0.0062 | [−0.0213, +0.0093] | 0.44 (ns) |
+| Hits@10 | 0.9082 → 0.9011 | −0.0071 | [−0.0182, +0.0040] | 0.22 (ns) |
+
+So turning the dense channel on buys a little breadth at the top of the list and costs set
+coverage and ranking: **the shipped default is the best MAP@10 configuration the engine has on
+this corpus (0.3128)**, and it is the one that ships. It remains below the harness's
+coverage-plus-quota rule (0.3192) — the selection programme's target survives, unchanged.
+
 ## What this does not show
 
-- **Not the shipped default path.** Both runs use `--embed-model bge-small` so the dense channel is
-  on; the engine's shipped default resolves Laya's encoder to a dense weight of zero and uses
-  lexical recall only, and that configuration is still unmeasured.
 - **Not that the engine's model is better.** The delta bundles the chunking change with the
   engine's channel wiring; the engine did not use a cross-encoder, coverage or a document quota
   here, so this is a statement about the *system under its own defaults* versus a replica of it.
 - **Not a recall claim.** MAP@10 is set-coverage sensitive; the pool-reorder ceiling and fact
   recall diagnostics in [findings-multihop-diagnostics.md](findings-multihop-diagnostics.md) still
   describe where the remaining headroom is.
-- **One chunking, one encoder.** `bge-small` only, corpus-aware sizing only. The shipped default
-  (Laya's encoder, dense weight 0) and fixed-size ablations are separate fingerprints and separate
-  runs.
+- **One chunking, corpus-aware sizing only.** The hybrid rows use `bge-small`; the shipped-default
+  row uses Laya's encoder with a dense weight of zero. Fixed-size chunking ablations are separate
+  fingerprints and separate runs.
 
 ## Method notes
 
