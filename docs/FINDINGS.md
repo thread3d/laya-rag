@@ -67,6 +67,14 @@ are what stops the next pass from re-trying them.
 
 ## Method notes worth carrying forward
 
+- **Checkpoint before the marker, and verify on load.** A checkpoint written before its `.done` marker is
+  untrusted if interrupted; a part *with* a marker but corrupt contents must still be re-read defensively,
+  or a torn write is trusted forever. A test caught the second case in a change written to handle the first.
+- **A checkpoint granularity that changes the numbers is part of the cache key.** Chunked embedding is
+  float-equivalent to a single pass but not bit-identical (4.17e-07 on `bge-small`), so the chunk size is
+  recorded with the cache and a mismatch re-embeds instead of silently mixing two numerics.
+
+
 - **Pin the chunking constant.** Up to +0.067 Hits@10 comes from an undeclared overlap.
 - **Test the caller, not just the callee.** `FUSION_K` was fixed in `_fuse` and the config
   while the primary `query()` call site kept not passing it; a spy on `_fuse` from `query()`
