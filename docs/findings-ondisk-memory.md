@@ -122,6 +122,33 @@ is what makes it parity-testable rather than a format migration.
 That is the next step, and it is a much smaller change than the plan's: no format bump, no on-disk
 dictionary, and the 20/20 and 300/300 ranking-parity checks apply directly.
 
+## The rewrite, measured
+
+The per-block representation was changed: term ids are now assigned as documents stream, so a
+document's `term -> count` dict is transient instead of one of ~10,000 alive at once. Term ids are
+still assigned in first-appearance order, so the spilled runs are unchanged.
+
+| documents | peak RSS before | **peak RSS after** | change | index MB | build s |
+| --- | --- | --- | --- | --- | --- |
+| 25,000 | 312.4 MB | **241.9 MB** | **−22.6%** | 22.0 | 12.4 (was 12.2) |
+| 50,000 | 417.9 MB | **377.3 MB** | **−9.7%** | 42.4 | 25.1 (was 25.2) |
+| 100,000 | 596.3 MB | **548.9 MB** | **−8.0%** | 83.2 | 50.9 (was 51.4) |
+
+Under `tracemalloc` at 100k documents the peak falls further — 942.8 → **703.0 MB**, −25.5% — with the
+live state unchanged at 7.4 MB.
+
+**Ranking parity is proven, not asserted.** `tests/test_ondisk_engine.py` is 15/15, including
+`test_ondisk_bm25_matches_the_in_memory_ranking`,
+`test_ondisk_bm25_ranking_is_stable_across_build_blocks` and
+`test_ondisk_lexical_channel_reproduces_in_memory_ids`; index bytes and build times are unchanged.
+
+**This is a partial fix, and the numbers say so.** The saving is 8–23% and it *shrinks* as the corpus
+grows — from −22.6% at 25k documents to −8.0% at 100k — because the per-document dicts were a
+constant per-block cost while the rest of the peak scales with the corpus. That remainder is the run
+and merge arrays plus allocator retention, which the profile could not separate and this change does
+not touch. The 10M-document wall is therefore **reduced but not removed**, and the next lever is the
+merge, not the block.
+
 ## What this does not show
 
 - **Not a fix.** No index format changed. The cheaper per-block representation above is the next

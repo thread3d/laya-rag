@@ -112,49 +112,57 @@ class OnDiskBM25:
         lengths: list[int] = []
         doc_freq: list[int] = []
         runs: list[Path] = []
-        block: list[tuple[str, dict[str, int]]] = []
-        block_start = 0
+        # The block holds *entries*, not one `term -> count` dict per document. Term ids are
+        # assigned as the documents stream, in the same first-appearance order the deferred
+        # loop produced, so the runs written below stay byte-identical — what changes is that
+        # a document's counts dict is transient instead of one of ~10,000 alive at once. That
+        # is where the build's peak actually is: profiling shows the persistent state
+        # (vocabulary, document frequencies, ids, lengths) is a few MB against a peak
+        # approaching a gigabyte.
+        block_term_ids: list[int] = []
+        block_rows: list[int] = []
+        block_tfs: list[int] = []
+        block_docs_seen = 0
         block_token_count = 0
 
         def flush() -> None:
-            if not block:
+            if not block_rows:
                 return
-            term_ids: list[int] = []
-            rows: list[int] = []
-            tfs: list[int] = []
-            for offset, (doc_id, counts) in enumerate(block):
-                row = block_start + offset
-                ids.append(doc_id)
-                lengths.append(sum(counts.values()))
-                for term, tf in counts.items():
-                    tid = term_to_id.get(term)
-                    if tid is None:
-                        tid = len(term_to_id)
-                        term_to_id[term] = tid
-                        doc_freq.append(0)
-                    doc_freq[tid] += 1
-                    term_ids.append(tid)
-                    rows.append(row)
-                    tfs.append(tf)
             arr = np.stack(
-                [np.asarray(term_ids, np.int32), np.asarray(rows, np.int32), np.asarray(tfs, np.int32)],
+                [np.asarray(block_term_ids, np.int32), np.asarray(block_rows, np.int32),
+                 np.asarray(block_tfs, np.int32)],
                 axis=1,
             )
             order = np.lexsort((arr[:, 1], arr[:, 0]))
             run_path = run_dir / f"run-{len(runs):04d}.npy"
             np.save(run_path, arr[order])
             runs.append(run_path)
-            block.clear()
+            block_term_ids.clear()
+            block_rows.clear()
+            block_tfs.clear()
 
         for doc_id, text in documents:
             counts: dict[str, int] = {}
             for token in tokenize(text, stem=self.stem):
                 counts[token] = counts.get(token, 0) + 1
-            block.append((doc_id, counts))
+            row = len(ids)
+            ids.append(doc_id)
+            lengths.append(sum(counts.values()))
+            for term, tf in counts.items():
+                tid = term_to_id.get(term)
+                if tid is None:
+                    tid = len(term_to_id)
+                    term_to_id[term] = tid
+                    doc_freq.append(0)
+                doc_freq[tid] += 1
+                block_term_ids.append(tid)
+                block_rows.append(row)
+                block_tfs.append(tf)
             block_token_count += sum(counts.values())
-            if len(block) >= block_docs or block_token_count >= block_tokens:
+            block_docs_seen += 1
+            if block_docs_seen >= block_docs or block_token_count >= block_tokens:
                 flush()
-                block_start = len(ids)
+                block_docs_seen = 0
                 block_token_count = 0
         flush()
 

@@ -266,7 +266,7 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
-| 4.1 | Cheaper per-block build state | `src/laya_rag/ondisk.py`, `tools/ondisk_scale.py` | bound the build's *transient* peak: a block is one Python `dict` per document today | ranking parity against the in-memory index (runs must stay byte-identical); peak RSS lower at fixed `block_tokens` | **profiled, and the target is corrected again.** `tracemalloc` at 100k docs: **live state 7.4 MB against a 943 MB peak**, so the dictionary and id lists are *not* the cost (the largest live site is the tokenizer's stopword set at 2.74 MB; the dict plus its document frequencies are 3.3 MB). The peak is **transient** — the block (which `block_tokens` controls: 399.9 → 808.1 MB across a 16× cap range) plus retention across blocks. The fix is a flat per-block representation (doc offsets + term/tf arrays) instead of one dict per document, which writes **byte-identical runs** and is therefore parity-testable. Not implemented |
+| 4.1 | Cheaper per-block build state | `src/laya_rag/ondisk.py` | assign term ids inline so a document's counts dict is transient, not one of ~10,000 alive per block | ranking parity against the in-memory index; peak RSS lower at fixed `block_tokens` | **done, partial** — peak RSS **−22.6% / −9.7% / −8.0%** at 25k / 50k / 100k documents (−25.5% under tracemalloc), at **identical index bytes and unchanged build time**, with the 15 on-disk tests green including ranking parity and block-size stability. The saving *shrinks* with corpus size, so the wall is reduced and not removed: what remains is the run/merge arrays and allocator retention, which the profile could not separate. **Next lever is the merge, not the block** |
 | 4.2 | The 13 remaining BEIR datasets | `[data]` disk | build sequentially, one dataset at a time; record mirror stubs as blocked rather than skipped silently | full BEIR-18 average, stated with its dataset list | **in progress — 6 of 18.** `quora` measured (bm25-engine 0.7689, dense 0.8876, fused 0.8629; the fused mean moves **0.4515 → 0.5201**, so the membership is recorded with it). `webis-touche2020` **downloaded and extracted** (702 MB) but **not evaluated**: the lexical pass over 382k long documents is single-threaded and the 382k-document embedding is still ahead, so it was stopped rather than left running; a re-run skips the fetch. `specter`/`signal1m` are **404 on this mirror**; Robust04/TREC-NEWS still stubs; BioASQ/FEVER/NQ await Phase 4.1 |
 | 4.3 | Multi-corpus distillation | `[model]` | extend `tools/finetune.py` / `distill_eval.py` beyond NFCorpus (where the 33M student already recovers **~29%** of the 478M ensemble, 0.3385 → 0.3505); package in SentenceTransformers format; upload | the packaged student beats zero-shot on every training corpus, or the artefact is not shipped | planned |
 | 4.4 | MTEB submission | network, external | the leaderboard wants a **model**, and one is now packageable; submit the distilled encoder | an external row with the model card's measured numbers | external |
@@ -500,6 +500,16 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   held for every document in the block. Term ids are then assigned in the same
   first-appearance order, so the spilled runs stay byte-identical and the three tests above are the
   proof. Suite **1114 passed, 5 deselected**; no code changed this round.
+- 2026-10-04 — **Phase 4.1 implemented, and it is a partial fix.** Term ids are now assigned as
+  documents stream, so a document's `term -> count` dict is transient instead of one of ~10,000 alive
+  at once per block. Peak build RSS falls **−22.6% / −9.7% / −8.0%** at 25k / 50k / 100k documents
+  (312.4 → 241.9, 417.9 → 377.3, 596.3 → 548.9 MB) and −25.5% under `tracemalloc` (942.8 → 703.0 MB),
+  at **identical index bytes and unchanged build time** (12.4/25.1/50.9 s), with the 15 on-disk tests
+  green — including ranking parity against the in-memory index, block-size stability and chunk-id
+  reproduction, which is what proves the runs are unchanged. **The saving shrinks with corpus size**,
+  because the per-document dicts were a constant per-block cost while the rest of the peak scales with
+  the corpus: the run and merge arrays and allocator retention remain, the wall is reduced rather than
+  removed, and the next lever is the merge. Suite **1114 passed, 5 deselected**.
 - 2026-10-04 — **Phase 1 complete: the full MuSiQue run finished and confirms the subset.** All
   2,417 validation queries, engine hybrid: MAP@10 **0.3761** against the harness `fused`'s 0.3852,
   **−0.0091 [−0.0120, −0.0062]** — the 200-query subset read −0.0097, so the finding replicates.
