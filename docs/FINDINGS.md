@@ -51,6 +51,7 @@ are what stops the next pass from re-trying them.
 | BM25 parameters | The engine ran Lucene `k1=1.2, b=0.75` while every BEIR row used Anserini `0.9/0.4`, and could not be configured; at the engine level the two are **indistinguishable** (0.7264 vs 0.7238, p=0.45), so the default stays and `BM25_K1`/`BM25_B` now exist to reproduce the baseline exactly | [findings-bm25-parameters.md](findings-bm25-parameters.md) |
 | Chunking-gap hypotheses | Three targeted fixes for the engine's 0.013 chunking gap all fail — merging documents ≤ `chunk_chars+overlap` (0.7236 vs 0.7264), doubling `RETRIEVE_K` (0.7273), indexing a context breadcrumb (0.7243) — while whole-document chunking reaches 0.7396, so the loss is the **chunked representation**, not its selection | [findings-chunk-merge.md](findings-chunk-merge.md) |
 | RGB negative rejection | Not adapted: no clean no-answer label in the English files and a judge-based official metric | [../BENCHMARKS.md](../BENCHMARKS.md) |
+| Late-interaction ordering head (`answerai-colbert-small-v1` MaxSim) | Worse than the unordered first stage: **−0.0430 MAP@10 [−0.0632, −0.0229]** against `fused`, −0.0894 against the CE order, −0.1016 against covquota. Reordering the CE's *own* top-10 by MaxSim — recall fixed, Hits@10 unchanged — still costs **−0.0257 [−0.0434, −0.0079]**, so the +0.1254 ordering headroom is not reachable by this instrument | [findings-ordering-head.md](findings-ordering-head.md) |
 
 ## Method notes worth carrying forward
 

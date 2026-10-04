@@ -214,15 +214,18 @@ training run or a model download.
 
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
-| 2.1 | Late interaction done properly | `[model]` (~130 MB, CPU-viable) | `answerai-colbert-small-v1` (33M) MaxSim over the CE top-10, CPU via MUVERA/SLIM-style pooling if needed; `tools/multihop_ordering.py` | beats covquota **0.3192** with a paired CI; note this differs from the rejected Laya-token probe, whose failure was the *untrained* token states | planned |
+| 2.1 | Late interaction done properly | `[model]` (~130 MB, MPS) | `answerai-colbert-small-v1` (33M) MaxSim over the cached pool, plus a recall-fixed arm that reorders the CE's own top-10; `tools/multihop_ordering.py` | beats covquota **0.3280** with a paired CI | **done, negative** — MaxSim is below even the unordered `fused` first stage (−0.0430 MAP@10), and reordering the CE's own top-10 still costs −0.0257, so the +0.1254 ordering headroom is not reachable by this instrument |
 | 2.2 | Train on bridge conventions | `[model]` GPU-preferred | cross-encoder trained on multi-hop pairs mined from *train* splits (MuSiQue / 2Wiki / HotpotQA), positives from gold facts, hard negatives from the pool — not MS MARCO points; `tools/order_train.py` | held-out MAP@10 over the trained vs zero-shot ranker; label the result **adapted** | planned |
 | 2.3 | Route by relation | `[model]` | pointwise for topical, pairwise/NLI-stance for opposition (ArguAna); route per corpus/query, never a global swap | ArguAna recovers toward the dense 0.596 without losing BEIR-5 | planned |
 | 2.4 | Listwise fallback | `[dep]` | `jina-reranker-v3` is **CC BY-NC 4.0, non-commercial** — reproduce on the five sets + MultiHop before believing any self-reported row | if it does not beat 2.2 on this host, drop it | planned |
-| 2.5 | Report ordering vs signal vs selection | `docs/findings-ordering-head.md` | state each new rule's number against the decomposition, so an ordering gain is never read as a recall gain | — | planned |
+| 2.5 | Report ordering vs signal vs selection | `docs/findings-ordering-head.md` | state each new rule's number against the decomposition, so an ordering gain is never read as a recall gain | — | done for 2.1 |
 
 **Do not retry:** any pointwise MS MARCO reranker at depth 100 (loss on all five BEIR datasets;
 ArguAna 0.568 → 0.250), full-split fine-tuning with naive mined negatives (below zero-shot),
-BM25 PRF, or another optimiser over the cached channels.
+BM25 PRF, another optimiser over the cached channels, or **a general-purpose topical
+late-interaction reranker** — `answerai-colbert-small-v1` MaxSim is below the unordered fused
+first stage on MultiHop-RAG and makes the CE's own top-10 worse when it only reorders it
+(Phase 2.1, `docs/findings-ordering-head.md`).
 
 ---
 
@@ -374,3 +377,18 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   reasoning is recorded rather than left as an omission. Suite **1009 passed, 4 deselected**.
   Phase 1 is complete on the 400/200-query subsets; the full 2,255/2,417 runs and the
   shipped-default paths are the next long jobs, and Phase 2 is next.
+- 2026-10-03 — **Phase 2.1 done, and it falsifies the hypothesis.** A ColBERT MaxSim ordering
+  head (`answerai-colbert-small-v1`, 33M, built directly as `BertModel` + the checkpoint's
+  `linear` projection since the pinned `sentence-transformers` 4.1.0 has no
+  `MultiVectorEncoder`) scores **worse than the unordered fused first stage**: MAP@10 0.2092
+  against `fused` 0.2522 (**−0.0430 [−0.0632, −0.0229]**), and −0.0894 against the CE order and
+  −0.1016 against covquota. The sharpest arm holds recall fixed by reordering the cross-encoder's
+  *own* top-10 (Hits@10 +0.0000 by construction) and still loses **−0.0257 [−0.0434, −0.0079]**:
+  the **+0.1254** the decomposition measures as available from reordering that set is headroom a
+  better *scorer* would have to reach, not one any reranker can collect. The likely reason is that
+  the model is trained for topical retrieval and MultiHop's difficulty is the low-relevance second
+  hop — the project's "trust a stronger pointwise model more" prior, with late interaction over a
+  topical model still topical. The harness reproduces `fused` 0.2522, `ce` 0.2986 and
+  `covquota-3-0.7` **0.3280** exactly, so the baselines are the project's own. Suite **1021
+  passed, 5 deselected** (the model sanity check is a `real_weights` test). Next: 2.2, a
+  cross-encoder trained on bridge conventions.
