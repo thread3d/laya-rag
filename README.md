@@ -1052,7 +1052,11 @@ should not be cited as a strength out of domain.
 - **Abstention and citation checking as first-class outputs**, which no IR leaderboard scores.
   The engine returns calibrated probabilities and can abstain; `verify.py` checks citations and
   quoted spans deterministically, with no model and no threshold, so it cannot be wrong in the
-  way a model can.
+  way a model can. `make trust-report` states those surfaces together with their measured numbers —
+  a planted poison leak rate of 0.20 falling to **0.00** at **zero** false refusals, tenant
+  isolation and anonymous denial holding, and the 12-feature gate's false-accept rate at 80%
+  coverage at **0.4069** against the shipped scalar's 0.5099
+  ([`docs/findings-trust-report.md`](docs/findings-trust-report.md)).
 - **No hallucination surface by construction.** It cannot generate, so it cannot invent facts.
   That is a real property, not a marketing one, and it is invisible on any leaderboard.
 - **It runs anywhere.** No GPU, no API key, fp32 on CPU with Metal when present, a 2–5 s query
@@ -1182,12 +1186,18 @@ zero-shot. Neither is a floor to be scaled. The item that paid off most beyond i
 
 ### What cannot be claimed
 
-There is **no end-to-end RAG ranking**, because no end-to-end benchmark has been run to
-completion. There is **no KILT, MTEB, HHEM or TREC RAG placement** — those need a submission, a
-full stack, or access this machine does not have. **Answerability is not portable**, as measured
-above. And any faithfulness or answer-accuracy figure produced with the local 35B model would be a
-statement about that model, not about this engine; it should be labelled that way wherever it
-appears. `BENCHMARKS.md` carries the full per-benchmark verdict for the rest of the landscape.
+There is **no end-to-end RAG ranking**: the first `engine + <generator>` row exists only as a
+**pilot** (12 answerable + 8 null records, local `ornith-1.5:35b`), where EM 0.000 sits beside a
+0.667 gold-containment rate on the same answers and ~36 s/query puts the full row at 22–25 h on this
+host — see [`docs/findings-endtoend-pilot.md`](docs/findings-endtoend-pilot.md). There is **no KILT,
+MTEB, HHEM or TREC RAG placement** — those need a submission, a full stack, or access this machine
+does not have. **Answerability is not portable**, as measured above. **Stronger scorers did not pay
+off here**: besides the pointwise reranker and the failed fine-tune listed above, all three Phase 2
+ordering heads lost to the baselines they targeted (topical late interaction, relational NLI stance,
+and a cross-encoder adapted on MuSiQue's own train pairs). And any faithfulness or answer-accuracy
+figure produced with the local 35B model is a statement about that model, not about this engine; it
+is labelled that way wherever it appears. `BENCHMARKS.md` carries the full per-benchmark verdict for
+the rest of the landscape.
 
 ## Repository layout
 

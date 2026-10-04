@@ -255,7 +255,7 @@ solves the attribution problem.
 | 3.2 | MultiHop answer accuracy + rejection | `tools/endtoend_multihop.py` at the engine's shipped defaults with a labelled local generator | the gate's rejection rate is reported beside accuracy, with the AUC and the transfer caveat | **done as a pilot** — 12 answerable + 8 null, `ornith-1.5:35b`; EM 0.000 against **gold-contained 0.667**, abstention 25% vs rejection 37.5% (n=20, not evidence) |
 | 3.3 | Citation precision/recall | `verify.py` over composed answers: does every cited span exist, and does the answer cite the evidence that supports it? | this is the engine's own number, not the generator's; ship only with a labelled corpus of composed answers | pending — the pilot records answers; scoring citation precision needs a labelled span set |
 | 3.4 | Cost axis | latency, throughput, peak RSS per query, index bytes/query, beside quality | makes "best per unit of compute" measurable rather than asserted | **partly done** — per-query seconds are recorded and extrapolate to **~22–25 h** for the full 2,255-record row; RSS and index bytes per query are still owed |
-| 3.5 | Publish the row | `BENCHMARKS.md`, `docs/findings-endtoend-pilot.md` | replace "cannot be claimed" with the labelled row and its limits | **partly done** — the pilot and its limits are written up; `BENCHMARKS.md`'s "no end-to-end row" line now needs the pilot linked once 3.2 is a full run |
+| 3.5 | Publish the row | `BENCHMARKS.md`, `README.md` | replace "cannot be claimed" with the labelled row and its limits | **done for the pilot** — both claim documents now describe the pilot, its EM-versus-containment trap, and the 22–25 h full-run cost, and no longer say "no end-to-end benchmark has been run" |
 
 **Phase 3 verdict: the harness exists, the row is a pilot, and the blocker is the generator.** The
 first `engine + <model>` row is produced and labelled, and the two things it establishes are that
@@ -290,7 +290,7 @@ This is the axis no 8B API model leads on, and the one a CPU-only system can win
 | 5.2 | Three-state adjudication | `src/laya_rag/verify.py` | a claim about an unmentioned topic becomes `no_coverage`/`contradicted`, not `not_measured`, via the shipped `NLIAnswerability` hook; report no-coverage recall on hand-labelled pairs | `tests/test_verify_states.py` | planned |
 | 5.3 | Numeric / negation / unit / date checks | `src/laya_rag/verify.py` | deterministic span checks; ship only at precision ≥ ~0.9 on 200 labelled composed answers | `tests/test_verify_numeric.py` | planned |
 | 5.4 | Grow the adversarial suite | `tools/adversarial_audit.py`, `eval/` | poison / noise / negative rejection / injection with frozen seeds; poison 5 documents → ASR measured, never cited | `make adversarial-audit --check` | planned |
-| 5.5 | Trust as the README claim | `README.md`, `BENCHMARKS.md` | lead with the measured trust report, not with a retrieval rank the hardware cannot hold | `make claim-check` | planned |
+| 5.5 | Trust as the README claim | `README.md` | lead with the measured trust report, not with a retrieval rank the hardware cannot hold | `make claim-check` | **done** — the "where this RAG is better" bullet now carries the trust report's numbers (poison leak 0.20 → 0.00 at zero false refusals; gate risk@80 0.4069 against the scalar's 0.5099) and links the write-up |
 
 ---
 

@@ -256,17 +256,23 @@ published system in the benchmark's own Table 5, reranking included — with the
 that the published table has no lexical baseline and plain BM25 already beats it. A model-free
 coverage pass lifts MAP@10 from 0.255 to 0.279.
 
-**Cannot be claimed.** There is no end-to-end RAG ranking, because no end-to-end benchmark has
-been run to completion here. There is no KILT, MTEB, HHEM or TREC RAG placement, because those
-need a submission, a full stack, or access this machine does not have. **Answerability does not
-transfer**: on MultiHop-RAG the gate abstains at ~30% whether or not the question is answerable,
-an AUC of 0.51, and a threshold recalibrated on a held-out MultiHop split scores at chance
-(0.511 balanced accuracy) — so calibrated abstention is a property of a calibrated corpus, not a
-portable capability. **Cross-encoder reranking and fine-tuning did not pay off here**: a 335M
-reranker over the fused top-100 lost nDCG@10 on all five BEIR datasets, and full-split
-fine-tuning with mined hard negatives scored below zero-shot. And any faithfulness or
-answer-accuracy number produced with a local 35B model would be a statement about that model, not
-about this engine — it should be labelled that way wherever it appears.
+**Cannot be claimed.** There is no end-to-end **ranking**: the first `engine + <generator>` row
+exists only as a **pilot** — 12 answerable plus 8 `null_query` records through the engine at its
+shipped defaults with the local `ornith-1.5:35b`, where **EM 0.000 sits beside a 0.667
+gold-containment rate on the same nine answers** (prose against short entity golds) and ~36 s/query
+puts the full 2,255-record row at 22–25 h on this host. See
+[`docs/findings-endtoend-pilot.md`](docs/findings-endtoend-pilot.md). There is no KILT, MTEB, HHEM or
+TREC RAG placement, because those need a submission, a full stack, or access this machine does not
+have. **Answerability does not transfer**: on MultiHop-RAG the gate abstains at ~30% whether or not
+the question is answerable, an AUC of 0.51, and a threshold recalibrated on a held-out MultiHop
+split scores at chance (0.511 balanced accuracy) — so calibrated abstention is a property of a
+calibrated corpus, not a portable capability. **Stronger scorers did not pay off here**: a 335M
+pointwise reranker over the fused top-100 lost nDCG@10 on all five BEIR datasets, full-split
+fine-tuning with mined hard negatives scored below zero-shot, and all three Phase 2 ordering heads
+failed — a topical late-interaction model, a relational NLI stance score, and a cross-encoder
+adapted on MuSiQue's own train pairs all scored *below* the baselines they were meant to improve.
+And any faithfulness or answer-accuracy number produced with a local 35B model is a statement about
+that model, not about this engine — it is labelled that way wherever it appears.
 
 ## What was expected to move this, and what actually did
 
