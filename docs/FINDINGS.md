@@ -52,6 +52,7 @@ are what stops the next pass from re-trying them.
 | Chunking-gap hypotheses | Three targeted fixes for the engine's 0.013 chunking gap all fail — merging documents ≤ `chunk_chars+overlap` (0.7236 vs 0.7264), doubling `RETRIEVE_K` (0.7273), indexing a context breadcrumb (0.7243) — while whole-document chunking reaches 0.7396, so the loss is the **chunked representation**, not its selection | [findings-chunk-merge.md](findings-chunk-merge.md) |
 | RGB negative rejection | Not adapted: no clean no-answer label in the English files and a judge-based official metric | [../BENCHMARKS.md](../BENCHMARKS.md) |
 | Late-interaction ordering head (`answerai-colbert-small-v1` MaxSim) | Worse than the unordered first stage: **−0.0430 MAP@10 [−0.0632, −0.0229]** against `fused`, −0.0894 against the CE order, −0.1016 against covquota. Reordering the CE's *own* top-10 by MaxSim — recall fixed, Hits@10 unchanged — still costs **−0.0257 [−0.0434, −0.0079]**, so the +0.1254 ordering headroom is not reachable by this instrument | [findings-ordering-head.md](findings-ordering-head.md) |
+| Relational (stance) reranker on ArguAna | Contradiction−entailment ordering of the dense pool is **far worse than the dense order itself** (nDCG@10 0.3767 vs 0.6467, **−0.2700 [−0.2921, −0.2474]**) and below BM25's ~0.417, which is the roadmap's own falsification criterion — a relational NLI score is not a better ArguAna ordering signal than the similarity it was meant to correct | [findings-relational-rerank.md](findings-relational-rerank.md) |
 
 ## Method notes worth carrying forward
 

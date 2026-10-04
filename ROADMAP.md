@@ -216,16 +216,19 @@ training run or a model download.
 | --- | --- | --- | --- | --- | --- |
 | 2.1 | Late interaction done properly | `[model]` (~130 MB, MPS) | `answerai-colbert-small-v1` (33M) MaxSim over the cached pool, plus a recall-fixed arm that reorders the CE's own top-10; `tools/multihop_ordering.py` | beats covquota **0.3280** with a paired CI | **done, negative** — MaxSim is below even the unordered `fused` first stage (−0.0430 MAP@10), and reordering the CE's own top-10 still costs −0.0257, so the +0.1254 ordering headroom is not reachable by this instrument |
 | 2.2 | Train on bridge conventions | `[model]` GPU-preferred | cross-encoder trained on multi-hop pairs mined from *train* splits (MuSiQue / 2Wiki / HotpotQA), positives from gold facts, hard negatives from the pool — not MS MARCO points; `tools/order_train.py` | held-out MAP@10 over the trained vs zero-shot ranker; label the result **adapted** | planned |
-| 2.3 | Route by relation | `[model]` | pointwise for topical, pairwise/NLI-stance for opposition (ArguAna); route per corpus/query, never a global swap | ArguAna recovers toward the dense 0.596 without losing BEIR-5 | planned |
+| 2.3 | Route by relation | `[model]` (~180 MB) | `cross-encoder/nli-deberta-v3-base` scored as `P(contradiction) − P(entailment)` over the dense pool; `tools/arguana_stance.py` | ArguAna recovers toward the dense 0.596 without losing BEIR-5; loses to BM25 → hypothesis wrong | **done, negative** — nDCG@10 **0.3767 vs the dense order's 0.6467** (−0.2700 [−0.2921, −0.2474]), below BM25's ~0.417, so the roadmap's own falsification criterion fires |
 | 2.4 | Listwise fallback | `[dep]` | `jina-reranker-v3` is **CC BY-NC 4.0, non-commercial** — reproduce on the five sets + MultiHop before believing any self-reported row | if it does not beat 2.2 on this host, drop it | planned |
 | 2.5 | Report ordering vs signal vs selection | `docs/findings-ordering-head.md` | state each new rule's number against the decomposition, so an ordering gain is never read as a recall gain | — | done for 2.1 |
 
 **Do not retry:** any pointwise MS MARCO reranker at depth 100 (loss on all five BEIR datasets;
 ArguAna 0.568 → 0.250), full-split fine-tuning with naive mined negatives (below zero-shot),
-BM25 PRF, another optimiser over the cached channels, or **a general-purpose topical
+BM25 PRF, another optimiser over the cached channels, **a general-purpose topical
 late-interaction reranker** — `answerai-colbert-small-v1` MaxSim is below the unordered fused
 first stage on MultiHop-RAG and makes the CE's own top-10 worse when it only reorders it
-(Phase 2.1, `docs/findings-ordering-head.md`).
+(Phase 2.1, `docs/findings-ordering-head.md`) — or a **relational NLI stance score as a
+replacement** for similarity on ArguAna, which is worse than the dense order it reorders and
+below BM25 (Phase 2.3, `docs/findings-relational-rerank.md`). Both negatives point the same way:
+the next ordering head must be trained on this task's own relevance conventions, not borrowed.
 
 ---
 
@@ -392,3 +395,14 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   `covquota-3-0.7` **0.3280** exactly, so the baselines are the project's own. Suite **1021
   passed, 5 deselected** (the model sanity check is a `real_weights` test). Next: 2.2, a
   cross-encoder trained on bridge conventions.
+- 2026-10-04 — **Phase 2.3 done, also negative.** An NLI stance reranker
+  (`cross-encoder/nli-deberta-v3-base`, scored `P(contradiction) − P(entailment)`) over the
+  ArguAna dense pool scores nDCG@10 **0.3767** against the dense order's **0.6467** on the same
+  pool — **−0.2700 [−0.2921, −0.2474]** — and below BM25's ~0.417, which is the roadmap's own
+  falsification criterion. Probable causes, recorded as hypotheses: 512-token truncation of
+  300–500-word arguments, sentence-level NLI as a proxy for a discourse relation, and discarding
+  the topical signal instead of blending with it. Phase 2 now has **two falsified ordering heads**
+  (topical late interaction, relational NLI) against one strong baseline rule, which is the
+  argument for 2.2. Also found and fixed a reusable harness trap: `evaluate_rankings` averages
+  over every qrels query, so a limited run must score against the subset it ranked — the `--limit 8`
+  smoke read nDCG@10 0.0045 until it did. Suite **1027 passed, 5 deselected**. Next: 2.2.
