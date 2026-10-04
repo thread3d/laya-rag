@@ -149,6 +149,32 @@ and merge arrays plus allocator retention, which the profile could not separate 
 not touch. The 10M-document wall is therefore **reduced but not removed**, and the next lever is the
 merge, not the block.
 
+## The merge is not the lever — and the block is a tradeoff, not a win
+
+The previous round's write-up said *"the next lever is the merge, not the block"*. That was wrong,
+and varying the run count at a fixed corpus shows it:
+
+| block_tokens | runs | peak RSS | index MB | build s |
+| --- | --- | --- | --- | --- |
+| 100,000 | ~101 | **340.7 MB** | 83.2 | 55.0 |
+| 1,000,000 | ~11 | 641.4 MB | 83.2 | 53.9 |
+| 10,000,000 | ~2 | **911.8 MB** | 83.2 | 53.3 |
+
+**More runs means *less* memory.** The 101-run build is the cheapest configuration measured and the
+2-run build the most expensive, so the peak is the **block**, and the k-way merge over 101 runs is
+cheap — the opposite of what I recorded. The `block_tokens` knob I already described is the lever.
+
+It is a **tradeoff, not a free win**, which is why the default was *not* changed on this evidence.
+A lower cap bounds memory but multiplies runs: at 10M documents a 100k-token cap would produce tens
+of thousands of run files and a merge heap with that many handles — plausibly slower and possibly
+past the open-file limit. The 100k-document experiment that shows the memory saving cannot show that
+cost, because it has only 101 runs. **Choosing the cap needs a run at a corpus size where the run
+count is realistic**, and that measurement has not been made.
+
+**A variance caveat.** The same configuration here reads 641.4 MB where the earlier sweep read
+548.9 MB — a ~15% spread between runs of the identical build. Allocator behaviour and machine state
+move these numbers, so differences smaller than that are not findings.
+
 ## What this does not show
 
 - **Not a fix.** No index format changed. The cheaper per-block representation above is the next
