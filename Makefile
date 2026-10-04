@@ -44,12 +44,13 @@ ENGINE_MUSIQUE_REPORT ?= eval/benchmarks/musique/engine-hybrid-200
 ENGINE_MUSIQUE_COMPARE_ARGS ?=
 ORDERING_ARGS ?=
 STANCE_ARGS ?=
+TRUST_ARGS ?=
 ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 JOB_STATUS_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
+.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -92,6 +93,7 @@ help:
 	@echo "engine-musique-compare  the engine vs the MuSiQue harness, paired MAP@10"
 	@echo "multihop-ordering  late interaction as an ordering head over the cached pool"
 	@echo "arguana-stance  NLI contradiction-entailment reranking on ArguAna"
+	@echo "trust-report  one deterministic report: poisoning, verification, abstention"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -304,6 +306,10 @@ multihop-ordering:
 # Both arms reorder the same dense pool, so a delta is ordering alone. Resumable per query.
 arguana-stance:
 	OMP_NUM_THREADS=16 $(PY) tools/arguana_stance.py $(STANCE_ARGS)
+
+# Phase 5.1: the deterministic trust surfaces in one report. `TRUST_ARGS="--check"` gates a change.
+trust-report:
+	OMP_NUM_THREADS=16 $(PY) tools/trust_report.py $(TRUST_ARGS)
 
 # Does a learned gate threshold or a fitted temperature beat the fixed 0.5 and raw score?
 gate-calibration:

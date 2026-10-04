@@ -269,7 +269,7 @@ This is the axis no 8B API model leads on, and the one a CPU-only system can win
 
 | # | item | file | change | test | status |
 | --- | --- | --- | --- | --- | --- |
-| 5.1 | Trust report | **new** `tools/trust_report.py`, `make trust-report` | one deterministic, offline report: citation precision/recall, abstention risk–coverage + AURC, poison exclusion, injection flags, tenant-isolation checks — in-domain and labelled out-of-domain | `make trust-report --check` gates | planned |
+| 5.1 | Trust report | `tools/trust_report.py`, `make trust-report` | one deterministic, offline report aggregating poison exclusion, gold retention, negative rejection, injection flags, tenant isolation, deterministic verification, and the abstention selective-prediction suite; `--check` gates a change | `make trust-report TRUST_ARGS="--check"` | done — 12/12 checks pass; poison leak 0.20 → 0.00 at zero false refusals, gate risk@80 0.4069 vs the scalar's 0.5099 |
 | 5.2 | Three-state adjudication | `src/laya_rag/verify.py` | a claim about an unmentioned topic becomes `no_coverage`/`contradicted`, not `not_measured`, via the shipped `NLIAnswerability` hook; report no-coverage recall on hand-labelled pairs | `tests/test_verify_states.py` | planned |
 | 5.3 | Numeric / negation / unit / date checks | `src/laya_rag/verify.py` | deterministic span checks; ship only at precision ≥ ~0.9 on 200 labelled composed answers | `tests/test_verify_numeric.py` | planned |
 | 5.4 | Grow the adversarial suite | `tools/adversarial_audit.py`, `eval/` | poison / noise / negative rejection / injection with frozen seeds; poison 5 documents → ASR measured, never cited | `make adversarial-audit --check` | planned |
@@ -406,3 +406,11 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   argument for 2.2. Also found and fixed a reusable harness trap: `evaluate_rankings` averages
   over every qrels query, so a limited run must score against the subset it ranked — the `--limit 8`
   smoke read nDCG@10 0.0045 until it did. Suite **1027 passed, 5 deselected**. Next: 2.2.
+- 2026-10-04 — **Phase 5.1 done.** `make trust-report` states the deterministic trust surfaces in
+  one artefact and `--check` gates a change: **12/12 checks pass** — planted poison leak rate
+  0.20 → **0.00** with **zero** false refusals, tenant isolation and anonymous denial hold, and a
+  fabricated number plus an injection marker are flagged. The abstention half pairs the
+  12-feature gate against the shipped scalar out of sample: AUC **0.8146 vs 0.5199**, false-accept
+  at 80% coverage **0.4069 vs 0.5099**, ECE 0.065 vs 0.271. It aggregates existing tools and
+  re-measures nothing, which the write-up says plainly. Suite **1034 passed, 5 deselected**. Next:
+  2.2 (the data path exists — `tools/fetch_musique.py --split train`), then Phase 3.
