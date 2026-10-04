@@ -40,6 +40,29 @@ dense row alone** (0.8876). That is the fourth corpus where a "helpful" instrume
 now RRF fusion on quora), and it is the same conclusion each time: pick per corpus, do not
 configure globally.
 
+## The seventh dataset: touche, and selection cutting the other way
+
+`webis-touche2020` (382,545 documents, 49 scored queries) is now measured under the same retrievers:
+
+| dataset | `bm25-engine` | `bge-small` dense | fused (hybrid) |
+| --- | --- | --- | --- |
+| **webis-touche2020** | **0.4419** | **0.2202** | **0.3509** |
+| **5-set mean** | 0.3612 | 0.4472 | 0.4515 |
+| **6-set mean (+quora)** | 0.4291 | 0.5206 | 0.5201 |
+| **7-set mean (+touche)** | **0.4309** | **0.4777** | **0.4959** |
+
+**Adding touche moves the fused mean the other way** — 0.5201 down to **0.4959**, −0.024 — where adding
+quora moved it up by +0.069. Two datasets, opposite directions, is the composition point demonstrated
+rather than asserted: a BEIR average is a statement about a set, and swapping one member can move it
+by more than any method difference it is used to adjudicate.
+
+**Fusion reverses again, and harder than anywhere else.** On touche the fused row is **0.091 below
+BM25 alone** (0.3509 against 0.4419), and the dense row is *less than half* the lexical one (0.2202).
+That is the fifth corpus where an instrument that helps elsewhere loses — after MultiHop-RAG's dense
+channel, MuSiQue's dense channel, the cross-encoder across five BEIR sets, and RRF fusion on quora.
+Touche's documents are long, noisy web pages, which is where a 33M-parameter dense encoder has least
+to offer relative to exact lexical matching.
+
 ## What this does not show
 
 - **Not the 18-dataset average.** Six of eighteen. `webis-touche2020` is **downloaded and extracted**
