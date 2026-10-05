@@ -1007,7 +1007,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if "bm25" in wanted:
             started = time.perf_counter()
-            rankings["bm25"] = bm25_rankings(corpus, queries, args.top_k, k1=args.k1, b=args.b)
+            # The control row is checkpointed too. It runs at *published* settings, so it does not
+            # stem and its vocabulary is far larger: on NQ that made it a three-hour row with no
+            # way to resume, which is exactly the waste the engine row's checkpoint exists to avoid.
+            rankings["bm25"] = bm25_rankings(
+                corpus, queries, args.top_k, k1=args.k1, b=args.b,
+                checkpoint=(Path(str(args.out) + ".lexical-control.jsonl")
+                            if args.lexical_checkpoint else None),
+            )
             results["bm25"] = {"seconds": round(time.perf_counter() - started, 2)}
 
         # The engine's own lexical channel: query stopwords dropped, English stemming on.

@@ -69,6 +69,12 @@ are what stops the next pass from re-trying them.
 
 ## Method notes worth carrying forward
 
+- **Checkpoint the row you are actually waiting on.** The engine lexical row was checkpointed because it
+  was the shipped arm; the *control* row — published settings, no stemming, a far larger vocabulary — was
+  not, and on NQ it became a three-hour blind wait twice. Resumability belongs to whichever call is
+  slowest, which is not always the one being reported.
+
+
 - **A uniform partial result is an API *semantic*, not a data problem.** Fetching the FRAMES corpus
   stored **exactly one article per 20-title batch** — a 5% yield as regular as a metronome. It reads
   like broken title normalisation and is not: the TextExtracts extension returns **one full extract

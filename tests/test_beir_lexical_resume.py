@@ -98,3 +98,15 @@ def test_queries_not_in_the_checkpoint_are_filled_in(tmp_path):
     result = beir.bm25_rankings(CORPUS, {"q1": QUERIES["q1"], "q9": "refunds"}, 2,
                                 checkpoint=checkpoint)
     assert "q9" in result
+
+
+def test_the_control_row_has_its_own_checkpoint_path():
+    """The published-settings control must not share the engine row's file: different settings,
+    different fingerprint, and on NQ it is the slower of the two by far, so it needs its own."""
+    import re
+    from pathlib import Path as _Path
+
+    source = (_Path(__file__).resolve().parents[1] / "tools" / "beir.py").read_text()
+    assert ".lexical-control.jsonl" in source
+    control = re.search(r'rankings\["bm25"\] = bm25_rankings\((.*?)\)', source, re.S).group(1)
+    assert "checkpoint=" in control, "the control row must be resumable like the engine row"
