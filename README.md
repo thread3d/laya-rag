@@ -737,6 +737,31 @@ yet for the per-corpus lesson below: there lexical BM25 beats dense by more than
 (0.442 against 0.220) and fusion **loses 0.091 to BM25 alone**. See
 [docs/findings-beir-breadth.md](docs/findings-beir-breadth.md).
 
+### FRAMES — retrieval, and the same two channels swapping places
+
+[FRAMES](https://huggingface.co/datasets/google/frames-benchmark) is 824 questions whose evidence is
+English Wikipedia articles, so it is scored at document level against the articles each question
+links. Retrieval only — the plan's rule when the generator dominates the variance. 814 questions over
+a 2,482-article corpus built in 51 API requests:
+
+| arm | recall@1 | recall@10 | recall@20 | MRR@10 | nDCG@10 |
+| --- | --- | --- | --- | --- | --- |
+| lexical (BM25, engine settings) | 0.7224 | 0.9349 | 0.9619 | 0.8028 | 0.6586 |
+| **dense (`bge-small`)** | **0.8464** | **0.9767** | **0.9939** | **0.8931** | **0.7505** |
+
+Dense wins on every metric — and FRAMES is *also* long Wikipedia text, like touche, where lexical wins
+by two to one. So the axis is not length and not domain; it is the query against the document. Touche
+asks a short topical query of running prose, where exact matching is strong; FRAMES asks a sentence of
+constraints ("the 15th first lady's mother's first name…") against a page that names its subject once.
+Two sides of the reversal now sit inside one source corpus family, which is the strongest form of this
+project's recurring lesson: **route per corpus, do not configure globally.**
+
+**Gold coverage is reported because it is not 1.0 by accident.** The dataset's links are URLs while the
+corpus is keyed by canonical titles; following the API's redirects took coverage from **0.8792 to
+0.9977** and moved each arm by **0.08–0.10 nDCG@10** — more than the dense-lexical gap being measured.
+An unresolved gold set does not merely scale numbers down. See
+[docs/findings-frames.md](docs/findings-frames.md).
+
 Against the published field, on the four datasets an independent matrix carries for every system:
 
 ![BEIR 4-dataset mean nDCG@10: this system against published systems](docs/charts/beir_ranking.png)
