@@ -1,5 +1,9 @@
 # Roadmap — the six steps toward a winnable "best in the world"
 
+**Current state: [docs/PROGRAMME-STATUS.md](docs/PROGRAMME-STATUS.md)** — where the
+programme landed, what it refuted, and what remains with its measured cost.
+
+
 Companion to [`PLAN.md`](PLAN.md) (the closed seven-gap programme), [`RESEARCH.md`](RESEARCH.md)
 (the outward survey) and [`IMPROVEMENTS.md`](IMPROVEMENTS.md) (the in-repo diagnosis). This
 document is the **forward** plan: what is done next, in what order, how each item is verified,
