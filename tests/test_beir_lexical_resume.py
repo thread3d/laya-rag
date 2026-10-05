@@ -132,3 +132,23 @@ def test_a_limit_at_or_above_the_query_count_keeps_everything():
     queries = {f"q{i}": f"text {i}" for i in range(5)}
     assert beir.sample_queries(queries, 5, 17) == queries
     assert beir.sample_queries(queries, None, 17) == queries
+
+
+def test_qrels_are_restricted_to_the_queries_actually_ranked():
+    """The dilution that made a 100-query SciFact subset read 0.2047 against 0.6762."""
+    qrels = {f"q{i}": {f"d{i}": 1.0} for i in range(10)}
+    ranked = {f"q{i}": "text" for i in range(3)}
+    restricted = beir.restrict_qrels(qrels, ranked)
+    assert set(restricted) == {"q0", "q1", "q2"}
+    assert restricted["q0"] == {"d0": 1.0}
+
+
+def test_restricting_drops_qrels_for_queries_with_no_ranking():
+    qrels = {"a": {"d1": 1.0}, "b": {"d2": 1.0}}
+    assert beir.restrict_qrels(qrels, {"a": "t"}) == {"a": {"d1": 1.0}}
+
+
+def test_restricting_is_a_no_op_when_every_query_was_ranked():
+    qrels = {"a": {"d1": 1.0}, "b": {"d2": 1.0}}
+    ranked = {"a": "t", "b": "t"}
+    assert beir.restrict_qrels(qrels, ranked) == qrels

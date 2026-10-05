@@ -69,14 +69,16 @@ are what stops the next pass from re-trying them.
 
 ## Method notes worth carrying forward
 
-- **A result that is off by an order of magnitude is a bug signal, not a finding.** The HotpotQA row came
-  back at nDCG@10 0.0516 against a published 0.603. Nine other corpora agree within 0.02 on the same code
-  path, so the honest response was to stop and diagnose rather than publish a dramatic new "finding" — and
-  when the first two hypotheses (id mismatch, short documents at scale) were ruled out, to record it as
-  unresolved. The number is quarantined in the roadmap and must not be quoted.
-- **`--limit-queries` exists for corpora whose full query set costs hours.** It draws a *seeded random*
-  subset rather than the head of the file, because query difficulty is not uniformly ordered and the head
-  would sample the easy ones. The seed and the subset size are recorded in the report.
+- **A result off by an order of magnitude is a bug signal, not a finding — and here it was mine.**
+  HotpotQA read nDCG@10 0.0516 against a published 0.603, and nine other corpora agreed within 0.02 on
+  the same path. Rather than publish a twelve-fold gap, I diagnosed it: the gold documents ranked #1 and
+  #2 in a corpus slice, so scoring was fine, and SciFact then read 0.2047 against 0.6762 under the same
+  new `--limit-queries` flag. It was the dilution trap this project had already recorded twice — full
+  qrels passed alongside a subset's rankings, so every unsampled query scored zero. The prediction from
+  dilution (0.0516 x 7405/600 = 0.637) matched the corrected 0.6365 to three digits.
+- **The dilution trap is worth re-checking on every partial-run path.** It has now been found three
+  times in this repository — `arguana_stance`, `order_eval`, and the new query-subset flag — each time
+  because a partial ranking set was evaluated against a complete qrels.
 
 
 - **Checkpoint the row you are actually waiting on.** The engine lexical row was checkpointed because it

@@ -162,6 +162,19 @@ def load_titles(dataset_dir: Path) -> dict[str, str]:
     return titles
 
 
+def restrict_qrels(qrels: Mapping[str, Mapping[str, float]],
+                   queries: Mapping[str, str]) -> dict[str, Mapping[str, float]]:
+    """Qrels limited to the queries actually ranked.
+
+    `evaluate_rankings` macro-averages over every query in the qrels it is handed, so passing a full
+    qrels alongside a subset's rankings scores every unsampled query as zero and divides the mean by
+    the wrong denominator. On a 100-query SciFact subset that read **0.2047** where the full set scores
+    **0.6762** — a 3.3x shortfall that looks like a retrieval failure and is an averaging one. It is
+    the same dilution trap this project recorded for `arguana_stance` and `order_eval`.
+    """
+    return {qid: qrels[qid] for qid in queries if qid in qrels}
+
+
 def sample_queries(queries: Mapping[str, str], limit: int | None, seed: int) -> dict[str, str]:
     """A seeded random subset of the scored queries, in a stable order.
 
@@ -1022,6 +1035,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.limit_queries and len(queries) > args.limit_queries:
             total = len(queries)
             queries = sample_queries(queries, args.limit_queries, args.query_seed)
+            # `evaluate_rankings` macro-averages over every query in the qrels it is handed, so
+            # passing the full qrels alongside a partial ranking set scores every unsampled query as
+            # zero and dilutes the mean -- SciFact read 0.2047 instead of 0.6762 before this line.
+            # The restriction is applied only here, so a full run's qrels are untouched.
+            qrels = restrict_qrels(qrels, queries)
             print(f"  SUBSET RUN: {len(queries)} of {total} qrels queries, seed {args.query_seed} "
                   f"-- not comparable to a full-set published figure", flush=True)
         print(f"  {len(corpus)} documents, {len(queries)} scored queries", flush=True)
