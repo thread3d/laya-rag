@@ -68,6 +68,57 @@ def already_fetched(path: Path) -> set[str]:
     return done
 
 
+def resolve_titles(titles: Sequence[str], pause: float = 2.0, timeout: int = 30,
+                   seed: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Map each title to the canonical article it resolves to, following normalisation and redirects.
+
+    FRAMES' links are URLs — ``USA``, ``Harriet_Lane`` — while a corpus built from the API is keyed by
+    canonical titles, so 12% of the gold set matched nothing until the redirects were followed. Both
+    hops come back in one response: ``normalized`` (underscores, case, percent-encoding) and
+    ``redirects`` (the article the title actually points at).
+
+    ``seed`` holds titles already resolved, so a run interrupted by a rate limit resumes rather than
+    restarting — and a 429 is retried with backoff rather than skipped, which is how four batches went
+    missing the first time this ran at 1 s pacing.
+    """
+    mapping: dict[str, str] = dict(seed or {})
+    pending = [title for title in titles if title not in mapping]
+    for start in range(0, len(pending), BATCH):
+        batch = pending[start : start + BATCH]
+        block: dict | None = None
+        for attempt in range(5):
+            query = urllib.parse.urlencode({
+                "action": "query", "format": "json", "redirects": 1, "titles": "|".join(batch),
+            })
+            request = urllib.request.Request(f"{API}?{query}", headers={"User-Agent": USER_AGENT})
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    block = (json.loads(response.read().decode("utf-8")).get("query") or {})
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code == 429:
+                    wait = 15.0 * (2**attempt)
+                    print(f"  rate limited (429); waiting {wait:.0f}s", flush=True)
+                    time.sleep(wait)
+                    continue
+                print(f"  resolve batch {start // BATCH}: HTTP {exc.code}", flush=True)
+                break
+            except Exception as exc:
+                print(f"  resolve batch {start // BATCH}: {type(exc).__name__}: {exc}", flush=True)
+                time.sleep(5.0)
+                break
+        if block is None:
+            continue
+        normalised = {row["from"]: row["to"] for row in block.get("normalized", [])}
+        redirected = {row["from"]: row["to"] for row in block.get("redirects", [])}
+        for title in batch:
+            step = normalised.get(title, title)
+            mapping[title] = redirected.get(step, step)
+        print(f"  resolved {min(start + BATCH, len(pending))}/{len(pending)}", flush=True)
+        time.sleep(pause)
+    return mapping
+
+
 def fetch_batch(titles: Sequence[str], timeout: int = 30) -> dict[str, str]:
     """Article text for up to ``BATCH`` titles, following redirects.
 
@@ -121,6 +172,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--out", default=str(DEFAULT_OUT))
     ap.add_argument("--limit", type=int, default=None, help="stop after this many articles")
     ap.add_argument("--pause", type=float, default=2.0, help="seconds between batches; Wikimedia throttles bulk extraction")
+    ap.add_argument("--resolve-map", default=None,
+                    help="write a dataset-title -> canonical-title map here and exit")
     return ap.parse_args(argv)
 
 
@@ -130,6 +183,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not tsv.is_file():
         raise SystemExit(f"{tsv} is missing; fetch it with the command in ROADMAP 3.1")
     titles = article_titles(read_rows(tsv))
+    if args.resolve_map:
+        target = Path(args.resolve_map)
+        seed = json.loads(target.read_text(encoding="utf-8")) if target.is_file() else {}
+        if seed:
+            print(f"resuming from {len(seed)} resolved titles", flush=True)
+        mapping = resolve_titles(titles, pause=args.pause, seed=seed)
+        target = Path(args.resolve_map)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(mapping, indent=1, sort_keys=True), encoding="utf-8")
+        print(f"resolved {len(mapping)} titles -> {target}")
+        return 0
     done = already_fetched(out)
     pending = [title for title in titles if title not in done]
     if args.limit:

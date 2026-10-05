@@ -18,10 +18,29 @@ make frames-eval                            # both arms
 
 | arm | recall@1 | recall@10 | recall@20 | MRR@10 | nDCG@10 |
 | --- | --- | --- | --- | --- | --- |
-| lexical (BM25, engine settings) | 0.6425 | 0.8759 | 0.9079 | 0.7296 | 0.5794 |
-| **dense (`bge-small`)** | **0.7432** | **0.9275** | **0.9521** | **0.8113** | **0.6594** |
+| lexical (BM25, engine settings) | 0.7224 | 0.9349 | 0.9619 | 0.8028 | 0.6586 |
+| **dense (`bge-small`)** | **0.8464** | **0.9767** | **0.9939** | **0.8931** | **0.7505** |
 
-**Dense beats lexical on every metric**, by 0.10 recall@1 and 0.08 nDCG@10.
+**Dense beats lexical on every metric**, by 0.12 recall@1 and 0.09 nDCG@10.
+
+### Resolving the redirects was worth more than the comparison it enabled
+
+The first run scored the dataset's URL spellings directly and reported `gold_coverage` 0.8792 — 12% of
+the gold articles matched nothing. Resolving every link through the API's `normalized` and `redirects`
+hops (`tools/frames_corpus.py --resolve-map`) took coverage to **0.9977** and moved both arms by far
+more than the arms differ from each other:
+
+| arm | metric | unresolved | **resolved** | change |
+| --- | --- | --- | --- | --- |
+| lexical | recall@1 | 0.6425 | **0.7224** | +0.080 |
+| lexical | nDCG@10 | 0.5794 | **0.6586** | +0.079 |
+| dense | recall@1 | 0.7432 | **0.8464** | +0.103 |
+| dense | nDCG@10 | 0.6594 | **0.7505** | +0.091 |
+
+So the unresolved run understated *both* retrievers by roughly 0.08–0.10 nDCG@10 — more than the
+dense-lexical gap it was being used to measure — and the gap itself widened slightly (0.0800 → 0.0919).
+A coverage gap does not just scale the numbers down; it changes how much they can be trusted to rank
+the things being compared.
 
 ## The fourth reversal, and what it says
 
@@ -59,7 +78,8 @@ comparison on this corpus should fix the redirect gap first, or it will be measu
   measured, and this says nothing about whether a model can *use* the retrieved articles.
 - **Not a labelled span set.** Gold is document-level, so a retrieval can be "correct" and still not
   contain the sentence a question needs — which is what Phase 5.3's verifier would then have to catch.
-- **Not redirect-aware.** As above; the coverage figure is the honest bound on every recall number here.
+- **Redirects are now resolved** (`--resolve-map`, coverage 0.9977), so these numbers are the
+  comparable ones; the unresolved run is kept above only to show what the gap cost.
 - **One retriever per channel.** BM25 at engine settings and one 33M encoder; the three-model ensemble
   and the cross-encoder were not run.
 

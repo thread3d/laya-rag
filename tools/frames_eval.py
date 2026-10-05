@@ -50,13 +50,26 @@ def normalise_title(title: str) -> str:
     return text.casefold().rstrip(".,;")
 
 
-def gold_titles(row: Mapping[str, str]) -> set[str]:
-    """The articles a question's links name, normalised."""
+def load_title_map(path: Path) -> dict[str, str]:
+    """Dataset title -> canonical article title, both normalised, from `frames_corpus --resolve-map`.
+
+    Absent means the dataset's spellings are used as-is, which understates recall by the redirect gap;
+    the report's `gold_coverage` is what makes that visible instead of silent.
+    """
+    if not path.is_file():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {normalise_title(key): normalise_title(value) for key, value in raw.items()}
+
+
+def gold_titles(row: Mapping[str, str], title_map: Mapping[str, str] | None = None) -> set[str]:
+    """The articles a question's links name, normalised and resolved to canonical titles."""
     found = set()
     for value in row.values():
         if isinstance(value, str):
             found.update(normalise_title(match) for match in LINK_RE.findall(value))
-    return {title for title in found if title}
+    title_map = title_map or {}
+    return {title_map.get(title, title) for title in found if title}
 
 
 def recall_at_k(ranked: Sequence[str], gold: set[str], k: int) -> float:
@@ -85,13 +98,13 @@ def score_ranking(ranked: Sequence[str], gold: set[str]) -> dict[str, float]:
     return out
 
 
-def load_questions(path: Path) -> list[dict[str, Any]]:
+def load_questions(path: Path, title_map: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
     with path.open(encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
     questions = []
     for row in rows:
         prompt = (row.get("Prompt") or "").strip()
-        gold = gold_titles(row)
+        gold = gold_titles(row, title_map)
         if prompt and gold:
             questions.append({"query": prompt, "gold": gold, "answer": row.get("Answer", ""),
                               "types": row.get("reasoning_types", "")})
@@ -125,6 +138,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="frames_eval.py")
     ap.add_argument("--tsv", default=str(FRAMES / "test.tsv"))
     ap.add_argument("--corpus", default=str(FRAMES / "corpus.jsonl"))
+    ap.add_argument("--title-map", default=str(FRAMES / "title-map.json"),
+                    help="dataset-title -> canonical-title map; without it gold coverage is understated")
     ap.add_argument("--model", default="BAAI/bge-small-en-v1.5")
     ap.add_argument("--top-k", type=int, default=20)
     ap.add_argument("--limit", type=int, default=None)
@@ -135,7 +150,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    questions = load_questions(Path(args.tsv))
+    title_map = load_title_map(Path(args.title_map))
+    if title_map:
+        print(f"resolved {len(title_map)} dataset titles to canonical ones", flush=True)
+    questions = load_questions(Path(args.tsv), title_map)
     if args.limit:
         questions = questions[: args.limit]
     corpus = load_corpus(Path(args.corpus))

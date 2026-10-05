@@ -90,3 +90,28 @@ def test_summarize_means_the_per_query_rows():
     assert summary["questions"] == 2
     assert summary["recall@1"] == pytest.approx(0.5)
     assert summary["gold_coverage"] == pytest.approx(1.0)
+
+
+def test_a_title_map_folds_a_dataset_link_onto_its_canonical_article():
+    """The redirect gap was worth 0.12 of coverage and 0.09 nDCG@10, so the map must be applied."""
+    row = {"wikipedia_link_1": "https://en.wikipedia.org/wiki/USA"}
+    assert fe.gold_titles(row) == {"usa"}
+    assert fe.gold_titles(row, {"usa": "united states"}) == {"united states"}
+
+
+def test_a_partial_title_map_leaves_unmapped_titles_alone():
+    row = {"wikipedia_link_1": "https://en.wikipedia.org/wiki/Harriet_Lane",
+           "wikipedia_link_2": "https://en.wikipedia.org/wiki/USA"}
+    mapped = fe.gold_titles(row, {"usa": "united states"})
+    assert mapped == {"harriet lane", "united states"}
+
+
+def test_the_title_map_is_loaded_normalised_on_both_sides(tmp_path):
+    path = tmp_path / "title-map.json"
+    path.write_text('{"USA": "United_States", "Harriet_Lane": "Harriet Lane"}')
+    loaded = fe.load_title_map(path)
+    assert loaded == {"usa": "united states", "harriet lane": "harriet lane"}
+
+
+def test_an_absent_title_map_is_empty_rather_than_an_error(tmp_path):
+    assert fe.load_title_map(tmp_path / "nothing.json") == {}
