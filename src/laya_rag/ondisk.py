@@ -56,6 +56,44 @@ _ANN = "ann.faiss"
 
 # ── lexical: packed postings, mmap search ────────────────────────────────
 
+#: How many runs the merge may hold open at once. The final pass opens every remaining run, and a
+#: small block cap multiplies runs — a 100k-token cap needs ~1,000 runs at a million documents and
+#: ~10,000 at ten million — so without a bound the build fails on the file-descriptor limit as a
+#: hard error. Collapsing in groups of this size first keeps the handle count flat.
+_MERGE_FAN_IN = 64
+
+
+def _merge_run_group(paths: Sequence[Path], target: Path) -> None:
+    """Merge sorted ``(term, row, tf)`` runs into one, holding at most ``len(paths)`` open.
+
+    Same heap loop as the final merge, writing triples rather than postings. The output is streamed
+    through a memmap so a group larger than memory does not have to be materialised.
+    """
+    handles = [np.load(path, mmap_mode="r") for path in paths]
+    total = int(sum(len(handle) for handle in handles))
+    sink = np.lib.format.open_memmap(target, mode="w+", dtype=np.int32, shape=(total, 3))
+    positions = [0] * len(handles)
+    heads: list[tuple[int, int, int, int]] = []
+    for r, handle in enumerate(handles):
+        if len(handle):
+            cell = handle[0]
+            heapq.heappush(heads, (int(cell[0]), r, int(cell[1]), int(cell[2])))
+            positions[r] = 1
+    written = 0
+    while heads:
+        term, r, row, tf = heapq.heappop(heads)
+        sink[written] = (term, row, tf)
+        written += 1
+        handle = handles[r]
+        position = positions[r]
+        if position < len(handle):
+            nxt = handle[position]
+            heapq.heappush(heads, (int(nxt[0]), r, int(nxt[1]), int(nxt[2])))
+            positions[r] = position + 1
+    sink.flush()
+    del sink
+
+
 class OnDiskBM25:
     """BM25 over a packed, memory-mapped postings file.
 
@@ -98,7 +136,11 @@ class OnDiskBM25:
         tokens, whichever comes first. The token cap is what bounds build memory: a block
         of long documents otherwise holds a `term -> count` dict per document in RAM, and
         that one block — not the postings — was the 2.4 GB peak on TREC-COVID. More,
-        smaller runs cost a little merge time and no ranking change.
+        smaller runs cost a little merge time and no ranking change. The merge collapses runs in
+        bounded groups, so a small cap can no longer exhaust the file-descriptor limit — but the
+        collapse rewrites the runs once, and at 400,000 documents a 250k cap measured **65% slower**
+        (396 s against 240 s) for 11% less peak RSS, so the default stays at 1M: the bound is there
+        for corpora large enough to need it, not as a licence to lower the cap.
         """
         if block_docs < 1:
             raise ValueError(f"block_docs must be positive, got {block_docs}")
@@ -180,6 +222,27 @@ class OnDiskBM25:
         # smallest run index first drains each run's block for a term before the next
         # run, which reproduces the previous per-run scan byte for byte — and therefore
         # the identical ranking.
+        # Collapse the runs into at most `_MERGE_FAN_IN` before the final pass, so the number of
+        # open handles does not grow with the number of blocks. The heap loop below is unchanged
+        # and sees exactly the same (term, row, tf) order, so the ranking is untouched.
+        level = list(runs)
+        # A fan-in below 2 can never reduce the level, so it would spin forever; clamp rather than
+        # trusting the constant to be sane.
+        fan_in = max(2, int(_MERGE_FAN_IN))
+        while len(level) > fan_in:
+            collapsed: list[Path] = []
+            for start in range(0, len(level), fan_in):
+                group = level[start : start + fan_in]
+                if len(group) == 1:
+                    collapsed.append(group[0])
+                    continue
+                target = run_dir / f"merge-{len(level):05d}-{start:05d}.npy"
+                _merge_run_group(group, target)
+                collapsed.append(target)
+            if len(collapsed) >= len(level):  # pragma: no cover - defensive
+                raise RuntimeError(f"run merge made no progress at fan-in {fan_in}")
+            level = collapsed
+        runs = level
         handles = [np.load(path, mmap_mode="r") for path in runs]
         positions = [0] * len(handles)
         heads: list[tuple[int, int, int, int]] = []  # (term, run, row, tf)
@@ -227,7 +290,10 @@ class OnDiskBM25:
             }),
             encoding="utf-8",
         )
-        for path in runs:
+        # The run directory is scratch: beside the runs themselves the collapse may have left
+        # intermediate `merge-*.npy` files, so clear the directory rather than only `runs`, or the
+        # build fails at the last step having already produced a complete index.
+        for path in run_dir.glob("*"):
             path.unlink()
         run_dir.rmdir()
         for handle in handles:

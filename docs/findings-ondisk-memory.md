@@ -191,14 +191,22 @@ could not answer because it had only 101 runs. Measured at **400,000 documents**
 **42% less peak memory** at a byte-identical index. So a lower cap is a good trade, not the tradeoff
 the 101-run experiment made it look like.
 
-**It cannot ship on its own, though.** The merge opens *every* run at once
-(`handles = [np.load(path, mmap_mode="r") for path in runs]`), so a 100k-token cap needs ~1,000
-handles at a million documents and ~10,000 at ten million — past the usual file-descriptor limit, and
-the failure would be a hard error rather than a slow run. The ordered fix is therefore: **bound the
-merge's open runs first, then lower the default cap.** That is the remaining work on this item, and it
-is now specified rather than guessed.
+**The merge is now bounded, and that reverses the conclusion.** The final merge opens every run at
+once, so a small cap could exhaust the file-descriptor limit and fail as a hard error. It now collapses
+runs in groups of 64 first. But the collapse **rewrites the runs once**, and measuring the cap again
+*after* it changes the answer:
 
-## What this does not show
+| `block_tokens` | runs | peak RSS | build s |
+| --- | --- | --- | --- |
+| 1,000,000 (default) | ~41 | 1,106.4 MB | **240.2** |
+| 250,000 | ~161 | 985.3 MB | **396.1** |
+| 100,000 | ~401 | 723.0 MB | 241.5 *(measured before the collapse existed)* |
+
+So a 250k cap buys **11% less memory for 65% more time** — a bad trade. The earlier "401 runs cost
+nothing" reading was taken *before* the collapse was in the path and **does not survive it**; the
+100k row is kept only with that caveat attached. The default therefore stays at **1M**: the bounded
+merge exists so that a large corpus *can* use a small cap without a hard failure, not as evidence that
+it should.## What this does not show
 
 - **Not a fix.** No index format changed. The cheaper per-block representation above is the next
   step and is parity-testable (identical runs), but it is not implemented here.
