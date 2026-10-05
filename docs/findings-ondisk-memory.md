@@ -175,6 +175,29 @@ count is realistic**, and that measurement has not been made.
 548.9 MB — a ~15% spread between runs of the identical build. Allocator behaviour and machine state
 move these numbers, so differences smaller than that are not findings.
 
+## The cap, costed at a realistic run count
+
+The open question was whether lowering `block_tokens` is safe, which the earlier 100k-document run
+could not answer because it had only 101 runs. Measured at **400,000 documents** (200,000 vocabulary,
+100 tokens per document), where a small cap produces a realistic number of runs:
+
+| `block_tokens` | runs | peak RSS | index MB | build s |
+| --- | --- | --- | --- | --- |
+| 100,000 | ~401 | **723.0 MB** | 333.8 | 241.5 |
+| 1,000,000 | ~41 | 1,106.4 MB | 333.8 | 240.2 |
+| 4,000,000 | ~11 | **1,256.9 MB** | 333.8 | 237.0 |
+
+**The run count costs almost nothing** — 241.5 s against 237.0 s, about 1.8% — while the small cap buys
+**42% less peak memory** at a byte-identical index. So a lower cap is a good trade, not the tradeoff
+the 101-run experiment made it look like.
+
+**It cannot ship on its own, though.** The merge opens *every* run at once
+(`handles = [np.load(path, mmap_mode="r") for path in runs]`), so a 100k-token cap needs ~1,000
+handles at a million documents and ~10,000 at ten million — past the usual file-descriptor limit, and
+the failure would be a hard error rather than a slow run. The ordered fix is therefore: **bound the
+merge's open runs first, then lower the default cap.** That is the remaining work on this item, and it
+is now specified rather than guessed.
+
 ## What this does not show
 
 - **Not a fix.** No index format changed. The cheaper per-block representation above is the next
