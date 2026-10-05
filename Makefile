@@ -425,6 +425,7 @@ adversarial-audit:
 # It reads the reports `make beir` and the multihop tools already wrote, so run those first.
 charts:
 	OMP_NUM_THREADS=16 $(PY) tools/compare.py --charts $(CHARTS_DIR)
+	$(PY) tools/compare_more.py --charts $(CHARTS_DIR)
 	$(PY) tools/diagram.py --out $(DIAGRAM)
 
 # Do the numbers quoted in prose still resolve against the reports that produced them?

@@ -797,6 +797,30 @@ The best-per-dataset mean is **0.495 [0.481, 0.510]** against BGE-large's 0.491,
 cherry-picks a configuration per dataset. The **single deployable configuration**
 (`bge-small` + fused BM25, 33M parameters) is **0.469**. The three-model ensemble is also a
 single configuration, and it reaches **0.495 on five datasets and 0.507 on the four** — above the
+
+Three further cross-system charts, each answering a question the score table cannot:
+
+![Quality per parameter: this system against ten published systems](docs/charts/quality_per_parameter.png)
+
+**Quality per parameter** is the axis this project can actually win, and it is not the same story as
+the score table. The **33M fused arm reaches 0.469 against BGE-large's 0.491** — within 0.022 of a
+335M model at a tenth of the parameters, which is the claim worth making. The 478M ensemble does
+*overtake* it (0.507 against 0.491) but only by spending 1.4× the parameters, so it is a score win,
+not an efficiency one. Sorting by score alone hides exactly this.
+
+![Which channel wins, by corpus](docs/charts/channel_reversal.png)
+
+**The channel reversal** is the programme's central finding in one figure: the same two arms, ten
+corpora, opposite answers. Dense wins on eight of them — most dramatically FiQA (+61%) and ArguAna
+(+43%) — and loses on two, including the largest single swing in the project, Touché-2020 at **−50%**.
+Each bar names its own metric because the engine rows are MAP@10 while the rest are nDCG@10; the chart
+plots a percentage for that reason, not to flatter the differences.
+
+![FRAMES retrieval by arm](docs/charts/frames_arms.png)
+
+**FRAMES by arm** carries no published marker, and that is deliberate: the FRAMES paper reports
+end-to-end *accuracy* for generators, not retrieval, and this project has run no generator on it. An
+external marker would have to be invented.
 cherry-picked mean, from stock components, with no cross-encoder. That removes the "level with a
 335M BGE-large, if you pick per dataset" caveat; the remaining caveat is its parameter and
 embedding cost.
