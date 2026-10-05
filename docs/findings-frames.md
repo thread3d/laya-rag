@@ -23,6 +23,26 @@ make frames-eval                            # both arms
 
 **Dense beats lexical on every metric**, by 0.12 recall@1 and 0.09 nDCG@10.
 
+### The ensemble is the best arm, and BM25 fusion loses at the top
+
+The three-model dense ensemble (`bge-small` + `bge-base` + `bge-large`, 478M parameters) against the
+single encoder, and against fusing BM25 back in by RRF:
+
+| arm | recall@1 | recall@10 | recall@20 | MRR@10 | nDCG@10 |
+| --- | --- | --- | --- | --- | --- |
+| dense (`bge-small`) | 0.8464 | 0.9767 | 0.9939 | 0.8931 | 0.7505 |
+| **ensemble** | **0.8722** | 0.9939 | 0.9975 | **0.9193** | **0.8013** |
+| ensemble + BM25 (RRF) | 0.8317 | 0.9939 | **0.9988** | 0.8939 | 0.7978 |
+
+The ensemble beats the single encoder on every metric — **+0.051 nDCG@10, +0.026 recall@1, +0.026
+MRR@10** — which is the sixth corpus on which this programme's one positive lever has held.
+
+**Fusing BM25 into it loses 0.041 recall@1** and 0.0035 nDCG@10, buying only the last 0.0013 of
+recall@20 (0.9975 → 0.9988). So on FRAMES the lexical channel is not merely redundant beside a strong
+dense arm, it is harmful at the top of the ranking — the fifth corpus where fusion fails to be a free
+win, and the clearest case yet, since here it is fusing into an arm that is already better than the
+channel being added.
+
 ### Resolving the redirects was worth more than the comparison it enabled
 
 The first run scored the dataset's URL spellings directly and reported `gold_coverage` 0.8792 — 12% of

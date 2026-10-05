@@ -121,6 +121,15 @@ def load_corpus(path: Path) -> dict[str, str]:
     return corpus
 
 
+def rrf_fuse(rankings: Sequence[Sequence[str]], k: int = 5) -> list[str]:
+    """Reciprocal rank fusion of top-k runs, the combiner this project uses everywhere else."""
+    scores: dict[str, float] = {}
+    for ranking in rankings:
+        for position, item in enumerate(ranking, start=1):
+            scores[item] = scores.get(item, 0.0) + 1.0 / (k + position)
+    return [item for item, _ in sorted(scores.items(), key=lambda pair: -pair[1])]
+
+
 def mean(values: Iterable[float]) -> float:
     values = list(values)
     return round(sum(values) / len(values), 4) if values else 0.0
@@ -143,6 +152,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--model", default="BAAI/bge-small-en-v1.5")
     ap.add_argument("--top-k", type=int, default=20)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--ensemble-models", default=None,
+                    help="comma-separated encoders to average into an ensemble arm "
+                         "(e.g. bge-small,bge-base,bge-large), plus an RRF row against BM25")
+    ap.add_argument("--rrf-k", type=int, default=5)
     ap.add_argument("--lexical-only", action="store_true", help="skip the dense arm (no weights)")
     ap.add_argument("--out", default=str(ROOT / "eval" / "frames-eval"))
     return ap.parse_args(argv)
@@ -168,19 +181,43 @@ def main(argv: Sequence[str] | None = None) -> int:
     index.build(_Doc(title, text) for title, text in corpus.items())
     print(f"  lexical index built in {time.perf_counter() - started:.1f}s", flush=True)
 
+    # `titles` is the corpus order every encoder shares, so a ranking index means one article.
+    titles = list(corpus)
+    texts = [corpus[title] for title in titles]
     dense = None
+    ensemble: list[tuple[str, Any, Any]] = []
+    arms: dict[str, list[dict[str, Any]]] = {"lexical": []}
+
     if not args.lexical_only:
         from sentence_transformers import SentenceTransformer
 
         model = SentenceTransformer(args.model)
-        titles = list(corpus)
         started = time.perf_counter()
-        vectors = model.encode([corpus[title] for title in titles], normalize_embeddings=True,
-                               batch_size=32, show_progress_bar=False)
+        vectors = model.encode(texts, normalize_embeddings=True, batch_size=32,
+                               show_progress_bar=False)
         print(f"  embedded {len(titles)} articles in {time.perf_counter() - started:.1f}s", flush=True)
-        dense = (titles, vectors)
+        dense = (titles, vectors, model)
+        arms["dense"] = []
 
-    arms: dict[str, list[dict[str, Any]]] = {"lexical": [], "dense": []}
+        if args.ensemble_models:
+            for name in (part.strip() for part in args.ensemble_models.split(",")):
+                if not name:
+                    continue
+                member = SentenceTransformer(name)
+                started = time.perf_counter()
+                member_vectors = member.encode(texts, normalize_embeddings=True, batch_size=32,
+                                               show_progress_bar=False)
+                print(f"  embedded with {name} in {time.perf_counter() - started:.1f}s", flush=True)
+                ensemble.append((name, member, member_vectors))
+            if ensemble:
+                arms["ensemble"] = []
+                arms["ensemble+bm25"] = []
+
+    def rank_with(vectors, model, query: str) -> list[str]:
+        query_vector = model.encode([query], normalize_embeddings=True)[0]
+        order = (vectors @ query_vector).argsort()[::-1][: args.top_k]
+        return [titles[i] for i in order]
+
     for question in questions:
         gold = question["gold"]
         coverage = len(gold & set(corpus)) / len(gold) if gold else 0.0
@@ -188,10 +225,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         row = {"query": question["query"], "gold_coverage": coverage, **score_ranking(ranked, gold)}
         arms["lexical"].append(row)
         if dense is not None:
-            titles, vectors = dense
-            query = model.encode([question["query"]], normalize_embeddings=True)[0]
-            order = (vectors @ query).argsort()[::-1][: args.top_k]
-            arms["dense"].append({**row, **score_ranking([titles[i] for i in order], gold)})
+            arms["dense"].append({**row, **score_ranking(rank_with(dense[1], dense[2],
+                                                                   question["query"]), gold)})
+        if ensemble:
+            # The mean of the members' similarities is what the BEIR ensemble does; the scores are
+            # summed rather than averaged, which cannot change the order.
+            total = None
+            for _name, member, member_vectors in ensemble:
+                scores = member_vectors @ member.encode([question["query"]],
+                                                        normalize_embeddings=True)[0]
+                total = scores if total is None else total + scores
+            fused_ranking = [titles[i] for i in total.argsort()[::-1][: args.top_k]]
+            arms["ensemble"].append({**row, **score_ranking(fused_ranking, gold)})
+            arms["ensemble+bm25"].append({**row, **score_ranking(
+                rrf_fuse([fused_ranking, ranked], k=args.rrf_k), gold)})
 
     report = {
         "_settings": vars(args),

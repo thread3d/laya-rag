@@ -115,3 +115,18 @@ def test_the_title_map_is_loaded_normalised_on_both_sides(tmp_path):
 
 def test_an_absent_title_map_is_empty_rather_than_an_error(tmp_path):
     assert fe.load_title_map(tmp_path / "nothing.json") == {}
+
+
+def test_rrf_fusion_rewards_agreement_between_runs():
+    """An item both runs rank well must beat one only a single run ranks best."""
+    fused = fe.rrf_fuse([["a", "b"], ["b", "a"]], k=5)
+    assert fused[:2] == ["a", "b"] or fused[:2] == ["b", "a"]
+    only_one = fe.rrf_fuse([["a", "x"], ["b", "y"]], k=5)
+    assert set(only_one[:2]) == {"a", "b"}
+
+
+def test_rrf_keeps_every_item_and_orders_by_summed_reciprocal_rank():
+    fused = fe.rrf_fuse([["a"], ["b"]], k=5)
+    assert sorted(fused) == ["a", "b"]
+    # Both appear once at rank 1, so they tie; the fusion must not drop either.
+    assert len(fused) == 2

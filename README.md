@@ -747,14 +747,22 @@ a 2,482-article corpus built in 51 API requests:
 | arm | recall@1 | recall@10 | recall@20 | MRR@10 | nDCG@10 |
 | --- | --- | --- | --- | --- | --- |
 | lexical (BM25, engine settings) | 0.7224 | 0.9349 | 0.9619 | 0.8028 | 0.6586 |
-| **dense (`bge-small`)** | **0.8464** | **0.9767** | **0.9939** | **0.8931** | **0.7505** |
+| dense (`bge-small`) | 0.8464 | 0.9767 | 0.9939 | 0.8931 | 0.7505 |
+| **`bge-small` + `bge-base` + `bge-large` ensemble** | **0.8722** | 0.9939 | 0.9975 | **0.9193** | **0.8013** |
+| ensemble fused with BM25 (RRF) | 0.8317 | 0.9939 | **0.9988** | 0.8939 | 0.7978 |
 
-Dense wins on every metric — and FRAMES is *also* long Wikipedia text, like touche, where lexical wins
-by two to one. So the axis is not length and not domain; it is the query against the document. Touche
-asks a short topical query of running prose, where exact matching is strong; FRAMES asks a sentence of
-constraints ("the 15th first lady's mother's first name…") against a page that names its subject once.
-Two sides of the reversal now sit inside one source corpus family, which is the strongest form of this
-project's recurring lesson: **route per corpus, do not configure globally.**
+Dense beats lexical on every metric, the **ensemble beats dense** on every metric (+0.051 nDCG@10,
++0.026 recall@1), and **fusing BM25 back into the ensemble loses 0.041 recall@1** — it buys only the
+last two tenths of recall@20. That is the ensemble lever confirming itself on a sixth corpus, and the
+fusion lever failing on a fifth. Reproduce with
+`make frames-eval FRAMES_ARGS="--ensemble-models BAAI/bge-small-en-v1.5,BAAI/bge-base-en-v1.5,BAAI/bge-large-en-v1.5"`.
+
+FRAMES is *also* long Wikipedia text, like touche, where lexical wins by two to one. So the axis is
+not length and not domain; it is the query against the document. Touche asks a short topical query of
+running prose, where exact matching is strong; FRAMES asks a sentence of constraints ("the 15th first
+lady's mother's first name…") against a page that names its subject once. Two sides of the reversal now
+sit inside one source corpus family, which is the strongest form of this project's recurring lesson:
+**route per corpus, do not configure globally.**
 
 **Gold coverage is reported because it is not 1.0 by accident.** The dataset's links are URLs while the
 corpus is keyed by canonical titles; following the API's redirects took coverage from **0.8792 to
