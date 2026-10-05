@@ -505,6 +505,22 @@ make beir BEIR_ARGS="--datasets scifact --retrievers bm25,dense"
 make beir-ablate BEIR_ABLATE_ARGS="--datasets scifact"   # sweep weight / rerank depth
 ```
 
+Two conveniences for the long parts of a dataset sweep, both verified against a resumed run:
+`--lexical-checkpoint` writes each query's ranking to a JSONL beside the report so an interrupted
+lexical pass resumes, and `--embed-chunk N` checkpoints the corpus embedding every N documents.
+`make job-status` lists jobs and how far they got.
+
+### Measuring the system rather than its score
+
+```sh
+make cost-report       # latency, throughput, peak RSS, index bytes per query
+make verify-precision  # precision/recall of the advisory verifier checks (--check gates)
+make citation-report   # citation mechanics over composed answers (the engine-side half)
+make distill-verify    # is the exported distilled encoder faithful to its checkpoint?
+make ondisk-scale      # peak build RSS against corpus size and vocabulary
+make ann-bench         # approximate vs exhaustive dense search, including IVF-PQ rescore
+```
+
 Four retrievers run over the same corpus, qrels, evaluator and top-k, so the difference between
 rows is the retriever and nothing else:
 
@@ -711,6 +727,15 @@ this is 478M parameters across three encoders and three corpus embedding passes,
 "retrieval per parameter" claim does not extend to it; what it does show is that the ArguAna
 weakness of fusion and the SciDocs shortfall are *ensemble* effects, not model-quality effects
 (SciDocs 0.199 → 0.225 matches the published BGE-large number).
+
+**The mean moves with its members by more than the margins above.** These five are five of BEIR's
+eighteen, and extending them shows how much the composition carries: adding `quora` takes the fused
+mean from **0.452 to 0.520**, and adding `webis-touche2020` brings it back down to **0.496**. So
+"the BEIR average" is a statement about a *named set*, and a differently-sized set is a different
+claim — the numbers here are always reported with their membership. Touche is also the strongest case
+yet for the per-corpus lesson below: there lexical BM25 beats dense by more than two to one
+(0.442 against 0.220) and fusion **loses 0.091 to BM25 alone**. See
+[docs/findings-beir-breadth.md](docs/findings-beir-breadth.md).
 
 Against the published field, on the four datasets an independent matrix carries for every system:
 
