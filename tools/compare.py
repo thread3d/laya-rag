@@ -54,7 +54,12 @@ PUBLISHED_MH = [
     ("bge-large, no rerank", 0.6718, 0.5221, 0.3423, 0.4298),
 ]
 
-DATASET_ORDER = ["scifact", "nfcorpus", "arguana", "scidocs", "fiqa"]
+DATASET_ORDER = ["scifact", "nfcorpus", "arguana", "scidocs", "fiqa",
+                 "quora", "webis-touche2020"]
+#: Datasets measured in their own reports rather than the original five-dataset run.
+DATASET_REPORT = {"quora": "quora", "webis-touche2020": "touche"}
+#: Display names, because `capitalize()` mangles the hyphenated one.
+DATASET_LABEL = {"webis-touche2020": "Touché-2020", "quora": "Quora"}
 FOUR = ["scifact", "nfcorpus", "arguana", "scidocs"]
 
 #: The per-dataset best configuration, as recorded in RANKINGS.md.
@@ -87,6 +92,11 @@ def load(name: str) -> dict:
 def per_query(name: str, dataset: str, retriever: str) -> list[float]:
     report = load(name)["datasets"][dataset]
     return list(report["per_query_nDCG@10"][retriever].values())
+
+
+def per_query_for(dataset: str, retriever: str) -> list[float]:
+    """Per-query nDCG@10 for a dataset from whichever report measured it."""
+    return per_query(DATASET_REPORT.get(dataset, "five-small-fixed"), dataset, retriever)
 
 
 #: The three-model dense ensemble was measured in two runs; route each dataset to its report.
@@ -137,8 +147,13 @@ PUBLISHED = "#c9c9c9"
 PUBLISHED_DARK = "#8a8a8a"
 ACCENT = "#c0392b"
 
+#: Published BM25 nDCG@10. The first five are the anchors this project has always quoted; the last
+#: two come from the same table and the same column, checked by reproducing three existing anchors —
+#: ArguAna 0.397, SciFact 0.679 and FiQA 0.236 all match the source's BM25 column exactly. Source:
+#: "Resources for Brewing BEIR" (arXiv:2306.07471), reference-model table.
 PUBLISHED_BM25 = {"scifact": 0.679, "nfcorpus": 0.325, "arguana": 0.397,
-                  "scidocs": 0.158, "fiqa": 0.236}
+                  "scidocs": 0.158, "fiqa": 0.236,
+                  "quora": 0.789, "webis-touche2020": 0.442}
 PUBLISHED_BGE = {"scifact": 0.722, "nfcorpus": 0.380, "arguana": 0.636, "scidocs": 0.225}
 PUBLISHED_MH_DICT = {"bge-large + rerank": (0.7183, 0.6364, 0.4759, 0.5630),
                      "voyage-02 + rerank": (0.7467, 0.6625, 0.4795, 0.5860)}
@@ -218,11 +233,16 @@ def chart_beir_datasets(outdir: Path, plt) -> None:
               ("3-model ensemble + BM25", "hybrid-ensemble", ENSEMBLE, True)]
     x = np.arange(len(DATASET_ORDER))
     width = 0.2
-    fig, ax = plt.subplots(figsize=(9.6, 4.8))
+    fig, ax = plt.subplots(figsize=(12.0, 4.8))
     for i, (label, key, color, is_ensemble) in enumerate(series):
         vals, lo, hi = [], [], []
         for ds in DATASET_ORDER:
-            values = per_query_ensemble(ds) if is_ensemble else per_query("five-small-fixed", ds, key)
+            if is_ensemble and ds not in ENSEMBLE_REPORT:
+                # The ensemble was not run on the two datasets added later; leave a gap rather than
+                # implying a measurement that does not exist.
+                vals.append(float("nan")); lo.append(float("nan")); hi.append(float("nan"))
+                continue
+            values = per_query_ensemble(ds) if is_ensemble else per_query_for(ds, key)
             m, low, high = bootstrap_ci(values)
             vals.append(m)
             lo.append(m - low)
@@ -230,17 +250,20 @@ def chart_beir_datasets(outdir: Path, plt) -> None:
         ax.bar(x + (i - 1.5) * width, vals, width, color=color, label=label,
                yerr=np.vstack([lo, hi]), capsize=2.5, error_kw=dict(lw=0.9, ecolor="#444"))
 
-    ax.scatter(x, [PUBLISHED_BM25[d] for d in DATASET_ORDER], marker="x", s=46,
-               color=PUBLISHED_DARK, zorder=5, label="published BM25 (Lucene)")
+    anchored = [d for d in DATASET_ORDER if d in PUBLISHED_BM25]
+    ax.scatter([DATASET_ORDER.index(d) for d in anchored], [PUBLISHED_BM25[d] for d in anchored],
+               marker="x", s=46,
+               color=PUBLISHED_DARK, zorder=5, label="published BM25")
     four = [d for d in DATASET_ORDER if d in PUBLISHED_BGE]
     ax.scatter([DATASET_ORDER.index(d) for d in four], [PUBLISHED_BGE[d] for d in four],
                marker="D", s=30, facecolor="none", edgecolor=ACCENT, zorder=5,
                label="published BGE-large")
     ax.set_xticks(x)
-    ax.set_xticklabels([d.capitalize() for d in DATASET_ORDER])
+    ax.set_xticklabels([DATASET_LABEL.get(d, d.capitalize()) for d in DATASET_ORDER],
+                       rotation=20, ha="right")
     ax.set_ylabel("nDCG@10")
-    ax.set_ylim(0, 0.88)
-    ax.set_title("BEIR per dataset: this system against published baselines")
+    ax.set_ylim(0, 1.02)
+    ax.set_title("BEIR per dataset: this system against published BM25 and BGE-large")
     ax.legend(frameon=False, fontsize=8, ncol=2, loc="upper right")
     _save(fig, outdir, "beir_datasets.png", plt)
 
@@ -510,11 +533,11 @@ def main(argv=None) -> int:
         cell = []
         for r, _ in retrievers:
             try:
-                m, lo, hi = bootstrap_ci(per_query("five-small-fixed", ds, r))
+                m, lo, hi = bootstrap_ci(per_query_for(ds, r))
                 cell.append(f"{m:.3f} [{lo:.3f},{hi:.3f}]".rjust(26))
             except KeyError:
                 cell.append("—".rjust(26))
-        n = len(per_query("five-small-fixed", ds, "bm25-engine"))
+        n = len(per_query_for(ds, "bm25-engine"))
         print(f"{ds:<10} {n:>7} " + " ".join(cell))
 
     print()

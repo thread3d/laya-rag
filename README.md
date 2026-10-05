@@ -776,9 +776,22 @@ Against the published field, on the four datasets an independent matrix carries 
 
 ![BEIR per dataset, with published BM25 and BGE-large reference points](docs/charts/beir_datasets.png)
 
-The per-dataset chart is the one to read carefully: single-model fusion is **below** the
-published BGE-large marker on SciDocs, **level** with it on SciFact and NFCorpus, and only
-genuinely ahead on ArguAna — while the ensemble closes SciDocs.
+The per-dataset chart now covers **all seven datasets measured here**, against published BM25 and
+BGE-large markers. It is the one to read carefully: single-model fusion is **below** the published
+BGE-large marker on SciDocs, **level** with it on SciFact and NFCorpus, and only genuinely ahead on
+ArguAna — while the ensemble closes SciDocs. Two things it shows that the means hide:
+
+- **Touché-2020 is a control that passes.** Our lexical arm lands on **0.442** against a published
+  BM25 of **0.442** — an independent baseline reproduced to three decimals on a 382k-document corpus,
+  which is what makes the rest of the lexical rows credible.
+- **Quora has no dense marker and no ensemble bar,** because no published BGE-large figure is carried
+  for it and the ensemble was never run there. The gap is deliberate: a missing bar is honest, an
+  inferred one is not.
+
+The published BM25 anchors for Quora (0.789) and Touché (0.442) are pinned from the same source and
+column as the original five — "Resources for Brewing BEIR" ([arXiv:2306.07471](https://arxiv.org/abs/2306.07471)),
+whose BM25 column reproduces the three anchors this project already quoted (ArguAna 0.397, SciFact
+0.679, FiQA 0.236) exactly.
 
 The best-per-dataset mean is **0.495 [0.481, 0.510]** against BGE-large's 0.491, and it
 cherry-picks a configuration per dataset. The **single deployable configuration**
