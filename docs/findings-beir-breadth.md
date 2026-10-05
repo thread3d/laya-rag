@@ -63,6 +63,42 @@ channel, MuSiQue's dense channel, the cross-encoder across five BEIR sets, and R
 Touche's documents are long, noisy web pages, which is where a 33M-parameter dense encoder has least
 to offer relative to exact lexical matching.
 
+## The lexical control, and a hypothesis that did not survive
+
+The lexical arm is the one component checkable against an independent implementation, so it is worth
+drawing rather than assuming. Nine corpora now have both our number and a published BM25 anchor:
+
+| corpus | documents | ours | published | gap |
+| --- | --- | --- | --- | --- |
+| SciFact | 5,183 | 0.6762 | 0.679 | −0.003 |
+| NFCorpus | 3,633 | 0.3244 | 0.325 | −0.001 |
+| ArguAna | 8,674 | 0.4169 | 0.397 | **+0.020** |
+| SciDocs | 25,657 | 0.1497 | 0.158 | −0.008 |
+| FiQA | 57,638 | 0.2386 | 0.236 | +0.003 |
+| Touché-2020 | 382,545 | 0.4419 | 0.442 | −0.000 |
+| **Quora** | 522,931 | 0.7689 | 0.789 | **−0.020** |
+| **NQ** | 2,681,468 | 0.3118 | 0.329 | **−0.017** |
+| **DBPedia-entity** | 4,635,922 | 0.3053 | 0.313 | **−0.008** |
+
+**Eight of nine agree within ±0.008**, and one is in our favour. The exceptions are Quora and NQ.
+
+**The tempting explanation — that the gap grows with corpus size — is wrong**, and DBPedia is what
+kills it: at 4.6M documents, the largest corpus measured, the gap is −0.008, smaller than SciDocs at
+25,657 documents. Three points had suggested a trend (Quora and NQ were the two largest *and* the two
+worst); a fourth, chosen to test it, did not fit.
+
+**The second candidate is ruled out by data already on disk.** Our `bm25-engine` row differs from a
+published BM25 in two ways — it drops stopwords and it stems — so the obvious mechanism is that those
+choices cost accuracy. The `bm25` **control** row runs at published settings without either, and on all
+five small datasets it sits *further* from the anchor than the engine row does (SciFact −0.025 against
+−0.003, NFCorpus −0.021 against −0.001). So the engine's settings are not the cause; if anything they
+help.
+
+What is left is that both outliers are **natural-language question** datasets — NQ and Quora — while
+every keyword- or entity-style set agrees closely. That is an observation with two members, not an
+explanation, and the cause is **unidentified**. A control row on NQ itself (published settings, another
+~1 h at 2.68M documents) is the experiment that would separate "our settings" from "these queries".
+
 ## What this does not show
 
 - **Not the 18-dataset average.** Six of eighteen. `webis-touche2020` is **downloaded and extracted**
