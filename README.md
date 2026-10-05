@@ -131,18 +131,98 @@ Use `--json` for machine-readable output on any of them.
 | Route | Purpose |
 | --- | --- |
 | `GET /` | the web GUI (see below) |
-| `GET /health` | liveness, checkpoint, whether the model and index are usable |
+| `GET /healthz` | liveness: the process serves HTTP (cheap, never loads the model) |
+| `GET /readyz` | readiness: model loadable + index present → 200, else 503 + `Retry-After` |
+| `GET /health` | the legacy combined health report (deprecated in favour of the two probes) |
 | `GET /v1/stats` | config, model and corpus statistics |
-| `GET /v1/documents` | every indexed document with its chunk and character counts |
-| `GET /v1/chunks` | indexed chunks in document order, optionally `?path=` one file |
+| `GET /v1/documents` | every indexed document with its chunk and character counts (`?limit=&cursor=`) |
+| `GET /v1/chunks` | indexed chunks in document order, optionally `?path=` one file (`?limit=&cursor=`) |
 | `GET /v1/integrity` | index drift: deleted documents, duplicate and near-duplicate chunks (`?near_duplicates=true&threshold=0.85`) |
-| `POST /v1/index` | `{paths: [...], rebuild?: bool}` |
-| `POST /v1/index/stream` | the same body, but streams running counters as NDJSON (`progress` events, then one `done` carrying the report) |
+| `POST /v1/index` | `{paths: [...], rebuild?: bool}` — idempotent with `Idempotency-Key` |
+| `DELETE /v1/index` | delete the index (standard verb; `POST /v1/reset` is the deprecated alias) |
+| `POST /v1/index/stream` | the same body, but streams running counters (`progress` events, then one `done`); NDJSON, or SSE with `Accept: text/event-stream` |
 | `POST /v1/query` | `{query, top_k?, retrieve_k?, relevance_threshold?, answerability_threshold?, max_passage_chars?}` |
-| `POST /v1/compose` | `{query, passages: [...]}` — streams composed prose as newline-delimited JSON |
+| `POST /v1/compose` | `{query, passages: [...]}` — streams composed prose (NDJSON or SSE) |
 | `POST /v1/verify` | `{answer, passages: [...]}` — deterministic citation and quote checks |
 | `POST /v1/adjudicate` | `{answer, …}` — Laya decides whether the corpus supports each claim |
-| `POST /v1/reset` | delete the index |
+| `POST /v1/reset` | delete the index (deprecated) |
+
+#### The contract
+
+Other software is meant to depend on this service, so the surface is documented and
+tested rather than incidental:
+
+- **Errors** are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html)
+  `application/problem+json` with a stable `code` (e.g. `index_not_built`), a
+  `request_id`, and field-level `errors` with JSON Pointers. `detail` is always a string.
+  The `WWW-Authenticate` challenge is sent on 401/403.
+- **Correlation:** every response carries `X-Request-ID` (an inbound one is echoed). A
+  valid W3C `traceparent` is reused and its trace id returned in `X-Trace-ID` and in
+  problem bodies.
+- **OpenAPI:** the typed document is at `/openapi.json` (and `/docs`). Every success and
+  error response is a named schema, including the two stream media types. Set
+  `LAYA_RAG_SCHEMA_PUBLIC=false` to disable the schema routes on an authenticated service.
+- **Pagination** on the two listings is keyset via an opaque `cursor`; without `limit` the
+  full listing is returned, and `next_cursor` is null on the last page.
+- **Idempotency:** `Idempotency-Key` on the mutating routes replays the first response
+  (with `Idempotency-Replayed: true`); a key reused with a different payload is 422, and a
+  duplicate while the first is running is 409.
+- **Versioning:** routes live under `/v1`. A replaced route is marked with the RFC 9745
+  `Deprecation` header (`@`-Unix-seconds) and a `Link: rel="successor-version"`.
+
+#### Authorization and tenancy
+
+`LAYA_RAG_API_KEY` is a single admin token, kept for existing deployments. For per-token
+tenants and scopes, set `LAYA_RAG_API_KEYS` to a JSON map (or a path to one):
+
+```json
+{
+  "acme-read":  {"tenant": "acme", "scopes": ["read"]},
+  "acme-admin": {"tenant": "acme", "scopes": ["read", "write"]},
+  "ops":        {"scopes": ["read", "write"]}
+}
+```
+
+A token's `tenant` is the **only** tenant it may query; a body `tenant` that disagrees is
+403, so the trust manifest's per-tenant ACL can no longer be spoofed. A principal with no
+tenant (or the legacy admin key) may select one. `read` covers query/verify/adjudicate and
+the listings; `write` covers index/delete. Indexing is confined to `LAYA_RAG_INDEX_ROOTS`;
+with no allowlist it is permitted only on a loopback bind, so a service reachable from
+elsewhere cannot be asked to read arbitrary host paths.
+
+### MCP server
+
+The engine also speaks the [Model Context Protocol](https://modelcontextprotocol.io), so
+an agent host can call it directly. The SDK is an optional extra:
+
+```sh
+.venv/bin/pip install -e '.[mcp]'
+make mcp            # stdio transport (what Claude Desktop / Cursor launch)
+make mcp-http       # streamable HTTP on MCP_PORT (default 8078)
+```
+
+Claude Desktop / Cursor config (use absolute paths):
+
+```json
+{
+  "mcpServers": {
+    "laya-rag": {
+      "command": "/absolute/path/to/laya-rag/.venv/bin/laya-rag-mcp"
+    }
+  }
+}
+```
+
+Tools: `search_evidence` (the calibrated evidence call), `list_documents`,
+`read_document`, `corpus_stats`, `check_index_integrity`, `verify_answer`,
+`adjudicate_answer`, `compose_answer`, and — only with `LAYA_RAG_MCP_ALLOW_WRITES=1` —
+`index_documents` and `reset_index` (the latter requires `confirm="reset"`). The
+`search_evidence` description states the honesty rule plainly: when `answerable` is false,
+the passages do not support an answer and the agent should abstain. Resources
+(`laya-rag://stats`, `laya-rag://documents`) and two prompts (`answer_from_corpus`,
+`audit_answer`) are also exposed. By default the server runs the engine in-process, like
+the CLI; `LAYA_RAG_MCP_BACKEND=http` proxies to a running service instead. The HTTP
+transport refuses to start beyond loopback without a bearer token.
 
 ### Web GUI
 
@@ -401,13 +481,27 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `TRUST_DEFAULT_TIER` | `untrusted` | tier for a path the manifest does not name, when a manifest is configured (an allow-list is the safe default) |
 | `QUERY_MIN_TRUST` | unset | minimum tier a candidate must have to be returned; unset keeps trust filtering off even when a manifest is loaded |
 | `HOST` / `PORT` | `127.0.0.1` / `8077` | service bind address |
-| `API_KEY` | unset | when set, requires `Authorization: Bearer <key>` |
+| `API_KEY` | unset | when set, requires `Authorization: Bearer <key>` (a single admin token) |
+| `API_KEYS` | unset | JSON map (or path to one) from token to `{tenant?, scopes?, name?}`; supersedes `API_KEY` |
+| `INDEX_ROOTS` | unset | comma-separated directories that may be indexed; unset allows indexing only on a loopback bind |
+| `CORS_ORIGINS` | unset | comma-separated browser origins allowed to call the JSON API; unset disables CORS |
+| `RATE_LIMIT` | `0` | requests per minute per token (or client address); `0` disables limiting |
+| `MAX_REQUEST_BYTES` | `4194304` | request body cap; a larger body is a 413 |
+| `IDEMPOTENCY_TTL_S` | `86400` | how long a completed `Idempotency-Key` response is replayed |
+| `GZIP` | `true` | compress JSON responses (the stream media types are excluded) |
+| `SCHEMA_PUBLIC` | `true` | serve `/openapi.json`, `/docs` and `/redoc` without auth; set false to hide them |
 | `WARMUP` | `true` | load the checkpoint during service startup instead of on the first request |
 | `COMPOSE_BASE_URL` | Ollama's `http://localhost:11434/v1` | endpoint used to compose an answer |
 | `COMPOSE_MODEL` | `ornith-1.5:35b` | model that writes the composed answer; set to `none` (or `off` / `disabled`) to turn composition off |
 | `COMPOSE_API` | `ollama` | `ollama` calls the native `/api/chat`; `openai` calls any OpenAI-compatible `/v1/chat/completions` |
 | `COMPOSE_TIMEOUT_S` | `300` | how long composition may take before it is abandoned |
 | `COMPOSE_MAX_TOKENS` | `1200` | token budget for one composed answer; hitting it is reported as truncated |
+| `MCP_BACKEND` | `local` | MCP server backend: `local` runs the engine in-process, `http` proxies to a running service |
+| `MCP_URL` | `http://127.0.0.1:8077` | service URL when `MCP_BACKEND=http` |
+| `MCP_API_KEY` | `API_KEY` | bearer token the MCP HTTP backend sends |
+| `MCP_ALLOW_WRITES` | unset | register the MCP `index_documents` and `reset_index` tools |
+| `MCP_TRANSPORT` / `MCP_HOST` / `MCP_PORT` | `stdio` / `127.0.0.1` / `8078` | MCP transport and HTTP bind address |
+| `MCP_ALLOWED_HOSTS` | unset | extra allowed `Host` values when the MCP HTTP transport binds beyond loopback |
 
 The default checkpoint is `multilingual` (322M parameters, 768-dim embeddings): it matches the
 English checkpoint's accuracy on the measured queries while being roughly twice as fast, and it
@@ -437,9 +531,10 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (746 tests)
+make test          # Python suite, offline, deterministic (1229 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
+make test-mcp      # the MCP server suite (skips without the [mcp] extra)
 ```
 
 The offline suite runs against a test double that speaks the same `embed`/`predict` interface, so it

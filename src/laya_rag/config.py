@@ -7,6 +7,7 @@ under ``vendor/laya``, with the checkpoints it downloads symlinked into ``models
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,7 @@ ENV_PREFIX = "LAYA_RAG_"
 # Fields that must never be serialised verbatim. ``as_dict`` feeds ``/v1/stats`` and
 # the CLI's ``--json`` output, so a secret here would land in a response body or a
 # log line. Report that one is configured without disclosing it.
-REDACTED_FIELDS: frozenset[str] = frozenset({"api_key"})
+REDACTED_FIELDS: frozenset[str] = frozenset({"api_key", "api_keys"})
 
 # Where a stock Ollama serves its OpenAI-compatible API. This is the default endpoint
 # for answer composition, so a local Ollama is used without any environment at all.
@@ -462,6 +463,59 @@ class EngineConfig:
     api_key: str | None = field(default_factory=lambda: _env("API_KEY"))
 
     warmup: bool = field(default_factory=lambda: _env_bool("WARMUP", True))
+
+    # -- API contract and service hardening ---------------------------------
+    # A JSON map (or a path to one) from bearer token to a principal, so tenancy and
+    # authorization stop being caller-supplied. Accepted shapes:
+    #   {"tok": "acme"}                                  -> tenant acme, all scopes
+    #   {"tok": {"tenant": "acme", "scopes": ["read"]}}  -> tenant acme, read only
+    #   {"tok": {"scopes": ["read"]}}                    -> admin identity, read only
+    # When set it supersedes the single ``API_KEY``. A token's ``tenant`` is the only
+    # tenant it may query: a body ``tenant`` that disagrees is refused. A principal with
+    # no tenant is an admin and may select one.
+    api_keys: str = field(default_factory=lambda: _env("API_KEYS") or "")
+    # Directories a client is allowed to index. Empty means "only when the service is
+    # bound to loopback": a reachable service with no allowlist refuses to read arbitrary
+    # host paths, which is what stops `POST /v1/index {"paths": ["/etc"]}`.
+    index_roots: str = field(default_factory=lambda: _env("INDEX_ROOTS") or "")
+    # Browser origins the JSON API may be called from. Empty disables CORS entirely, the
+    # shipped behaviour; the bundled GUI is same-origin and needs no entry here.
+    cors_origins: str = field(default_factory=lambda: _env("CORS_ORIGINS") or "")
+    # Requests allowed per minute per principal (or per client address when no token is
+    # configured). 0 disables limiting, the shipped behaviour.
+    rate_limit: int = field(default_factory=lambda: _env_int("RATE_LIMIT", 0))
+    # Reject a request body larger than this before reading it. Generous enough for a
+    # 50-passage compose request (the API caps each passage at 20k chars).
+    max_request_bytes: int = field(
+        default_factory=lambda: _env_int("MAX_REQUEST_BYTES", 4 * 1024 * 1024)
+    )
+    # How long a completed ``Idempotency-Key`` response is retained for replay.
+    idempotency_ttl_s: int = field(default_factory=lambda: _env_int("IDEMPOTENCY_TTL_S", 86400))
+    # Compress JSON responses. Safe for the streaming routes: their media types are
+    # excluded in api.py so a progress stream is never buffered.
+    gzip: bool = field(default_factory=lambda: _env_bool("GZIP", True))
+    # Serve /openapi.json, /docs and /redoc. Turn off, or leave on deliberately, for a
+    # service that is otherwise authenticated: the schema is not behind the key.
+    schema_public: bool = field(default_factory=lambda: _env_bool("SCHEMA_PUBLIC", True))
+
+    @property
+    def resolved_index_roots(self) -> list[Path]:
+        """The parsed, expanded index allowlist; empty means unset."""
+        return [
+            Path(part).expanduser()
+            for part in re.split(r"[,\n]", self.index_roots)
+            if part.strip()
+        ]
+
+    @property
+    def resolved_cors_origins(self) -> list[str]:
+        """The parsed CORS origin allowlist; empty means CORS is off."""
+        return [part.strip() for part in re.split(r"[,\n]", self.cors_origins) if part.strip()]
+
+    @property
+    def loopback_only(self) -> bool:
+        """Whether the configured bind address is reachable only from this host."""
+        return (self.host or "").strip() in {"127.0.0.1", "::1", "localhost", ""}
 
     def as_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {}

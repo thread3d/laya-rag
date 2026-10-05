@@ -193,6 +193,57 @@ def chart_frames_arms(outdir: Path, plt) -> dict[str, Any]:
                      for arm, label, _c in arms}}
 
 
+#: Published BM25 nDCG@10 for the large corpora measured lexical-only, read from the same table and
+#: column as the anchors `compare.py` pins -- NFCorpus 0.325 reproduces there too. These have no dense
+#: arm here: a multi-million-document embedding pass buys little when the lexical row is the question.
+PUBLISHED_BM25_LARGE = {"nq": 0.329, "hotpotqa": 0.603, "dbpedia-entity": 0.313,
+                        "climate-fever": 0.213, "fever": 0.753}
+LEXICAL_ONLY = ["nq", "hotpotqa", "dbpedia-entity", "climate-fever", "fever"]
+
+
+def lexical_vs_published() -> list[dict[str, Any]]:
+    """Every dataset where both our lexical arm and a published BM25 anchor exist."""
+    rows: list[dict[str, Any]] = []
+    for dataset in compare.DATASET_ORDER:
+        if dataset in compare.PUBLISHED_BM25:
+            rows.append({"dataset": dataset, "ours": dataset_mean(dataset, "bm25-engine"),
+                         "published": compare.PUBLISHED_BM25[dataset]})
+    for dataset in LEXICAL_ONLY:
+        if (ROOT / "eval" / "beir" / f"{dataset}.json").is_file():
+            rows.append({"dataset": dataset, "ours": dataset_mean(dataset, "bm25-engine"),
+                         "published": PUBLISHED_BM25_LARGE[dataset]})
+    for row in rows:
+        row["gap"] = row["ours"] - row["published"]
+    return rows
+
+
+def chart_lexical_vs_published(outdir: Path, plt) -> list[dict[str, Any]]:
+    """Our lexical arm against published BM25: a control that mostly passes, and where it fails."""
+    import numpy as np
+
+    rows = lexical_vs_published()
+    x = np.arange(len(rows))
+    fig, ax = plt.subplots(figsize=(10.6, 4.8))
+    width = 0.38
+    ax.bar(x - width / 2, [row["ours"] for row in rows], width, color=OURS,
+           label="this system (BM25, engine settings)")
+    ax.bar(x + width / 2, [row["published"] for row in rows], width, color=compare.PUBLISHED,
+           label="published BM25 (same column as the pinned anchors)")
+    for position, row in enumerate(rows):
+        ax.text(position, max(row["ours"], row["published"]) + 0.012, f"{row['gap']:+.3f}",
+                ha="center", fontsize=7.5,
+                color=ACCENT if abs(row["gap"]) > 0.012 else "#555")
+    ax.set_xticks(x)
+    ax.set_xticklabels([compare.DATASET_LABEL.get(row["dataset"], row["dataset"].capitalize())
+                        for row in rows], rotation=25, ha="right")
+    ax.set_ylabel("nDCG@10")
+    ax.set_ylim(0, 0.85)
+    ax.set_title("Lexical arm against published BM25: the control, by corpus")
+    ax.legend(frameon=False, fontsize=8.5, loc="upper right")
+    compare._save(fig, outdir, "lexical_vs_published.png", plt)
+    return rows
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="compare_more.py")
     ap.add_argument("--charts", default=str(ROOT / "docs" / "charts"))
@@ -207,6 +258,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     quality = chart_quality_per_parameter(outdir, plt)
     reversals = chart_channel_reversal(outdir, plt)
     frames = chart_frames_arms(outdir, plt)
+    lexical = chart_lexical_vs_published(outdir, plt)
 
     print("quality per parameter (4-dataset mean nDCG@10):")
     for name, value in quality.items():
@@ -218,7 +270,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("\nFRAMES by arm:")
     for arm, values in frames["arms"].items():
         print(f"  {arm:<18} " + "  ".join(f"{k} {v:.4f}" for k, v in values.items()))
-    print(f"\nwrote 3 charts to {outdir}")
+    print("\nlexical arm against published BM25:")
+    for row in lexical:
+        flag = "  <-- gap" if abs(row["gap"]) > 0.012 else ""
+        print(f"  {row['dataset']:<18} ours {row['ours']:.4f}  published {row['published']:.4f}  "
+              f"{row['gap']:+.4f}{flag}")
+    print(f"\nwrote 4 charts to {outdir}")
     return 0
 
 

@@ -23,6 +23,12 @@ dev = [
     "pytest>=8.0",
     "httpx>=0.27",
 ]
+# The MCP server is a separate process and an optional surface, so the SDK is an extra
+# rather than a core dependency: `pip install -e '.[mcp]'` adds `laya-rag-mcp`, while the
+# engine, the HTTP API and the GUI keep working without it.
+mcp = [
+    "mcp>=2.3",
+]
 # Only the measurement tools need these: faiss for the ANN index, matplotlib for the
 # comparison charts, and sentence-transformers (+ datasets/accelerate, which its Trainer
 # path imports) for in-domain fine-tuning. None is required to run the engine.
@@ -37,6 +43,7 @@ eval = [
 [project.scripts]
 laya-rag = "laya_rag.cli:main"
 laya-rag-serve = "laya_rag.api:main"
+laya-rag-mcp = "laya_rag.mcp_server:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

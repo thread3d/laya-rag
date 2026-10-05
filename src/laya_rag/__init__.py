@@ -5,10 +5,17 @@ side it does not ship (loading, chunking, a persistent vector index) and exposes
 result to callers over HTTP.
 """
 from .config import EngineConfig
-from .engine import IndexNotBuiltError, IndexReport, QueryResult, RagEngine
+from .engine import (
+    BuildInProgressError,
+    IndexNotBuiltError,
+    IndexReport,
+    QueryResult,
+    RagEngine,
+)
 from .model import LayaModel, ModelUnavailableError
 
 __all__ = [
+    "BuildInProgressError",
     "EngineConfig",
     "IndexNotBuiltError",
     "IndexReport",

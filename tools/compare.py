@@ -57,7 +57,12 @@ PUBLISHED_MH = [
 DATASET_ORDER = ["scifact", "nfcorpus", "arguana", "scidocs", "fiqa",
                  "quora", "webis-touche2020"]
 #: Datasets measured in their own reports rather than the original five-dataset run.
-DATASET_REPORT = {"quora": "quora", "webis-touche2020": "touche"}
+#: Datasets measured in their own reports. The large corpora are lexical-only runs, so they
+#: appear here for the BM25 control but deliberately not in DATASET_ORDER, whose chart needs a
+#: dense arm that was never run for them.
+DATASET_REPORT = {"quora": "quora", "webis-touche2020": "touche",
+                  "nq": "nq", "hotpotqa": "hotpotqa", "dbpedia-entity": "dbpedia-entity",
+                  "climate-fever": "climate-fever", "fever": "fever"}
 #: Display names, because `capitalize()` mangles the hyphenated one.
 DATASET_LABEL = {"webis-touche2020": "Touché-2020", "quora": "Quora"}
 FOUR = ["scifact", "nfcorpus", "arguana", "scidocs"]

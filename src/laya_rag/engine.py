@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -48,6 +49,14 @@ from .trust import TrustManifest, filter_candidates
 
 class IndexNotBuiltError(RuntimeError):
     """Raised when a query arrives before any index exists."""
+
+
+class BuildInProgressError(RuntimeError):
+    """Raised when a second build is requested while one is running.
+
+    ``index_paths`` mutates the in-memory index and the persisted files; two overlapping
+    builds, or a query reading the index mid-build, race. The API turns this into a 409.
+    """
 
 
 @dataclass
@@ -440,6 +449,16 @@ class RagEngine:
         # cost on an otherwise lexical path. Keyed by the exact query string, so it can
         # never return a stale *result* — only a recomputed vector.
         self._query_cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        # One build at a time. The index is mutated in place, so a second build (or a
+        # query reading it mid-build) would race; the API reports 409 to the loser.
+        self._build_lock = threading.Lock()
+        self._build_active = threading.Event()
+
+    def _ensure_not_building(self) -> None:
+        if self._build_active.is_set():
+            raise BuildInProgressError(
+                "an index build is in progress; retry when it finishes"
+            )
 
     # -- index state -----------------------------------------------------
     @property
@@ -581,7 +600,21 @@ class RagEngine:
         return time.perf_counter() - started
 
     def reset(self) -> None:
-        """Delete the on-disk index and drop the in-memory copies."""
+        """Delete the on-disk index and drop the in-memory copies.
+
+        Refused while a build is running, like a second build.
+        """
+        if not self._build_lock.acquire(blocking=False):
+            raise BuildInProgressError("an index build is in progress; reset refused")
+        self._build_active.set()
+        try:
+            self._reset_unlocked()
+        finally:
+            self._build_active.clear()
+            self._build_lock.release()
+
+    def _reset_unlocked(self) -> None:
+        """The body of :meth:`reset`, called with the build lock already held."""
         wipe(self.config.index_dir)
         self._index = None
         self._lexical = None
@@ -658,6 +691,36 @@ class RagEngine:
     ) -> IndexReport:
         """Read, chunk and embed everything under ``paths``; then persist the index.
 
+        Serialized against other builds: a second concurrent call raises
+        :class:`BuildInProgressError` rather than racing on the shared index.
+        """
+        if not self._build_lock.acquire(blocking=False):
+            raise BuildInProgressError("another index build is already running")
+        self._build_active.set()
+        try:
+            return self._index_paths_locked(
+                paths,
+                rebuild=rebuild,
+                extensions=extensions,
+                max_file_bytes=max_file_bytes,
+                progress=progress,
+                prune=prune,
+            )
+        finally:
+            self._build_active.clear()
+            self._build_lock.release()
+
+    def _index_paths_locked(
+        self,
+        paths: Sequence[Path | str],
+        rebuild: bool = False,
+        extensions: Iterable[str] = DEFAULT_EXTENSIONS,
+        max_file_bytes: int = MAX_FILE_BYTES,
+        progress: ProgressFn | None = None,
+        prune: bool = True,
+    ) -> IndexReport:
+        """Read, chunk and embed everything under ``paths``; then persist the index.
+
         ``progress`` is called with a counter event as the work happens — one per file
         read, one per document chunked, one per embedding batch — so a caller can show
         running numbers rather than an opaque wait. It is never required and never
@@ -677,7 +740,7 @@ class RagEngine:
             )
 
         if rebuild:
-            self.reset()
+            self._reset_unlocked()
 
         _progress(progress, "reading")
         resolved = [Path(p).expanduser() for p in paths]
@@ -899,6 +962,7 @@ class RagEngine:
         configured. With no tenant block in the manifest it is ignored, so single-tenant
         deployments are unaffected.
         """
+        self._ensure_not_building()
         if not query or not query.strip():
             raise ValueError("query must be a non-empty string")
         started = time.perf_counter()
@@ -1248,6 +1312,7 @@ class RagEngine:
         Work is batched: one embedding pass for every claim, one relevance pass over
         every (claim, candidate) pair, one answerability pass over every surviving set.
         """
+        self._ensure_not_building()
         started = time.perf_counter()
         index = self.index  # raises IndexNotBuiltError when nothing is indexed
 

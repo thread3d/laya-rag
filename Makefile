@@ -9,6 +9,7 @@ PY := $(VENV)/bin/python
 PIP_CACHE := $(CURDIR)/vendor/laya/.pip-cache
 CORPUS ?= vendor/laya/docs
 PORT ?= 8077
+MCP_PORT ?= 8078
 EVAL_ARGS ?=
 BENCH_ARGS ?=
 BEIR_ARGS ?=
@@ -64,7 +65,7 @@ CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 JOB_STATUS_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui test test-real test-gui eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -72,10 +73,13 @@ help:
 	@echo "index        (re)index CORPUS (default: $(CORPUS))"
 	@echo "serve        run the HTTP service and GUI on PORT (default: $(PORT))"
 	@echo "gui          serve, then open the GUI in a browser"
+	@echo "mcp          run the MCP server over stdio (needs: pip install -e '.[mcp]')"
+	@echo "mcp-http     run the MCP streamable-HTTP transport on MCP_PORT (default: $(MCP_PORT))"
 	@echo "query Q=...  ask the CLI for evidence"
 	@echo "test         offline Python suite (no checkpoints needed)"
 	@echo "test-real    Python suite against real Laya weights"
 	@echo "test-gui     drive the running service's GUI in headless Chrome"
+	@echo "test-mcp     MCP server suite (skips without the [mcp] extra)"
 	@echo "eval         measure retrieval and calibration on labelled queries"
 	@echo "bench        probe the engine's limits (evidence, batch, scale, ...)"
 	@echo "bench-index-parallel  serial vs threads vs processes on the Laya encoder"
@@ -156,6 +160,16 @@ gui:
 	@(sleep 2; command -v open >/dev/null && open "http://127.0.0.1:$(PORT)/") &
 	OMP_NUM_THREADS=16 $(PY) -m laya_rag.api
 
+# The MCP server is a separate process and an optional extra; stdio is the default
+# transport, so this blocks while a host (Claude Desktop, Cursor, ...) is connected.
+mcp:
+	$(PY) -m laya_rag.mcp_server
+
+# Streamable HTTP on MCP_PORT. Beyond loopback the server requires a bearer token
+# (LAYA_RAG_API_KEYS or LAYA_RAG_API_KEY) before it will start.
+mcp-http:
+	$(PY) -m laya_rag.mcp_server --transport streamable-http --port $(MCP_PORT)
+
 query:
 	@test -n "$(Q)" || (echo 'usage: make query Q="your question"' >&2; exit 2)
 	$(PY) -m laya_rag.cli query "$(Q)"
@@ -170,6 +184,10 @@ test-real:
 # engine is absent, so run `make serve` first to actually exercise the page.
 test-gui:
 	node tools/gui-smoke.mjs
+
+# Runs only when the [mcp] extra is installed; the module skips itself otherwise.
+test-mcp:
+	$(PY) -m pytest tests/test_mcp_server.py -q
 
 # Measurement rather than pass/fail, and both need the real checkpoints. Reports are
 # written under eval/ (gitignored). `make eval EVAL_ARGS="--corpus docs"` switches

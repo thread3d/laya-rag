@@ -4,14 +4,19 @@ The route names mirror what the engine actually does —
 ``/v1/index`` and ``/v1/query`` — rather than pretending to be an OpenAI-compatible
 endpoint, because Laya is not a completion model and a shim would misrepresent it.
 
+The service is designed as a contract other software can depend on: every route has a
+typed response model, errors are RFC 9457 ``application/problem+json`` with a stable
+``code`` and a correlation id, the corpus listings paginate, the mutating routes accept
+an ``Idempotency-Key``, and the streaming routes content-negotiate between NDJSON (the
+historical default, used by the bundled GUI) and SSE. See
+``docs/api-mcp-design.md`` for the design and what each choice conforms to.
+
 Handlers are synchronous on purpose: Laya's forward passes are CPU-bound, and
 FastAPI runs ``def`` handlers in its worker threadpool, which keeps the event loop
 free without any hand-rolled thread management.
 """
 from __future__ import annotations
 
-import json
-import hmac
 import logging
 import queue
 import threading
@@ -19,23 +24,122 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import Depends, FastAPI, Header, Query, Request, Response
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
+from . import __version__
+from .auth import SCOPE_READ, SCOPE_WRITE, Authenticator, Principal, check_index_paths
 from .compose import resolve_target
 from .config import EngineConfig
-from .engine import IndexNotBuiltError, RagEngine
+from .engine import BuildInProgressError, IndexNotBuiltError, RagEngine
 from .evidence import group_passages_by_document
+from .idempotency import IdempotencyStore, fingerprint
 from .integrity import audit
 from .model import ModelUnavailableError
+from .paging import MAX_LIMIT, paginate
+from .problems import (
+    CODE_BUILD_IN_PROGRESS,
+    CODE_COMPOSE_DISABLED,
+    CODE_MODEL_UNAVAILABLE,
+    PROBLEM_MEDIA_TYPE,
+    APIProblem,
+    http_phrase,
+    install as install_problem_handlers,
+    render_problem,
+    request_context_middleware,
+)
+from .ratelimit import RateLimiter
 from .rerank import DecisionError
+from .schemas import (
+    AdjudicateResponse,
+    ChunkListResponse,
+    DocumentListResponse,
+    HealthResponse,
+    IndexReportResponse,
+    IntegrityResponse,
+    LivenessResponse,
+    Problem,
+    QueryResponse,
+    ReadinessResponse,
+    ResetResponse,
+    StatsResponse,
+    VerifyResponse,
+)
+from .streaming import (
+    NDJSON_MEDIA_TYPE,
+    SSE_MEDIA_TYPE,
+    STREAM_HEADERS,
+    ndjson,
+    sse,
+    wants_sse,
+)
 from .verify import split_claims, verify_citations
 
 log = logging.getLogger("laya_rag.api")
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
+
+#: When ``/health`` was superseded by ``/healthz`` + ``/readyz`` (RFC 9745 `@` seconds).
+#: No `Sunset` is emitted: the alias has no scheduled removal.
+HEALTH_DEPRECATED_AT = 1759622400
+
+_PROBLEM_DESCRIPTIONS = {
+    400: "Malformed request",
+    401: "Missing or invalid bearer token",
+    403: "The token is not allowed to perform this action",
+    404: "The requested path or document does not exist",
+    409: "The request conflicts with current server state (no index, or a build is running)",
+    413: "Request body too large",
+    422: "Request validation failed; field errors are in `errors`",
+    429: "Rate limit exceeded",
+    502: "The decision engine returned an unusable result",
+    503: "The model or composer is unavailable",
+}
+
+
+def _problems(*codes: int) -> dict[int, dict[str, Any]]:
+    """Document error responses against the shared :class:`Problem` schema.
+
+    The media type is spelled out because RFC 9457 requires
+    ``application/problem+json``; letting FastAPI infer it would document
+    ``application/json`` and misdescribe the wire.
+    """
+    return {
+        code: {
+            "description": _PROBLEM_DESCRIPTIONS.get(code, http_phrase(code)),
+            "content": {
+                PROBLEM_MEDIA_TYPE: {"schema": {"$ref": "#/components/schemas/Problem"}}
+            },
+        }
+        for code in codes
+    }
+
+
+_READ_ERRORS = _problems(400, 401, 403, 409, 422, 429, 503)
+_WRITE_ERRORS = _problems(400, 401, 403, 409, 413, 422, 429, 503)
+_STREAM_RESPONSES = {
+    200: {
+        "description": "Event stream; the encoding follows the Accept header",
+        "content": {
+            NDJSON_MEDIA_TYPE: {"schema": {"type": "string"}},
+            SSE_MEDIA_TYPE: {"schema": {"type": "string"}},
+        },
+    },
+    **_problems(401, 403, 409, 413, 422, 429, 503),
+}
+
+OPENAPI_TAGS = [
+    {"name": "health", "description": "Liveness and readiness probes."},
+    {"name": "corpus", "description": "Read-only corpus introspection."},
+    {"name": "retrieval", "description": "Retrieve calibrated evidence for a query."},
+    {"name": "verification", "description": "Check an answer against evidence or the corpus."},
+    {"name": "indexing", "description": "Build, stream and delete the index."},
+]
 
 
 def _web_dir() -> Path | None:
@@ -101,8 +205,8 @@ class QueryRequest(BaseModel):
     max_passage_chars: int | None = Field(2000, ge=100, le=20000)
     tenant: str | None = Field(
         None,
-        description="Caller identity for the trust manifest's per-tenant ACL, when one "
-                    "is configured; ignored otherwise",
+        description="Caller identity for the trust manifest's per-tenant ACL. When the "
+                    "bearer token is bound to a tenant, this must match it or be omitted",
     )
 
 
@@ -196,6 +300,9 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
     """Build the FastAPI application for ``config``."""
     config = config or EngineConfig()
     holder, get_engine = _engine_holder(config)
+    authenticator = Authenticator(config)
+    idempotency = IdempotencyStore(ttl_s=config.idempotency_ttl_s)
+    limiter = RateLimiter(config.rate_limit) if config.rate_limit > 0 else None
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -204,31 +311,168 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 get_engine().model.ensure_loaded()
                 log.info("Laya checkpoint %r warmed up", config.checkpoint)
             except ModelUnavailableError as exc:
-                # A missing checkpoint must not stop the service: /health reports it
+                # A missing checkpoint must not stop the service: /readyz reports it
                 # and every real request fails with the same actionable message.
                 log.warning("warmup skipped: %s", exc)
         yield
         holder.clear()
 
+    openapi_url = "/openapi.json" if config.schema_public else None
     app = FastAPI(
         title="Laya RAG engine",
-        description="Retrieval-augmented generation over Laya embeddings and decisions.",
-        version="0.1.0",
+        description=(
+            "Retrieval-augmented generation over Laya embeddings and decisions. The engine "
+            "returns calibrated evidence, not prose: `answerable` is Laya's verdict on whether "
+            "the returned passages support an answer, and callers should not synthesise one when "
+            "it is false. Errors are RFC 9457 `application/problem+json`."
+        ),
+        version=__version__,
         lifespan=lifespan,
+        openapi_tags=OPENAPI_TAGS,
+        openapi_url=openapi_url,
+        docs_url="/docs" if config.schema_public else None,
+        redoc_url="/redoc" if config.schema_public else None,
     )
 
-    def authorise(authorization: str | None = Header(default=None)) -> None:
-        if not config.api_key:
-            return
-        expected = f"Bearer {config.api_key}"
-        # Constant-time comparison: a plain != leaks the position of the first
-        # mismatching byte through timing, which is enough to recover a token.
-        if not hmac.compare_digest(authorization or "", expected):
-            raise HTTPException(status_code=401, detail="invalid or missing bearer token")
+    install_problem_handlers(app)
 
-    @app.get("/health")
-    def health(_: None = Depends(authorise)) -> dict[str, Any]:
-        """Liveness plus whether the checkpoint and index are actually usable."""
+    def authorise(authorization: str | None = Header(default=None)) -> Principal:
+        return authenticator.authenticate(authorization)
+
+    def read_access(principal: Principal = Depends(authorise)) -> Principal:
+        """Authenticate and require the read scope."""
+        authenticator.check_scope(principal, SCOPE_READ)
+        return principal
+
+    def tenant_for(principal: Principal, requested: str | None) -> str | None:
+        return authenticator.resolve_tenant(principal, requested)
+
+    def require_write(principal: Principal) -> None:
+        authenticator.check_scope(principal, SCOPE_WRITE)
+
+    def idempotency_scope(request: Request, principal: Principal) -> str:
+        return principal.token or (request.client.host if request.client else "anonymous")
+
+    # -- middleware ------------------------------------------------------
+    @app.middleware("http")
+    async def body_size_limit(request: Request, call_next: Any) -> Any:
+        """Refuse an oversized body before the handler reads it."""
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > config.max_request_bytes:
+            problem = APIProblem(
+                413,
+                "payload_too_large",
+                f"request body exceeds {config.max_request_bytes} bytes",
+            )
+            return render_problem(problem, request)
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def rate_limit(request: Request, call_next: Any) -> Any:
+        if limiter is None:
+            return await call_next(request)
+        identity = request.headers.get("authorization") or (
+            request.client.host if request.client else "anonymous"
+        )
+        try:
+            state = limiter.check(identity)
+        except APIProblem as problem:
+            return render_problem(problem, request)
+        response = await call_next(request)
+        for name, value in state.headers().items():
+            response.headers[name] = value
+        return response
+
+    # Added before gzip/CORS so it sits outside the rate-limit and body-size
+    # middlewares, which render problems and need the correlation id already set.
+    app.middleware("http")(request_context_middleware)
+
+    if config.gzip:
+        app.add_middleware(
+            GZipMiddleware,
+            minimum_size=1024,
+            # A progress stream must never be buffered to compress it.
+            exclude_content_types=(*DEFAULT_EXCLUDED_CONTENT_TYPES, NDJSON_MEDIA_TYPE),
+        )
+    if config.resolved_cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=config.resolved_cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=[
+                "X-Request-ID",
+                "Idempotency-Replayed",
+                "RateLimit",
+                "RateLimit-Policy",
+                "Retry-After",
+            ],
+            allow_credentials=False,
+        )
+
+    # -- health ----------------------------------------------------------
+    @app.get(
+        "/healthz",
+        tags=["health"],
+        operation_id="get_liveness",
+        response_model=LivenessResponse,
+        summary="Liveness probe",
+    )
+    def liveness() -> dict[str, Any]:
+        """Cheap liveness: the process serves HTTP. Never touches the model."""
+        return {"status": "ok"}
+
+    def readiness_payload() -> dict[str, Any]:
+        engine = get_engine()
+        model_loaded = bool(getattr(engine.model, "_agent", None) is not None)
+        error: str | None = None
+        if not model_loaded:
+            try:
+                engine.model.ensure_loaded()
+                model_loaded = True
+            except ModelUnavailableError as exc:
+                error = str(exc)
+        index_present = engine.has_index()
+        ready = model_loaded and index_present
+        return {
+            "status": "ready" if ready else "degraded",
+            "ready": ready,
+            "checkpoint": config.checkpoint,
+            "model_loaded": model_loaded,
+            "index_present": index_present,
+            "error": error,
+            "retry_after": None if ready else 30,
+        }
+
+    @app.get(
+        "/readyz",
+        tags=["health"],
+        operation_id="get_readiness",
+        response_model=ReadinessResponse,
+        summary="Readiness probe",
+        responses={503: {"model": ReadinessResponse, "description": "Not ready to serve queries"}},
+    )
+    def readiness(response: Response) -> dict[str, Any]:
+        """Whether the model can load and an index exists; 503 when it cannot."""
+        payload = readiness_payload()
+        if not payload["ready"]:
+            response.status_code = 503
+            response.headers["Retry-After"] = str(payload["retry_after"])
+        return payload
+
+    @app.get(
+        "/health",
+        tags=["health"],
+        operation_id="get_health",
+        response_model=HealthResponse,
+        summary="Legacy combined health (deprecated)",
+        responses=_problems(401, 422, 429),
+    )
+    def health(response: Response, _: Principal = Depends(authorise)) -> dict[str, Any]:
+        """Liveness plus whether the checkpoint and index are actually usable.
+
+        Deprecated in favour of ``/healthz`` and ``/readyz``, which separate the two.
+        """
         engine = get_engine()
         model_loaded = bool(getattr(engine.model, "_agent", None) is not None)
         payload: dict[str, Any] = {
@@ -244,29 +488,65 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
             except ModelUnavailableError as exc:
                 payload["status"] = "degraded"
                 payload["error"] = str(exc)
+        response.headers["Deprecation"] = f"@{HEALTH_DEPRECATED_AT}"
+        response.headers["Link"] = '</healthz>; rel="successor-version"'
         return payload
 
-    @app.get("/v1/stats")
-    def stats(_: None = Depends(authorise)) -> dict[str, Any]:
-        """Configuration, model and corpus statistics."""
+    # -- corpus introspection --------------------------------------------
+    @app.get(
+        "/v1/stats",
+        tags=["corpus"],
+        operation_id="get_stats",
+        response_model=StatsResponse,
+        summary="Configuration, model and corpus statistics",
+        responses=_READ_ERRORS,
+    )
+    def stats(_: Principal = Depends(read_access)) -> dict[str, Any]:
         return get_engine().stats()
 
-    @app.get("/v1/documents")
-    def documents(_: None = Depends(authorise)) -> dict[str, Any]:
+    @app.get(
+        "/v1/documents",
+        tags=["corpus"],
+        operation_id="list_documents",
+        response_model=DocumentListResponse,
+        summary="Indexed documents, page by page",
+        responses=_READ_ERRORS,
+    )
+    def documents(
+        limit: int | None = Query(None, ge=1, le=MAX_LIMIT, description="Documents per page"),
+        cursor: str | None = Query(None, description="Opaque cursor from a previous page"),
+        _: Principal = Depends(read_access),
+    ) -> dict[str, Any]:
         """Every indexed document, with its chunk and character counts.
 
-        Backs the corpus browser. Returns an empty listing rather than an error when
-        no index exists, so a dashboard can render its empty state from one call.
+        Without ``limit`` the whole listing is returned, which is the historical
+        behaviour; with it, ``next_cursor`` walks the corpus. Returns an empty listing
+        rather than an error when no index exists.
         """
         listing = get_engine().list_documents()
-        return {"total": len(listing), "documents": listing}
+        page, next_cursor, has_more, total = paginate(
+            listing, lambda record: (record["path"],), limit=limit, cursor=cursor
+        )
+        return {
+            "total": total,
+            "documents": page,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+        }
 
-    @app.get("/v1/integrity")
+    @app.get(
+        "/v1/integrity",
+        tags=["corpus"],
+        operation_id="get_integrity",
+        response_model=IntegrityResponse,
+        summary="Index drift: deleted, duplicate and near-duplicate chunks",
+        responses=_READ_ERRORS,
+    )
     def integrity(
         near_duplicates: bool = False,
         threshold: float = 0.85,
         max_chunks: int = 20000,
-        _: None = Depends(authorise),
+        _: Principal = Depends(read_access),
     ) -> dict[str, Any]:
         """Index drift: deleted documents, duplicate and near-duplicate chunks.
 
@@ -285,20 +565,85 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         report["index_present"] = True
         return report
 
-    @app.get("/v1/chunks")
+    @app.get(
+        "/v1/chunks",
+        tags=["corpus"],
+        operation_id="list_chunks",
+        response_model=ChunkListResponse,
+        summary="Indexed chunks in document order, page by page",
+        responses=_READ_ERRORS,
+    )
     def chunks(
         path: str | None = None,
-        _: None = Depends(authorise),
+        limit: int | None = Query(None, ge=1, le=MAX_LIMIT, description="Chunks per page"),
+        cursor: str | None = Query(None, description="Opaque cursor from a previous page"),
+        _: Principal = Depends(read_access),
     ) -> dict[str, Any]:
         """Indexed chunks in document order, optionally narrowed to one path."""
         records = get_engine().list_chunks(path)
-        return {"total": len(records), "path": path, "chunks": records}
+        page, next_cursor, has_more, total = paginate(
+            records,
+            lambda record: (record["path"], record["index"]),
+            limit=limit,
+            cursor=cursor,
+        )
+        return {
+            "total": total,
+            "path": path,
+            "chunks": page,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+        }
 
-    @app.post("/v1/index")
-    def index_documents(request: IndexRequest, _: None = Depends(authorise)) -> dict[str, Any]:
-        """Index the requested paths and return what was read, skipped and embedded."""
+    # -- indexing --------------------------------------------------------
+    @app.post(
+        "/v1/index",
+        tags=["indexing"],
+        operation_id="create_index",
+        response_model=IndexReportResponse,
+        summary="Index files or directories",
+        responses=_WRITE_ERRORS,
+    )
+    def index_documents(
+        request: IndexRequest,
+        http_request: Request,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+        principal: Principal = Depends(authorise),
+    ) -> Any:
+        """Index the requested paths and return what was read, skipped and embedded.
+
+        Safe to retry with an ``Idempotency-Key``: a replay returns the first report
+        instead of indexing twice.
+        """
+        require_write(principal)
+        check_index_paths(config, request.paths)
         engine = get_engine()
         extensions: Iterable[str] | None = request.extensions
+
+        scope: str | None = None
+        digest: str | None = None
+        if idempotency_key:
+            scope = idempotency_scope(http_request, principal)
+            digest = fingerprint(
+                {
+                    "paths": list(request.paths),
+                    "rebuild": request.rebuild,
+                    "prune": request.prune,
+                    "extensions": list(extensions) if extensions else None,
+                }
+            )
+            stored = idempotency.begin(scope, idempotency_key, digest)
+            if stored is not None:
+                return JSONResponse(
+                    stored.body,
+                    status_code=stored.status,
+                    headers={"Idempotency-Replayed": "true"},
+                )
+
+        def abandoned() -> None:
+            if idempotency_key and scope is not None:
+                idempotency.abandon(scope, idempotency_key)
+
         try:
             report = engine.index_paths(
                 request.paths,
@@ -306,31 +651,52 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 prune=request.prune,
                 **({"extensions": extensions} if extensions else {}),
             )
+        except BuildInProgressError as exc:
+            abandoned()
+            raise APIProblem(409, CODE_BUILD_IN_PROGRESS, str(exc)) from exc
         except ModelUnavailableError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            abandoned()
+            raise APIProblem(503, CODE_MODEL_UNAVAILABLE, str(exc)) from exc
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            abandoned()
+            raise APIProblem(404, "not_found", str(exc)) from exc
         payload = report.as_dict()
+        # Present the same shape the response model serialises, so an idempotent replay
+        # is byte-identical to the original response.
+        payload.setdefault("note", None)
         if report.documents == 0:
             payload["note"] = "no readable text documents were found under the given paths"
+        if idempotency_key and scope is not None and digest is not None:
+            idempotency.complete(scope, idempotency_key, digest, 200, payload)
         return payload
 
-    @app.post("/v1/index/stream")
+    @app.post(
+        "/v1/index/stream",
+        tags=["indexing"],
+        operation_id="stream_index",
+        summary="Index files or directories, streaming progress",
+        responses=_STREAM_RESPONSES,
+    )
     def index_documents_stream(
-        request: IndexRequest, _: None = Depends(authorise)
+        request: IndexRequest,
+        accept: str | None = Header(default=None),
+        principal: Principal = Depends(authorise),
     ) -> StreamingResponse:
-        """Index the requested paths, streaming progress as newline-delimited JSON.
+        """Index the requested paths, streaming progress as NDJSON or SSE.
 
         The same work as ``POST /v1/index``, reported while it happens: a ``progress``
         event per file read, per document chunked and per embedding batch, then one
         terminal ``done`` carrying the report ``/v1/index`` returns, or an ``error``.
         Because indexing is synchronous and CPU-bound it runs on a worker thread, and
-        the stream reads its counter events off a queue.
+        the stream reads its counter events off a queue. Send
+        ``Accept: text/event-stream`` for SSE framing; NDJSON is the default.
         """
+        require_write(principal)
+        check_index_paths(config, request.paths)
         engine = get_engine()
         extensions: Iterable[str] | None = request.extensions
 
-        def events() -> Iterator[str]:
+        def events() -> Iterator[dict[str, Any]]:
             counters: queue.Queue[dict[str, Any] | None] = queue.Queue()
             outcome: dict[str, Any] = {}
 
@@ -343,6 +709,8 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                         progress=counters.put,
                         **({"extensions": extensions} if extensions else {}),
                     )
+                except BuildInProgressError as exc:
+                    outcome["error"] = (409, str(exc))
                 except ModelUnavailableError as exc:
                     outcome["error"] = (503, str(exc))
                 except FileNotFoundError as exc:
@@ -359,28 +727,97 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 item = counters.get()
                 if item is None:
                     break
-                yield json.dumps({"type": "progress", **item}, ensure_ascii=False) + "\n"
+                yield {"type": "progress", **item}
 
             report = outcome.get("report")
             if report is not None:
                 payload = report.as_dict()
                 if report.documents == 0:
                     payload["note"] = "no readable text documents were found under the given paths"
-                yield json.dumps({"type": "done", "report": payload}, ensure_ascii=False) + "\n"
+                yield {"type": "done", "report": payload}
                 return
             status, message = outcome.get("error", (500, "indexing failed"))
-            yield json.dumps(
-                {"type": "error", "status": status, "message": message}, ensure_ascii=False
-            ) + "\n"
+            yield {"type": "error", "status": status, "message": message}
 
+        if wants_sse(accept):
+            return StreamingResponse(
+                sse(events()), media_type=SSE_MEDIA_TYPE, headers=STREAM_HEADERS
+            )
         return StreamingResponse(
-            events(),
-            media_type="application/x-ndjson",
-            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+            ndjson(events()), media_type=NDJSON_MEDIA_TYPE, headers=STREAM_HEADERS
         )
 
-    @app.post("/v1/query")
-    def query(request: QueryRequest, _: None = Depends(authorise)) -> dict[str, Any]:
+    def reset_index(http_request: Request, idempotency_key: str | None, principal: Principal) -> Any:
+        require_write(principal)
+        engine = get_engine()
+        body = {"status": "ok", "index_dir": str(config.index_dir)}
+        scope: str | None = None
+        digest: str | None = None
+        if idempotency_key:
+            scope = idempotency_scope(http_request, principal)
+            digest = fingerprint({})
+            stored = idempotency.begin(scope, idempotency_key, digest)
+            if stored is not None:
+                return JSONResponse(
+                    stored.body,
+                    status_code=stored.status,
+                    headers={"Idempotency-Replayed": "true"},
+                )
+        try:
+            engine.reset()
+        except BuildInProgressError as exc:
+            if idempotency_key and scope is not None:
+                idempotency.abandon(scope, idempotency_key)
+            raise APIProblem(409, CODE_BUILD_IN_PROGRESS, str(exc)) from exc
+        if idempotency_key and scope is not None and digest is not None:
+            idempotency.complete(scope, idempotency_key, digest, 200, body)
+        return body
+
+    @app.delete(
+        "/v1/index",
+        tags=["indexing"],
+        operation_id="delete_index",
+        response_model=ResetResponse,
+        summary="Delete the index",
+        responses=_WRITE_ERRORS,
+    )
+    def delete_index(
+        http_request: Request,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+        principal: Principal = Depends(authorise),
+    ) -> Any:
+        """Delete the index. The standard verb for a destructive operation."""
+        return reset_index(http_request, idempotency_key, principal)
+
+    @app.post(
+        "/v1/reset",
+        tags=["indexing"],
+        operation_id="reset_index",
+        response_model=ResetResponse,
+        summary="Delete the index (deprecated: use DELETE /v1/index)",
+        responses=_WRITE_ERRORS,
+    )
+    def reset(
+        response: Response,
+        http_request: Request,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+        principal: Principal = Depends(authorise),
+    ) -> Any:
+        """Delete the index. Deprecated in favour of ``DELETE /v1/index``."""
+        response.headers["Deprecation"] = f"@{HEALTH_DEPRECATED_AT}"
+        response.headers["Link"] = '</v1/index>; rel="successor-version"'
+        return reset_index(http_request, idempotency_key, principal)
+
+    # -- retrieval -------------------------------------------------------
+    @app.post(
+        "/v1/query",
+        tags=["retrieval"],
+        operation_id="create_query",
+        response_model=QueryResponse,
+        summary="Return calibrated evidence for a query",
+        responses=_READ_ERRORS,
+    )
+    def query(request: QueryRequest, principal: Principal = Depends(read_access)) -> dict[str, Any]:
         """Return Laya-ranked, Laya-gated evidence for a query.
 
         ``answerable`` is Laya's calibrated verdict on whether the returned passages
@@ -396,46 +833,67 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 relevance_threshold=request.relevance_threshold,
                 answerability_threshold=request.answerability_threshold,
                 max_passage_chars=request.max_passage_chars,
-                tenant=request.tenant,
+                tenant=tenant_for(principal, request.tenant),
             )
+        except BuildInProgressError as exc:
+            raise APIProblem(409, CODE_BUILD_IN_PROGRESS, str(exc)) from exc
         except IndexNotBuiltError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise APIProblem(409, "index_not_built", str(exc)) from exc
         except ModelUnavailableError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            raise APIProblem(503, CODE_MODEL_UNAVAILABLE, str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise APIProblem(400, "invalid_request", str(exc)) from exc
         return result.as_dict()
 
-    @app.post("/v1/compose")
-    def compose(request: ComposeRequest, _: None = Depends(authorise)) -> StreamingResponse:
-        """Write prose from evidence, streaming newline-delimited JSON events.
+    @app.post(
+        "/v1/compose",
+        tags=["retrieval"],
+        operation_id="create_compose",
+        summary="Write prose from evidence, streaming",
+        responses=_STREAM_RESPONSES,
+    )
+    def compose(
+        request: ComposeRequest,
+        accept: str | None = Header(default=None),
+        _: Principal = Depends(read_access),
+    ) -> StreamingResponse:
+        """Write prose from evidence, streaming NDJSON or SSE events.
 
         The only route that returns generated text, and therefore the only one whose
         output a model can have invented. Events are ``delta`` while the model writes,
         then one terminal ``done`` or ``error`` — and an ``error`` may arrive after
         some ``delta`` events if the connection drops mid-answer, which is the
-        caller's signal that the text it holds is incomplete.
+        caller's signal that the text it holds is incomplete. Send
+        ``Accept: text/event-stream`` for SSE framing; NDJSON is the default.
         """
         engine = get_engine()
         target, reason = resolve_target(engine.config)
         if target is None:
-            raise HTTPException(status_code=503, detail=reason)
+            raise APIProblem(503, CODE_COMPOSE_DISABLED, reason)
 
         pairs = [(passage.path or "", passage.text) for passage in request.passages]
 
-        def events() -> Iterator[str]:
-            for event in engine.composer.stream(request.query, pairs, max_tokens=request.max_tokens):
-                yield json.dumps(event, ensure_ascii=False) + "\n"
+        def events() -> Iterator[dict[str, Any]]:
+            yield from engine.composer.stream(request.query, pairs, max_tokens=request.max_tokens)
 
+        if wants_sse(accept):
+            return StreamingResponse(
+                sse(events()), media_type=SSE_MEDIA_TYPE, headers=STREAM_HEADERS
+            )
         return StreamingResponse(
-            events(),
-            media_type="application/x-ndjson",
-            # Proxies and browsers must not buffer a stream that can take a minute.
-            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+            ndjson(events()), media_type=NDJSON_MEDIA_TYPE, headers=STREAM_HEADERS
         )
 
-    @app.post("/v1/verify")
-    def verify(request: VerifyRequest, _: None = Depends(authorise)) -> dict[str, Any]:
+    # -- verification ----------------------------------------------------
+    @app.post(
+        "/v1/verify",
+        tags=["verification"],
+        operation_id="create_verify",
+        response_model=VerifyResponse,
+        summary="Check an answer's citations against the evidence",
+        responses=_READ_ERRORS,
+    )
+    def verify(request: VerifyRequest, _: Principal = Depends(read_access)) -> dict[str, Any]:
         """Check an answer's citations and quoted spans against the evidence.
 
         Deterministic and model-free: it reports whether each claim cites in-range
@@ -459,8 +917,18 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
             query=request.query or "",
         )
 
-    @app.post("/v1/adjudicate")
-    def adjudicate(request: AdjudicateRequest, _: None = Depends(authorise)) -> dict[str, Any]:
+    @app.post(
+        "/v1/adjudicate",
+        tags=["verification"],
+        operation_id="create_adjudicate",
+        response_model=AdjudicateResponse,
+        summary="Ask Laya whether the corpus supports each claim",
+        responses=_READ_ERRORS,
+    )
+    def adjudicate(
+        request: AdjudicateRequest,
+        principal: Principal = Depends(read_access),
+    ) -> dict[str, Any]:
         """Ask Laya whether the corpus supports each claim in an answer.
 
         The counterpart to ``/v1/verify``: that endpoint checks citations
@@ -479,22 +947,80 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 retrieve_k=request.retrieve_k,
                 relevance_threshold=request.relevance_threshold,
                 answerability_threshold=request.answerability_threshold,
-                tenant=request.tenant,
+                tenant=tenant_for(principal, request.tenant),
             )
+        except BuildInProgressError as exc:
+            raise APIProblem(409, CODE_BUILD_IN_PROGRESS, str(exc)) from exc
         except IndexNotBuiltError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise APIProblem(409, "index_not_built", str(exc)) from exc
         except ModelUnavailableError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            raise APIProblem(503, CODE_MODEL_UNAVAILABLE, str(exc)) from exc
         except DecisionError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+            raise APIProblem(502, "decision_failed", str(exc)) from exc
         return report
 
-    @app.post("/v1/reset")
-    def reset(_: None = Depends(authorise)) -> dict[str, Any]:
-        """Delete the index."""
-        engine = get_engine()
-        engine.reset()
-        return {"status": "ok", "index_dir": str(config.index_dir)}
+    # -- OpenAPI ---------------------------------------------------------
+    def _servers() -> list[dict[str, str]]:
+        display = "127.0.0.1" if config.host in {"0.0.0.0", "::"} else config.host or "127.0.0.1"
+        return [
+            {
+                "url": f"http://{display}:{config.port}",
+                "description": "This service",
+            }
+        ]
+
+    def custom_openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            tags=OPENAPI_TAGS,
+            servers=_servers(),
+        )
+        components = schema.setdefault("components", {})
+        components.setdefault("securitySchemes", {})["bearerAuth"] = {
+            "type": "http",
+            "scheme": "bearer",
+            "description": (
+                "Static bearer token. Set LAYA_RAG_API_KEYS for per-token tenants and scopes, "
+                "or LAYA_RAG_API_KEY for a single admin token."
+            ),
+        }
+        # Error responses reference this schema by raw $ref (their media type is
+        # application/problem+json, which FastAPI's `model=` shortcut cannot express),
+        # so make sure it is present.
+        schemas = components.setdefault("schemas", {})
+        if "Problem" not in schemas:
+            problem_schema = Problem.model_json_schema(
+                ref_template="#/components/schemas/{model}"
+            )
+            schemas.update(problem_schema.pop("$defs", {}))
+            schemas["Problem"] = problem_schema
+        public = {"/healthz", "/readyz"}
+        for path, operations in schema.get("paths", {}).items():
+            for method, operation in operations.items():
+                if method not in {"get", "post", "put", "patch", "delete"}:
+                    continue
+                if path in public:
+                    operation["security"] = []
+                else:
+                    operation.setdefault("security", [{"bearerAuth": []}])
+                # A stream route has no response_model, so FastAPI leaves an untyped
+                # application/json 200 alongside the media types we declared. Drop any
+                # content entry with no schema: an untyped response is not a contract.
+                for response in operation.get("responses", {}).values():
+                    content = response.get("content")
+                    if not content:
+                        continue
+                    for media_type in [name for name, spec in content.items() if not spec.get("schema")]:
+                        content.pop(media_type)
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi  # type: ignore[method-assign]
 
     # The GUI ships as plain static files — no build step, no CDN, no bundler — so the
     # service stays self-contained and works offline. Mounted last on purpose: /health,
@@ -527,6 +1053,7 @@ def main() -> None:
     if _web_dir() is not None:
         log.info("GUI at http://%s:%d/", host, config.port)
     log.info("API docs at http://%s:%d/docs", host, config.port)
+    log.info("probes at http://%s:%d/healthz and /readyz", host, config.port)
     uvicorn.run(app, host=config.host, port=config.port, log_level="info")
 
 
