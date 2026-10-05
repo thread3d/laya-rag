@@ -116,6 +116,9 @@ class Claim:
     scale: float = 1.0          # doc_value = source * scale (100 for a percentage)
     decimals: int = 4
     tol: float = 5e-4
+    #: Report the claim resolves against, relative to the root. `None` means the headline
+    #: diagnostics report. A missing report is a skip rather than a failure, as with the default.
+    report: str | None = None
 
 
 @dataclass(frozen=True)
@@ -195,6 +198,33 @@ CHECKS: list[Claim] = [
           _D + ("100", "pool_ceiling_MAP@10", "mean")),
     Claim("findings incomplete share", "docs/FINDINGS.md", r"Multi-hop selection", 35.4,
           "incomplete_100_share", scale=100.0, decimals=1, tol=0.05),
+    # The FRAMES arms and the touché comparison. These were typed into the README by hand this
+    # session, which is exactly how a miscount got in: the tables are generated from reports and
+    # stay honest, while the prose summarising them does not unless something pins it.
+    Claim("frames lexical recall@1", README, r"^\| lexical \(BM25, engine settings\) \|",
+          0.7224, ("summary", "lexical", "recall@1"), report="eval/frames-eval-ensemble.json"),
+    Claim("frames lexical nDCG@10", README, r"^\| lexical \(BM25, engine settings\) \|",
+          0.6586, ("summary", "lexical", "ndcg@10"), report="eval/frames-eval-ensemble.json"),
+    Claim("frames dense recall@1", README, r"^\| dense \(`bge-small`\) \|",
+          0.8464, ("summary", "dense", "recall@1"), report="eval/frames-eval-ensemble.json"),
+    Claim("frames dense nDCG@10", README, r"^\| dense \(`bge-small`\) \|",
+          0.7505, ("summary", "dense", "ndcg@10"), report="eval/frames-eval-ensemble.json"),
+    Claim("frames ensemble recall@1", README, r"^\| \*\*`bge-small`.*ensemble\*\* \|",
+          0.8722, ("summary", "ensemble", "recall@1"), report="eval/frames-eval-ensemble.json"),
+    Claim("frames ensemble nDCG@10", README, r"^\| \*\*`bge-small`.*ensemble\*\* \|",
+          0.8013, ("summary", "ensemble", "ndcg@10"), report="eval/frames-eval-ensemble.json"),
+    Claim("frames ensemble+bm25 recall@1", README, r"^\| ensemble fused with BM25 \(RRF\) \|",
+          0.8317, ("summary", "ensemble+bm25", "recall@1"), report="eval/frames-eval-ensemble.json"),
+    Claim("frames ensemble+bm25 nDCG@10", README, r"^\| ensemble fused with BM25 \(RRF\) \|",
+          0.7978, ("summary", "ensemble+bm25", "ndcg@10"), report="eval/frames-eval-ensemble.json"),
+    # Touché is stated in prose to three decimals against a four-decimal report value, so the
+    # tolerance carries the rounding.
+    Claim("touche lexical beats dense", README, r"beats dense by more than two to one",
+          0.442, ("datasets", "webis-touche2020", "retrievers", "bm25-engine", "nDCG@10"),
+          decimals=3, report="eval/beir/touche.json"),
+    Claim("touche dense behind it", README, r"beats dense by more than two to one",
+          0.220, ("datasets", "webis-touche2020", "retrievers", "biencoder", "nDCG@10"),
+          decimals=3, report="eval/beir/touche.json"),
 ]
 
 FORBIDDEN: list[Forbidden] = [
@@ -267,6 +297,7 @@ def run_checks(
     *,
     root: Path,
     report: Mapping[str, Any],
+    reports: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[str]:
     """Return one failure message per violated claim or forbidden value."""
     failures: list[str] = []
@@ -278,13 +309,17 @@ def run_checks(
             cache[doc] = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
         return cache[doc]
 
+    extra = dict(reports or {})
     for claim in checks:
         regions = _regions(lines_of(claim.doc), claim.anchor)
         if not regions:
             failures.append(f"{claim.label}: anchor {claim.anchor!r} matched no line in {claim.doc}")
             continue
+        active = report if claim.report is None else extra.get(claim.report)
+        if active is None:
+            continue          # its report has not been generated: a skip, not a failure
         try:
-            expected = resolve(claim.source, report) * claim.scale
+            expected = resolve(claim.source, active) * claim.scale
         except KeyError as exc:
             failures.append(f"{claim.label}: {exc}")
             continue
@@ -332,8 +367,19 @@ def main(argv=None) -> int:
         print(f"claim-check: SKIPPED — {report_path} not found (run `make multihop-diagnostics`)")
         return 0
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    failures = run_checks(CHECKS, FORBIDDEN, root=root, report=report)
-    checked = len(CHECKS) + len(FORBIDDEN)
+
+    # Claims sourced from other reports load them on demand; a claim whose report is absent is
+    # skipped, so a fresh checkout with no eval/ still passes rather than failing on missing data.
+    reports: dict[str, Mapping[str, Any]] = {}
+    for claim in CHECKS:
+        if claim.report is None or claim.report in reports:
+            continue
+        path = root / claim.report
+        if path.is_file():
+            reports[claim.report] = json.loads(path.read_text(encoding="utf-8"))
+    checkable = [c for c in CHECKS if c.report is None or c.report in reports]
+    failures = run_checks(checkable, FORBIDDEN, root=root, report=report, reports=reports)
+    checked = len(checkable) + len(FORBIDDEN)
     if failures:
         print(f"claim-check: {len(failures)} failure(s) across {checked} checks")
         for line in failures:
