@@ -110,3 +110,25 @@ def test_the_control_row_has_its_own_checkpoint_path():
     assert ".lexical-control.jsonl" in source
     control = re.search(r'rankings\["bm25"\] = bm25_rankings\((.*?)\)', source, re.S).group(1)
     assert "checkpoint=" in control, "the control row must be resumable like the engine row"
+
+
+def test_a_query_subset_is_seeded_and_stable():
+    """A subset must be reproducible, and must not be the head of the file."""
+    queries = {f"q{i}": f"text {i}" for i in range(100)}
+    first = beir.sample_queries(queries, 20, 17)
+    second = beir.sample_queries(queries, 20, 17)
+    assert first == second, "the same seed must score the same queries"
+    assert len(first) == 20
+    assert set(first) <= set(queries)
+    assert list(first) != list(queries)[:20], "the head is not a random sample"
+
+
+def test_a_different_seed_draws_a_different_subset():
+    queries = {f"q{i}": f"text {i}" for i in range(100)}
+    assert beir.sample_queries(queries, 20, 1) != beir.sample_queries(queries, 20, 2)
+
+
+def test_a_limit_at_or_above_the_query_count_keeps_everything():
+    queries = {f"q{i}": f"text {i}" for i in range(5)}
+    assert beir.sample_queries(queries, 5, 17) == queries
+    assert beir.sample_queries(queries, None, 17) == queries

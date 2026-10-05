@@ -28,6 +28,7 @@ import argparse
 import json
 from collections import Counter
 import os
+import random
 import shutil
 import sys
 import time
@@ -159,6 +160,20 @@ def load_titles(dataset_dir: Path) -> dict[str, str]:
     for row in _read_jsonl(dataset_dir / "corpus.jsonl"):
         titles[str(row["_id"])] = (row.get("title") or "").strip()
     return titles
+
+
+def sample_queries(queries: Mapping[str, str], limit: int | None, seed: int) -> dict[str, str]:
+    """A seeded random subset of the scored queries, in a stable order.
+
+    Random rather than the first N: query difficulty is not uniformly ordered in the file, so taking
+    the head samples the easy ones and flatters the result. The seed is recorded with the report, so a
+    subset can be reproduced exactly or widened later without re-deriving it.
+    """
+    if not limit or len(queries) <= limit:
+        return dict(queries)
+    rng = random.Random(seed)
+    keep = sorted(rng.sample(sorted(queries), limit))
+    return {qid: queries[qid] for qid in keep}
 
 
 def load_queries(dataset_dir: Path) -> dict[str, str]:
@@ -848,6 +863,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="checkpoint the corpus embedding every N documents so an interrupted "
                              "run resumes instead of restarting; 0 keeps the single-pass behaviour")
     parser.add_argument("--limit-docs", type=int, default=None, help="truncate the corpus (smoke runs only)")
+    parser.add_argument("--limit-queries", type=int, default=None,
+                        help="score a seeded random subset of the queries; for corpora whose full "
+                             "query set costs hours. Recorded in the report so a subset can never be "
+                             "mistaken for the full run")
+    parser.add_argument("--query-seed", type=int, default=17,
+                        help="seed for --limit-queries; the same seed scores the same queries")
     parser.add_argument("--dense-weight", type=float, default=None,
                         help="dense RRF weight for the hybrid row (default: the engine's resolved value)")
     parser.add_argument("--biencoder-weight", type=float, default=1.0,
@@ -998,6 +1019,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         qrels = load_qrels(dataset_dir)
         # Only rank the queries that have qrels, which is what BEIR scores.
         queries = {qid: text for qid, text in all_queries.items() if qid in qrels}
+        if args.limit_queries and len(queries) > args.limit_queries:
+            total = len(queries)
+            queries = sample_queries(queries, args.limit_queries, args.query_seed)
+            print(f"  SUBSET RUN: {len(queries)} of {total} qrels queries, seed {args.query_seed} "
+                  f"-- not comparable to a full-set published figure", flush=True)
         print(f"  {len(corpus)} documents, {len(queries)} scored queries", flush=True)
 
         cache_dir = data_root / "cache"

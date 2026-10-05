@@ -69,6 +69,16 @@ are what stops the next pass from re-trying them.
 
 ## Method notes worth carrying forward
 
+- **A result that is off by an order of magnitude is a bug signal, not a finding.** The HotpotQA row came
+  back at nDCG@10 0.0516 against a published 0.603. Nine other corpora agree within 0.02 on the same code
+  path, so the honest response was to stop and diagnose rather than publish a dramatic new "finding" — and
+  when the first two hypotheses (id mismatch, short documents at scale) were ruled out, to record it as
+  unresolved. The number is quarantined in the roadmap and must not be quoted.
+- **`--limit-queries` exists for corpora whose full query set costs hours.** It draws a *seeded random*
+  subset rather than the head of the file, because query difficulty is not uniformly ordered and the head
+  would sample the easy ones. The seed and the subset size are recorded in the report.
+
+
 - **Checkpoint the row you are actually waiting on.** The engine lexical row was checkpointed because it
   was the shipped arm; the *control* row — published settings, no stemming, a far larger vocabulary — was
   not, and on NQ it became a three-hour blind wait twice. Resumability belongs to whichever call is
