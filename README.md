@@ -888,6 +888,35 @@ column as the original five — "Resources for Brewing BEIR" ([arXiv:2306.07471]
 whose BM25 column reproduces the three anchors this project already quoted (ArguAna 0.397, SciFact
 0.679, FiQA 0.236) exactly.
 
+### The lexical control, on nine corpora including two multi-million-document ones
+
+The lexical arm is the only component here checkable against an independent implementation, so it is
+drawn rather than assumed — and it is extended past the seven above with **two large corpora run
+lexical-only**, `nq` (2.68M documents) and `dbpedia-entity` (4.64M):
+
+![Lexical arm against published BM25, by corpus](docs/charts/lexical_vs_published.png)
+
+**Eight of nine agree within ±0.008**, and Touché reproduces its anchor to three decimals. The
+exceptions are Quora (**−0.020**) and NQ (**−0.017**) — both natural-language question datasets.
+
+Two explanations were tested and **both failed**, which is worth stating because the first was
+plausible and I believed it:
+
+- **Corpus size does not explain it.** Three points had suggested the gap grows with the corpus, but
+  `dbpedia-entity` — chosen to test exactly that — is the largest measured at **4.6M documents** and
+  sits at **−0.008**, smaller than SciDocs at a fifth its size.
+- **Our lexical settings do not explain it either**, and the data to rule this out was already on
+  disk. `bm25-engine` drops stopwords and stems, so the natural suspect was those choices; the `bm25`
+  **control** row runs at published settings with neither, and on all five small datasets it sits
+  *further* from the anchor than the engine row does (SciFact −0.025 against −0.003). If anything our
+  settings help.
+
+The cause of the two outliers is **unidentified**. The experiment that would separate "our settings"
+from "these queries" — a control row on NQ itself — was started and abandoned on measured cost:
+without stemming its queries run at **0.15 q/s**, roughly five hours for one diagnostic whose
+configuration matches neither ours nor the published one exactly. Recorded as unrun rather than
+quietly dropped.
+
 The best-per-dataset mean is **0.495 [0.481, 0.510]** against BGE-large's 0.491, and it
 cherry-picks a configuration per dataset. The **single deployable configuration**
 (`bge-small` + fused BM25, 33M parameters) is **0.469**. The three-model ensemble is also a
