@@ -80,7 +80,10 @@ drawing rather than assuming. Nine corpora now have both our number and a publis
 | **NQ** | 2,681,468 | 0.3118 | 0.329 | **−0.017** |
 | **DBPedia-entity** | 4,635,922 | 0.3053 | 0.313 | **−0.008** |
 
-**Eight of nine agree within ±0.008**, and one is in our favour. The exceptions are Quora and NQ.
+**Eight of ten agree within ±0.02** (five within ±0.008). ArguAna and HotpotQA sit *above* their
+anchors — HotpotQA by +0.034 on a 600-query subset, so it carries sampling noise roughly the size of
+that margin. Quora (−0.020) and NQ (−0.017) sit below. An earlier version of this line claimed "eight
+of nine agree within ±0.008", which was simply a miscount; the table is the record.
 
 **The tempting explanation — that the gap grows with corpus size — is wrong**, and DBPedia is what
 kills it: at 4.6M documents, the largest corpus measured, the gap is −0.008, smaller than SciDocs at

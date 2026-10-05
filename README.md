@@ -896,8 +896,10 @@ lexical-only**, `nq` (2.68M documents) and `dbpedia-entity` (4.64M):
 
 ![Lexical arm against published BM25, by corpus](docs/charts/lexical_vs_published.png)
 
-**Eight of nine agree within ±0.008**, and Touché reproduces its anchor to three decimals. The
-exceptions are Quora (**−0.020**) and NQ (**−0.017**) — both natural-language question datasets.
+**Eight of ten agree within ±0.02, and five within ±0.008** — with Touché reproducing its anchor to
+three decimals. Two are in our favour (ArguAna **+0.020**, and HotpotQA **+0.034** on a 600-query
+subset) and two are clearly against (Quora **−0.020**, NQ **−0.017**). An earlier version of this
+paragraph said "eight of nine agree within ±0.008"; that was wrong, and the recount is above.
 
 Two explanations were tested and **both failed**, which is worth stating because the first was
 plausible and I believed it:

@@ -198,7 +198,12 @@ def chart_frames_arms(outdir: Path, plt) -> dict[str, Any]:
 #: arm here: a multi-million-document embedding pass buys little when the lexical row is the question.
 PUBLISHED_BM25_LARGE = {"nq": 0.329, "hotpotqa": 0.603, "dbpedia-entity": 0.313,
                         "climate-fever": 0.213, "fever": 0.753}
-LEXICAL_ONLY = ["nq", "hotpotqa", "dbpedia-entity", "climate-fever", "fever"]
+LEXICAL_ONLY = ["nq", "dbpedia-entity", "climate-fever", "fever"]
+
+#: Corpora measured on a *seeded subset* rather than the full query set, with the subset size. They are
+#: charted with the estimate named in the label: a 600-query sample has sampling noise of roughly the
+#: same size as the gaps the chart is used to read, so it must not look like a full-set number.
+SUBSET_ESTIMATES = {"hotpotqa": ("hotpotqa-subset", 600)}
 
 
 def lexical_vs_published() -> list[dict[str, Any]]:
@@ -212,6 +217,13 @@ def lexical_vs_published() -> list[dict[str, Any]]:
         if (ROOT / "eval" / "beir" / f"{dataset}.json").is_file():
             rows.append({"dataset": dataset, "ours": dataset_mean(dataset, "bm25-engine"),
                          "published": PUBLISHED_BM25_LARGE[dataset]})
+    for dataset, (report, size) in SUBSET_ESTIMATES.items():
+        if (ROOT / "eval" / "beir" / f"{report}.json").is_file():
+            # The report file is named for the run and the dataset key inside it is the corpus, so
+            # these do not go through `dataset_mean`, which assumes the two are the same string.
+            rows.append({"dataset": dataset,
+                         "ours": _mean(compare.per_query(report, dataset, "bm25-engine")),
+                         "published": PUBLISHED_BM25_LARGE[dataset], "subset": size})
     for row in rows:
         row["gap"] = row["ours"] - row["published"]
     return rows
@@ -234,8 +246,11 @@ def chart_lexical_vs_published(outdir: Path, plt) -> list[dict[str, Any]]:
                 ha="center", fontsize=7.5,
                 color=ACCENT if abs(row["gap"]) > 0.012 else "#555")
     ax.set_xticks(x)
-    ax.set_xticklabels([compare.DATASET_LABEL.get(row["dataset"], row["dataset"].capitalize())
-                        for row in rows], rotation=25, ha="right")
+    labels = []
+    for row in rows:
+        name = compare.DATASET_LABEL.get(row["dataset"], row["dataset"].capitalize())
+        labels.append(f"{name}\n({row['subset']}-query subset)" if row.get("subset") else name)
+    ax.set_xticklabels(labels, rotation=25, ha="right")
     ax.set_ylabel("nDCG@10")
     ax.set_ylim(0, 0.85)
     ax.set_title("Lexical arm against published BM25: the control, by corpus")
