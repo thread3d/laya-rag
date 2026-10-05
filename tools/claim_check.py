@@ -225,6 +225,21 @@ CHECKS: list[Claim] = [
     Claim("touche dense behind it", README, r"beats dense by more than two to one",
           0.220, ("datasets", "webis-touche2020", "retrievers", "biencoder", "nDCG@10"),
           decimals=3, report="eval/beir/touche.json"),
+    # The lexical-control counts. These exist because the prose summarising the table was wrong: the
+    # tables are generated from reports and cannot drift, while the sentence describing them can, and
+    # did. The summary is now generated too (tools/lexical_control.py) and the prose is pinned to it.
+    Claim("lexical control corpora", README, r"of the 10 measured corpora agree within",
+          10, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("lexical control within 0.02", README, r"agree within \u00b10\.02, and",
+          8, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("lexical control within 0.008", README, r"within \u00b10\.008\*\*",
+          5, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("breadth corpora", "docs/findings-beir-breadth.md", r"of the 10 corpora agree within",
+          10, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("breadth within 0.02", "docs/findings-beir-breadth.md", r"agree within \u00b10\.02\*\*",
+          8, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("breadth within 0.008", "docs/findings-beir-breadth.md", r"within \u00b10\.008\)",
+          5, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
 ]
 
 FORBIDDEN: list[Forbidden] = [

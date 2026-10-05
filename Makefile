@@ -60,12 +60,13 @@ ANNBENCH_ARGS ?=
 ONDISK_SCALE_ARGS ?=
 DISTILL_VERIFY_ARGS ?=
 FRAMES_ARGS ?=
+LEXICAL_CONTROL_ARGS ?=
 ANSWERABILITY_GROUP_ARGS ?=
 CHARTS_DIR ?= docs/charts
 DIAGRAM ?= docs/architecture.png
 JOB_STATUS_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -122,6 +123,7 @@ help:
 	@echo "ondisk-scale peak build RSS against corpus size and vocabulary (Phase 4.1 evidence)"
 	@echo "distill-verify  is the exported distilled encoder faithful to its checkpoint?"
 	@echo "frames-eval  FRAMES retrieval: recall@k and MRR against the linked articles"
+	@echo "lexical-control  gaps against published BM25, and the counts the prose is pinned to"
 	@echo "ondisk       on-disk postings and streaming dense index"
 	@echo "bench-lexical  BM25 vs eager BM25: parity, index size, query latency"
 	@echo "adversarial-audit  poison/trust/verification regression checks"
@@ -402,6 +404,10 @@ distill-verify:
 # Phase 3.1: FRAMES retrieval, document-level gold from the dataset's Wikipedia links.
 frames-eval:
 	OMP_NUM_THREADS=16 $(PY) tools/frames_eval.py $(FRAMES_ARGS)
+
+# The lexical-control summary, generated so the prose describing it can be pinned by claim-check.
+lexical-control:
+	$(PY) tools/lexical_control.py $(LEXICAL_CONTROL_ARGS)
 
 # Does a learned gate threshold or a fitted temperature beat the fixed 0.5 and raw score?
 gate-calibration:
