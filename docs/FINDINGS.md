@@ -76,7 +76,7 @@ are what stops the next pass from re-trying them.
   new `--limit-queries` flag. It was the dilution trap this project had already recorded twice — full
   qrels passed alongside a subset's rankings, so every unsampled query scored zero. The prediction from
   dilution (0.0516 x 7405/600 = 0.637) matched the corrected 0.6365 to three digits.
-- **The dilution trap is worth re-checking on every partial-run path.** It has now been found three
+- **The dilution trap is worth auditing, not just re-checking.** An audit after the HotpotQA fix found it in **two more tools** — `ondisk.py --limit-queries` and `engine_beir.py --limit` — both passing full qrels with a capped ranking set. It has now been found **four times** here. A behavioural test in `tests/test_qrels_dilution.py` demonstrates the effect directly (a perfect 3-of-10 result scores 0.3 against the full qrels, 1.0 against a restricted one), so the reason for the guard is pinned rather than the guard's spelling. Reassuringly, **no recorded report used a limited run**, so no published number was affected — which was checked rather than assumed.
   times in this repository — `arguana_stance`, `order_eval`, and the new query-subset flag — each time
   because a partial ranking set was evaluated against a complete qrels.
 

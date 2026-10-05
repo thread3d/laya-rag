@@ -377,8 +377,13 @@ def main(argv=None) -> int:
     queries = beir.load_queries(dataset_dir)
     qrels = beir.load_qrels(dataset_dir)
     scored = {q: t for q, t in queries.items() if q in qrels}
+    scoring_qrels = qrels
     if args.limit_queries:
         scored = dict(list(scored.items())[: args.limit_queries])
+        # `evaluate_rankings` macro-averages over every query in the qrels it is given, so a partial
+        # ranking set with the full qrels scores the rest as zero and divides the mean by the wrong
+        # denominator. Restricting only on the limited path leaves full runs untouched.
+        scoring_qrels = beir.restrict_qrels(qrels, scored)
     print(f"{args.dataset}: {len(corpus)} documents, {len(scored)} scored queries", flush=True)
 
     report: dict[str, Any] = {"settings": vars(args), "documents": len(corpus)}
@@ -417,7 +422,7 @@ def main(argv=None) -> int:
             query_id: [doc_id for doc_id, _ in ondisk.search(text, k=args.top_k)]
             for query_id, text in scored.items()
         }
-        bm25_eval = evalkit.evaluate_rankings(bm25_rankings, qrels, k_values=(10, 100))
+        bm25_eval = evalkit.evaluate_rankings(bm25_rankings, scoring_qrels, k_values=(10, 100))
         report["bm25_ondisk"] = {
             "seconds": round(bm25_seconds, 1),
             "megabytes": round(ondisk.disk_bytes() / 1e6, 1),
@@ -455,7 +460,7 @@ def main(argv=None) -> int:
             query_id: [doc_id for doc_id, _ in opened.search(vector, k=args.top_k)]
             for (query_id, _), vector in zip(scored.items(), query_vectors)
         }
-        dense_eval = evalkit.evaluate_rankings(dense_rankings, qrels, k_values=(10, 100))
+        dense_eval = evalkit.evaluate_rankings(dense_rankings, scoring_qrels, k_values=(10, 100))
         report["dense_streaming"] = {
             "seconds": round(dense_seconds, 1),
             "megabytes": round(index.disk_bytes() / 1e6, 1),

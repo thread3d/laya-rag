@@ -226,6 +226,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     test_queries = {qid: text for qid, text in queries.items() if qid in qrels}
     if args.limit:
         test_queries = dict(list(test_queries.items())[: args.limit])
+        # Same dilution trap as `beir.py`: the evaluator macro-averages over the qrels it is handed,
+        # so a capped query set must be paired with qrels capped to it.
+        qrels = beir.restrict_qrels(qrels, test_queries)
     doc_ids = write_corpus(corpus, docs_dir)
 
     config = EngineConfig()
