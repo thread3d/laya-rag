@@ -67,6 +67,13 @@ are what stops the next pass from re-trying them.
 
 ## Method notes worth carrying forward
 
+- **A bulk API answers a fast caller with 429, not with partial data.** Wikimedia throttles
+  `prop=extracts` hard, and the symptom was not an error but a *plausible-looking* result: exactly one
+  article per 20-title batch resolved, which reads like a data problem (bad titles) rather than a
+  throttling one. The tell was the uniformity. Pacing plus multiplicative backoff, retried per batch
+  so a resume loses only the batch in flight.
+
+
 - **Memoise the pure-Python stemmer.** `snowballstemmer` is implemented in Python and a corpus
   repeats its words heavily — 6.2M tokens in a 20,000-document sample collapsed to **74,334 distinct
   stems** — so the same token was being stemmed over and over. Caching by token took a lexical build
