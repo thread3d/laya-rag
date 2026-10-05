@@ -67,11 +67,14 @@ are what stops the next pass from re-trying them.
 
 ## Method notes worth carrying forward
 
-- **A bulk API answers a fast caller with 429, not with partial data.** Wikimedia throttles
-  `prop=extracts` hard, and the symptom was not an error but a *plausible-looking* result: exactly one
-  article per 20-title batch resolved, which reads like a data problem (bad titles) rather than a
-  throttling one. The tell was the uniformity. Pacing plus multiplicative backoff, retried per batch
-  so a resume loses only the batch in flight.
+- **A uniform partial result is an API *semantic*, not a data problem.** Fetching the FRAMES corpus
+  stored **exactly one article per 20-title batch** — a 5% yield as regular as a metronome. It reads
+  like broken title normalisation and is not: the TextExtracts extension returns **one full extract
+  per request however `exlimit` is set** (three titles in, three pages back, exactly one with text), so
+  a 50-title batch fetched 50 pages and stored one. Two lessons. The regular yield was the tell — a
+  data problem is noisy, a contract is uniform. And the first diagnosis, HTTP 429, was **wrong**: the
+  throttling was real and separate, and I attributed the systematic pattern to it because I had just
+  seen a 429. `prop=revisions&rvprop=content` honours the batch and fetched all 2,482 articles.
 
 
 - **Memoise the pure-Python stemmer.** `snowballstemmer` is implemented in Python and a corpus

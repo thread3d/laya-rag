@@ -28,8 +28,8 @@ DEFAULT_TSV = ROOT / "eval" / "frames" / "test.tsv"
 DEFAULT_OUT = ROOT / "eval" / "frames" / "corpus.jsonl"
 API = "https://en.wikipedia.org/w/api.php"
 USER_AGENT = "laya-rag-eval/1.0 (offline research harness; contact: local)"
-#: `prop=extracts` caps an anonymous request at 20 titles.
-BATCH = 20
+#: `prop=revisions` accepts up to 50 titles per request, which is why the corpus is fetchable.
+BATCH = 50
 LINK_RE = re.compile(r"https?://en\.wikipedia\.org/wiki/([^\s'\"\]|]+)")
 
 
@@ -69,10 +69,18 @@ def already_fetched(path: Path) -> set[str]:
 
 
 def fetch_batch(titles: Sequence[str], timeout: int = 30) -> dict[str, str]:
-    """Plain-text extracts for up to ``BATCH`` titles, following redirects."""
+    """Article text for up to ``BATCH`` titles, following redirects.
+
+    Not ``prop=extracts``: the TextExtracts extension returns only **one** full extract per request
+    however ``exlimit`` is set — measured, three titles in and three pages back, exactly one with
+    text — so a 20-title batch stores one article and the corpus would need a request per article.
+    ``prop=revisions&rvprop=content`` honours the whole batch instead, at the cost of wikitext rather
+    than prose. For retrieval that is acceptable, since the entities and numbers a question asks
+    about are in the markup, and `strip_wikitext` removes the obvious scaffolding.
+    """
     query = urllib.parse.urlencode({
-        "action": "query", "format": "json", "prop": "extracts", "explaintext": 1,
-        "exlimit": "max", "redirects": 1, "titles": "|".join(titles),
+        "action": "query", "format": "json", "prop": "revisions", "rvprop": "content",
+        "rvslots": "main", "redirects": 1, "titles": "|".join(titles),
     })
     request = urllib.request.Request(f"{API}?{query}", headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -80,10 +88,31 @@ def fetch_batch(titles: Sequence[str], timeout: int = 30) -> dict[str, str]:
     out: dict[str, str] = {}
     for page in (payload.get("query") or {}).get("pages", {}).values():
         title = page.get("title")
-        extract = page.get("extract")
-        if title and extract:
-            out[title] = extract
+        revisions = page.get("revisions") or []
+        if not title or not revisions:
+            continue
+        slots = revisions[0].get("slots") or {}
+        content = (slots.get("main") or {}).get("*")
+        if content:
+            out[title] = strip_wikitext(content)
     return out
+
+
+#: Cheap scaffolding removal, not a parser: tables and refs are left in place, because for retrieval a
+#: noisy document that contains the answer beats a clean one that does not.
+_TEMPLATE = re.compile(r"\{\{[^{}]*\}\}")
+_TAG = re.compile(r"<[^>]{1,200}>")
+
+
+def strip_wikitext(text: str) -> str:
+    """Lose the markup that carries no terms; keep everything that might."""
+    text = _TAG.sub(" ", text)
+    for _ in range(4):                       # collapse the innermost templates a few levels deep
+        text = _TEMPLATE.sub(" ", text)
+    text = text.replace("'''", "").replace("''", "")
+    text = re.sub(r"\[\[(?:[^\]|]*\|)?([^\]|]+)\]\]", r"\1", text)
+    text = re.sub(r"\[https?://\S+\s+([^\]]+)\]", r"\1", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
