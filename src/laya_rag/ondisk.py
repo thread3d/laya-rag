@@ -44,6 +44,9 @@ _CHUNKS = "chunks.jsonl"
 _CHUNK_OFFSETS = "chunk_offsets.npy"
 _IDS = "ids.json"
 _DENSE_META = "meta.json"
+#: Tombstoned chunk ids, so the append-only dense index can drop documents without rewriting
+#: its offset table: the record stays on disk, `search`/`get`/`chunks` skip it.
+_DELETED = "deleted.json"
 
 _POSTINGS = "postings.bin"
 _OFFSETS = "offsets.npy"
@@ -397,6 +400,10 @@ class OnDiskVectorIndex:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.dim = int(dim)
         self.count = 0
+        #: Chunks tombstoned by `remove_paths`/`remove_doc_ids`; the records stay on disk.
+        self._deleted: set[str] = set()
+        #: `count` minus the tombstones that exist in `_ids`; what `__len__` reports.
+        self.live_count = 0
         self._ids: list[str] = []
         self._positions: dict[str, int] = {}
         self._vectors: np.ndarray | None = None
@@ -407,15 +414,20 @@ class OnDiskVectorIndex:
 
     # -- introspection ---------------------------------------------------
     def __len__(self) -> int:
-        return self.count
+        """Live chunks: `count` minus the tombstoned ones."""
+        return self.live_count
 
     def get(self, chunk_id: str) -> Chunk | None:
+        if chunk_id in self._deleted:
+            return None
         position = self._positions.get(chunk_id)
         if position is None:
             return None
         return self._chunk_at(position)
 
     def vector(self, chunk_id: str) -> np.ndarray | None:
+        if chunk_id in self._deleted:
+            return None
         position = self._positions.get(chunk_id)
         if position is None or self._vectors is None:
             return None
@@ -423,8 +435,12 @@ class OnDiskVectorIndex:
 
     @property
     def chunks(self) -> list[Chunk]:
-        """Every chunk record materialised (introspection only; prefer ``get``)."""
-        return [self._chunk_at(i) for i in range(self.count)]
+        """Every live chunk record materialised (introspection only; prefer ``get``)."""
+        return [
+            self._chunk_at(i)
+            for i in range(self.count)
+            if self._ids[i] not in self._deleted
+        ]
 
     def document_count(self) -> int:
         return len({chunk.doc_id for chunk in self.chunks})
@@ -514,6 +530,7 @@ class OnDiskVectorIndex:
             self._positions[chunk.chunk_id] = self.count + position
         self._ids.extend(chunk.chunk_id for chunk in chunks)
         self.count += len(chunks)
+        self.live_count += len(chunks)
         return 0
 
     def finalize(self) -> None:
@@ -522,11 +539,46 @@ class OnDiskVectorIndex:
             json.dumps({"version": 1, "dim": self.dim, "count": self.count}),
             encoding="utf-8",
         )
+        self._save_deleted()
+
+    def _save_deleted(self) -> None:
+        (self.directory / _DELETED).write_text(
+            json.dumps(sorted(self._deleted)), encoding="utf-8"
+        )
+
+    def _tombstone(self, predicate: Any) -> int:
+        """Mark every live chunk whose record satisfies ``predicate`` deleted."""
+        removed = 0
+        for position in range(self.count):
+            chunk_id = self._ids[position]
+            if chunk_id in self._deleted:
+                continue
+            if predicate(self._chunk_at(position)):
+                self._deleted.add(chunk_id)
+                removed += 1
+        if removed:
+            self.live_count -= removed
+            self._save_deleted()
+        return removed
 
     def remove_paths(self, paths: Sequence[str]) -> int:
-        raise IndexError_(
-            "the on-disk backend is append-only and cannot drop paths; rebuild the index"
-        )
+        """Tombstone every live chunk read from ``paths``.
+
+        The append-only format is preserved: the chunk records and their offsets are not
+        rewritten, so a tombstoned chunk is simply skipped by ``get``/``search``/``chunks``.
+        The engine rebuilds the lexical channel from the survivors.
+        """
+        wanted = {str(Path(path)) for path in paths}
+        if not wanted:
+            return 0
+        return self._tombstone(lambda chunk: chunk.path in wanted)
+
+    def remove_doc_ids(self, doc_ids: Sequence[str]) -> int:
+        """Tombstone every live chunk belonging to ``doc_ids``."""
+        doomed = set(doc_ids)
+        if not doomed:
+            return 0
+        return self._tombstone(lambda chunk: chunk.doc_id in doomed)
 
     # -- open / search ---------------------------------------------------
     @classmethod
@@ -541,6 +593,12 @@ class OnDiskVectorIndex:
             directory / _VECTORS, dtype=np.float32, mode="r", shape=(index.count, index.dim)
         )
         index._offsets = np.load(directory / _CHUNK_OFFSETS)
+        deleted_path = directory / _DELETED
+        if deleted_path.is_file():
+            index._deleted = set(json.loads(deleted_path.read_text(encoding="utf-8")))
+        index.live_count = index.count - sum(
+            1 for chunk_id in index._deleted if chunk_id in index._positions
+        )
         ann_path = directory / _ANN
         if ann_path.is_file():
             try:
@@ -608,24 +666,44 @@ class OnDiskVectorIndex:
         return self._ann is not None
 
     def _rank(self, query: np.ndarray, count: int, block: int) -> list[tuple[float, int]]:
-        """The top ``count`` ``(score, position)`` pairs, by ANN when available else exact."""
+        """The top ``count`` live ``(score, position)`` pairs, ANN when available else exact."""
         if self._ann is not None:
             self._ann.nprobe = min(self.nprobe, self._ann.nlist)
+            window = min(self.count, count + len(self._deleted))
             similarities, positions = self._ann.search(
-                query.reshape(1, -1).astype(np.float32), min(count, self.count)
+                query.reshape(1, -1).astype(np.float32), window
             )
-            return [
+            out = [
                 (float(similarity), int(position))
                 for similarity, position in zip(similarities[0], positions[0])
-                if position >= 0
+                if position >= 0 and self._ids[int(position)] not in self._deleted
             ]
+            if len(out) >= count or window >= self.count:
+                return out[:count]
+            # The ANN window was too narrow once tombstones were removed: exact is correct.
+            return self._rank_exact(query, count, block)
+        return self._rank_exact(query, count, block)
+
+    def _rank_exact(self, query: np.ndarray, count: int, block: int) -> list[tuple[float, int]]:
+        """The exact scan, masking tombstoned rows so they never enter a top-k."""
+        deleted = self._deleted
         best: list[tuple[float, int]] = []
         for start in range(0, self.count, block):
             stop = min(start + block, self.count)
             scores = self._vectors[start:stop] @ query
+            if deleted:
+                for offset in range(stop - start):
+                    if self._ids[start + offset] in deleted:
+                        scores[offset] = -np.inf
             take = min(count, len(scores))
+            if take <= 0:
+                continue
             local = np.argpartition(-scores, take - 1)[:take]
-            best.extend((float(scores[int(i)]), start + int(i)) for i in local)
+            best.extend(
+                (float(scores[int(i)]), start + int(i))
+                for i in local
+                if np.isfinite(scores[int(i)])
+            )
         best.sort(key=lambda item: -item[0])
         return best[:count]
 
@@ -647,7 +725,7 @@ class OnDiskVectorIndex:
         """
         if k < 1:
             raise ValueError(f"k must be positive, got {k}")
-        if not self.count or self._vectors is None:
+        if not self.live_count or self._vectors is None:
             return []
         query = _normalise(np.asarray(query_vector, dtype=np.float32))[0]
         if query.shape[0] != self.dim:
@@ -657,11 +735,11 @@ class OnDiskVectorIndex:
         if allow is None:
             return [
                 Hit(chunk=self._chunk_at(position), score=score)
-                for score, position in self._rank(query, min(k, self.count), block)
+                for score, position in self._rank(query, min(k, self.live_count), block)
             ]
         # The predicate needs each candidate's path, which lives in its record. Rank a
         # window, read only those records, and deepen if too few survive.
-        window = min(self.count, k)
+        window = min(self.live_count, k)
         while True:
             kept: list[Hit] = []
             for score, position in self._rank(query, window, block):
@@ -670,13 +748,13 @@ class OnDiskVectorIndex:
                     kept.append(Hit(chunk=chunk, score=score))
                     if len(kept) >= k:
                         break
-            if len(kept) >= k or window >= self.count:
+            if len(kept) >= k or window >= self.live_count:
                 return kept[:k]
-            window = min(self.count, max(window * 4, k))
+            window = min(self.live_count, max(window * 4, k))
 
     def stats(self) -> dict[str, Any]:
         return {
-            "chunks": self.count,
+            "chunks": self.live_count,
             "documents": self.document_count(),
             "dim": self.dim,
             "paths": len(self.paths()),

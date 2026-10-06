@@ -643,6 +643,22 @@ class RagEngine:
         self._sparse = None
         self._sparse_query_cache = {}
 
+    def _rebuild_ondisk_lexical(self, chunks: Sequence[Any]) -> None:
+        """Rewrite the packed on-disk BM25 channel from the surviving chunks."""
+        from .ondisk import BM25_DIRNAME, OnDiskBM25
+
+        bm25_dir = self.config.index_dir / BM25_DIRNAME
+        if bm25_dir.exists():
+            shutil.rmtree(bm25_dir)
+        lexical = OnDiskBM25(
+            bm25_dir,
+            stem=self.config.lexical_stem,
+            k1=self.config.bm25_k1,
+            b=self.config.bm25_b,
+        )
+        lexical.build((chunk.chunk_id, chunk.index_text) for chunk in chunks)
+        self._lexical = lexical
+
     def remove_documents(
         self,
         paths: Sequence[Path | str] = (),
@@ -652,9 +668,10 @@ class RagEngine:
 
         The dense index is the source of truth for which chunks exist: chunks are removed
         there, then the lexical channel is rebuilt from the survivors so the two cannot
-        disagree. The in-memory backend supports removal; the on-disk backend is
-        append-only and refuses, because dropping chunks there would invalidate the saved
-        offsets — rebuild instead. Returns the number of chunks removed.
+        disagree. On the in-memory backend removal is a real delete; on the append-only
+        on-disk backend the chunk records are **tombstoned** (skipped by search, get and
+        chunks) and the packed lexical channel is rebuilt from the survivors, so no saved
+        byte offset is invalidated. Returns the number of chunks removed.
 
         Removing a path removes every chunk of the document(s) that path belongs to.
         """
@@ -663,32 +680,30 @@ class RagEngine:
             return 0
         if not self.has_index():
             return 0
-        if self.config.resolved_index_backend == "ondisk":
-            raise ValueError(
-                "the on-disk index backend is append-only and cannot remove documents; "
-                "rebuild the index instead"
-            )
         index = self.index
         removed = index.remove_paths([str(p) for p in paths]) if paths else 0
         if doc_ids:
             removed += index.remove_doc_ids(list(doc_ids))
         if not removed:
             return 0
-        index.save(self.config.index_dir)
         chunks = index.chunks
-        if self.config.resolved_lexical_backend == "eager":
-            lexical = EagerBM25Index(
-                stem=self.config.lexical_stem, k1=self.config.bm25_k1, b=self.config.bm25_b
-            )
-            lexical.build(chunks)
-            lexical.save(self.config.index_dir / EAGER_LEXICAL_FILE)
+        if self.config.resolved_index_backend == "ondisk":
+            self._rebuild_ondisk_lexical(chunks)
         else:
-            lexical = BM25Index(
-                stem=self.config.lexical_stem, k1=self.config.bm25_k1, b=self.config.bm25_b
-            )
-            lexical.build(chunks)
-            lexical.save(self.config.index_dir / LEXICAL_FILE)
-        self._lexical = lexical
+            index.save(self.config.index_dir)
+            if self.config.resolved_lexical_backend == "eager":
+                lexical = EagerBM25Index(
+                    stem=self.config.lexical_stem, k1=self.config.bm25_k1, b=self.config.bm25_b
+                )
+                lexical.build(chunks)
+                lexical.save(self.config.index_dir / EAGER_LEXICAL_FILE)
+            else:
+                lexical = BM25Index(
+                    stem=self.config.lexical_stem, k1=self.config.bm25_k1, b=self.config.bm25_b
+                )
+                lexical.build(chunks)
+                lexical.save(self.config.index_dir / LEXICAL_FILE)
+            self._lexical = lexical
         self._sparse = None
         self._sparse_encoder = None
         self._sparse_query_cache = {}

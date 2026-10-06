@@ -70,11 +70,19 @@ def test_removing_nothing_removes_nothing(tmp_path):
     assert engine.stats()["index"]["chunks"] == before
 
 
-def test_the_ondisk_backend_refuses_removal(tmp_path):
+def test_the_ondisk_backend_tombstones_removed_documents(tmp_path):
+    """The append-only backend cannot rewrite offsets, so it tombstones and rebuilds lexical."""
     engine = _engine(tmp_path, index_backend="ondisk")
     engine.index_paths([_corpus(tmp_path)], rebuild=True)
-    with pytest.raises(ValueError, match="append-only"):
-        engine.remove_documents([tmp_path / "corpus" / "shipping.md"])
+    before = engine.stats()["index"]["chunks"]
+    removed = engine.remove_documents([tmp_path / "corpus" / "shipping.md"])
+    assert removed > 0
+    assert engine.stats()["index"]["chunks"] == before - removed
+    assert all("shipping" not in p["path"] for p in engine.query("shipping cost").passages)
+
+    # The tombstone is persisted, so a reopened engine agrees.
+    reopened = _engine(tmp_path, index_backend="ondisk")
+    assert all("shipping" not in p["path"] for p in reopened.query("shipping cost").passages)
 
 
 def test_delete_documents_route_removes_and_reports(tmp_path, monkeypatch):

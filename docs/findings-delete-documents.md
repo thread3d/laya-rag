@@ -16,8 +16,11 @@ rebuilt too when configured, and the query cache is cleared.
 Removing a path removes every chunk of the document(s) that path belongs to. A request naming
 nothing removes nothing and returns `0`.
 
-**The on-disk backend refuses** with a clear error: it is append-only, and dropping chunks would
-invalidate its saved byte offsets. `--rebuild` remains the way to remove a document there.
+**The on-disk backend tombstones.** It is append-only, so a chunk's record and its saved byte
+offset cannot be rewritten; instead `OnDiskVectorIndex` marks the chunk's id as deleted in a
+`deleted.json` sidecar and `get`/`search`/`chunks`/`__len__` skip it, while the packed lexical
+channel is rebuilt from the survivors. The append-only format is preserved and the tombstone is
+persisted, so a reopened engine agrees.
 
 ## The surfaces
 
@@ -42,7 +45,10 @@ reports the append-only refusal. `make test`: **1304 passed, 5 deselected**.
 
 ## What this does not show
 
-- **The on-disk backend still cannot remove**, which is the incremental-lifecycle half of Bet 8.
+- **The on-disk backend tombstones, it does not compact.** Removing documents there leaves their
+  records and vectors on disk and skips them at query time, so the file does not shrink and the
+  tombstone set can grow; a `--rebuild` is still how to reclaim space. Replacing a document's
+  content in place is also still unsupported, which is the rest of the incremental-lifecycle item.
 - Removal is not transactional across the two files: a crash between `index.save` and the lexical
   save would leave a dense index missing documents the lexical channel still holds. The engine
   tolerates that (unknown chunk ids resolve to `None`), but a rebuild is the recovery.

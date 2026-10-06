@@ -306,3 +306,29 @@ def test_ondisk_search_without_allow_is_unchanged(tmp_path):
     opened = OnDiskVectorIndex.open(tmp_path / "dense")
     hits = opened.search(np.asarray([1.0, 0.0], dtype=np.float32), k=2)
     assert [hit.chunk.path for hit in hits] == ["a.md", "b.md"]
+
+
+def test_ondisk_remove_paths_tombstones_and_persists(tmp_path):
+    index = OnDiskVectorIndex(tmp_path / "dense", dim=2)
+    index.add(
+        [
+            _chunk(0, "nearest", doc_id="a", path="keep/a.md"),
+            _chunk(1, "second", doc_id="b", path="drop/b.md"),
+            _chunk(2, "third", doc_id="c", path="keep/c.md"),
+        ],
+        np.asarray([[1.0, 0.0], [0.99, 0.1], [0.9, 0.2]], dtype=np.float32),
+    )
+    index.finalize()
+    opened = OnDiskVectorIndex.open(tmp_path / "dense")
+    assert len(opened) == 3
+    assert opened.remove_paths(["drop/b.md"]) == 1
+    assert len(opened) == 2
+    assert opened.get("b:0001") is None
+    hits = opened.search(np.asarray([1.0, 0.0], dtype=np.float32), k=3)
+    assert [hit.chunk.path for hit in hits] == ["keep/a.md", "keep/c.md"]
+
+    # The tombstone is on disk, so a fresh open agrees.
+    reopened = OnDiskVectorIndex.open(tmp_path / "dense")
+    assert len(reopened) == 2
+    assert reopened.get("b:0001") is None
+    assert "drop/b.md" not in reopened.paths()

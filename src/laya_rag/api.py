@@ -826,9 +826,9 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         """Remove documents by path or doc id, without rebuilding the whole index.
 
         Removal rebuilds the lexical channel from the surviving chunks, so the two
-        channels cannot disagree. The on-disk backend is append-only and answers
-        ``409 index_not_updatable``; rebuild it instead. A request naming nothing
-        removes nothing.
+        channels cannot disagree. The append-only on-disk backend tombstones the chunks
+        and rebuilds its packed lexical channel, so removal works there too; it just does
+        not reclaim disk space until a rebuild. A request naming nothing removes nothing.
         """
         require_write(principal)
         engine = get_engine()
