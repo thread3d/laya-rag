@@ -196,7 +196,7 @@ none needs a GPU or an API. The number to beat is the repository's own best meas
 | # | addition | gap attacked | expected | falsify |
 | --- | --- | --- | --- | --- |
 | 1.1 | **Bridge-linked second-hop rescue** — after relevance/CE filtering, readmit low-relevance candidates lexically linked to a kept seed (bridge-entity term/n-gram overlap); drop only unlinked junk | §3.1, the measured cause of the MAP gap; composes with the CE and the coverage pass | MAP@10 0.2986 → **0.31–0.33** hypothesis | log retention before/after; if retention rises without MAP, the tax is not the bottleneck |
-| 1.2 | **CE × set-coverage joint selection** — feed CE scores into `facility_location_select` as the relevance term, plus bridge-rescue and a per-doc quota | both parts already measured positive; they have never been combined | +0.01–0.03 over CE alone | held-out A/B; if CE+coverage equals CE alone, coverage is subsumed |
+| 1.2 | **CE × set-coverage joint selection** — feed CE scores into `facility_location_select` as the relevance term, plus bridge-rescue and a per-doc quota | both parts already measured positive; they have never been combined. **Corrected 2026-10-06:** "both parts already measured positive" is true on the multi-hop corpus but **not** for the shipped default — `docs/findings-coverage-scope.md` finds coverage and dedup cost **0.02–0.08 / 0.002–0.51 nDCG@10 on every BEIR dataset** (ArguAna 0.560 → 0.087), and both ship off: they are corpus-shape instruments, not general wins | +0.01–0.03 over CE alone | held-out A/B; if CE+coverage equals CE alone, coverage is subsumed |
 | 1.3 | **Rank-1 guardrail + calibrated CE blending** — isotonic/temperature-calibrate CE logits on a held-out half; forbid demoting first-stage rank 1 unless the calibrated margin is large | bounds top-heavy flips (the ArguAna collapse lives in rank-1 swaps); `blend_scores` exists | recovers 30–70% of CE-induced BEIR loss at no MultiHop cost | guardrail on/off at fixed blend across five BEIR sets; if gain just mimics blend<1 it is redundant |
 | 1.4 | **Query-type routing gate** — tiny logistic gate over cheap features (query length, query/doc length ratio, lexical overlap, first-stage margin) deciding *whether* to run the CE and at what blend | CE helps MultiHop, hurts five topical corpora; global on/off wastes half | ~half the CE loss recovered at no MultiHop cost | leave-one-dataset-out; if it cannot beat global "CE off", drop it |
 | 1.5 | **Atomic units + parent-window return** — index sentence atoms (dense side only), map atom → parent chunk, return the window; keep chunk-level BM25 | the measured fact-loss class (fact > overlap and > 1 sentence) and fact-density per MAP slot | MAP@10 +0.01–0.04; removes the fact-loss class | atom→top-100→parents vs fused baseline; keep BM25 at chunk granularity — 600-char passage indexing already lost here |
@@ -365,6 +365,10 @@ paper — treat it as a hypothesis with a clear test in Tier 0.1).
 - **Nothing here was implemented.** No source file was changed; this is a survey. The briefs
   in `docs/research/` and the verification memos in `docs/research/verification/` are kept
   separate from `IMPROVEMENTS.md` (in-repo diagnosis) and `PLAN.md` (execution plan).
+  **Corrected 2026-10-06:** this top-line disclaimer was already stale relative to the survey's own
+  trailing status block, which records Tier 0.1/0.2, 0.6, 1.1, 1.7 and 1.8 as measured. Several
+  Tier-1 ideas have since been implemented too — the min-max convex fusion (`FUSION_MODE=convex`,
+  ablated on SciFact) and the bridge-conditioned gate column (`GATE_BRIDGE_FEATURE`).
 - **The prior to respect.** Every failure in §2 came from trusting a stronger pointwise model
   more. Every win came from changing the objective or the routing. Proposals that amount to
   "use a bigger model on the same objective" should be the most heavily discounted.

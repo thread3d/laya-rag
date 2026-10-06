@@ -36,7 +36,14 @@ rather than all at the checkpoint.
 
 ---
 
-## 1. Coverage on multi-hop queries — MAP@10 0.279 vs 0.479 published
+## 1. Coverage on multi-hop queries — MAP@10 0.279 vs 0.479 published (**reranked; not like-for-like**)
+
+> **Corrected 2026-10-06.** The title's comparison is apples-to-oranges and the body already says
+> so: the published 0.479 is a **reranked** row and 0.279 was not. The like-for-like internal bar is
+> the harness's fused first stage, and the engine's best measured configuration is **0.3128** on the
+> full protocol against the harness's 0.2510 (`docs/findings-engine-multihop.md`), with the
+> coverage-quota rule reaching 0.3280 reranked. The analysis below is kept as the original
+> diagnosis.
 
 ### What the code does
 
