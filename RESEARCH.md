@@ -52,7 +52,11 @@ re-derived here.
    repository's own coverage-plus-quota rule on the 400-query subset reaches MAP@10 0.3280
    (0.3192 on the full 2,255), above the 0.2986 the project quoted earlier. Any new proposal
    should be judged against **0.3280**, not 0.2986 or 0.2835 — otherwise a real regression can
-   read as a gain.
+   read as a gain. **Corrected 2026-10-06:** 0.3280 is the **harness's 400-query subset** number.
+   The like-for-like bars are **0.3192** for the harness on the full protocol and **0.3128** for
+   the **engine's** best measured configuration, so a proposal must be judged inside one of those
+   frames; the subset bar is unreachable by the engine by construction (`ROADMAP.md` §5 Phase 2,
+   `docs/findings-engine-multihop.md`).
 2. **The single most important number was 0.7307, and it was wrong.** It divided the oracle AP
    by the gold facts *the pool happened to match* rather than by the query's true gold count —
    the normalisation every rule it was compared against uses. The corrected reorder ceiling is
