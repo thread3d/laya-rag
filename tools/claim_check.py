@@ -240,6 +240,15 @@ CHECKS: list[Claim] = [
           8, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
     Claim("breadth within 0.008", "docs/findings-beir-breadth.md", r"within \u00b10\.008\)",
           5, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
+    # The findings index carried its own drifted copy of the same sentence ("8 of 9 corpora within
+    # ±0.008"), which the breadth pin did not reach because it pins a different file. Same source,
+    # one more site: a quantity quoted twice is a quantity that can disagree with itself.
+    Claim("findings index corpora", "docs/FINDINGS.md", r"\d+ measured corpora the lexical arm agrees",
+          10, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("findings index within 0.008", "docs/FINDINGS.md", r"within \u00b10\.008 on \d+",
+          5, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("findings index within 0.02", "docs/FINDINGS.md", r"within \u00b10\.02 on \d+",
+          8, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
 ]
 
 FORBIDDEN: list[Forbidden] = [

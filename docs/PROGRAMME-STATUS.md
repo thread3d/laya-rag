@@ -8,7 +8,7 @@ cost of getting it.
 
 | phase | state | headline |
 | --- | --- | --- |
-| 0 — claim ledger | **complete** | `make claim-check`: **55** prose numbers pinned to the reports that produced them |
+| 0 — claim ledger | **complete** | `make claim-check`: **58** prose numbers pinned to the reports that produced them, plus `make consistency-check`, which pins documents to *each other* and computes the BEIR coverage count from disk |
 | 1 — engine full-split runs | **complete** | MultiHop-RAG 2,255 both configurations; MuSiQue 2,417 hybrid plus a 200-query default |
 | 2 — ordering heads | **complete, entirely negative** | late interaction, relational NLI and an adapted cross-encoder all lose; 2.4 not adopted on licence |
 | 3 — end-to-end and cost | **complete** | FRAMES, a generation pilot, citation mechanics, and the cost axis |
@@ -72,7 +72,8 @@ Each of these cost a round to learn, and each is recorded in `docs/FINDINGS.md`:
 
 ```sh
 make setup && make test          # 1251 tests, offline and deterministic
-make claim-check                 # 55 prose claims against their reports
+make claim-check                 # 58 prose claims against their reports
+make consistency-check           # documents agree with each other on the shared quantities
 make charts && make charts-more  # regenerate every figure in the README
 make job-status                  # any long job and how far it got
 ```

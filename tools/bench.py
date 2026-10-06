@@ -384,6 +384,11 @@ def probe_scale(sizes: Sequence[int], embed_dim: int = 256) -> dict[str, Any]:
     """
     embedder = HashingEmbedder(dim=embed_dim)
     query = "what is the refund interval for secret rotation"
+    # `rss_mb()` is a process high-water mark, so it is not comparable between runs that did
+    # different work first: `bench.md` (all probes) reads ~4.4 GB because the Laya decision head
+    # was already loaded, while a scale-only run starts near zero. Record the baseline so the
+    # two grids can be read against each other, and `rss_delta_mb` is the probe's own footprint.
+    baseline_rss_mb = rss_mb()
     rows: list[dict[str, Any]] = []
     for size in sizes:
         chunks = synthetic_chunks(size)
@@ -418,6 +423,7 @@ def probe_scale(sizes: Sequence[int], embed_dim: int = 256) -> dict[str, Any]:
             lexical.search(query, k=20)
             lexical_samples.append(time.perf_counter() - mark)
 
+        peak = rss_mb()
         rows.append({
             "chunks": size,
             "embed_seconds": round(embed_seconds, 2),
@@ -430,10 +436,11 @@ def probe_scale(sizes: Sequence[int], embed_dim: int = 256) -> dict[str, Any]:
             "index_mb": round((directory / "index.json").stat().st_size / 1e6, 2),
             "vectors_mb": round((directory / "vectors.npy").stat().st_size / 1e6, 2),
             "lexical_mb": round((directory / "lexical.json").stat().st_size / 1e6, 2),
-            "rss_mb": rss_mb(),
+            "rss_mb": peak,
+            "rss_delta_mb": round(peak - baseline_rss_mb, 1),
         })
         del index, lexical, vectors, chunks
-    return {"embed_dim": embed_dim, "query": query, "rows": rows}
+    return {"embed_dim": embed_dim, "query": query, "baseline_rss_mb": baseline_rss_mb, "rows": rows}
 
 
 def probe_concurrency(model: Any, workers: int = 4) -> dict[str, Any]:
@@ -610,8 +617,18 @@ def render_markdown(results: dict[str, Any]) -> str:
         ]
     if "scale" in results:
         block = results["scale"]
+        baseline = block.get("baseline_rss_mb")
+        note = (
+            f"`rss_mb` is the process high-water mark and includes the "
+            f"{baseline} MB already resident when this probe started, so it is not comparable "
+            f"to a run that began after other probes; `rss_delta_mb` is the probe's own peak."
+            if baseline is not None else
+            "`rss_mb` is a process high-water mark and includes whatever was already resident."
+        )
         parts += [
             "## Scale (hash embedder; channels and storage only)",
+            "",
+            note,
             "",
             evalkit.markdown_table(block["rows"]),
             "",

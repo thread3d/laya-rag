@@ -182,7 +182,7 @@ need to transfer — not the threshold.
 MultiHop-RAG as the out-of-domain split, fit a threshold — and a monotone Platt rescaling — on
 half of the null/answerable queries, and score the other half. It does not transfer. ROC-AUC over
 all 601 queries is 0.509 [0.463, 0.555]; over the 506 that reached the head it is 0.529 [0.479,
-0.579]. The Platt slope fitted on the calibration half is −0.18. Across 500 stratified half-splits
+0.579]. The Platt slope fitted on the calibration half is −0.18. Across 300 stratified half-splits
 the held-out balanced accuracy is 0.511 [0.472, 0.548] — chance. So this is **not a miscalibrated
 threshold but the absence of a transferable signal**: recalibrating this head on a held-out
 MultiHop split produces no discrimination, and the gate must not be cited as a strength out of
@@ -210,13 +210,13 @@ not in the benchmark.
 
 | benchmark | verdict |
 | --- | --- |
-| **Natural Questions, TriviaQA, HotpotQA, 2WikiMultiHopQA, MuSiQue, ASQA, ELI5** | **blocked at full scale, runnable in "provided-context" settings.** The open-corpus variants need a Wikipedia index (the DPR corpus behind NQ/HotpotQA is ~21M passages — far past the 28 GB free here), and all of them are scored on generated answers. HotpotQA's distractor setting, 2WikiMultiHopQA and MuSiQue ship the gold paragraphs, so those are runnable — but in that setting retrieval is bypassed and the result is a statement about the generator |
+| **Natural Questions, TriviaQA, HotpotQA, 2WikiMultiHopQA, MuSiQue, ASQA, ELI5** | **blocked at full scale, runnable in "provided-context" settings.** The open-corpus variants need a Wikipedia index (the DPR corpus behind NQ/HotpotQA is ~21M passages — a multi-day build even where disk allows it, and this host has 471 GB free), and all of them are scored on generated answers. HotpotQA's distractor setting, 2WikiMultiHopQA and MuSiQue ship the gold paragraphs, so those are runnable — but in that setting retrieval is bypassed and the result is a statement about the generator |
 
 ### Retrieval only
 
 | benchmark | verdict |
 | --- | --- |
-| **BEIR** | **measured** — 5 of 18 datasets. The other 13 are not run: Robust04 and TREC-NEWS return stubs on the mirror used here, and the largest (BioASQ 14.9M, FEVER 5.4M, NQ 2.7M documents) exceed the 28 GB free disk |
+| **BEIR** | **measured — 10 of 18 datasets**, counted from the reports present in `eval/beir/` (`make consistency-check`): SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora, DBPedia-entity, NQ, HotpotQA (**600-query subset**, seed 17) and webis-touche2020. TREC-COVID has a **40,000-document subsample** and is deliberately not counted. The remaining eight are not run for one of three reasons: Robust04, TREC-NEWS, `specter` and `signal1m` return stubs or 404s on the mirror; BioASQ (14.9M), FEVER/Climate-FEVER (5.4M) are **compute-bound**, not disk-bound — this host has **471 GB free**, so the "28 GB free disk" this row previously cited is stale |
 | **MTEB (retrieval subset)** | **partially measured** — its retrieval tasks are largely BEIR's. The leaderboard wants a *model* submission; this system is an engine around a model, so it cannot be entered as-is |
 | **BRIGHT** | **partially measured** — `tools/bright.py` runs six CPU-cheap subsets (603 queries total). Macro mean nDCG@10: hybrid **0.1436** > BM25 0.1324 > dense 0.0991, and dense-only is *significantly* worse than BM25 on pony (−0.0823) and biology (−0.1013), which is the benchmark's premise. The hybrid is significantly better than BM25 on psychology (+0.0504); other per-subset deltas are ties at 76–112 queries. The large subsets (leetcode 414k, aops/theoremqa_questions 188k, stackoverflow 107k) are not run. Findings: `docs/findings-bright.md` |
 | **MIRACL** | **blocked as-is** — 18 languages and per-language Wikipedia indexes (disk), and the dense channel would need a multilingual encoder. Laya's own checkpoint is multilingual, which is the one favourable fact |

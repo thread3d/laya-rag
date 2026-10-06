@@ -978,7 +978,7 @@ paper's Table 5. All rows are the `chunk_overlap=200` setting the official harne
 
 | system | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
 | --- | --- | --- | --- | --- |
-| voyage-02 + rerank (published) | 0.747 | 0.662 | 0.479 | 0.586 |
+| voyage-02 + rerank (published) | 0.747 | 0.663 | 0.480 | 0.586 |
 | bge-large + rerank (published) | 0.718 | 0.636 | 0.476 | 0.563 |
 | bge-large, no rerank (published) | 0.672 | 0.522 | 0.342 | 0.430 |
 | **ours: coverage + document quota, reranked** | **0.896** | 0.759 | **0.319** | **0.619** |
@@ -1248,7 +1248,7 @@ Three readings, all pointing the same way:
   0.579]**. Both intervals include 0.5.
 - **A Platt rescaling fitted on the calibration half has a negative slope (−0.18)** — if anything
   the head's probability points the wrong way on this corpus, so there is no signal to rescale.
-- **A threshold fitted on one half does not transfer.** Across 500 stratified half-splits, the
+- **A threshold fitted on one half does not transfer.** Across 300 stratified half-splits, the
   held-out balanced accuracy is **0.511 [0.472, 0.548]** — chance. Even the oracle threshold
   chosen on the test half itself only reaches 0.524 balanced accuracy.
 
