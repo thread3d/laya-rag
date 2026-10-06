@@ -181,6 +181,9 @@ def _build_report(rows: dict) -> dict:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("order_eval.py")
     if args.compare_against:
         return _compare(args)
     if not args.cross_encoder:

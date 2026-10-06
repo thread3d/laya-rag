@@ -83,6 +83,9 @@ def coverage_rankings(
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("beir_coverage.py")
     data_root = Path(args.data_root)
     enc = beir.BiEncoder(args.model)
     payload: dict[str, Any] = {"_settings": vars(args), "datasets": {}}

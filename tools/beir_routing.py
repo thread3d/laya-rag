@@ -63,6 +63,9 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("beir_routing.py")
     rows = [r.strip() for r in args.rows.split(",") if r.strip()]
     scores = load_dataset_scores(Path(args.report))
     if args.extra:

@@ -10,8 +10,9 @@ that prevents it existed only in prose (`best-in-the-world/README.md` §7: "one 
 
 ## The rule, and its enforcement
 
-**Do not run two corpus-scale jobs at once.** The heavy runners — `tools/beir.py`,
-`tools/twowiki.py`, `tools/musique.py` and the `tools/engine_*.py` harnesses — now take an
+**Do not run two corpus-scale jobs at once.** **Twenty-six long-running tools** — corpus retrieval
+and its BEIR variants, the cross-encoder caches and multi-hop harnesses, the engine harnesses,
+fine-tuning/distillation, the ANN and on-disk scale benches, `bright` and `frames_eval` — now take an
 exclusive `flock` on `eval/.heavy-job.lock` before doing any work, through
 `tools/heavylock.py`:
 

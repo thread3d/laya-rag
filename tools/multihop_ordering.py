@@ -314,6 +314,9 @@ def render_markdown(report: Mapping[str, Any]) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("multihop_ordering.py")
     shard_index, shard_count = jobkit.parse_shard(args.shard)
     fingerprint = _fingerprint(args)
 

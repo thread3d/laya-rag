@@ -729,9 +729,10 @@ builds plus a retrieval harness, launched together, **crashed the host**. Every 
 no work was lost, but the crash was avoidable, and this is not a preference: the jobs are I/O- and
 memory-heavy enough that the combination is unsafe even on a 56-core, 256 GB machine.
 
-The rule is now enforced, not only written down. The heavy runners — `tools/beir.py`,
-`tools/twowiki.py`, `tools/musique.py` and the `tools/engine_*.py` harnesses — take an exclusive
-`flock` on `eval/.heavy-job.lock` before doing any work:
+The rule is now enforced, not only written down. **Twenty-six long-running tools** — the corpus
+retrieval and BEIR variants, the cross-encoder caches and multi-hop harnesses, the engine harnesses,
+fine-tuning/distillation, the ANN and on-disk scale benches, `bright`, `frames_eval` and
+`twowiki`/`musique` — take an exclusive `flock` on `eval/.heavy-job.lock` before doing any work:
 
 ```sh
 .venv/bin/python tools/heavylock.py --status    # who, if anyone, holds it

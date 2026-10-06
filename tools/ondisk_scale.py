@@ -181,6 +181,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("ondisk_scale.py")
     if args.profile:
         result = profile_once(args.docs, args.vocab, args.tokens, args.block_tokens)
         print(json.dumps(result, indent=2))

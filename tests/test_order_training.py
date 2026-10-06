@@ -122,6 +122,8 @@ def test_rank_positions_is_deterministic_on_ties():
     assert oe.rank_positions([0.5, 0.5, 0.9]) == [2, 0, 1]
 
 
-def test_eval_requires_a_cross_encoder_unless_comparing():
+def test_eval_requires_a_cross_encoder_unless_comparing(monkeypatch):
+    # The tool takes the heavy-job lock in `main`; this test calls it in-process.
+    monkeypatch.setenv("LAYA_RAG_ALLOW_CONCURRENT", "1")
     with pytest.raises(SystemExit, match="--cross-encoder is required"):
         oe.main([])

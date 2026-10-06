@@ -162,6 +162,9 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("multihop_tri_cache.py")
     ce_path = Path(str(args.ce_cache))
     if not ce_path.is_file():
         raise SystemExit(f"{ce_path} is missing; run tools/multihop_ce_cache.py first")

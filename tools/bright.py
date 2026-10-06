@@ -129,6 +129,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("bright.py")
     data_root = Path(args.data_root)
     retrievers = {name.strip() for name in args.retrievers.split(",") if name.strip()}
     enc = beir.BiEncoder(args.model) if "dense" in retrievers or "hybrid" in retrievers else None

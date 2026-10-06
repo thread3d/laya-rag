@@ -353,6 +353,9 @@ def _build_report(rows: dict) -> dict:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("multihop_diagnostics.py")
     shard_index, shard_count = jobkit.parse_shard(args.shard)
     depths = sorted({int(v) for v in str(args.depths).split(",") if v.strip()})
     if not depths or depths[0] < 1:

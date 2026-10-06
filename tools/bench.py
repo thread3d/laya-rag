@@ -773,6 +773,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("bench.py")
     probes = ALL_PROBES if args.probes == "all" else tuple(args.probes.split(","))
     unknown = [probe for probe in probes if probe not in ALL_PROBES]
     if unknown:

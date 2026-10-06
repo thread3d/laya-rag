@@ -87,6 +87,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--threads", default="2,4,8")
     parser.add_argument("--processes", default="1,2,4")
     args = parser.parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("bench_biencoder_parallel.py")
 
     texts = sample(args.n, args.seed)
     model = load(args.model, args.batch, args.max_length)

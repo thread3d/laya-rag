@@ -39,6 +39,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("distill_eval.py")
     dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root), download=False)
     corpus = beir.load_corpus(dataset_dir)
     queries = beir.load_queries(dataset_dir)

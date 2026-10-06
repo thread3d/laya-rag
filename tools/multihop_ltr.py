@@ -112,6 +112,9 @@ def main(argv=None) -> int:
     ap.add_argument("--samples", type=int, default=1000)
     ap.add_argument("--out", default=str(ROOT_BENCH / "ltr"))
     args = ap.parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("multihop_ltr.py")
 
     cache = json.loads(Path(args.ce_cache).read_text(encoding="utf-8"))
     corpus = load_corpus(int(cache["_settings"]["overlap"]))

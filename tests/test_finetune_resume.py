@@ -86,7 +86,9 @@ def test_existing_checkpoints_of_a_missing_dir_is_empty(tmp_path):
     assert finetune.existing_checkpoints(tmp_path / "absent") == []
 
 
-def test_resume_checkpoint_requires_the_flag_to_be_paired():
+def test_resume_checkpoint_requires_the_flag_to_be_paired(tmp_path, monkeypatch):
+    # The tool takes the heavy-job lock in `main`; this test calls it in-process.
+    monkeypatch.setenv("LAYA_RAG_ALLOW_CONCURRENT", "1")
     with pytest.raises(SystemExit, match="needs --checkpoint-steps"):
         finetune.main(["--resume-checkpoint"])
 

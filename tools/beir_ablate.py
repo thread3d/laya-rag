@@ -83,6 +83,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("beir_ablate.py")
     data_root = Path(args.data_root)
     config = EngineConfig()
     if args.device:

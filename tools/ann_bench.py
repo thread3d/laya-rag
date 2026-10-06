@@ -137,6 +137,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("ann_bench.py")
     faiss = load_faiss()
     rng = np.random.default_rng(args.seed)
     sizes = [int(value) for value in args.sizes.split(",") if value.strip()]

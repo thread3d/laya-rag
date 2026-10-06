@@ -90,6 +90,9 @@ def _build_report(rows: dict) -> dict:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("multihop_ce_cache.py")
     shard_index, shard_count = jobkit.parse_shard(args.shard)
     model_id = MODELS.get(args.model, args.model)
     fingerprint = _fingerprint(args, model_id)

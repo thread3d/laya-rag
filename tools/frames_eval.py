@@ -163,6 +163,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("frames_eval.py")
     title_map = load_title_map(Path(args.title_map))
     if title_map:
         print(f"resolved {len(title_map)} dataset titles to canonical ones", flush=True)
