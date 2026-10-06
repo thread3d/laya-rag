@@ -137,3 +137,45 @@ def test_load_queries_limit(tmp_path):
     ]))
     queries, _golds = gi.load_queries(path, limit=1)
     assert list(queries) == ["0"]
+
+
+def test_load_question_types_skips_null_queries(tmp_path):
+    path = tmp_path / "items.json"
+    path.write_text(json.dumps([
+        {"query": "Q1", "question_type": "inference_query", "evidence_list": []},
+        {"query": "Qnull", "question_type": "null_query", "evidence_list": []},
+        {"query": "Q2", "question_type": "comparison_query", "evidence_list": []},
+    ]))
+    # Keys are the *original* record indices (the null record keeps index 1), matching load_queries.
+    assert gi.load_question_types(path) == {"0": "inference_query", "2": "comparison_query"}
+
+
+def test_by_question_type_averages_each_group():
+    coverage = {"a": {"0": 0.0, "1": 1.0}, "b": {"0": 1.0, "1": 1.0}}
+    ceiling = {"a": {"0": 0.0, "1": 1.0}, "b": {"0": 0.5, "1": 1.0}}
+    types = {"a": "inference_query", "b": "comparison_query"}
+    out = gi._by_question_type(["a", "b"], types, coverage, ceiling, 1)
+    assert out["inference_query"]["queries"] == 1
+    assert out["inference_query"]["coverage_baseline"] == 0.0
+    assert out["inference_query"]["coverage_final"] == 1.0
+    assert out["comparison_query"]["ceiling_baseline"] == 0.5
+
+
+def test_by_question_type_is_empty_without_types():
+    assert gi._by_question_type(["a"], None, {"a": {"0": 0.0}}, {"a": {"0": 0.0}}, 0) == {}
+
+
+def test_the_synthetic_run_breaks_the_gain_down_by_type():
+    import nugget_recall as nugget
+
+    index = gi.build_bm25(CHUNKS)
+    evidence = nugget.Evidence(CHUNKS)
+    types = {"qa": "inference_query", "qb": "inference_query", "qc": "comparison_query"}
+    result = gi.run(
+        QUERIES, GOLDS, index, evidence, CHUNKS,
+        depth=1, iterations=1, max_probes=1, top_texts=1, types=types,
+    )
+    by_type = result["by_question_type"]
+    assert by_type["inference_query"]["queries"] == 2
+    assert by_type["inference_query"]["coverage_final"] == 1.0
+    assert by_type["comparison_query"]["coverage_final"] == 1.0

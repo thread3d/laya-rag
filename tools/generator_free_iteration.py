@@ -143,6 +143,16 @@ def load_queries(path: Path = ITEMS, *, limit: int | None = None) -> tuple[dict[
     return queries, golds
 
 
+def load_question_types(path: Path = ITEMS, *, limit: int | None = None) -> dict[str, str]:
+    """The benchmark's question type per query id, for the per-type breakdown."""
+    records = json.loads(path.read_text(encoding="utf-8"))
+    items = [(i, record) for i, record in enumerate(records)
+             if record.get("question_type") != "null_query"]
+    if limit:
+        items = items[:limit]
+    return {str(i): str(record.get("question_type") or "unknown") for i, record in items}
+
+
 def run(
     queries: Mapping[str, str],
     golds: Mapping[str, list[str]],
@@ -155,6 +165,7 @@ def run(
     max_probes: int,
     top_texts: int,
     shuffle_seed: int = 17,
+    types: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Run the real and shuffled-probe arms for every query, iteration by iteration."""
     order = list(queries)
@@ -256,11 +267,47 @@ def run(
             "ceiling_expansion_vs_baseline": paired_ceiling,
             "ceiling_real_vs_shuffled_at_final": paired_ceiling_control,
         },
+        "by_question_type": _by_question_type(
+            order, types, real_coverage, real_ceiling, iterations
+        ),
         "per_query_real": real_coverage,
         "per_query_shuffled": shuffled_coverage,
         "per_query_real_ceiling": real_ceiling,
         "per_query_shuffled_ceiling": shuffled_ceiling,
     }
+
+
+def _by_question_type(
+    order: Sequence[str],
+    types: Mapping[str, str] | None,
+    coverage: Mapping[str, Mapping[str, float]],
+    ceiling: Mapping[str, Mapping[str, float]],
+    iterations: int,
+) -> dict[str, dict[str, Any]]:
+    """Mean coverage and ceiling before/after, grouped by the benchmark's question type."""
+    if not types:
+        return {}
+    buckets: dict[str, dict[str, float]] = {}
+    for query_id in order:
+        kind = types.get(query_id, "unknown")
+        row = buckets.setdefault(kind, {"queries": 0.0, "baseline": 0.0, "final": 0.0,
+                                        "ceiling_baseline": 0.0, "ceiling_final": 0.0})
+        row["queries"] += 1
+        row["baseline"] += coverage[query_id]["0"]
+        row["final"] += coverage[query_id][str(iterations)]
+        row["ceiling_baseline"] += ceiling[query_id]["0"]
+        row["ceiling_final"] += ceiling[query_id][str(iterations)]
+    out: dict[str, dict[str, Any]] = {}
+    for kind, row in sorted(buckets.items()):
+        count = row["queries"] or 1
+        out[kind] = {
+            "queries": int(row["queries"]),
+            "coverage_baseline": round(row["baseline"] / count, 4),
+            "coverage_final": round(row["final"] / count, 4),
+            "ceiling_baseline": round(row["ceiling_baseline"] / count, 4),
+            "ceiling_final": round(row["ceiling_final"] / count, 4),
+        }
+    return out
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -300,6 +347,19 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             f"| {name} | {result['delta']:+.4f} | "
             f"[{result['ci_low']:+.4f}, {result['ci_high']:+.4f}] | {result['p_value']:.4f} |"
         )
+    by_type = report.get("by_question_type") or {}
+    if by_type:
+        lines += [
+            "",
+            "| question type | queries | coverage 0 → final | ceiling 0 → final |",
+            "| --- | --- | --- | --- |",
+        ]
+        for kind, row in by_type.items():
+            lines.append(
+                f"| {kind} | {row['queries']} | {row['coverage_baseline']:.4f} → "
+                f"{row['coverage_final']:.4f} | {row['ceiling_baseline']:.4f} → "
+                f"{row['ceiling_final']:.4f} |"
+            )
     lines.append("")
     return "\n".join(lines)
 
@@ -313,13 +373,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("generator-free-iteration: SKIPPED — MultiHop corpus/items not found")
         return 0
     queries, golds = load_queries(limit=args.limit_queries)
+    types = load_question_types(limit=args.limit_queries)
     chunks = build_chunks()
     index = build_bm25(chunks)
     evidence = nugget.Evidence(chunks)
     result = run(
         queries, golds, index, evidence, chunks,
         depth=args.depth, iterations=args.iterations,
-        max_probes=args.max_probes, top_texts=args.top_texts,
+        max_probes=args.max_probes, top_texts=args.top_texts, types=types,
     )
     report = {
         "_settings": {

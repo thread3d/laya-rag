@@ -49,6 +49,24 @@ Two further readings fall out. **One round saturates** at these settings — ite
 **triples** (100 → 327), so the extra coverage is bought with a larger candidate set, which the
 second stage then has to order.
 
+## Where the gain comes from
+
+The benchmark labels each query's type, and the breakdown is the strongest evidence that the gain is
+the bridge rather than generic extra retrieval:
+
+| question type | queries | coverage 0 → final | ceiling MAP@10 0 → final |
+| --- | --- | --- | --- |
+| **inference** | 816 | 0.7824 → **0.8891** (+0.1067) | 0.5115 → **0.5488** (+0.0373) |
+| temporal | 583 | 0.8273 → 0.8805 (+0.0532) | 0.6112 → 0.6389 (+0.0277) |
+| comparison | 856 | 0.8842 → 0.9071 (+0.0229) | 0.6648 → 0.6758 (+0.0110) |
+
+**Inference queries gain five times what comparison queries gain.** A comparison query names both
+entities it compares, so the first pool already contains what a probe would search for; an inference
+query asks for something the query does not name, which is exactly the bridge-hop case — and it is
+also the *hardest* type (baseline ceiling 0.5115). Temporal questions sit in between. This is the
+mechanism behaving as the BridgeRAG reading predicts, and it says where a controller should fire:
+on the type with the largest headroom, not uniformly.
+
 ## What this does not show
 
 - **Lexical-only.** The shipped default's channel; the fused (dense + lexical) version is the same
