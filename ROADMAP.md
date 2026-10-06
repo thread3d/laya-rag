@@ -268,11 +268,12 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 
 ## 7. Phase 4 — scale to 18 datasets, and own the encoder (weeks; mixed)
 
-**Coverage today: 10 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
-DBPedia-entity, NQ, HotpotQA (600-query subset) and webis-touche2020, counted from the reports
-present in `eval/beir/` by `tools/consistency_check.py`; TREC-COVID has a 40,000-document subsample
-and is not counted. The counts inside the 4.2 log below are the historical values at each dated
-step, and `make consistency-check` fails if this line and the other documents disagree again.
+**Coverage today: 11 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
+DBPedia-entity, NQ, HotpotQA (600-query subset), webis-touche2020 and **Climate-FEVER** (lexical-only,
+nDCG@10 0.1610), counted from the reports present in `eval/beir/` by `tools/consistency_check.py`;
+TREC-COVID has a 40,000-document subsample and is not counted. The counts inside the 4.2 log below
+are the historical values at each dated step, and `make consistency-check` fails if this line and the
+other documents disagree again.
 
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
@@ -676,3 +677,11 @@ overrides deliberately. See `docs/findings-heavy-job-lock.md`.
   exclusive `flock` (`make heavy-status`), with `twowiki`/`musique` embedding checkpoints added.
   The corpus rows resume **one at a time**: Climate-FEVER, then FEVER, then HotpotQA, then 2Wiki.
   Suite **1391 passed, 5 deselected**.
+- 2026-10-06 — **Climate-FEVER measured; coverage 10 → 11 of 18.** The first of the "blocked" large
+  corpora is done: 5,416,593 documents, 1,535 queries, lexical-only `bm25-engine` **nDCG@10 0.1610**
+  (Recall@10 0.2093, MRR@10 0.2139, MAP@100 0.1198). The run resumed from a 941-query checkpoint and
+  finished the rest in ~**34 minutes**, so the "~6 h per corpus" framing was pessimistic. The
+  consistency gate failed first and named the three documents stating the old count; they and the
+  registry were updated together, and coverage now computes **11 of 18**. No published anchor is
+  configured for Climate-FEVER, so the row records our number rather than a gap. FEVER is next in the
+  queue, then HotpotQA, then 2WikiMultiHopQA — one at a time under the heavy-job lock.

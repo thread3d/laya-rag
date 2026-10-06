@@ -189,9 +189,9 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR coverage count",
             sites=(
-                Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 10, 0),
-                Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 10, 0),
-                Site("ROADMAP.md", r"Coverage today: \d+ of 18", 10, 0),
+                Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 11, 0),
+                Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 11, 0),
+                Site("ROADMAP.md", r"Coverage today: \d+ of 18", 11, 0),
             ),
             authority=lambda: {"count": measured_beir()["count"]},
             key="count",
