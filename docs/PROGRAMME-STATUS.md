@@ -50,7 +50,31 @@ Negatives are results here, and these are the ones worth keeping:
    labelled seeded subset (~1 h per corpus).
 2. **Phase 4.4, the MTEB submission.** Requires an upload; not offline work.
 3. **HotpotQA's full query set.** Its 600-query subset reads **0.6365** against a published 0.603; the
-   full 7,405-query run is owed and resumes from a checkpoint at 1,640/7,405.
+   full 7,405-query run is owed and resumes from a checkpoint (**3,062/7,405** at the last restart).
+
+**The runs are queued one at a time.** Three corpus builds plus a harness launched together
+**crashed this host**; no work was lost (every job resumes), and the rule is now enforced by an
+exclusive lock in 26 long-running tools (`make heavy-status`). Current order: **Climate-FEVER →
+FEVER → HotpotQA → 2WikiMultiHopQA**.
+
+## Newest results (2026-10-06 pass)
+
+- **Generator-free iteration, Stage 1 — the mechanism holds.** One round of entity-probe pool
+  expansion on 2,255 MultiHop queries raises gold-fact coverage **0.8326 → 0.8937**
+  (**+0.0611** [+0.0555, +0.0670], p<0.0001), complete-evidence queries **61.2% → 72.8%**, and the
+  pool's **ceiling MAP@10 0.5955 → 0.6203** (**+0.0248**); **+0.0510 / +0.0210** survive a
+  shuffled-probe control. By type, **inference queries gain +0.1067 coverage** (five times
+  comparison's +0.0229). One round saturates; the pool triples. The ceiling is a bound, not an
+  achieved MAP@10 — realizing it is Bet 2.
+- **Answerability calibration.** The shipped scalar is at chance and miscalibrated on MultiHop-RAG
+  (AUC **0.5087**, ECE **0.3085**, risk@80 **0.4927**); a held-out 12-feature gate reads AUC
+  **0.8244** / ECE **0.0892** on the same queries. Reliability diagram committed.
+- **Fusion ablation (SciFact).** Min-max convex is the best arm (**0.7412**) but only **+0.0092
+  over RRF k=60, not significant**; it is significantly better than max-normalised CombSUM
+  (+0.0263). The rule matters; RRF is not clearly beaten.
+- **Nugget and whole-fact recall.** Claim-recall@10 **0.7438 fused vs 0.7803 CE**; whole-fact
+  recall@10 **0.4644 vs 0.5452**; both **0.8480** at depth 100 — the CE's gain is ordering, and 15.2%
+  of gold facts are missing from the pool.
 
 ## Method notes worth carrying
 
