@@ -74,4 +74,5 @@ def test_the_gated_checks_do_not_depend_on_the_dose_probe():
     assert set(report["checks"]) == {
         "gold_retained", "poison_excluded", "negative_rejected", "injection_flagged",
         "tenants_isolated", "anonymous_denied", "shared_visible_to_a_tenant",
+        "injection_variants_flagged", "injection_controls_clean", "noise_control_clean",
     }

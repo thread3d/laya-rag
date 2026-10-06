@@ -92,3 +92,55 @@ def test_report_includes_the_tenant_checks_and_they_pass():
         assert name in report["checks"]
         assert report["checks"][name] is True
     assert report["tenants"]["alpha_sees_beta"] is False
+
+
+# ── seeded noise ─────────────────────────────────────────────────────────
+
+def test_noise_documents_are_deterministic_for_a_seed():
+    assert audit.noise_documents(5, seed=7) == audit.noise_documents(5, seed=7)
+    assert audit.noise_documents(5, seed=7) != audit.noise_documents(5, seed=8)
+
+
+def test_noise_dose_zero_is_the_control():
+    probe = audit.noise_probe(k=5, doses=(0,))
+    assert probe["noise_in_top_k_by_dose"]["0"] == 0.0
+    assert probe["gold_hit_rate_by_dose"]["0"] == 1.0
+
+
+def test_noise_curve_is_recorded_per_dose():
+    probe = audit.noise_probe(k=5, doses=(0, 5))
+    assert set(probe["gold_hit_rate_by_dose"]) == {"0", "5"}
+    assert probe["seed"] == audit.NOISE_SEED
+
+
+def test_shared_vocabulary_noise_displaces_gold_at_high_density():
+    """The measured finding: unrelated-looking distractor text that shares the query vocabulary
+    eventually outranks a gold document. Dose 0 is clean; dose 100 is not."""
+    probe = audit.noise_probe(k=5, doses=(0, 100))
+    assert probe["gold_hit_rate_by_dose"]["0"] == 1.0
+    assert probe["gold_hit_rate_by_dose"]["100"] < 1.0
+
+
+# ── injection variants ───────────────────────────────────────────────────
+
+def test_injection_probe_flags_every_payload_and_no_control():
+    probe = audit.injection_probe()
+    assert probe["recall"] == 1.0
+    assert probe["control_false_positives"] == 0
+    assert len(probe["markers_covered"]) == 6
+
+
+def test_injection_probe_carries_a_benign_near_miss():
+    probe = audit.injection_probe()
+    near_miss = [row for row in probe["variants"] if row["name"] == "benign_near_miss"][0]
+    assert near_miss["found"] == [] and near_miss["ok"] is True
+
+
+def test_report_includes_the_noise_and_injection_checks():
+    report = audit.build_report(k=5)
+    for name in ("injection_variants_flagged", "injection_controls_clean", "noise_control_clean"):
+        assert report["checks"][name] is True
+    text = audit.render_markdown(report)
+    assert "## Seeded noise" in text
+    assert "## Injection variants" in text
+
