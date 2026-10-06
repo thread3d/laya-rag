@@ -39,6 +39,11 @@ eval = [
     "accelerate>=0.26",
     "matplotlib>=3.8",
 ]
+# MTEB v2 submission: the engine implements `SearchProtocol` directly (tools/mteb_search.py), so
+# only the benchmark harness is needed, and only for a submission run.
+mteb = [
+    "mteb>=2.0",
+]
 
 [project.scripts]
 laya-rag = "laya_rag.cli:main"
