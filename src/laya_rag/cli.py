@@ -228,6 +228,19 @@ def _cmd_delete(args: argparse.Namespace, config: EngineConfig) -> int:
     return 0
 
 
+def _cmd_extract(args: argparse.Namespace, config: EngineConfig) -> int:
+    """Emit only verbatim evidence sentences, each cited; abstain when there are none."""
+    engine = RagEngine(config)
+    payload = engine.query_extractive(
+        args.query,
+        max_sentences=args.max_sentences,
+        tenant=args.tenant,
+        top_k=args.top_k,
+    )
+    _emit(payload, args.json, payload["answer"])
+    return 0
+
+
 def _cmd_doctor(args: argparse.Namespace, config: EngineConfig) -> int:
     """Report whether the checkpoint can actually be loaded."""
     engine = RagEngine(config)
@@ -348,6 +361,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     delete.add_argument("--json", action="store_true")
     delete.set_defaults(func=_cmd_delete)
+
+    extract = sub.add_parser(
+        "extract", help="emit only verbatim evidence sentences, each cited"
+    )
+    extract.add_argument("query")
+    extract.add_argument("--max-sentences", type=int, default=5, dest="max_sentences")
+    extract.add_argument("--top-k", type=int, default=None, dest="top_k")
+    extract.add_argument(
+        "--tenant", default=None,
+        help="caller identity for the trust manifest's per-tenant ACL, when one is configured",
+    )
+    extract.add_argument("--json", action="store_true")
+    extract.set_defaults(func=_cmd_extract)
 
     doctor = sub.add_parser("doctor", help="check that the checkpoint loads")
     doctor.add_argument("--json", action="store_true")

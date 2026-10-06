@@ -1266,6 +1266,34 @@ class RagEngine:
             note=None if lexical is not None or not len(index) else degraded,
         )
 
+    def query_extractive(
+        self,
+        query: str,
+        *,
+        max_sentences: int = 5,
+        min_score: float = 0.0,
+        **query_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Query, then emit only verbatim evidence sentences, each with its citation.
+
+        Every emitted sentence is a substring of a retrieved passage, so the result cannot
+        state something the corpus does not contain; with nothing to emit it abstains. No
+        generator, no API. The structured citations are checkable with
+        :func:`laya_rag.verify.verify_citations`.
+        """
+        from .extractive import compose_extractive
+
+        result = self.query(query, **query_kwargs)
+        composed = compose_extractive(
+            result.passages, query=query, max_sentences=max_sentences, min_score=min_score
+        )
+        return {
+            "query": query,
+            "answerable": result.answerable,
+            "answerability": result.answerability,
+            **composed.as_dict(),
+        }
+
     @staticmethod
     def _fuse(
         index: VectorIndex,
