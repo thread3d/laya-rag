@@ -86,3 +86,31 @@ def test_main_writes_the_report(tmp_path):
     assert cal.main(["--out", str(out)]) == 0
     assert out.with_suffix(".json").is_file()
     assert out.with_suffix(".md").is_file()
+
+
+def test_the_held_out_gate_reading_is_present_when_the_features_exist():
+    if not cal.SHAPE.is_file():
+        pytest.skip("gate-shape.json not generated")
+    held = cal.gate_heldout()
+    assert held["n_test"] > 0
+    assert len(held["labels"]) == held["n_test"]
+    assert len(held["gate_probabilities"]) == held["n_test"]
+    assert len(held["head_probabilities"]) == held["n_test"]
+    assert set(held["labels"]) == {0, 1}
+
+
+def test_the_held_out_gate_is_deterministic():
+    if not cal.SHAPE.is_file():
+        pytest.skip("gate-shape.json not generated")
+    assert cal.gate_heldout() == cal.gate_heldout()
+
+
+def test_build_report_carries_both_gate_views():
+    if not cal.SHAPE.is_file() or not cal.GATE.is_file():
+        pytest.skip("reports not generated")
+    report = cal.build_report()
+    assert "gate_heldout" in report
+    gate = report["gate_heldout"]["gate"]
+    assert 0.0 <= gate["auc"] <= 1.0
+    assert 0.0 <= gate["ece_equal_width"] <= 1.0
+    assert report["gate_heldout"]["head"]["auc"] <= gate["auc"]

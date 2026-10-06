@@ -28,11 +28,16 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 
 import evalkit  # noqa: E402
-from laya_rag.answerability import roc_auc  # noqa: E402
+import answerability_train as train  # noqa: E402
+from laya_rag.answerability import FEATURE_NAMES, LogisticGate, roc_auc  # noqa: E402
 
 MULTIHOP = ROOT / "eval" / "benchmarks" / "multihop-rag"
 GATE = MULTIHOP / "gate.json"
 SELECTIVE = MULTIHOP / "answerability-selective.json"
+#: The 12-feature gate inputs (nine score features + three evidence-shape features) with labels.
+SHAPE = MULTIHOP / "gate-shape.json"
+#: Frozen seed for the held-out split, so the diagram is reproducible.
+SPLIT_SEED = 17
 
 #: Corpora the calibration row cannot yet cover, and why. Stated in the report so the
 #: single-corpus result is never read as a cross-corpus claim.
@@ -96,15 +101,52 @@ def feature_gate_reading(path: Path = SELECTIVE) -> dict[str, Any]:
     }
 
 
+def gate_heldout(path: Path = SHAPE, seed: int = SPLIT_SEED) -> dict[str, Any]:
+    """Per-query held-out predictions for the feature gate and the scalar head.
+
+    Trains `LogisticGate` on one stratified split of the labelled gate records and returns the
+    test-split labels, the gate's probabilities and the shipped scalar's probabilities on the
+    *same* queries, so the two reliability curves are directly comparable. Pure NumPy — no model
+    forward pass — because the feature vectors are already recorded.
+    """
+    if not path.is_file():
+        return {}
+    records = train.load_records(path)
+    X, y, head = train.build_matrix(records)
+    train_idx, test_idx = train.stratified_split(y, seed)
+    gate = LogisticGate().fit(X[train_idx], y[train_idx])
+    return {
+        "seed": seed,
+        "source": str(path.relative_to(ROOT)),
+        "n_test": int(len(test_idx)),
+        "features": list(FEATURE_NAMES),
+        "labels": [int(v) for v in y[test_idx]],
+        "gate_probabilities": [float(v) for v in gate.predict_proba(X[test_idx])],
+        "head_probabilities": [float(v) for v in head[test_idx]],
+    }
+
+
 def build_report(gate_path: Path = GATE, selective_path: Path = SELECTIVE) -> dict[str, Any]:
     probabilities, labels = load_head(gate_path)
-    return {
+    held = gate_heldout()
+    report: dict[str, Any] = {
         "corpus": "MultiHop-RAG",
         "shipped_head": calibration(labels, probabilities),
         "feature_gate": feature_gate_reading(selective_path),
         "uncalibrated_corpora": UNCALIBRATED,
         "chart": "docs/charts/reliability.png",
     }
+    if held:
+        gate_labels = held["labels"]
+        report["gate_heldout"] = {
+            "seed": held["seed"],
+            "source": held["source"],
+            "n_test": held["n_test"],
+            "features": held["features"],
+            "gate": calibration(gate_labels, held["gate_probabilities"]),
+            "head": calibration(gate_labels, held["head_probabilities"]),
+        }
+    return report
 
 
 def chart_reliability(report: Mapping[str, Any], out: Path) -> None:
@@ -117,10 +159,12 @@ def chart_reliability(report: Mapping[str, Any], out: Path) -> None:
     head = report["shipped_head"]
     fig, ax = plt.subplots(figsize=(4.8, 4.8))
     ax.plot([0, 1], [0, 1], linestyle="--", color="#999999", linewidth=1, label="perfect")
-    for rows, name, colour in (
-        (head["reliability_equal_width"], "equal-width (10)", "#1f77b4"),
-        (head["reliability_equal_mass"], "equal-mass (10)", "#d62728"),
-    ):
+    series = [(head["reliability_equal_width"], "scalar head (all 601)", "#1f77b4")]
+    held = (report.get("gate_heldout") or {}).get("gate")
+    if held:
+        series.append((held["reliability_equal_width"],
+                       f"feature gate (held out, n={report['gate_heldout']['n_test']})", "#2ca02c"))
+    for rows, name, colour in series:
         xs = [row["confidence"] for row in rows]
         ys = [row["accuracy"] for row in rows]
         ax.plot(xs, ys, marker="o", color=colour, linewidth=1.5, label=name)
@@ -128,7 +172,8 @@ def chart_reliability(report: Mapping[str, Any], out: Path) -> None:
     ax.set_ylabel("observed frequency")
     ax.set_title(
         f"MultiHop-RAG answerability reliability\n"
-        f"n={head['n']}, ECE={head['ece_equal_mass']:.3f}, Brier={head['brier']:.3f}"
+        f"scalar ECE={head['ece_equal_mass']:.3f}, Brier={head['brier']:.3f}"
+        + (f"; gate ECE={held['ece_equal_mass']:.3f}" if held else "")
     )
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -169,6 +214,29 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             f"| {row['range']} | {row['count']} | {row['confidence']:.4f} | "
             f"{row['accuracy']:.4f} | {row['gap']:.4f} |"
         )
+    held = report.get("gate_heldout")
+    if held:
+        gate_cal, head_cal = held["gate"], held["head"]
+        lines += [
+            "",
+            f"## The feature gate, held out (seed {held['seed']}, {held['n_test']} test queries)",
+            "",
+            f"Trained on a stratified split of `{held['source']}`; the scalar head is scored on the "
+            "same test queries.",
+            "",
+            "| reading | feature gate | scalar head (same split) |",
+            "| --- | --- | --- |",
+        ]
+        for key, label in (
+            ("auc", "ROC-AUC"),
+            ("ece_equal_width", "ECE (equal-width, 10)"),
+            ("brier", "Brier"),
+            ("nll", "NLL"),
+            ("risk@80", "risk@80"),
+            ("risk@90", "risk@90"),
+            ("aurc", "AURC"),
+        ):
+            lines.append(f"| {label} | {gate_cal[key]:.4f} | {head_cal[key]:.4f} |")
     gate = report.get("feature_gate") or {}
     if gate:
         held = gate.get("gate", {})

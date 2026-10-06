@@ -40,6 +40,20 @@ The feature gate, held out over 300 labelled queries (`answerability-selective.j
 | risk@80 | **0.4069** [0.3833, 0.4252] | 0.5099 [0.4833, 0.5419] |
 | AURC | **0.2691** [0.2413, 0.3057] | 0.4879 [0.4382, 0.5438] |
 
+The report now also trains the 12-feature gate on one stratified split of `gate-shape.json`
+(seed 17, 150 test queries) and scores the scalar head on the **same** queries, so the two
+reliability curves are directly comparable. Reliability diagram `docs/charts/reliability.png`
+carries both:
+
+| reading | feature gate | scalar head (same split) |
+| --- | --- | --- |
+| ROC-AUC | **0.8244** | 0.4679 |
+| ECE (equal-width, 10) | **0.0892** | 0.3274 |
+| Brier | **0.1745** | 0.3840 |
+| NLL | **0.5117** | 3.9274 |
+| risk@80 | **0.3917** | 0.5250 |
+| AURC | **0.2691** | 0.5402 |
+
 Two readings, and the first is the publishable one. **The gate is calibrated where the scalar is
 not** — ECE 0.065 against 0.271, Brier 0.177 against 0.368, and the intervals do not overlap. The
 second is the load-bearing caveat: this is an **in-domain** number, and answerability does not
@@ -65,8 +79,10 @@ the perfect-calibration diagonal, equal-width and equal-mass series, annotated w
 - **Retrieval *relevance* calibration is not here either.** It needs per-candidate gold labels
   against the engine's per-passage `relevance`; the reports persist per-query metrics, not
   per-candidate labels. That is the next artifact, and the phantom-hit detector depends on it.
-- **The gate row is the 9-feature arm** reported by `answerability-selective.json`. The 12-feature
-  arm's held-out reading (AUC 0.8290, risk@80 0.4009) is in
-  [`findings-gate-shape-features.md`](findings-gate-shape-features.md), not this report.
+- **The aggregate gate row is the 9-feature arm** reported by
+  `answerability-selective.json` (AUC 0.8146). The 12-feature arm's held-out reading (AUC 0.8290,
+  risk@80 0.4009) is in [`findings-gate-shape-features.md`](findings-gate-shape-features.md); the
+  reliability diagram's gate curve is a single-seed 12-feature split (AUC 0.8244), so the two are
+  close but not the same estimate.
 - **The scalar's NLL is large by construction** (probabilities near 0 on answerable queries), and
   NLL is dominated by those; Brier and ECE are the more stable summaries here.
