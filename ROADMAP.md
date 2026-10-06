@@ -344,7 +344,7 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
 | ViDoRe / MIRACL-VISION | the engine is text-only: no OCR or vision path |
 | An LLM decomposer / agentic loop | `[llm]`; every resulting number belongs to the generator, not the engine |
 | The ~300 claim/corpus pairs and ~200 composed answers | **human labelling**; `tools/labelling_queue.py` builds and scores the queue, it does not label |
-| 2WikiMultiHopQA | **harness built** (`tools/twowiki.py`, `make two-wiki`); the retrieval run is queued behind the corpus jobs |
+| 2WikiMultiHopQA | **measured** (`tools/twowiki.py`, `make two-wiki`) — 12,576 dev questions over a 56,651-paragraph pool: BM25 MAP@10 0.5037, biencoder 0.5223, hybrid-biencoder **0.5337** (all p<0.0001), with Hits@10 0.99 showing the gap is ordering. Retrieval-only; the coverage/selection replication is owed (`docs/findings-2wiki.md`) |
 | On-disk in-place content replacement | the append-only dense half tombstones and compacts; replacing a document's content still needs a rebuild |
 
 **The one-heavy-job rule is enforced.** Three corpus builds plus a harness launched together
@@ -702,3 +702,14 @@ overrides deliberately. See `docs/findings-heavy-job-lock.md`.
   supersedes, so a sample can never stand in for a full run again. Coverage is unchanged at **12 of
   18** — the subset had already counted HotpotQA — and the lexical-control counts are unchanged.
   2WikiMultiHopQA is next.
+- 2026-10-06 — **2WikiMultiHopQA, first run; the heavy queue is empty.** The adapter was built as a
+  third external multi-hop set to test whether the coverage objective's MuSiQue failure is
+  idiosyncratic, and it has now run on the full dev split: **12,576 questions over the 56,651-paragraph
+  distractor pool**. Retrieval-only (BM25, `bge-small` bi-encoder, RRF — no cross-encoder, no selection
+  rules): BM25 **Hits@10 0.9927 / MAP@10 0.5037**, biencoder 0.9986 / 0.5223, hybrid-biencoder
+  **0.9997 / 0.5337**, every paired delta significant (p<0.0001). **Recall is saturated and ordering is
+  the bottleneck** — the same split MultiHop-RAG showed — and a retrieval-trained channel beats the
+  lexical arm by +0.0186 MAP@10, so the shipped dense channel's BEIR failure is the *encoder*, not
+  dense retrieval. The coverage/selection replication this corpus was fetched for is **still owed**:
+  the harness has no selection rules yet. All four planned runs are done (Climate-FEVER, FEVER,
+  HotpotQA, 2Wiki), one at a time under the lock.

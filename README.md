@@ -1324,6 +1324,29 @@ deployment on MuSiQue-shaped data (small gold sets, harder second hops) would be
 because changing it costs Hits@4 where the project's headline numbers live, but it is a
 documented trade rather than a settled answer.
 
+### 2WikiMultiHopQA — the gold is found, the order is the bottleneck
+
+The 2Wiki adapter indexes the **distractor context pool** — all 56,651 paragraphs the dev split
+provides — and retrieves the supporting paragraphs inside it, so this is a retrieval measurement, not
+a provided-context generator score. It is deliberately retrieval-only: BM25, a bi-encoder and their
+RRF fusion, no cross-encoder and no selection rules.
+
+![2WikiMultiHopQA retrieval by arm](docs/charts/2wiki.png)
+
+| arm | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | --- | --- | --- | --- |
+| bm25-engine | 0.9927 | 0.9848 | 0.5037 | 0.9293 |
+| biencoder (`bge-small`) | 0.9986 | 0.9959 | 0.5223 | 0.9505 |
+| **hybrid-biencoder** | **0.9997** | **0.9986** | **0.5337** | **0.9564** |
+
+**Hits@10 is 0.993 while MAP@10 is 0.504** — the pool almost always contains the gold, and the score
+is lost in the order it comes back in, the same recall/selection split the MultiHop-RAG diagnostics
+found. A **retrieval-trained** bi-encoder beats the lexical arm on every metric (**+0.0186 MAP@10**)
+and RRF fusion adds again (**+0.0300**, all paired, p<0.0001 over 12,576 queries) — so the shipped
+dense channel's BEIR failure is the *encoder's* training, not dense retrieval as such. The
+coverage-objective replication this corpus was fetched for is still owed: the harness has no
+selection rules yet.
+
 ### Negative rejection — the claim that did not survive
 
 This is the one that should change how the project describes itself. MultiHop-RAG's 301

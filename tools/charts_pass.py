@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "eval" / "benchmarks" / "multihop-rag"
 GFI = BENCH / "generator-free-iteration.json"
 QUANT = ROOT / "eval" / "quantization-probe-{name}.json"
+TWO_WIKI = ROOT / "eval" / "benchmarks" / "2wiki" / "retrieval.json"
 
 
 def _load(path: Path) -> dict[str, Any] | None:
@@ -120,6 +121,38 @@ def chart_quantization(outdir: Path, plt: Any) -> bool:
     return True
 
 
+def chart_2wiki(outdir: Path, plt: Any) -> bool:
+    """2WikiMultiHopQA retrieval by arm: recall is saturated, ordering is the gap."""
+    report = _load(TWO_WIKI)
+    if report is None:
+        return False
+    import numpy as np
+
+    summary = report["summary"]
+    arms = list(summary)
+    metrics = ["Hits@10", "Hits@4", "MRR@10", "MAP@10"]
+    colours = ["#8fb8d8", "#1b6ca8", "#0f4c75", "#d9a441"]
+    positions = np.arange(len(arms))
+    width = 0.2
+    fig, ax = plt.subplots(figsize=(7.8, 4.4))
+    for index, (metric, colour) in enumerate(zip(metrics, colours)):
+        ax.bar(positions + (index - 1.5) * width,
+               [summary[arm].get(metric, 0.0) for arm in arms], width,
+               label=metric, color=colour)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(arms, fontsize=9)
+    ax.set_ylim(0.45, 1.03)
+    ax.set_ylabel("score")
+    ax.set_title(f"2WikiMultiHopQA retrieval — {report['_settings']['queries']} queries over "
+                 f"{report['_settings']['paragraphs']} paragraphs")
+    ax.legend(fontsize=8, ncol=4, loc="lower center")
+    fig.tight_layout()
+    fig.savefig(outdir / "2wiki.png", dpi=140)
+    plt.close(fig)
+    print("charts-pass: wrote 2wiki.png")
+    return True
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="charts_pass.py")
     ap.add_argument("--charts", default=str(ROOT / "docs" / "charts"))
@@ -138,6 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
     wrote = chart_generator_free_iteration(outdir, plt)
     wrote = chart_quantization(outdir, plt) or wrote
+    wrote = chart_2wiki(outdir, plt) or wrote
     if not wrote:
         print("charts-pass: nothing to render (no reports on disk)")
     return 0

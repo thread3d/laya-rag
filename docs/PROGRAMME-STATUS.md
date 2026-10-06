@@ -55,10 +55,10 @@ Negatives are results here, and these are the ones worth keeping:
    +0.034) is superseded: `tools/compare_more.py` now prefers a full report over a seeded estimate, so
    the lexical control uses the full row.
 
-**The runs are queued one at a time.** Three corpus builds plus a harness launched together
-**crashed this host**; no work was lost (every job resumes), and the rule is now enforced by an
-exclusive lock in 26 long-running tools (`make heavy-status`). Current order: **Climate-FEVER →
-FEVER → HotpotQA → 2WikiMultiHopQA**.
+**The runs are queued one at a time, and the queue is empty.** Three corpus builds plus a harness
+launched together **crashed this host**; no work was lost (every job resumes), and the rule is now
+enforced by an exclusive lock in 26 long-running tools (`make heavy-status`). All four planned runs
+have now finished, one at a time: **Climate-FEVER → FEVER → HotpotQA → 2WikiMultiHopQA**.
 
 ## Newest results (2026-10-06 pass)
 
@@ -78,6 +78,10 @@ FEVER → HotpotQA → 2WikiMultiHopQA**.
 - **Nugget and whole-fact recall.** Claim-recall@10 **0.7438 fused vs 0.7803 CE**; whole-fact
   recall@10 **0.4644 vs 0.5452**; both **0.8480** at depth 100 — the CE's gain is ordering, and 15.2%
   of gold facts are missing from the pool.
+- **2WikiMultiHopQA, first run.** 12,576 dev questions over the 56,651-paragraph distractor pool:
+  BM25 **MAP@10 0.5037 with Hits@10 0.9927** — the gold is found and the order is the score; a
+  retrieval-trained bi-encoder beats it (**+0.0186**) and RRF fusion adds again (**+0.0300**, all
+  p<0.0001). Retrieval-only; the coverage/selection replication is owed.
 
 ## Method notes worth carrying
 
