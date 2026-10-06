@@ -82,6 +82,11 @@ have now finished, one at a time: **Climate-FEVER → FEVER → HotpotQA → 2Wi
   BM25 **MAP@10 0.5037 with Hits@10 0.9927** — the gold is found and the order is the score; a
   retrieval-trained bi-encoder beats it (**+0.0186**) and RRF fusion adds again (**+0.0300**, all
   p<0.0001). Retrieval-only; the coverage/selection replication is owed.
+- **The learned selector (Bet 2).** On the full 2,255-query protocol (1,127 held out) the logistic
+  scorer reaches MAP@10 **0.2939** — not significantly above the cross-encoder (**+0.0058**, p=0.10)
+  and significantly below the hand coverage-quota rule (**−0.0208**, p=0.0001). Its bridge feature is
+  weighted **5× the shuffled control's** while the held-out ranking is unchanged, so the bridge signal
+  is real but redundant. The null now has scale and a control.
 
 ## Method notes worth carrying
 

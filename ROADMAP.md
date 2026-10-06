@@ -209,9 +209,11 @@ settings, not the index it was measured against.
 
 `ceiling-decomp.md` measures the headroom and it is mostly ordering (**+0.1254**), then signal
 (**+0.0992**), then selection (**+0.0634**). Every model-free optimiser over the *current*
-features is already null (LTR, IDF weights, beam search, per-question-type routing), so the next
+features is already null (LTR — now confirmed on the full 2,255-query protocol and against a
+shuffled-bridge control: **−0.0208** against the hand coverage-quota rule, p=0.0001, with the bridge
+feature real but redundant — IDF weights, beam search, per-question-type routing), so the next
 movement must come from **new information in the scorer**. This is the first phase that needs a
-training run or a model download.
+training run or a model download. `docs/findings-selector-ltr.md`.
 
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
@@ -713,3 +715,15 @@ overrides deliberately. See `docs/findings-heavy-job-lock.md`.
   dense retrieval. The coverage/selection replication this corpus was fetched for is **still owed**:
   the harness has no selection rules yet. All four planned runs are done (Climate-FEVER, FEVER,
   HotpotQA, 2Wiki), one at a time under the lock.
+- 2026-10-06 — **The learned selector, at full scale and against a shuffled-bridge control.** The Bet 2
+  prototype (`tools/multihop_ltr.py`) on the **full 2,255-query protocol** (1,127 held out) reaches
+  MAP@10 **0.2939**, against the cross-encoder's 0.2881 (**+0.0058**, p=0.10, ns) and the hand
+  coverage-quota rule's **0.3147** (**−0.0208 [−0.0287, −0.0129]**, p=0.0001 — significantly worse);
+  it does beat the fused first stage (+0.0466, p=0.0001), so the fit is real and simply worth less than
+  the rules already measured. Adding the bridge-conditioned score as a third feature gives it a fitted
+  weight **5× the shuffled control's** (+0.075 vs +0.014) while the held-out MAP is **unchanged**
+  (−0.0018, p=0.51) — the bridge score alone separates (0.1288 vs 0.0834, p=0.0006), so the signal is
+  real and **redundant** in this feature set. The null now has both scale and a control. This does
+  **not** test the generator-free-iteration headroom: these runs rank the cross-encoder pool, not the
+  probe-expanded one, and probe-added candidates have no cached cross-encoder scores.
+  `docs/findings-selector-ltr.md`.

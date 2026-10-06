@@ -1183,13 +1183,17 @@ depth 100, `chunk_overlap=200`) and all paired against the fused baseline:
 | rank-1 guardrail, then cross-encoder | 0.2882 | +0.0336 | 0.7530 |
 
 A note on the fitted scorer, because "learn the combination" is the obvious next idea and it was
-tested: on 200 held-out queries a logistic scorer over the cross-encoder logit, the fused
-position and the bridge-conditioned score reaches MAP@10 **0.3102**, against the hand-built
-`blend-0.75`'s **0.3081** (**+0.0022 [−0.0068, +0.0113]**, p=0.65) and the coverage-quota rule's
-**0.3155**. It beats the cross-encoder alone (+0.0141, p=0.07) and the fused order (+0.0422,
-p=0.001), but it does **not** beat the rules already measured — the gain over the cross-encoder is
-the blending that `RERANK_BLEND` already does, not something the fit added. `tools/multihop_ltr.py`,
-`make multihop-ltr`.
+tested. On the **full 2,255-query protocol** (1,127 held out) a logistic scorer over the
+cross-encoder logit and the fused position reaches MAP@10 **0.2939**, against the cross-encoder's
+**0.2881** (**+0.0058 [−0.0011, +0.0128]**, p=0.10 — not significant) and the coverage-quota rule's
+**0.3147** (**−0.0208 [−0.0287, −0.0129]**, p=0.0001 — significantly worse). It does beat the fused
+first stage (+0.0466, p=0.0001), so the fit is not noise; it is worth less than the rules already
+measured. The earlier 400-query run added the bridge-conditioned score as a third feature and
+reached 0.3102, with that feature's fitted weight **5× larger than its shuffled-bridge control's**
+(+0.075 vs +0.014) — yet the held-out MAP was **unchanged** (−0.0018, p=0.51), even though the bridge
+score *alone* separates the two conditions (0.1288 vs 0.0834, p=0.0006). The bridge signal is real
+and redundant in this feature set. `tools/multihop_ltr.py`, `make multihop-ltr`;
+`docs/findings-selector-ltr.md`.
 
 **And a second null on the same headroom, which narrows where it can come from.** If the ordering
 gap were an *optimizer* problem, a better atom weighting or a lookahead search would capture part
@@ -1212,10 +1216,10 @@ of it. Both were tried on the full 2,255-query protocol:
   same rule both ways, which is the signature of fitting noise rather than routing.
 
 So the ordering headroom is **not** reachable by re-weighting or searching the atoms the selector
-already has, nor by routing across question types. With the LTR null, four independent attempts to
-close it by optimizing over existing features have failed: the next gain has to come from **new
-information** — a signal that separates candidates the current features cannot — rather than a
-better optimizer over the current ones. That moves the recall and signal work ahead of further
+already has, nor by routing across question types. With the LTR null now confirmed at full scale and
+against a shuffled-bridge control, four independent attempts to close it by optimizing over existing
+features have failed: the next gain has to come from **new information** — a signal that separates
+candidates the current features cannot — rather than a better optimizer over the current ones. That moves the recall and signal work ahead of further
 selection-rule tuning.
 
 - **Coverage is the lever, not ranking.** The cross-encoder alone is +0.040; making it serve a
