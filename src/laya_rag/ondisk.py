@@ -26,7 +26,7 @@ import json
 import math
 import os
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 
@@ -607,8 +607,44 @@ class OnDiskVectorIndex:
     def is_approximate(self) -> bool:
         return self._ann is not None
 
-    def search(self, query_vector: np.ndarray, k: int = 10, block: int = 200000) -> list[Hit]:
-        """Return the ``k`` nearest chunks, reading only the hits' text from disk."""
+    def _rank(self, query: np.ndarray, count: int, block: int) -> list[tuple[float, int]]:
+        """The top ``count`` ``(score, position)`` pairs, by ANN when available else exact."""
+        if self._ann is not None:
+            self._ann.nprobe = min(self.nprobe, self._ann.nlist)
+            similarities, positions = self._ann.search(
+                query.reshape(1, -1).astype(np.float32), min(count, self.count)
+            )
+            return [
+                (float(similarity), int(position))
+                for similarity, position in zip(similarities[0], positions[0])
+                if position >= 0
+            ]
+        best: list[tuple[float, int]] = []
+        for start in range(0, self.count, block):
+            stop = min(start + block, self.count)
+            scores = self._vectors[start:stop] @ query
+            take = min(count, len(scores))
+            local = np.argpartition(-scores, take - 1)[:take]
+            best.extend((float(scores[int(i)]), start + int(i)) for i in local)
+        best.sort(key=lambda item: -item[0])
+        return best[:count]
+
+    def search(
+        self,
+        query_vector: np.ndarray,
+        k: int = 10,
+        block: int = 200000,
+        *,
+        allow: Callable[[str | None], bool] | None = None,
+    ) -> list[Hit]:
+        """Return the ``k`` nearest chunks, reading only the hits' text from disk.
+
+        ``allow`` is the same path predicate `VectorIndex.search` takes, so the two
+        backends are interchangeable: a trust-tier or tenant filter is applied **inside**
+        the scan rather than after it, and a short filtered window deepens instead of
+        returning fewer candidates than asked for. Only the candidate positions are read
+        from disk to evaluate the predicate, not the whole corpus.
+        """
         if k < 1:
             raise ValueError(f"k must be positive, got {k}")
         if not self.count or self._vectors is None:
@@ -618,25 +654,25 @@ class OnDiskVectorIndex:
             raise IndexError_(
                 f"query vector has {query.shape[0]} dimensions but the index holds {self.dim}"
             )
-        if self._ann is not None:
-            self._ann.nprobe = min(self.nprobe, self._ann.nlist)
-            similarities, positions = self._ann.search(
-                query.reshape(1, -1).astype(np.float32), min(k, self.count)
-            )
+        if allow is None:
             return [
-                Hit(chunk=self._chunk_at(int(position)), score=float(similarity))
-                for similarity, position in zip(similarities[0], positions[0])
-                if position >= 0
+                Hit(chunk=self._chunk_at(position), score=score)
+                for score, position in self._rank(query, min(k, self.count), block)
             ]
-        best: list[tuple[float, int]] = []
-        for start in range(0, self.count, block):
-            stop = min(start + block, self.count)
-            scores = self._vectors[start:stop] @ query
-            take = min(k, len(scores))
-            local = np.argpartition(-scores, take - 1)[:take]
-            best.extend((float(scores[int(i)]), start + int(i)) for i in local)
-        best.sort(key=lambda item: -item[0])
-        return [Hit(chunk=self._chunk_at(position), score=score) for score, position in best[:k]]
+        # The predicate needs each candidate's path, which lives in its record. Rank a
+        # window, read only those records, and deepen if too few survive.
+        window = min(self.count, k)
+        while True:
+            kept: list[Hit] = []
+            for score, position in self._rank(query, window, block):
+                chunk = self._chunk_at(position)
+                if allow(chunk.path):
+                    kept.append(Hit(chunk=chunk, score=score))
+                    if len(kept) >= k:
+                        break
+            if len(kept) >= k or window >= self.count:
+                return kept[:k]
+            window = min(self.count, max(window * 4, k))
 
     def stats(self) -> dict[str, Any]:
         return {

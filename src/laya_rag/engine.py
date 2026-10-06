@@ -1007,6 +1007,21 @@ class RagEngine:
             )
             else candidate_k
         )
+        # The predicate is pushed into the dense scan rather than applied only to the fused
+        # list: both vector backends take `allow`, so a filtered search chooses from the
+        # whole index and cannot come back short. The post-fusion filter stays as the
+        # authority for the lexical and sparse channels, which have no predicate.
+        allow_path: Any = None
+        if trust_active:
+            manifest, minimum, identity, acl = (
+                trust_manifest, effective_min_trust, tenant, acl_active,
+            )
+
+            def allow_path(path: str | None) -> bool:
+                if acl and not manifest.tenant_allowed(path, identity):
+                    return False
+                return manifest.allows(path, minimum, identity)
+
         dense_hits: list[Hit] = []
         lexical_hits: list[Any] = []
         sparse_hits: list[Any] = []
@@ -1022,7 +1037,7 @@ class RagEngine:
             if dense_weight == 0.0:
                 dense_hits = []
             else:
-                dense_hits = index.search(self._query_vector(query), k=recall_k)
+                dense_hits = index.search(self._query_vector(query), k=recall_k, allow=allow_path)
             lexical_hits = lexical.search(query, k=recall_k) if lexical else []
             sparse_hits = self._sparse_hits(query, recall_k)
             candidates = self._fuse(

@@ -345,3 +345,35 @@ def test_filtering_deepens_instead_of_returning_a_short_result(tmp_path):
     assert all("trusted" in passage["path"] for passage in result.passages), (
         [passage["path"] for passage in result.passages]
     )
+
+
+def test_ondisk_backend_pushes_the_acl_predicate_into_the_dense_scan(tmp_path):
+    """The on-disk vector backend takes the same `allow` predicate as the in-memory one.
+
+    With the predicate pushed into the scan, an ACL-filtered dense search chooses from the
+    whole index instead of a post-filtered window, so isolation must still hold and the
+    result must not come back short.
+    """
+    corpus = _write_tenant_corpus(tmp_path / "corpus")
+    config = make_config(
+        tmp_path / "od",
+        index_backend="ondisk",
+        dense_weight=1.0,
+        retrieve_k=3,
+        rerank_k=3,
+        relevance_threshold=0.0,
+        answerability_threshold=0.0,
+        trust_manifest=str(_tenant_manifest(tmp_path)),
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([corpus], rebuild=True)
+
+    acme = engine.query("acme secret codename", tenant="acme")
+    assert acme.passages
+    assert all("beta" not in passage["path"] for passage in acme.passages)
+
+    stolen = engine.query("beta secret codename", tenant="acme")
+    assert all("beta" not in passage["path"] for passage in stolen.passages)
+
+    anonymous = engine.query("acme secret codename")
+    assert anonymous.passages == []

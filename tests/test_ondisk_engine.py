@@ -246,3 +246,63 @@ def test_engine_builds_the_ann_when_configured(tmp_path):
     assert engine.index.is_approximate is True
     result = engine.query("How long does a refund take?")
     assert result.passages
+
+
+# ── retrieval-time predicate pushdown ────────────────────────────────────
+#
+# `VectorIndex.search` takes an `allow` path predicate (trust tiers, tenant ACLs); the
+# on-disk backend did not, so an engine on that backend could only filter after the scan.
+# These pin the parity: the predicate excludes inside the scan and deepens rather than
+# returning a short result.
+
+def test_ondisk_search_allow_predicate_excludes_inside_the_scan(tmp_path):
+    index = OnDiskVectorIndex(tmp_path / "dense", dim=2)
+    index.add(
+        [
+            _chunk(0, "nearest", doc_id="a", path="allowed/a.md"),
+            _chunk(1, "second", doc_id="b", path="blocked/b.md"),
+            _chunk(2, "third", doc_id="c", path="allowed/c.md"),
+        ],
+        np.asarray([[1.0, 0.0], [0.99, 0.1], [0.9, 0.2]], dtype=np.float32),
+    )
+    index.finalize()
+    opened = OnDiskVectorIndex.open(tmp_path / "dense")
+    query = np.asarray([1.0, 0.0], dtype=np.float32)
+    assert [hit.chunk.path for hit in opened.search(query, k=3)][:2] == [
+        "allowed/a.md",
+        "blocked/b.md",
+    ]
+    kept = opened.search(query, k=2, allow=lambda path: path.startswith("allowed/"))
+    assert [hit.chunk.path for hit in kept] == ["allowed/a.md", "allowed/c.md"]
+
+
+def test_ondisk_search_allow_deepens_when_the_window_is_short(tmp_path):
+    index = OnDiskVectorIndex(tmp_path / "dense", dim=2)
+    chunks = [
+        _chunk(i, f"blocked {i}", doc_id=f"b{i}", path="blocked/x.md") for i in range(6)
+    ]
+    vectors = [[1.0, 0.001 * i] for i in range(6)]
+    chunks.append(_chunk(6, "allowed", doc_id="a", path="allowed/y.md"))
+    vectors.append([0.0, 1.0])
+    index.add(chunks, np.asarray(vectors, dtype=np.float32))
+    index.finalize()
+    opened = OnDiskVectorIndex.open(tmp_path / "dense")
+
+    hits = opened.search(
+        np.asarray([1.0, 0.0], dtype=np.float32),
+        k=1,
+        allow=lambda path: path.startswith("allowed/"),
+    )
+    assert [hit.chunk.path for hit in hits] == ["allowed/y.md"]
+
+
+def test_ondisk_search_without_allow_is_unchanged(tmp_path):
+    index = OnDiskVectorIndex(tmp_path / "dense", dim=2)
+    index.add(
+        [_chunk(0, "one", doc_id="a", path="a.md"), _chunk(1, "two", doc_id="b", path="b.md")],
+        np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+    )
+    index.finalize()
+    opened = OnDiskVectorIndex.open(tmp_path / "dense")
+    hits = opened.search(np.asarray([1.0, 0.0], dtype=np.float32), k=2)
+    assert [hit.chunk.path for hit in hits] == ["a.md", "b.md"]
