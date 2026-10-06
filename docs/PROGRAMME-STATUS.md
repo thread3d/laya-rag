@@ -81,7 +81,9 @@ have now finished, one at a time: **Climate-FEVER → FEVER → HotpotQA → 2Wi
 - **2WikiMultiHopQA, first run.** 12,576 dev questions over the 56,651-paragraph distractor pool:
   BM25 **MAP@10 0.5037 with Hits@10 0.9927** — the gold is found and the order is the score; a
   retrieval-trained bi-encoder beats it (**+0.0186**) and RRF fusion adds again (**+0.0300**, all
-  p<0.0001). Retrieval-only; the coverage/selection replication is owed.
+  p<0.0001). **And the coverage rule loses here too**: coverage **−0.0046** and covquota **−0.0056**
+  MAP@10 against the fused order (both p<0.0001) while preserving Hits@4, so the MuSiQue failure is
+  not idiosyncratic.
 - **The learned selector (Bet 2).** On the full 2,255-query protocol (1,127 held out) the logistic
   scorer reaches MAP@10 **0.2939** — not significantly above the cross-encoder (**+0.0058**, p=0.10)
   and significantly below the hand coverage-quota rule (**−0.0208**, p=0.0001). Its bridge feature is

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import pytest
 import sys
 from pathlib import Path
 
@@ -123,3 +124,29 @@ def test_a_perfect_ranking_scores_one_under_the_shared_metrics(tmp_path):
     # The benchmark's AP convention: two gold facts found at ranks 1 and 2 give
     # (1/1 + 1/2) / 2 = 0.75, not 1.0 — a perfect *set* at imperfect ranks.
     assert row["MAP@10"] == 0.75
+
+
+def test_rrf_scores_fuse_the_channels_and_ignore_absent_candidates():
+    rankings = [{"q": ["a", "b", "c"]}, {"q": ["b", "a"]}]
+    scores = tw._rrf_scores(rankings, "q", ["a", "b", "c"], rrf_k=5)
+    # a and b are 1/6 + 1/7 in opposite orders; c appears in one channel only.
+    assert scores[0] == pytest.approx(scores[1])
+    assert scores[0] > scores[2] > 0.0
+    assert tw._rrf_scores(rankings, "absent", ["a"], rrf_k=5) == [0.0]
+
+
+def test_the_coverage_arm_returns_a_permutation_of_the_pool():
+    from multihop_coverage import atom_index, split_atoms
+    from multihop_rerank_experiment import coverage_order
+
+    texts = {
+        "a#0": "Alpha fact one. Alpha fact two.",
+        "b#0": "Beta fact only.",
+        "c#0": "Gamma fact here.",
+    }
+    ids = list(texts)
+    atom_ids, weights, _texts = atom_index([split_atoms(texts[doc_id]) for doc_id in ids])
+    relevance = tw._rrf_scores([{"q": ["a#0", "b#0", "c#0"]}], "q", ids, rrf_k=5)
+    order = coverage_order(relevance, atom_ids, weights, top_k=3, lam=0.7)
+    assert sorted(order) == [0, 1, 2]
+    assert len(order) == 3

@@ -1328,12 +1328,11 @@ deployment on MuSiQue-shaped data (small gold sets, harder second hops) would be
 because changing it costs Hits@4 where the project's headline numbers live, but it is a
 documented trade rather than a settled answer.
 
-### 2WikiMultiHopQA — the gold is found, the order is the bottleneck
+### 2WikiMultiHopQA — recall is saturated, and the coverage objective does not travel
 
 The 2Wiki adapter indexes the **distractor context pool** — all 56,651 paragraphs the dev split
 provides — and retrieves the supporting paragraphs inside it, so this is a retrieval measurement, not
-a provided-context generator score. It is deliberately retrieval-only: BM25, a bi-encoder and their
-RRF fusion, no cross-encoder and no selection rules.
+a provided-context generator score. It runs the channel arms and the coverage rule family.
 
 ![2WikiMultiHopQA retrieval by arm](docs/charts/2wiki.png)
 
@@ -1342,14 +1341,20 @@ RRF fusion, no cross-encoder and no selection rules.
 | bm25-engine | 0.9927 | 0.9848 | 0.5037 | 0.9293 |
 | biencoder (`bge-small`) | 0.9986 | 0.9959 | 0.5223 | 0.9505 |
 | **hybrid-biencoder** | **0.9997** | **0.9986** | **0.5337** | **0.9564** |
+| coverage-0.7 | 0.9997 | 0.9984 | 0.5291 | 0.9484 |
+| covquota-3-0.7 | 0.9997 | 0.9979 | 0.5282 | 0.9454 |
 
 **Hits@10 is 0.993 while MAP@10 is 0.504** — the pool almost always contains the gold, and the score
-is lost in the order it comes back in, the same recall/selection split the MultiHop-RAG diagnostics
-found. A **retrieval-trained** bi-encoder beats the lexical arm on every metric (**+0.0186 MAP@10**)
-and RRF fusion adds again (**+0.0300**, all paired, p<0.0001 over 12,576 queries) — so the shipped
-dense channel's BEIR failure is the *encoder's* training, not dense retrieval as such. The
-coverage-objective replication this corpus was fetched for is still owed: the harness has no
-selection rules yet.
+is lost in the order it comes back in. A retrieval-trained bi-encoder beats the lexical arm
+(**+0.0186 MAP@10**) and RRF fusion adds again (**+0.0300**, all p<0.0001).
+
+**And the coverage rule loses here.** On MultiHop-RAG the set-coverage objective is the project's
+headline retrieval win; it **falsified on MuSiQue** (−0.0109 MAP@10); on 2Wiki it falsifies again —
+coverage **−0.0046** and covquota **−0.0056** MAP@10 against the fused order handed to them (both
+p<0.0001), while preserving Hits@4 (−0.0002, ns). So the MuSiQue failure is **not idiosyncratic**:
+the rule trades ordering for coverage, and on a corpus where Hits@10 is already 0.9997 there is
+nothing left for coverage to buy and only the ordering cost remains. (The relevance term here is the
+fused RRF score, not a cross-encoder — a narrower test than MuSiQue's, stated in the finding.)
 
 ### Negative rejection — the claim that did not survive
 

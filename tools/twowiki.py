@@ -35,11 +35,37 @@ sys.path.insert(0, str(ROOT / "src"))
 import beir  # noqa: E402
 import evalkit  # noqa: E402
 from musique import gold_matches, slug  # noqa: E402
-from multihop_rerank_experiment import metrics_from_matches  # noqa: E402
+from multihop_coverage import atom_index, split_atoms  # noqa: E402
+from multihop_rerank_experiment import (  # noqa: E402
+    coverage_doc_quota_order,
+    coverage_order,
+    metrics_from_matches,
+)
 
 ROOT_BENCH = ROOT / "eval" / "benchmarks" / "2wiki"
 MODELS = {"bge-small": "BAAI/bge-small-en-v1.5", "bge-base": "BAAI/bge-base-en-v1.5"}
 METRICS = ("Hits@10", "Hits@4", "MAP@10", "MRR@10")
+
+
+def _rrf_scores(
+    rankings: Sequence[Mapping[str, Sequence[str]]],
+    query: str,
+    ids: Sequence[str],
+    rrf_k: int,
+) -> list[float]:
+    """Reciprocal-rank fusion score for ``ids`` under ``rankings`` — the relevance term.
+
+    The MultiHop/MuSiQue coverage runs use a cross-encoder logit as the relevance. This harness
+    has no cross-encoder (it is retrieval-only), so the fused RRF score stands in: the same
+    signal the baseline order is built from, which is the honest comparison for "does coverage
+    beat the order it was given?".
+    """
+    scores = {cid: 0.0 for cid in ids}
+    for ranking in rankings:
+        for rank, cid in enumerate(ranking.get(query, []), start=1):
+            if cid in scores:
+                scores[cid] += 1.0 / (rrf_k + rank)
+    return [scores[cid] for cid in ids]
 
 
 def load_split(path: Path, *, limit: int | None = None) -> dict[str, Any]:
@@ -110,6 +136,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                     help="checkpoint the embedding pass every N documents, so a crash resumes "
                          "at the next chunk instead of re-embedding")
     ap.add_argument("--samples", type=int, default=10000)
+    ap.add_argument("--coverage-lambda", type=float, default=0.7,
+                    help="coverage/relevance trade-off for the coverage arms")
+    ap.add_argument("--min-docs", type=int, default=3,
+                    help="distinct articles seeded before coverage fills, for the covquota arm")
     ap.add_argument("--out", default=str(ROOT_BENCH / "retrieval"))
     return ap.parse_args(argv)
 
@@ -145,16 +175,48 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     arms = {"bm25-engine": lexical, "biencoder": dense, "hybrid-biencoder": fused}
     per_query: dict[str, dict[str, dict[str, float]]] = {name: {} for name in arms}
-    summary: dict[str, dict[str, float]] = {}
     for name, ranked in arms.items():
         for q in queries:
             pool = list(ranked[q])[: args.depth]
             matches = gold_matches(pool, golds[q], order)
-            row = metrics_from_matches(list(range(len(pool))), matches, len(golds[q]), args.top_k)
-            per_query[name][q] = row
+            per_query[name][q] = metrics_from_matches(
+                list(range(len(pool))), matches, len(golds[q]), args.top_k
+            )
+
+    # ── the coverage objective, on the third corpus (the owed replication) ──
+    # MultiHop-RAG: coverage wins. MuSiQue: it falsified (−0.0109 MAP@10). 2Wiki decides whether
+    # that failure is idiosyncratic to MuSiQue. Same rule family, retrieval-only relevance.
+    print("  coverage selection...", flush=True)
+    corpus_ids = list(corpus)
+    atom_ids, atom_weight, _atom_texts = atom_index(
+        [split_atoms(corpus[cid]) for cid in corpus_ids]
+    )
+    atom_by_id = dict(zip(corpus_ids, atom_ids))
+    lam, min_docs = args.coverage_lambda, args.min_docs
+    coverage_arms = [f"coverage-{lam}", f"covquota-{min_docs}-{lam}"]
+    for name in coverage_arms:
+        per_query[name] = {}
+    for q in queries:
+        pool = list(fused[q])[: args.depth]
+        matches = gold_matches(pool, golds[q], order)
+        relevance = _rrf_scores([dense, lexical], q, pool, args.rrf_k)
+        atoms = [atom_by_id[cid] for cid in pool]
+        docs = [cid.rsplit("#", 1)[0] for cid in pool]
+        ranked_indices = {
+            f"coverage-{lam}": coverage_order(
+                relevance, atoms, atom_weight, args.top_k, lam),
+            f"covquota-{min_docs}-{lam}": coverage_doc_quota_order(
+                relevance, atoms, atom_weight, docs, args.top_k, lam, min_docs),
+        }
+        for name, order_indices in ranked_indices.items():
+            per_query[name][q] = metrics_from_matches(
+                list(order_indices), matches, len(golds[q]), args.top_k
+            )
+
+    summary: dict[str, dict[str, float]] = {}
+    for name, block in per_query.items():
         summary[name] = {
-            metric: round(sum(row[metric] for row in per_query[name].values())
-                          / max(1, len(per_query[name])), 4)
+            metric: round(sum(row[metric] for row in block.values()) / max(1, len(block)), 4)
             for metric in METRICS
         }
 
@@ -166,12 +228,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             comparisons[f"{name} vs bm25-engine {metric}"] = evalkit.paired_bootstrap(
                 baseline, candidate, samples=args.samples
             )
+    # The replication question: does the coverage rule beat the order it was given?
+    for name in coverage_arms:
+        for metric in ("MAP@10", "Hits@4"):
+            baseline = {q: per_query["hybrid-biencoder"][q][metric] for q in queries}
+            candidate = {q: per_query[name][q][metric] for q in queries}
+            comparisons[f"{name} vs hybrid-biencoder {metric}"] = evalkit.paired_bootstrap(
+                baseline, candidate, samples=args.samples
+            )
 
     report = {
         "_settings": {
             "split": args.split, "model": model_id, "depth": args.depth,
             "rrf_k": args.rrf_k, "limit_queries": args.limit_queries,
             "paragraphs": len(corpus), "queries": len(queries),
+            "coverage_lambda": args.coverage_lambda, "min_docs": args.min_docs,
         },
         "summary": summary,
         "comparisons": comparisons,

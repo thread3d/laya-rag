@@ -346,7 +346,7 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
 | ViDoRe / MIRACL-VISION | the engine is text-only: no OCR or vision path |
 | An LLM decomposer / agentic loop | `[llm]`; every resulting number belongs to the generator, not the engine |
 | The ~300 claim/corpus pairs and ~200 composed answers | **human labelling**; `tools/labelling_queue.py` builds and scores the queue, it does not label |
-| 2WikiMultiHopQA | **measured** (`tools/twowiki.py`, `make two-wiki`) — 12,576 dev questions over a 56,651-paragraph pool: BM25 MAP@10 0.5037, biencoder 0.5223, hybrid-biencoder **0.5337** (all p<0.0001), with Hits@10 0.99 showing the gap is ordering. Retrieval-only; the coverage/selection replication is owed (`docs/findings-2wiki.md`) |
+| 2WikiMultiHopQA | **measured, and the coverage rule falsified here too** (`tools/twowiki.py`, `make two-wiki`) — 12,576 dev questions over a 56,651-paragraph pool: BM25 MAP@10 0.5037, biencoder 0.5223, hybrid-biencoder **0.5337** (all p<0.0001), while **coverage-0.7 −0.0046** and **covquota-3-0.7 −0.0056** MAP@10 against the fused order (both p<0.0001), preserving Hits@4. MultiHop-RAG won, MuSiQue −0.0109, 2Wiki −0.0046/−0.0056: the failure is **not idiosyncratic** (`docs/findings-2wiki.md`) |
 | On-disk in-place content replacement | the append-only dense half tombstones and compacts; replacing a document's content still needs a rebuild |
 
 **The one-heavy-job rule is enforced.** Three corpus builds plus a harness launched together
@@ -727,3 +727,13 @@ overrides deliberately. See `docs/findings-heavy-job-lock.md`.
   **not** test the generator-free-iteration headroom: these runs rank the cross-encoder pool, not the
   probe-expanded one, and probe-added candidates have no cached cross-encoder scores.
   `docs/findings-selector-ltr.md`.
+- 2026-10-06 — **The 2Wiki coverage replication: the MuSiQue failure is not idiosyncratic.** The
+  coverage/covquota arms were added to `tools/twowiki.py` (relevance = the fused RRF score, since the
+  harness has no cross-encoder), and on **12,576 dev questions over the 56,651-paragraph pool** both
+  lose to the fused order handed to them: **coverage-0.7 −0.0046** and **covquota-3-0.7 −0.0056**
+  MAP@10 (both p<0.0001), while preserving Hits@4 (−0.0002 ns / −0.0008 sig). The sequence is now
+  MultiHop-RAG **won**, MuSiQue **−0.0109**, 2Wiki **−0.0046/−0.0056** — the coverage objective is a
+  MultiHop-RAG-shaped instrument, not a general one, and where Hits@10 is already 0.9997 there is
+  nothing left for coverage to buy and only the ordering cost remains. Stated limit: the relevance
+  term is the fused score, not a cross-encoder, so this is coverage-vs-fused rather than
+  coverage+CE-vs-CE. `docs/findings-2wiki.md`.
