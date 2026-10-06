@@ -5,7 +5,7 @@ This is the closing report for a pass over every item the audits
 `proposal-ledger.md` §3/§6) marked **blocked** or **owed**, offline-first. It covers what was
 measured, what was built, what was reconciled, what is still running, and what is genuinely
 external or human. **38 commits** landed; the suite is **1410 passed, 5 deselected**, `lint` is
-clean, `claim-check` is **58**, `consistency-check` is **11 of 18**, and `leakage-audit` reports
+clean, `claim-check` is **58**, `consistency-check` is **12 of 18**, and `leakage-audit` reports
 zero findings over 392 reports.
 
 ## Headline results
@@ -28,9 +28,10 @@ zero findings over 392 reports.
    (**0.7412**) but only **+0.0092 over RRF k=60, not significant** (p=0.139); it is significantly
    better than max-normalised CombSUM (**+0.0263**, p<0.0001). `findings-fusion-ablation.md`.
 
-4. **Coverage is now 11 of 18.** Climate-FEVER — listed *blocked/unstaged* — was measured
-   (5.4M documents, 1,535 queries, lexical **nDCG@10 0.1610**) in ~34 minutes once resumed from its
-   checkpoint. `findings-climate-fever.md`.
+4. **Coverage is now 12 of 18.** Both corpora the audit listed *blocked/unstaged* were measured:
+   **Climate-FEVER** (5.4M documents, 1,535 queries, lexical **nDCG@10 0.1610**) and **FEVER**
+   (5.4M documents, all **6,666** queries, lexical **0.6323** — against a published 0.753, the largest
+   lexical-control gap measured). `findings-climate-fever.md`, `findings-fever.md`.
 
 5. **Nugget and whole-fact recall, no judge.** Claim-recall@10 **0.7438 fused vs 0.7803 CE**;
    whole-fact recall@10 **0.4644 vs 0.5452**; both **0.8480** at depth 100 — the CE's gain is
@@ -94,7 +95,7 @@ zero findings over 392 reports.
 
 | audit item | outcome |
 | --- | --- |
-| BEIR coverage "5 / 7 / 10" | **11 of 18**, computed from disk, pinned in three documents + registry |
+| BEIR coverage "5 / 7 / 10" | **12 of 18**, computed from disk, pinned in three documents + registry |
 | `voyage-02` row 0.663/0.480 vs 0.662/0.479 | reconciled to the paper's 0.6625/0.4795 |
 | recalibration half-split 300 vs 500 | reconciled to the report's 300 |
 | two `bench` RSS grids | explained by a recorded process baseline |
@@ -106,7 +107,7 @@ zero findings over 392 reports.
 | lexical/sparse predicate | engine screens every channel before fusion |
 | FUSION_K vs convex | ablated on SciFact; convex best but not significantly over RRF |
 | BioASQ/FEVER/NQ "28 GB disk" | **stale** (471 GB free); the real block is licensing/gating |
-| Climate-FEVER "blocked/unstaged" | **measured** (11 of 18) |
+| Climate-FEVER / FEVER "blocked/unstaged" | **both measured** (12 of 18) |
 | ~300 claim pairs / ~200 answers | harness ready; **labels stay human** |
 | contamination audit | decidable half shipped (zero findings); encoder pretraining uncheckable |
 | 2WikiMultiHopQA | adapter built and tested; run queued |
@@ -137,7 +138,7 @@ zero findings over 392 reports.
 make test                  # 1410 passed, 5 deselected
 make lint                  # src/tests compile + GUI syntax
 make claim-check           # 58 prose claims vs their reports
-make consistency-check     # 11 of 18, 12 sites agree
+make consistency-check     # 12 of 18, 12 sites agree
 make leakage-audit         # 392 reports, zero findings
 make heavy-status          # is a corpus job running?
 ```

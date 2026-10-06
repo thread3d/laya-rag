@@ -66,7 +66,7 @@ to offer relative to exact lexical matching.
 ## The lexical control, and a hypothesis that did not survive
 
 The lexical arm is the one component checkable against an independent implementation, so it is worth
-drawing rather than assuming. Eleven corpora now have both our number and a published BM25 anchor:
+drawing rather than assuming. Twelve corpora now have both our number and a published BM25 anchor:
 
 | corpus | documents | ours | published | gap |
 | --- | --- | --- | --- | --- |
@@ -81,12 +81,13 @@ drawing rather than assuming. Eleven corpora now have both our number and a publ
 | **DBPedia-entity** | 4,635,922 | 0.3053 | 0.313 | **−0.008** |
 | HotpotQA (600-query subset) | 5,233,329 | 0.6365 | 0.603 | **+0.034** |
 | **Climate-FEVER** | 5,416,593 | 0.1610 | 0.213 | **−0.052** |
+| **FEVER** | 5,416,568 | 0.6323 | 0.753 | **−0.121** |
 
-**8 of the 11 corpora agree within ±0.02** (5 within ±0.008). ArguAna and HotpotQA sit *above* their
+**8 of the 12 corpora agree within ±0.02** (5 within ±0.008). ArguAna and HotpotQA sit *above* their
 anchors — HotpotQA by +0.034 on a 600-query subset, so it carries sampling noise roughly the size of
-that margin. **Climate-FEVER (−0.052, the largest gap measured)**, Quora (−0.020) and NQ (−0.017) sit
-below. An earlier version of this line claimed "eight of nine agree within ±0.008", which was simply a
-miscount; the table is the record.
+that margin. **FEVER (−0.121, the largest gap measured by far)**, Climate-FEVER (−0.052), Quora
+(−0.020) and NQ (−0.017) sit below. An earlier version of this line claimed "eight of nine agree
+within ±0.008", which was simply a miscount; the table is the record.
 
 **The tempting explanation — that the gap grows with corpus size — is wrong**, and DBPedia is what
 kills it: at 4.6M documents, the largest corpus measured, the gap is −0.008, smaller than SciDocs at

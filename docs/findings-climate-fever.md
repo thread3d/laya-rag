@@ -13,21 +13,21 @@ touches only a query's postings.
 | climate-fever | 5,416,593 | 1,535 | bm25-engine | **0.1610** | 0.2093 | 0.2139 | 0.1198 |
 
 This is the **third 5.4M-document corpus** and the **eleventh** BEIR dataset with a report, so
-`make consistency-check` now computes **11 of 18** and the three documents that state the count were
+`make consistency-check` now computes **12 of 18** and the three documents that state the count were
 updated together (the gate failed first and named them, which is the designed behaviour).
 
 ## What this does not show
 
 - **Lexical-only.** The dense arm would need its own multi-million-document embedding pass; the row
   is `bm25-engine` under the engine's settings (stemming on, query stopwords dropped).
-- **The anchor exists, and the gap is the largest measured.** `tools/compare_more.py` already carried
+- **The anchor exists, and the gap is large.** `tools/compare_more.py` already carried
   a published BM25 anchor of **0.213** for Climate-FEVER, so the row is **0.1610 against 0.213 — a
-  −0.052 gap**, worse than Quora (−0.020) and NQ (−0.017). It joins the lexical control as its
-  eleventh corpus and its worst outlier, which moved that sentence from "8 of 10" to "8 of 11" and its
-  heading to *eleven corpora including three multi-million-document ones*. An earlier draft of this
-  finding said no anchor was configured; regenerating `tools/lexical_control.py` after the run showed
-  otherwise — the anchor was present, only the derived report was stale, and `make claim-check` now
-  pins the corrected count.
+  −0.052 gap**, second-largest in the lexical control after FEVER's −0.121 (and worse than Quora's
+  −0.020). It joins the control as its eleventh corpus, which moved that sentence from "8 of 10" to
+  "8 of 12" and its heading to *twelve corpora including four multi-million-document ones*. An earlier
+  draft of this finding said no anchor was configured; regenerating `tools/lexical_control.py` after
+  the run showed otherwise — the anchor was present, only the derived report was stale, and
+  `make claim-check` now pins the corrected count.
 - **One retriever, not the fusion comparison.** The channel-reversal and lexical-control analyses
   need the dense arm; this row is a coverage addition, not a new instrument comparison.
 - **The ~6 h estimate was pessimistic.** The measured time was ~34 minutes after the checkpoint

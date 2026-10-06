@@ -268,12 +268,12 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 
 ## 7. Phase 4 — scale to 18 datasets, and own the encoder (weeks; mixed)
 
-**Coverage today: 11 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
-DBPedia-entity, NQ, HotpotQA (600-query subset), webis-touche2020 and **Climate-FEVER** (lexical-only,
-nDCG@10 0.1610), counted from the reports present in `eval/beir/` by `tools/consistency_check.py`;
-TREC-COVID has a 40,000-document subsample and is not counted. The counts inside the 4.2 log below
-are the historical values at each dated step, and `make consistency-check` fails if this line and the
-other documents disagree again.
+**Coverage today: 12 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
+DBPedia-entity, NQ, HotpotQA (600-query subset), webis-touche2020, **Climate-FEVER** (lexical, nDCG@10
+0.1610) and **FEVER** (lexical, **0.6323** over all 6,666 queries), counted from the reports present in
+`eval/beir/` by `tools/consistency_check.py`; TREC-COVID has a 40,000-document subsample and is not
+counted. The counts inside the 4.2 log below are the historical values at each dated step, and
+`make consistency-check` fails if this line and the other documents disagree again.
 
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
@@ -685,3 +685,12 @@ overrides deliberately. See `docs/findings-heavy-job-lock.md`.
   registry were updated together, and coverage now computes **11 of 18**. No published anchor is
   configured for Climate-FEVER, so the row records our number rather than a gap. FEVER is next in the
   queue, then HotpotQA, then 2WikiMultiHopQA — one at a time under the heavy-job lock.
+- 2026-10-06 — **FEVER measured; coverage 11 → 12 of 18, and the largest lexical gap yet.** The second
+  of the "blocked" 5.4M-document corpora: 5,416,568 documents, all **6,666** queries, lexical-only
+  `bm25-engine` **nDCG@10 0.6323** (Recall@10 0.7846, MRR@10 0.6022, MAP@100 0.5796). Against the
+  published BM25 anchor of **0.753** that is **−0.121**, six times Quora's gap and more than twice
+  Climate-FEVER's — the largest in the lexical control. Size still does not explain it
+  (`dbpedia-entity`, 4.6M, is −0.008); the negative outliers now share a *query kind* (FEVER's
+  natural-language claims, Quora's and NQ's natural-language questions), which is a pattern and not a
+  cause. The consistency and claim gates failed first and named every stale site; documents, findings
+  index and pins were updated together. HotpotQA is next in the queue.
