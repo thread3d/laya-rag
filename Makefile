@@ -502,7 +502,7 @@ labelling-queue:
 
 # Is a heavyweight job running? Run long jobs one at a time (see README).
 heavy-status:
-	$(PY) tools/heavylock.py --status
+	-$(PY) tools/heavylock.py --status
 
 # What resumable work is in flight? Reads the `<stem>.manifest.json` sidecars jobkit writes.
 job-status:
