@@ -26,7 +26,7 @@ def _cmd_index(args: argparse.Namespace, config: EngineConfig) -> int:
     if args.ext:
         extensions = [e if e.startswith(".") else f".{e}" for e in args.ext.split(",")]
     try:
-        report = engine.index_paths(args.paths, rebuild=args.rebuild, prune=args.prune, **(
+        report = engine.index_paths(args.paths, rebuild=args.rebuild, prune=args.prune, actor="cli", **(
             {"extensions": extensions} if extensions else {}
         ))
     except ModelUnavailableError as exc:
@@ -206,7 +206,7 @@ def _cmd_integrity(args: argparse.Namespace, config: EngineConfig) -> int:
 
 
 def _cmd_reset(args: argparse.Namespace, config: EngineConfig) -> int:
-    RagEngine(config).reset()
+    RagEngine(config).reset(actor="cli")
     _emit({"status": "ok", "index_dir": str(config.index_dir)}, args.json,
           f"removed index at {config.index_dir}")
     return 0
@@ -216,7 +216,7 @@ def _cmd_delete(args: argparse.Namespace, config: EngineConfig) -> int:
     """Remove documents without rebuilding the whole index."""
     engine = RagEngine(config)
     try:
-        removed = engine.remove_documents(args.paths, args.doc_ids)
+        removed = engine.remove_documents(args.paths, args.doc_ids, actor="cli")
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -244,7 +244,7 @@ def _cmd_extract(args: argparse.Namespace, config: EngineConfig) -> int:
 def _cmd_compact(args: argparse.Namespace, config: EngineConfig) -> int:
     """Reclaim the on-disk index's tombstoned documents, without re-embedding."""
     engine = RagEngine(config)
-    remaining = engine.compact()
+    remaining = engine.compact(actor="cli")
     _emit(
         {"live_chunks": remaining, "index_dir": str(config.index_dir)},
         args.json,

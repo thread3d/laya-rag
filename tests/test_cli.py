@@ -184,7 +184,7 @@ def test_cli_delete_forwards_to_the_engine(monkeypatch):
         def __init__(self, config):
             pass
 
-        def remove_documents(self, paths, doc_ids):
+        def remove_documents(self, paths, doc_ids, actor=None):
             captured["paths"] = list(paths)
             captured["doc_ids"] = list(doc_ids)
             return 3
@@ -199,7 +199,7 @@ def test_cli_delete_reports_an_append_only_backend(monkeypatch, capsys):
         def __init__(self, config):
             pass
 
-        def remove_documents(self, paths, doc_ids):
+        def remove_documents(self, paths, doc_ids, actor=None):
             raise ValueError("the on-disk index backend is append-only")
 
     monkeypatch.setattr(cli, "RagEngine", _RefusingEngine)
@@ -214,7 +214,7 @@ def test_compact_parser_and_forwarding(monkeypatch):
         def __init__(self, config):
             pass
 
-        def compact(self):
+        def compact(self, actor=None):
             captured["called"] = True
             return 5
 

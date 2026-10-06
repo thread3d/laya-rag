@@ -603,12 +603,16 @@ class RagEngine:
         self._sparse = index
         return time.perf_counter() - started
 
-    def _record_audit(self, action: str, detail: dict[str, Any]) -> None:
+    def _record_audit(
+        self, action: str, detail: dict[str, Any], actor: str | None = None
+    ) -> None:
         """Append a mutation to the optional hash-chained audit log.
 
         A logging failure must not undo a successful mutation: the index is already written,
         so a broken log path is swallowed here and surfaces through `audit` verification
-        rather than as a failed request. `actor` is not known at the engine layer.
+        rather than as a failed request. ``actor`` is supplied by the surface that knows the
+        caller (the API passes the authenticated principal, the CLI/MCP a fixed label); the
+        engine has no identity context of its own.
         """
         path = self.config.audit_log
         if path is None:
@@ -616,11 +620,11 @@ class RagEngine:
         if self._audit is None:
             self._audit = AuditLog(path)
         try:
-            self._audit.append(action, detail=detail)
+            self._audit.append(action, actor=actor, detail=detail)
         except OSError:
             return
 
-    def reset(self) -> None:
+    def reset(self, actor: str | None = None) -> None:
         """Delete the on-disk index and drop the in-memory copies.
 
         Refused while a build is running, like a second build.
@@ -630,7 +634,7 @@ class RagEngine:
         self._build_active.set()
         try:
             self._reset_unlocked()
-            self._record_audit("reset", {"index_dir": str(self.config.index_dir)})
+            self._record_audit("reset", {"index_dir": str(self.config.index_dir)}, actor)
         finally:
             self._build_active.clear()
             self._build_lock.release()
@@ -665,7 +669,7 @@ class RagEngine:
         lexical.build((chunk.chunk_id, chunk.index_text) for chunk in chunks)
         self._lexical = lexical
 
-    def compact(self) -> int:
+    def compact(self, actor: str | None = None) -> int:
         """Rewrite the on-disk index without tombstones, without re-embedding.
 
         A no-op for the in-memory backend and when nothing is tombstoned: it returns the live
@@ -683,7 +687,7 @@ class RagEngine:
             return len(index)
         chunks = index.chunks
         if not chunks:
-            self.reset()
+            self.reset(actor)
             return 0
         from .ondisk import DENSE_DIRNAME, OnDiskVectorIndex
 
@@ -708,13 +712,14 @@ class RagEngine:
         self._sparse = None
         self._sparse_encoder = None
         self._sparse_query_cache = {}
-        self._record_audit("compact", {"live_chunks": len(chunks)})
+        self._record_audit("compact", {"live_chunks": len(chunks)}, actor)
         return len(chunks)
 
     def remove_documents(
         self,
         paths: Sequence[Path | str] = (),
         doc_ids: Sequence[str] = (),
+        actor: str | None = None,
     ) -> int:
         """Drop documents from the index and rebuild the lexical channel to match.
 
@@ -769,6 +774,7 @@ class RagEngine:
                 "removed_chunks": removed,
                 "total_chunks": len(chunks),
             },
+            actor,
         )
         return removed
 
@@ -839,6 +845,7 @@ class RagEngine:
         max_file_bytes: int = MAX_FILE_BYTES,
         progress: ProgressFn | None = None,
         prune: bool = True,
+        actor: str | None = None,
     ) -> IndexReport:
         """Read, chunk and embed everything under ``paths``; then persist the index.
 
@@ -867,6 +874,7 @@ class RagEngine:
                     "chunks": report.chunks,
                     "removed_chunks": report.removed_chunks,
                 },
+                actor,
             )
             return report
         finally:

@@ -139,3 +139,27 @@ def test_verify_tool_exit_codes(tmp_path):
 
 def test_verify_tool_skips_a_missing_log(tmp_path):
     assert _tool().main(["--log", str(tmp_path / "absent.jsonl")]) == 0
+
+
+def test_the_engine_records_the_actor_it_is_given(tmp_path):
+    log_path = tmp_path / "audit.jsonl"
+    config = make_config(
+        tmp_path, audit_log=log_path, relevance_threshold=0.0, answerability_threshold=0.0
+    )
+    engine = RagEngine(config, model=StubModel())
+    root = _corpus(tmp_path)
+    engine.index_paths([root], rebuild=True, actor="alice")
+    engine.remove_documents([root / "shipping.md"], actor="bob")
+    engine.reset(actor="carol")
+    assert [record["actor"] for record in AuditLog(log_path).entries()] == [
+        "alice", "bob", "carol",
+    ]
+
+
+def test_api_audit_actor_prefers_name_then_tenant():
+    from laya_rag import api
+    from laya_rag.auth import Principal
+
+    assert api._audit_actor(Principal(token="t", name="alice", tenant="acme")) == "alice"
+    assert api._audit_actor(Principal(token="t", tenant="acme")) == "acme"
+    assert api._audit_actor(Principal(token="t", anonymous=True)) is None

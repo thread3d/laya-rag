@@ -263,7 +263,7 @@ class LocalBackend:
         }
 
     def index(self, paths: Sequence[str], rebuild: bool) -> dict[str, Any]:
-        report = self.engine().index_paths(list(paths), rebuild=rebuild)
+        report = self.engine().index_paths(list(paths), rebuild=rebuild, actor="mcp")
         payload = report.as_dict()
         if report.documents == 0:
             payload["note"] = "no readable text documents were found under the given paths"
@@ -271,12 +271,12 @@ class LocalBackend:
 
     def reset(self) -> dict[str, Any]:
         engine = self.engine()
-        engine.reset()
+        engine.reset(actor="mcp")
         return {"status": "ok", "index_dir": str(self.config.index_dir)}
 
     def delete(self, paths: Sequence[str], doc_ids: Sequence[str]) -> dict[str, Any]:
         engine = self.engine()
-        removed = engine.remove_documents(list(paths), list(doc_ids))
+        removed = engine.remove_documents(list(paths), list(doc_ids), actor="mcp")
         return {"removed_chunks": removed, "total_chunks": engine.stats()["index"]["chunks"]}
 
 

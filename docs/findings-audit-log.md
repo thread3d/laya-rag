@@ -30,8 +30,11 @@ written, so the mutation stands and the gap surfaces through verification.
 
 ## What this does not show
 
-- **No actor.** The engine layer has no identity context, so `actor` is `null`; the HTTP layer knows
-  the `Principal` and could enrich the record, which is the remaining wiring.
+- **Attribution is surface-supplied.** The engine has no identity context, so `actor` is a
+  parameter of the mutation methods: the HTTP layer passes the authenticated principal's name (or
+  tenant, `None` when anonymous), and the CLI and MCP backends pass the fixed labels `cli` / `mcp`.
+  A caller that omits it records `null`, which is visibly unattributed rather than silently
+  misattributed.
 - **Not a security boundary on its own.** Anyone who can rewrite the file can recompute the whole
   chain. What it catches is edit-after-the-fact by someone who did not; anchoring the head hash
   elsewhere is what would make forgery harder.

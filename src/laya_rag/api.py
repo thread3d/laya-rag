@@ -299,6 +299,15 @@ def _engine_holder(config: EngineConfig) -> tuple[dict[str, RagEngine], Any]:
     return holder, get_engine
 
 
+def _audit_actor(principal: Principal) -> str | None:
+    """The label an index mutation records in the audit log.
+
+    The principal's name when it has one, else its tenant; `None` for an anonymous caller, so
+    an unauthenticated mutation is visibly unattributed rather than silently attributed.
+    """
+    return principal.name or principal.tenant
+
+
 def create_app(config: EngineConfig | None = None) -> FastAPI:
     """Build the FastAPI application for ``config``."""
     config = config or EngineConfig()
@@ -652,6 +661,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 request.paths,
                 rebuild=request.rebuild,
                 prune=request.prune,
+                actor=_audit_actor(principal),
                 **({"extensions": extensions} if extensions else {}),
             )
         except BuildInProgressError as exc:
@@ -710,6 +720,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                         rebuild=request.rebuild,
                         prune=request.prune,
                         progress=counters.put,
+                        actor=_audit_actor(principal),
                         **({"extensions": extensions} if extensions else {}),
                     )
                 except BuildInProgressError as exc:
@@ -767,7 +778,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                     headers={"Idempotency-Replayed": "true"},
                 )
         try:
-            engine.reset()
+            engine.reset(_audit_actor(principal))
         except BuildInProgressError as exc:
             if idempotency_key and scope is not None:
                 idempotency.abandon(scope, idempotency_key)
@@ -833,7 +844,9 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         require_write(principal)
         engine = get_engine()
         try:
-            removed = engine.remove_documents(request.paths, request.doc_ids)
+            removed = engine.remove_documents(
+                request.paths, request.doc_ids, actor=_audit_actor(principal)
+            )
         except ValueError as exc:
             raise APIProblem(409, CODE_INDEX_NOT_UPDATABLE, str(exc)) from exc
         return {
