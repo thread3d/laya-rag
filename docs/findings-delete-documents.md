@@ -45,10 +45,13 @@ reports the append-only refusal. `make test`: **1304 passed, 5 deselected**.
 
 ## What this does not show
 
-- **The on-disk backend tombstones, it does not compact.** Removing documents there leaves their
-  records and vectors on disk and skips them at query time, so the file does not shrink and the
-  tombstone set can grow; a `--rebuild` is still how to reclaim space. Replacing a document's
-  content in place is also still unsupported, which is the rest of the incremental-lifecycle item.
+- **Compaction is explicit, not automatic.** Tombstoned records and vectors stay on disk until
+  `RagEngine.compact()` (`laya-rag compact`) rewrites the live chunks into a staging directory and
+  swaps it in — streaming the stored vectors in batches, so **no embedding pass** is paid and the
+  matrix is never fully resident. An index whose every chunk was removed is deleted outright.
+- **In-place content replacement is still unsupported** on the on-disk backend: a changed document
+  is removed (tombstoned) and re-appended, which needs a rebuild for the append-only dense half.
+  That is the rest of the incremental-lifecycle item.
 - Removal is not transactional across the two files: a crash between `index.save` and the lexical
   save would leave a dense index missing documents the lexical channel still holds. The engine
   tolerates that (unknown chunk ids resolve to `None`), but a rebuild is the recovery.

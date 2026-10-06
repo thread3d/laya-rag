@@ -650,6 +650,12 @@ class RagEngine:
         bm25_dir = self.config.index_dir / BM25_DIRNAME
         if bm25_dir.exists():
             shutil.rmtree(bm25_dir)
+        if not chunks:
+            # Nothing survived: a packed postings file with no postings cannot be mmapped,
+            # so drop the channel rather than writing an unusable one. The dense half is all
+            # tombstones and `compact()` resets it.
+            self._lexical = None
+            return
         lexical = OnDiskBM25(
             bm25_dir,
             stem=self.config.lexical_stem,
@@ -658,6 +664,52 @@ class RagEngine:
         )
         lexical.build((chunk.chunk_id, chunk.index_text) for chunk in chunks)
         self._lexical = lexical
+
+    def compact(self) -> int:
+        """Rewrite the on-disk index without tombstones, without re-embedding.
+
+        A no-op for the in-memory backend and when nothing is tombstoned: it returns the live
+        chunk count. On the on-disk backend the live chunk records and their stored vectors are
+        streamed in batches into a staging directory, which is then swapped in, so the vector
+        matrix is never fully resident and no embedding pass is paid. An index whose every chunk
+        was removed is deleted outright. Returns the number of live chunks.
+        """
+        if not self.has_index():
+            return 0
+        if self.config.resolved_index_backend != "ondisk":
+            return len(self.index)
+        index = self.index
+        if not getattr(index, "_deleted", None):
+            return len(index)
+        chunks = index.chunks
+        if not chunks:
+            self.reset()
+            return 0
+        from .ondisk import DENSE_DIRNAME, OnDiskVectorIndex
+
+        dense_dir = self.config.index_dir / DENSE_DIRNAME
+        staging = dense_dir.parent / f"{DENSE_DIRNAME}.compact"
+        if staging.exists():
+            shutil.rmtree(staging)
+        fresh = OnDiskVectorIndex(staging, dim=index.dim)
+        batch_size = 20000
+        for start in range(0, len(chunks), batch_size):
+            batch = chunks[start : start + batch_size]
+            vectors = np.asarray(
+                [index.vector(chunk.chunk_id) for chunk in batch], dtype=np.float32
+            )
+            fresh.add(batch, vectors)
+        fresh.finalize()
+        if dense_dir.exists():
+            shutil.rmtree(dense_dir)
+        staging.rename(dense_dir)
+        self._index = OnDiskVectorIndex.open(dense_dir)
+        self._rebuild_ondisk_lexical(chunks)
+        self._sparse = None
+        self._sparse_encoder = None
+        self._sparse_query_cache = {}
+        self._record_audit("compact", {"live_chunks": len(chunks)})
+        return len(chunks)
 
     def remove_documents(
         self,

@@ -101,3 +101,40 @@ def test_delete_documents_route_removes_and_reports(tmp_path, monkeypatch):
     body = response.json()
     assert body["removed_chunks"] > 0
     assert body["total_chunks"] == engine.stats()["index"]["chunks"]
+
+
+def test_compact_reclaims_tombstoned_on_disk_documents(tmp_path):
+    from laya_rag.ondisk import DENSE_DIRNAME
+
+    engine = _engine(tmp_path, index_backend="ondisk")
+    engine.index_paths([_corpus(tmp_path)], rebuild=True)
+    engine.remove_documents([tmp_path / "corpus" / "shipping.md"])
+    live = engine.stats()["index"]["chunks"]
+
+    assert engine.compact() == live
+    assert engine.stats()["index"]["chunks"] == live
+    deleted_path = engine.config.index_dir / DENSE_DIRNAME / "deleted.json"
+    assert not deleted_path.exists() or deleted_path.read_text(encoding="utf-8").strip() in ("[]", "")
+    assert all("shipping" not in p["path"] for p in engine.query("shipping cost").passages)
+
+    # The compacted index reopens cleanly and still excludes the removed document.
+    reopened = _engine(tmp_path, index_backend="ondisk")
+    assert reopened.stats()["index"]["chunks"] == live
+    assert all("shipping" not in p["path"] for p in reopened.query("shipping cost").passages)
+
+
+def test_compact_on_the_memory_backend_is_a_no_op(tmp_path):
+    engine = _engine(tmp_path)
+    engine.index_paths([_corpus(tmp_path)], rebuild=True)
+    before = engine.stats()["index"]["chunks"]
+    assert engine.compact() == before
+    assert engine.stats()["index"]["chunks"] == before
+
+
+def test_compacting_an_entirely_deleted_index_resets_it(tmp_path):
+    engine = _engine(tmp_path, index_backend="ondisk")
+    root = _corpus(tmp_path)
+    engine.index_paths([root], rebuild=True)
+    engine.remove_documents([root / "refunds.md", root / "shipping.md"])
+    assert engine.compact() == 0
+    assert engine.has_index() is False

@@ -205,3 +205,19 @@ def test_cli_delete_reports_an_append_only_backend(monkeypatch, capsys):
     monkeypatch.setattr(cli, "RagEngine", _RefusingEngine)
     assert cli.main(["delete", "a.md"]) == 2
     assert "append-only" in capsys.readouterr().err
+
+
+def test_compact_parser_and_forwarding(monkeypatch):
+    captured: dict = {}
+
+    class _FakeEngine:
+        def __init__(self, config):
+            pass
+
+        def compact(self):
+            captured["called"] = True
+            return 5
+
+    monkeypatch.setattr(cli, "RagEngine", _FakeEngine)
+    assert cli.main(["compact", "--json"]) == 0
+    assert captured["called"] is True

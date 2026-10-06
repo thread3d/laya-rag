@@ -241,6 +241,18 @@ def _cmd_extract(args: argparse.Namespace, config: EngineConfig) -> int:
     return 0
 
 
+def _cmd_compact(args: argparse.Namespace, config: EngineConfig) -> int:
+    """Reclaim the on-disk index's tombstoned documents, without re-embedding."""
+    engine = RagEngine(config)
+    remaining = engine.compact()
+    _emit(
+        {"live_chunks": remaining, "index_dir": str(config.index_dir)},
+        args.json,
+        f"compacted index: {remaining} live chunk(s)",
+    )
+    return 0
+
+
 def _cmd_doctor(args: argparse.Namespace, config: EngineConfig) -> int:
     """Report whether the checkpoint can actually be loaded."""
     engine = RagEngine(config)
@@ -374,6 +386,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     extract.add_argument("--json", action="store_true")
     extract.set_defaults(func=_cmd_extract)
+
+    compact = sub.add_parser(
+        "compact", help="rewrite the on-disk index without tombstoned documents"
+    )
+    compact.add_argument("--json", action="store_true")
+    compact.set_defaults(func=_cmd_compact)
 
     doctor = sub.add_parser("doctor", help="check that the checkpoint loads")
     doctor.add_argument("--json", action="store_true")
