@@ -333,14 +333,24 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
 
 ## 10. What is external, and stated as remaining
 
-| item | blocked by |
+| item | status now |
 | --- | --- |
-| MTEB submission (4.4) | upload + submission; no code blocker left once 4.3 packages the student |
-| TREC RAG, KILT | NIST corpus/gold-nugget access; an entity linker and a full submission stack |
-| BioASQ / FEVER / NQ at full size | disk — 28 GB free against 14.9M / 5.4M / 2.7M documents |
+| MTEB submission (4.4) | **code blocker gone; run + upload external.** The engine itself is representable — `tools/mteb_search.py` implements MTEB v2's `SearchProtocol` and is verified against mteb 2.22.5. A full SciFact evaluation forked ~33 harness workers and stalled in this environment, so no score is claimed; the upload remains external |
+| TREC RAG, KILT | external — NIST corpus/gold-nugget access; an entity linker and a full submission stack |
+| BioASQ / FEVER / NQ at full size | **not disk-bound** (this host has 471 GB free). BioASQ is **gated** on HuggingFace; FEVER and Climate-FEVER are downloadable and are running as lexical rows; HotpotQA's full run resumes from its checkpoint |
+| Robust04 / TREC-NEWS / specter / signal1m | **licensing-gated** — the UKP mirror now 404s them and the HuggingFace copies return 401 anonymously; not a mirror glitch or a disk problem |
 | MIRACL / MMTEB | per-language Wikipedia indexes; the multilingual encoder would need measuring |
 | ViDoRe / MIRACL-VISION | the engine is text-only: no OCR or vision path |
 | An LLM decomposer / agentic loop | `[llm]`; every resulting number belongs to the generator, not the engine |
+| The ~300 claim/corpus pairs and ~200 composed answers | **human labelling**; `tools/labelling_queue.py` builds and scores the queue, it does not label |
+| 2WikiMultiHopQA | **harness built** (`tools/twowiki.py`, `make two-wiki`); the retrieval run is queued behind the corpus jobs |
+| On-disk in-place content replacement | the append-only dense half tombstones and compacts; replacing a document's content still needs a rebuild |
+
+**The one-heavy-job rule is enforced.** Three corpus builds plus a harness launched together
+crashed this host (no work was lost — every job resumes from its checkpoint). The 26 long-running
+tools now take an exclusive lock via `tools/heavylock.py` (`make heavy-status`); a second job exits
+`2` before reading a corpus, and the kernel drops the lock on a crash. `LAYA_RAG_ALLOW_CONCURRENT=1`
+overrides deliberately. See `docs/findings-heavy-job-lock.md`.
 
 ---
 
@@ -648,3 +658,21 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   the "28 GB free disk" block is **stale** (471 GB here) and the five still-unmeasured BEIR datasets
   are **licensing-gated**, not mirror glitches; FEVER and Climate-FEVER are running as lexical rows
   and HotpotQA's full run is restarted from its checkpoint. Suite **1292 passed, 5 deselected**.
+- 2026-10-06 — **Second pass: the remaining capability and safety items, then the corpus runs.**
+  Landed after the first entry: **delete-by-id** reachable by `DELETE /v1/documents`, `laya-rag
+  delete` and a write-gated MCP tool, with the append-only on-disk backend **tombstoning** and
+  **compacting** (`RagEngine.compact()`) without re-embedding; **retrieval-time predicate
+  pushdown** (the on-disk dense search takes `allow`, and the engine screens dense/lexical/sparse
+  before fusion); a **`FUSION_MODE=convex`** rule plus a measured **fusion ablation** on SciFact
+  (convex 0.7412 best arm, but only **+0.0092 over RRF k=60, ns**; significantly better than
+  CombSUM); a **hash-chained audit log** with surface-supplied actors; a **budgeted evidence
+  context**; an **extractive citation-first composer** (verbatim spans only); an **LLM-free nugget
+  and whole-fact recall protocol** (claim-recall@10 0.7438 fused / 0.7803 CE; fact recall 0.4644 /
+  0.5452; both 0.8480 at depth 100); the **bridge-conditioned gate column** behind
+  `GATE_BRIDGE_FEATURE` (wired, not measured); a **labelling harness** for the two human sets; a
+  **leakage audit** (392 reports, zero findings); and the **2WikiMultiHopQA adapter** (`make
+  two-wiki`). **Then the host crashed** with three corpus builds and a harness running at once. No
+  work was lost (checkpoints held), and the rule is now enforced: 26 long-running tools take an
+  exclusive `flock` (`make heavy-status`), with `twowiki`/`musique` embedding checkpoints added.
+  The corpus rows resume **one at a time**: Climate-FEVER, then FEVER, then HotpotQA, then 2Wiki.
+  Suite **1391 passed, 5 deselected**.
