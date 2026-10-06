@@ -39,11 +39,15 @@ Negatives are results here, and these are the ones worth keeping:
 
 ## What is left, and what it costs
 
-1. **Phase 4.2, eight datasets.** Not a code problem. `specter` and `signal1m` are **404 on the public
-   mirror**, Robust04 and TREC-NEWS return **stubs**, and the rest are 2.7M–8.8M documents. Measured
-   rates: NQ (2.68M) completed in ~25 min, but HotpotQA degraded to **~0.04 q/s** on its later queries,
-   which is 10–40 hours for one lexical-only row. `--limit-queries` gives a labelled seeded subset
-   (~1 h per corpus).
+1. **Phase 4.2, the remaining datasets.** Not a code problem, and the reason has changed since
+   this page was first written. The UKP mirror now returns **404** for `robust04`, `trec-news`,
+   `specter`, `signal1m` and `bioasq` (not a transient stub — the files are gone), and the
+   HuggingFace copies under `BeIR/*` are **gated** (401 anonymously): they need a signed license
+   or a token, so the block is **access/licensing**, not disk. `fever` and `climate-fever` **are**
+   on the mirror and are running as lexical rows (~6 h each, resumable from
+   `--lexical-checkpoint`); NQ (2.68M) completed in ~25 min; HotpotQA degrades to **~0.04 q/s** on
+   its later queries, which is 10–40 hours for one lexical-only row. `--limit-queries` gives a
+   labelled seeded subset (~1 h per corpus).
 2. **Phase 4.4, the MTEB submission.** Requires an upload; not offline work.
 3. **HotpotQA's full query set.** Its 600-query subset reads **0.6365** against a published 0.603; the
    full 7,405-query run is owed and resumes from a checkpoint at 1,640/7,405.

@@ -291,6 +291,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--model-name", default=MODEL_NAME)
     ap.add_argument("--task", default="SciFact", help="an MTEB task name to evaluate")
     ap.add_argument("--cache", default=None, help="MTEB_CACHE directory (must be writable)")
+    ap.add_argument("--num-proc", type=int, default=1,
+                    help="dataloading processes; 1 keeps the engine single-process")
     return ap.parse_args(argv)
 
 
@@ -308,7 +310,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     meta = build_model_meta()
     model = meta.load_model()
     task = mteb.get_task(args.task)
-    result = mteb.evaluate(model, task)
+    result = mteb.evaluate(model, task, num_proc=args.num_proc)
     print(result)
     return 0
 
