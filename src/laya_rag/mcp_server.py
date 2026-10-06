@@ -45,6 +45,7 @@ from .rerank import DecisionError
 from .schemas import (
     AdjudicateResponse,
     ChunkRecord,
+    DeleteDocumentsResponse,
     DocumentRecord,
     IndexReportResponse,
     ResetResponse,
@@ -273,6 +274,11 @@ class LocalBackend:
         engine.reset()
         return {"status": "ok", "index_dir": str(self.config.index_dir)}
 
+    def delete(self, paths: Sequence[str], doc_ids: Sequence[str]) -> dict[str, Any]:
+        engine = self.engine()
+        removed = engine.remove_documents(list(paths), list(doc_ids))
+        return {"removed_chunks": removed, "total_chunks": engine.stats()["index"]["chunks"]}
+
 
 class HttpBackend:
     """Proxies to a running ``laya-rag-serve`` over HTTP."""
@@ -406,6 +412,11 @@ class HttpBackend:
 
     def reset(self) -> dict[str, Any]:
         return self._request("DELETE", "/v1/index")
+
+    def delete(self, paths: Sequence[str], doc_ids: Sequence[str]) -> dict[str, Any]:
+        return self._request(
+            "DELETE", "/v1/documents", {"paths": list(paths), "doc_ids": list(doc_ids)}
+        )
 
 
 def make_backend(config: EngineConfig) -> LocalBackend | HttpBackend:
@@ -701,6 +712,29 @@ def build_server(
                 raise ToolError('reset_index: pass confirm="reset" to delete the index')
             body = _call("reset_index", backend.reset)
             return ResetResponse(**body)
+
+        @server.tool(
+            title="Delete documents",
+            annotations=ToolAnnotations(
+                read_only_hint=False, destructive_hint=True, idempotent_hint=True
+            ),
+        )
+        def delete_documents(
+            paths: list[str] | None = None, doc_ids: list[str] | None = None
+        ) -> DeleteDocumentsResponse:
+            """Remove documents from the index by path or document id.
+
+            Cheaper than a rebuild: the lexical channel is rebuilt from the surviving chunks.
+            The append-only on-disk backend refuses, and the tool reports that as an error.
+            Removing an already-absent document removes nothing.
+            """
+            if not paths and not doc_ids:
+                raise ToolError("delete_documents: pass paths, doc_ids, or both")
+            try:
+                body = _call("delete_documents", backend.delete, paths or [], doc_ids or [])
+            except Exception as exc:  # noqa: BLE001 - surfaced as a tool error
+                raise ToolError(f"delete_documents: {exc}") from exc
+            return DeleteDocumentsResponse(**body)
 
     # -- resources -------------------------------------------------------
     @server.resource(

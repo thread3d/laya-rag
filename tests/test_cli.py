@@ -169,3 +169,39 @@ def test_integrity_without_an_index_is_an_error(monkeypatch, capsys):
     args = cli.build_parser().parse_args(["integrity"])
     assert cli._cmd_integrity(args, EngineConfig()) == 3
     assert "no index" in capsys.readouterr().err
+
+
+def test_delete_parser_collects_paths_and_doc_ids():
+    args = cli.build_parser().parse_args(["delete", "a.md", "b.md", "--doc-id", "d1"])
+    assert args.paths == ["a.md", "b.md"]
+    assert args.doc_ids == ["d1"]
+
+
+def test_cli_delete_forwards_to_the_engine(monkeypatch):
+    captured: dict = {}
+
+    class _FakeEngine:
+        def __init__(self, config):
+            pass
+
+        def remove_documents(self, paths, doc_ids):
+            captured["paths"] = list(paths)
+            captured["doc_ids"] = list(doc_ids)
+            return 3
+
+    monkeypatch.setattr(cli, "RagEngine", _FakeEngine)
+    assert cli.main(["delete", "a.md", "--doc-id", "d1", "--json"]) == 0
+    assert captured == {"paths": ["a.md"], "doc_ids": ["d1"]}
+
+
+def test_cli_delete_reports_an_append_only_backend(monkeypatch, capsys):
+    class _RefusingEngine:
+        def __init__(self, config):
+            pass
+
+        def remove_documents(self, paths, doc_ids):
+            raise ValueError("the on-disk index backend is append-only")
+
+    monkeypatch.setattr(cli, "RagEngine", _RefusingEngine)
+    assert cli.main(["delete", "a.md"]) == 2
+    assert "append-only" in capsys.readouterr().err

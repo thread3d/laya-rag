@@ -267,4 +267,18 @@ class ResetResponse(BaseModel):
     index_dir: str
 
 
+class DeleteDocumentsRequest(BaseModel):
+    """A request to remove documents from the index without rebuilding it."""
+
+    paths: list[str] = Field(default_factory=list)
+    doc_ids: list[str] = Field(default_factory=list)
+
+
+class DeleteDocumentsResponse(BaseModel):
+    """Outcome of a delete: how many chunks were removed and what remains."""
+
+    removed_chunks: int
+    total_chunks: int
+
+
 Problem.model_rebuild()

@@ -45,6 +45,7 @@ from .paging import MAX_LIMIT, paginate
 from .problems import (
     CODE_BUILD_IN_PROGRESS,
     CODE_COMPOSE_DISABLED,
+    CODE_INDEX_NOT_UPDATABLE,
     CODE_MODEL_UNAVAILABLE,
     PROBLEM_MEDIA_TYPE,
     APIProblem,
@@ -58,6 +59,8 @@ from .rerank import DecisionError
 from .schemas import (
     AdjudicateResponse,
     ChunkListResponse,
+    DeleteDocumentsRequest,
+    DeleteDocumentsResponse,
     DocumentListResponse,
     HealthResponse,
     IndexReportResponse,
@@ -807,6 +810,36 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         response.headers["Deprecation"] = f"@{HEALTH_DEPRECATED_AT}"
         response.headers["Link"] = '</v1/index>; rel="successor-version"'
         return reset_index(http_request, idempotency_key, principal)
+
+    @app.delete(
+        "/v1/documents",
+        tags=["indexing"],
+        operation_id="delete_documents",
+        response_model=DeleteDocumentsResponse,
+        summary="Remove documents from the index",
+        responses=_WRITE_ERRORS,
+    )
+    def delete_documents(
+        request: DeleteDocumentsRequest,
+        principal: Principal = Depends(authorise),
+    ) -> Any:
+        """Remove documents by path or doc id, without rebuilding the whole index.
+
+        Removal rebuilds the lexical channel from the surviving chunks, so the two
+        channels cannot disagree. The on-disk backend is append-only and answers
+        ``409 index_not_updatable``; rebuild it instead. A request naming nothing
+        removes nothing.
+        """
+        require_write(principal)
+        engine = get_engine()
+        try:
+            removed = engine.remove_documents(request.paths, request.doc_ids)
+        except ValueError as exc:
+            raise APIProblem(409, CODE_INDEX_NOT_UPDATABLE, str(exc)) from exc
+        return {
+            "removed_chunks": removed,
+            "total_chunks": engine.stats()["index"]["chunks"],
+        }
 
     # -- retrieval -------------------------------------------------------
     @app.post(

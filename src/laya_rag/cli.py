@@ -212,6 +212,22 @@ def _cmd_reset(args: argparse.Namespace, config: EngineConfig) -> int:
     return 0
 
 
+def _cmd_delete(args: argparse.Namespace, config: EngineConfig) -> int:
+    """Remove documents without rebuilding the whole index."""
+    engine = RagEngine(config)
+    try:
+        removed = engine.remove_documents(args.paths, args.doc_ids)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(
+        {"removed_chunks": removed, "index_dir": str(config.index_dir)},
+        args.json,
+        f"removed {removed} chunk(s)",
+    )
+    return 0
+
+
 def _cmd_doctor(args: argparse.Namespace, config: EngineConfig) -> int:
     """Report whether the checkpoint can actually be loaded."""
     engine = RagEngine(config)
@@ -323,6 +339,15 @@ def build_parser() -> argparse.ArgumentParser:
     reset = sub.add_parser("reset", help="delete the index")
     reset.add_argument("--json", action="store_true")
     reset.set_defaults(func=_cmd_reset)
+
+    delete = sub.add_parser("delete", help="remove documents from the index")
+    delete.add_argument("paths", nargs="*", help="paths whose documents should be removed")
+    delete.add_argument(
+        "--doc-id", action="append", default=[], dest="doc_ids",
+        help="a document id to remove; repeat for more",
+    )
+    delete.add_argument("--json", action="store_true")
+    delete.set_defaults(func=_cmd_delete)
 
     doctor = sub.add_parser("doctor", help="check that the checkpoint loads")
     doctor.add_argument("--json", action="store_true")

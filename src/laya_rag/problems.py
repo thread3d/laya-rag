@@ -57,6 +57,7 @@ DEFAULT_CODES: dict[int, str] = {
 CODE_INDEX_NOT_BUILT = "index_not_built"
 CODE_MODEL_UNAVAILABLE = "model_unavailable"
 CODE_BUILD_IN_PROGRESS = "build_in_progress"
+CODE_INDEX_NOT_UPDATABLE = "index_not_updatable"
 CODE_TENANT_MISMATCH = "tenant_mismatch"
 CODE_PATH_NOT_ALLOWED = "path_not_allowed"
 CODE_SCOPE_REQUIRED = "insufficient_scope"

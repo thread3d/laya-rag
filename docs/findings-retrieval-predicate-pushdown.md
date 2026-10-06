@@ -30,9 +30,9 @@ sparse channels have no predicate yet; it is now the authority for those channel
   parameter — a dense search under an ACL selects from the whole index rather than a fixed
   over-fetch window.
 - **Not yet:** the lexical and sparse channels still filter after fusion (they expose no
-  predicate), so the cost win is partial; `remove_doc_ids`/`remove_paths` still have no HTTP, MCP
-  or CLI route; and the on-disk backend still refuses incremental updates. Those are the rest of
-  Bet 8.
+  predicate), so the cost win is partial, and the on-disk backend still refuses incremental
+  updates. Delete-by-id is now reachable by HTTP and CLI
+  ([`findings-delete-documents.md`](findings-delete-documents.md)); MCP is not yet wired.
 
 ## Verification
 
