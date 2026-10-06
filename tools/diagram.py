@@ -106,10 +106,10 @@ def draw(out: Path) -> None:
 
     # ── engine pipeline ──────────────────────────────────────────────────
     stages = [
-        "chunk  \u2192  embed  \u2192  index",
-        "hybrid recall   (dense + BM25)",
-        "Laya re-rank  +  answerability gate",
-        "evidence bundle, with calibrated probabilities",
+        "chunk  \u2192  embed  \u2192  index\n(delete-by-id tombstones; compact reclaims)",
+        "hybrid recall  (dense + BM25)\ntrust/ACL-screened before fusion; pool shape reported",
+        "Laya re-rank  +  answerability gate\n(optional feature gate; bridge column opt-in)",
+        "evidence bundle, with calibrated probabilities\nextractive composer emits verbatim spans",
     ]
     xs, width, height = 5.05, 6.50, 0.55
     ys = [4.45, 3.60, 2.75, 1.90]
@@ -118,11 +118,15 @@ def draw(out: Path) -> None:
         _box(ax, xs, y, width, height, text,
              face=STAGE_LAST if last else STAGE_FACE,
              edge=BLUE if last else STAGE_EDGE,
-             fontsize=10 if not last else 9.6,
+             fontsize=8.6 if not last else 8.8,
              weight="bold" if last else "normal", radius=0.05, lw=1.2)
         if i:
             _arrow(ax, (xs + width / 2, ys[i - 1]), (xs + width / 2, y + height),
                    lw=1.5, scale=13)
+
+    ax.text(xs + 0.02, 1.20,
+            "index mutations are hash-chained (make audit-verify)",
+            fontsize=8.4, style="italic", color=GREY, ha="left", va="center")
 
     # ── the two directions across the wire ───────────────────────────────
     _arrow(ax, (3.15, 3.92), (4.75, 3.92))

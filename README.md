@@ -5,7 +5,7 @@ retrieval and decision engine, with a command line, an HTTP API and a web interf
 
 Clients meet the engine over a local HTTP service:
 
-![Architecture: browser, curl and CLI clients call the local Python engine over HTTP on port 8077; the engine chunks, embeds and indexes, recalls with dense + BM25, re-ranks and gates answerability with Laya, and returns an evidence bundle with calibrated probabilities. It loads a Laya torch checkpoint, and the caller composes the answer, or not.](docs/architecture.png)
+![Architecture: browser, curl and CLI clients call the local Python engine over HTTP on port 8077; the engine chunks, embeds and indexes (delete-by-id tombstones, compact reclaims), recalls with dense + BM25 screened by the trust/ACL predicate before fusion and reports the pool's shape, re-ranks and gates answerability with Laya (an optional feature gate, with the bridge-conditioned column opt-in), and returns an evidence bundle with calibrated probabilities, from which an extractive composer emits verbatim spans. Every index mutation is written to a hash-chained audit log. It loads a Laya torch checkpoint, and the caller composes the answer, or not.](docs/architecture.png)
 
 ## Why the split is shaped this way
 
@@ -113,14 +113,22 @@ Verify everything is wired up:
 
 # Report index drift: deleted documents, duplicate and near-duplicate chunks
 .venv/bin/laya-rag integrity --near-duplicates
+
+# Remove specific documents by id or path, without a rebuild
+.venv/bin/laya-rag delete --doc-id doc-17 path/to/gone.md
+
+# On the append-only on-disk backend, reclaim tombstoned space without re-embedding
+.venv/bin/laya-rag compact
 ```
 
-`query` prints Laya's calibrated verdict, the passages it selected with their sources, and which
-recall channel found each one. `verify` is model-free and checks citations and quoted spans
-only; `adjudicate` re-retrieves across the corpus and reuses the measured answerability
-question. `integrity` reads the index and reports; it never repairs, because the one safe
-automatic rule (prune the paths of a directory being re-indexed) already lives in `index`.
-Use `--json` for machine-readable output on any of them.
+`query` prints Laya's calibrated verdict, the passages it selected with their sources, which
+recall channel found each one, and the shape of the retrieval pool it built (`requested` vs
+`searched`, each channel's contribution). `verify` is model-free and checks citations and quoted
+spans only; `adjudicate` re-retrieves across the corpus and reuses the measured answerability
+question. `delete` removes documents by id and/or path; on the append-only on-disk backend it
+tombstones them and `compact` rewrites the store without the tombstones. `integrity` reads the index
+and reports; it never repairs, because the one safe automatic rule (prune the paths of a directory
+being re-indexed) already lives in `index`. Use `--json` for machine-readable output on any of them.
 
 ### HTTP service
 
@@ -140,6 +148,7 @@ Use `--json` for machine-readable output on any of them.
 | `GET /v1/integrity` | index drift: deleted documents, duplicate and near-duplicate chunks (`?near_duplicates=true&threshold=0.85`) |
 | `POST /v1/index` | `{paths: [...], rebuild?: bool}` — idempotent with `Idempotency-Key` |
 | `DELETE /v1/index` | delete the index (standard verb; `POST /v1/reset` is the deprecated alias) |
+| `DELETE /v1/documents` | `{ids: [...]}` or `{paths: [...]}` — remove specific documents without a rebuild; on the append-only on-disk backend this tombstones and compacts |
 | `POST /v1/index/stream` | the same body, but streams running counters (`progress` events, then one `done`); NDJSON, or SSE with `Accept: text/event-stream` |
 | `POST /v1/query` | `{query, top_k?, retrieve_k?, relevance_threshold?, answerability_threshold?, max_passage_chars?}` |
 | `POST /v1/compose` | `{query, passages: [...]}` — streams composed prose (NDJSON or SSE) |
@@ -618,6 +627,12 @@ make citation-report   # citation mechanics over composed answers (the engine-si
 make distill-verify    # is the exported distilled encoder faithful to its checkpoint?
 make ondisk-scale      # peak build RSS against corpus size and vocabulary
 make ann-bench         # approximate vs exhaustive dense search, including IVF-PQ rescore
+make calibration-report        # reliability, ECE, Brier, NLL and risk-coverage of the gate
+make nugget-recall             # claim-recall and whole-fact recall, with no LLM judge
+make leakage-audit             # dilution signature and empty held-out blocks, across every report
+make generator-free-iteration  # does entity-probe expansion raise gold coverage? (no model)
+make quantization-probe        # what int8/fp16/PQ cost on the shipped encoder's own vectors
+make mteb-eval                 # MTEB v2 SearchProtocol conformance over the engine itself
 ```
 
 Four retrievers run over the same corpus, qrels, evaluator and top-k, so the difference between
@@ -721,6 +736,51 @@ drop is marginally *better* than the published BM25 settings (+0.004 / +0.007 nD
 And **Laya's decision head is a stronger filter than a ranker** — reordering BM25's candidates by it
 lowered nDCG@10 on both datasets (SciFact 0.654 → 0.470). It still filters and still gates
 answerability, which is what those decisions are calibrated for.
+
+### Answerability calibration — is the probability meaningful?
+
+The gate reports a probability, so it can be scored as one. On MultiHop-RAG's 601 labelled queries the
+shipped single-scalar decision is **at chance and miscalibrated** — ROC-AUC **0.5087**, ECE **0.3085**,
+Brier **0.3650**, risk@80 **0.4927** — while a held-out **12-feature gate** trained on the retrieval
+signals the engine already emits reads AUC **0.8244** and ECE **0.0892** on the same queries. One scalar
+cannot carry a probability; the features to replace it are already there.
+
+![Reliability of the answerability decision: the shipped scalar against the held-out feature gate](docs/charts/reliability.png)
+
+`make calibration-report` regenerates the diagram. The boundary is stated in
+[`docs/findings-calibration-row.md`](docs/findings-calibration-row.md): MultiHop-RAG is the only corpus
+here that labels a negative class, so the row is in-domain.
+
+### Generator-free iteration, Stage 1 — the pool bet
+
+The engine retrieves once. The audit's largest bet is that *iterating* — not a stronger scorer — is the
+missing lever, and its first stage is testable with no model and no LLM: if a second retrieval pass,
+driven by entities the first pool found but the query did not name, raises the pool's gold-fact
+coverage, the mechanism is real. `make generator-free-iteration`, on 2,255 MultiHop queries,
+lexical-only:
+
+![Pool coverage and ceiling by expansion round, and the per-question-type gain](docs/charts/generator_free_iteration.png)
+
+**Coverage rises 0.8326 → 0.8937 (+0.0611, p<0.0001)** and the pool's **ceiling MAP@10 0.5955 → 0.6203
+(+0.0248)**; **+0.0510 coverage and +0.0210 ceiling survive a shuffled-probe control**, so it is the
+bridge and not "search more". The third panel is the strongest evidence: **inference queries gain five
+times what comparison queries gain** — a comparison query names both entities, so its first pool already
+holds what a probe would search for. One round saturates at four probes and the pool triples (100 → 327).
+The ceiling is a *bound*: no ranker has captured it here, which is the next experiment, and coverage
+alone already falsified on MuSiQue.
+
+### What compression would cost the dense channel
+
+The dense channel stores one float32 per dimension per chunk. `make quantization-probe` measures what
+int8, fp16 and product quantization cost on the **shipped encoder's own vectors** (`bge-small`, cached),
+by self-retrieval against the exact scan:
+
+![Recall@10 against index bytes per vector for fp16, int8, PQ and flat](docs/charts/quantization.png)
+
+**fp16 halves the index at no measured recall cost**; **int8 is 3.8× smaller for −0.66 (scidocs) /
+−1.36 (fiqa) recall@10**; **PQ m=48/8-bit is 22–32× smaller but loses 31–41 points**. These are raw
+codec numbers: the engine's shipped approximate path is IVF-PQ **with `rescore 500`**, measured at 0.998
+recall, so the PQ row is what compression costs, not what the engine loses.
 
 ## Running long jobs: one at a time
 
@@ -846,6 +906,13 @@ Shipped `bge-small` bi-encoder, corrected evaluator, 95% bootstrap intervals ove
 last two columns are the multi-model dense ensemble: `bge-small` + `bge-base` + `bge-large`
 fused by RRF, alone and with BM25 — a single configuration, not a per-dataset choice:
 
+**Eleven of BEIR's eighteen datasets now have a report**, counted from `eval/beir/` by
+`make consistency-check` (which fails if any document states a different number): the five below
+carry the multi-model comparison, while `nq`, `dbpedia-entity`, `quora`, `webis-touche2020`,
+`hotpotqa` and `climate-fever` have the lexical row. `climate-fever` is also the worst outlier in the
+lexical control below (**−0.052** against its published anchor). The other seven are **access-gated**
+— the mirror 404s them and the HuggingFace copies are gated — not silently skipped.
+
 | dataset | queries | shipped lexical | bi-encoder | fused BM25 + bi-encoder | dense ensemble | **ensemble + BM25** |
 | --- | --- | --- | --- | --- | --- | --- |
 | SciFact | 300 | 0.676 | 0.720 | 0.741 | 0.754 | **0.767** |
@@ -929,19 +996,20 @@ column as the original five — "Resources for Brewing BEIR" ([arXiv:2306.07471]
 whose BM25 column reproduces the three anchors this project already quoted (ArguAna 0.397, SciFact
 0.679, FiQA 0.236) exactly.
 
-### The lexical control, on nine corpora including two multi-million-document ones
+### The lexical control, on eleven corpora including three multi-million-document ones
 
 The lexical arm is the only component here checkable against an independent implementation, so it is
-drawn rather than assumed — and it is extended past the seven above with **two large corpora run
-lexical-only**, `nq` (2.68M documents) and `dbpedia-entity` (4.64M):
+drawn rather than assumed — and it is extended past the seven above with **three large corpora run
+lexical-only**, `nq` (2.68M documents), `dbpedia-entity` (4.64M) and `climate-fever` (5.42M):
 
 ![Lexical arm against published BM25, by corpus](docs/charts/lexical_vs_published.png)
 
-**8 of the 10 measured corpora agree within ±0.02, and 5 within ±0.008** — with Touché reproducing
+**8 of the 11 measured corpora agree within ±0.02, and 5 within ±0.008** — with Touché reproducing
 its anchor to three decimals. ArguAna (**+0.020**) and HotpotQA (**+0.034** on a 600-query subset) sit
-above their anchors; Quora (**−0.020**) and NQ (**−0.017**) sit below. An earlier version of this
-paragraph miscounted these agreements, so the count is now generated by `tools/lexical_control.py` and
-pinned by `make claim-check` — the sentence cannot drift from the table again.
+above their anchors; **Climate-FEVER (−0.052, the largest gap measured)**, Quora (**−0.020**) and NQ
+(**−0.017**) sit below. An earlier version of this paragraph miscounted these agreements, so the count
+is now generated by `tools/lexical_control.py` and pinned by `make claim-check` — the sentence cannot
+drift from the table again.
 
 Two explanations were tested and **both failed**, which is worth stating because the first was
 plausible and I believed it:
@@ -1453,14 +1521,21 @@ There is **no end-to-end RAG ranking**: the first `engine + <generator>` row exi
 **pilot** (12 answerable + 8 null records, local `ornith-1.5:35b`), where EM 0.000 sits beside a
 0.667 gold-containment rate on the same answers and ~36 s/query puts the full row at 22–25 h on this
 host — see [`docs/findings-endtoend-pilot.md`](docs/findings-endtoend-pilot.md). There is **no KILT,
-MTEB, HHEM or TREC RAG placement** — those need a submission, a full stack, or access this machine
-does not have. **Answerability is not portable**, as measured above. **Stronger scorers did not pay
-off here**: besides the pointwise reranker and the failed fine-tune listed above, all three Phase 2
-ordering heads lost to the baselines they targeted (topical late interaction, relational NLI stance,
-and a cross-encoder adapted on MuSiQue's own train pairs). And any faithfulness or answer-accuracy
-figure produced with the local 35B model is a statement about that model, not about this engine; it
-is labelled that way wherever it appears. `BENCHMARKS.md` carries the full per-benchmark verdict for
-the rest of the landscape.
+HHEM or TREC RAG placement**, and **no MTEB placement either**: MTEB is now *representable* — the
+engine implements MTEB v2's `SearchProtocol` (`make mteb-eval`) — but a full evaluation forked the
+harness workers and stalled, so there is no score and no upload. **Answerability is not portable**, as
+measured above, **and not usable as a probability out of domain**: on the only labelled negative class
+here the shipped scalar is at chance (AUC **0.5087**, ECE **0.3085**), and the calibrated 12-feature
+replacement is a measured in-domain gate, not a shipped default. **The pool bet's ceiling is not
+realized**: entity-probe expansion raises gold coverage and the oracle ceiling, but no ranker here has
+converted that into MAP@10, and coverage alone already falsified on MuSiQue. **Eleven of BEIR's
+eighteen datasets are measured** — the other seven are access-gated, so there is no BEIR-18 average.
+**Stronger scorers did not pay off here**: besides the pointwise reranker and the failed fine-tune
+listed above, all three Phase 2 ordering heads lost to the baselines they targeted (topical late
+interaction, relational NLI stance, and a cross-encoder adapted on MuSiQue's own train pairs). And any
+faithfulness or answer-accuracy figure produced with the local 35B model is a statement about that
+model, not about this engine; it is labelled that way wherever it appears. `BENCHMARKS.md` carries the
+full per-benchmark verdict for the rest of the landscape.
 
 ## Repository layout
 
@@ -1477,6 +1552,8 @@ laya-rag/
 │   ├── compose.py           optional answer composition (the one non-Laya step)
 │   ├── verify.py            deterministic citation, quote, numeric and injection checks
 │   ├── trust.py             trust tiers and the per-tenant path ACL
+│   ├── audit.py             hash-chained log of index mutations, with an actor
+│   ├── extractive.py        citation-first extraction: verbatim spans, structured citations
 │   ├── api.py               FastAPI service
 │   ├── cli.py               `laya-rag` command line
 │   └── web/                 the GUI: static HTML/CSS/JS, no build step
@@ -1496,14 +1573,20 @@ laya-rag/
 │                          eval_significance.py,
 │                          answerability_train.py, answerability_features.py,
 │                          adversarial_audit.py, bright.py, beir_atom_channel.py,
-│                          generation_eval.py, context_prefix_eval.py, bench_lexical.py
+│                          generation_eval.py, context_prefix_eval.py, bench_lexical.py,
+│                          consistency_check.py (the cross-document gate),
+│                          claiming/coverage tools (claim_check.py, audit_verify.py,
+│                          nugget_recall.py, leakage_audit.py, labelling_queue.py),
+│                          calibration_report.py, mteb_search.py, musique.py, twowiki.py,
+│                          generator_free_iteration.py, quantization_probe.py,
+│                          charts_pass.py, heavylock.py (the one-heavy-job lock)
 ├── docs/                  generated figures, `FINDINGS.md` (the index of every measured
 │                          result), and the per-topic findings documents
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
 ├── eval/                  generated evaluation reports and caches (gitignored)
-└── vendor/                submodule: laya
+└── vendor/                submodule: laya (pinned v0.3.28)
 ```
 
 ## Known limits
@@ -1585,10 +1668,17 @@ budget at the default thresholds.
 
 ## The vendored submodule
 
-The Laya checkout lives under `vendor/`. It was originally at `laya/`, but a top-level `laya/`
-directory shadows the installed `laya` Python package for any process started from the repository
-root, so `import laya` resolved to the checkout folder. Moving it under `vendor/` removed the
-collision. The Python package for this project is `laya_rag`, which does not collide.
+The Laya checkout lives under `vendor/` and is pinned as a git submodule at **v0.3.28**
+(`2b60aed`, `github.com/thread3d/laya`), which the venv installs editable so `import laya` resolves to
+the pinned checkout. It was originally at `laya/`, but a top-level `laya/` directory shadows the
+installed `laya` Python package for any process started from the repository root, so `import laya`
+resolved to the checkout folder. Moving it under `vendor/` removed the collision. The Python package
+for this project is `laya_rag`, which does not collide.
+
+Measurements quoted in this README and in `docs/findings-*.md` were produced under Laya **0.3.23**;
+the submodule was updated to **0.3.28** afterwards and the update is compatibility-verified (the full
+offline suite, `make doctor`, and an end-to-end index+query smoke), but a decision-path change could
+move a number, so re-run a benchmark before treating a recorded figure as reproducible.
 
 ## License
 
