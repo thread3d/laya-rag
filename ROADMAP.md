@@ -628,3 +628,23 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
   on-disk backend) and six tests pin it. The full-set measurement is re-run against a rebuilt index
   with `--fresh`, since checkpoints from the degraded run are not reusable — jobkit's fingerprint
   covers a run's *settings*, not the index it was measured against.
+- 2026-10-06 — **A pass over the blocked and owed items, offline-first.** Four things landed.
+  **A cross-document consistency gate** (`tools/consistency_check.py`, `make consistency-check`)
+  holds one authority per contested quantity and fails when any registered document disagrees:
+  the audit's six flagged drifts are reconciled (BEIR coverage is now computed from `eval/beir/`
+  and reads **10 of 18**; the published `voyage-02` row is the paper's 0.6625/0.4795; the
+  recalibration half-split count is the report's **300**; the `bench` RSS grids are explained by a
+  recorded process baseline) plus a seventh the audit had not listed — the findings index said
+  "8 of 9 corpora within ±0.008" where the report says **5 of 10**. Ten pre-fix BEIR reports are
+  quarantined with machine-readable markers, and `claim-check` is **58** claims. **An engine-level
+  MTEB v2 `SearchProtocol` adapter** (`tools/mteb_search.py`, `.[mteb]`, `make mteb-eval`) — the
+  "cannot be entered as-is" objection expires; it is verified against mteb 2.22.5. **The calibration
+  row** (`tools/calibration_report.py`, `make calibration-report`, `docs/charts/reliability.png`):
+  on MultiHop-RAG's 601 labelled queries the shipped scalar is at chance and miscalibrated
+  (AUC **0.5087**, ECE **0.3085**, Brier **0.3650**, risk@80 **0.4927**) while the held-out feature
+  gate is calibrated in-domain (ECE **0.0650**); the boundary (no other corpus labels a negative
+  class) is stated. **The owed adversarial variants** (Phase 5.4): seeded noise and seven injection
+  payloads over all six markers, two controls at zero false positives — **12 checks**. Separately,
+  the "28 GB free disk" block is **stale** (471 GB here) and the five still-unmeasured BEIR datasets
+  are **licensing-gated**, not mirror glitches; FEVER and Climate-FEVER are running as lexical rows
+  and HotpotQA's full run is restarted from its checkpoint. Suite **1292 passed, 5 deselected**.
