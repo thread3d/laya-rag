@@ -244,6 +244,11 @@ class EngineConfig:
     # (-0.0053, p=0.10) — and the harness that produced the MultiHop numbers already used
     # 5, so this aligns the engine with its own measurement.
     fusion_k: int = field(default_factory=lambda: _env_int("FUSION_K", 5))
+    # How the first stage fuses its channels: `rrf` (the shipped default) or `convex`, a
+    # weighted sum of min-max normalised scores. The published evidence says a tuned convex
+    # combination can beat RRF, so it ships behind a flag for the fusion ablation rather
+    # than as a default; an unknown value fails loudly where it is used.
+    fusion_mode: str = field(default_factory=lambda: (_env("FUSION_MODE") or "rrf").lower())
     # Approximate dense search. The exact scan is fast to a few hundred thousand vectors and
     # linear after that; tools/ann_bench.py measures the recall/latency trade. Off by
     # default so small corpora keep exact results.

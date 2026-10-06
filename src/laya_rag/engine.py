@@ -40,6 +40,7 @@ from .lexical import (
     LEXICAL_FILE,
     BM25Index,
     EagerBM25Index,
+    convex_combination,
     reciprocal_rank_fusion,
 )
 from .model import BiEncoderModel, CrossEncoderModel, LayaModel
@@ -1106,6 +1107,7 @@ class RagEngine:
                 rrf_k=self.config.fusion_k,
                 sparse_hits=sparse_hits,
                 sparse_weight=self.config.sparse_weight,
+                fusion_mode=self.config.fusion_mode,
             )
             trust_filtered = 0
             acl_filtered = 0
@@ -1236,10 +1238,15 @@ class RagEngine:
         rrf_k: int = 60,
         sparse_hits: Sequence[tuple[str, float]] | None = None,
         sparse_weight: float = 1.0,
+        fusion_mode: str = "rrf",
     ) -> list[Hit]:
         """Fuse dense, lexical and optional sparse rankings into one candidate list.
 
-        The fused ``Hit.score`` is the RRF score, not a cosine similarity; the
+        ``fusion_mode`` selects the fusion rule: ``rrf`` (rank-based, the shipped default) or
+        ``convex`` (:func:`convex_combination`, a weighted sum of min-max normalised scores).
+        An unknown value raises rather than silently falling back.
+
+        The fused ``Hit.score`` is the fusion score, not a cosine similarity; the
         channels that produced each candidate travel with it so the evidence bundle
         can say where a passage came from.
 
@@ -1248,7 +1255,7 @@ class RagEngine:
         of 0 removes that channel from the fusion without disabling it elsewhere.
 
         ``sparse_hits`` is the learned-sparse channel's ``(chunk_id, score)`` list, which
-        only its rank contributes to the fusion — measured, it is the first additional
+        only its rank contributes to rank fusion — measured, it is the first additional
         channel that improves the fused ranking consistently (+0.004 to +0.023 nDCG@10).
 
         ``dedup_threshold`` > 0 walks the fused list and drops a candidate whose cosine to
@@ -1259,17 +1266,29 @@ class RagEngine:
         """
         dense_ids = [hit.chunk.chunk_id for hit in dense_hits]
         lexical_ids = [hit.chunk_id for hit in lexical_hits]
-        sparse_pairs = list(sparse_hits or [])
+        sparse_pairs = [(chunk_id, float(score)) for chunk_id, score in (sparse_hits or [])]
         sparse_ids = [chunk_id for chunk_id, _score in sparse_pairs]
         # Over-fetch when diversifying: the duplicates have to be *replaced* by deeper
         # candidates, so the fused pool is wider than the returned candidate list.
         pool = limit * 3 if (dedup_threshold > 0.0 or coverage_lambda > 0.0) else limit
-        fused = reciprocal_rank_fusion(
-            [dense_ids, lexical_ids, sparse_ids],
-            k=rrf_k,
-            limit=pool,
-            weights=[dense_weight, lexical_weight, sparse_weight],
-        )
+        weights = [dense_weight, lexical_weight, sparse_weight]
+        if fusion_mode == "convex":
+            # Score-based, so this is the only branch that needs the channel scores.
+            dense_pairs = [
+                (hit.chunk.chunk_id, float(getattr(hit, "score", 0.0))) for hit in dense_hits
+            ]
+            lexical_pairs = [
+                (hit.chunk_id, float(getattr(hit, "score", 0.0))) for hit in lexical_hits
+            ]
+            fused = convex_combination(
+                [dense_pairs, lexical_pairs, sparse_pairs], limit=pool, weights=weights
+            )
+        elif fusion_mode == "rrf":
+            fused = reciprocal_rank_fusion(
+                [dense_ids, lexical_ids, sparse_ids], k=rrf_k, limit=pool, weights=weights
+            )
+        else:
+            raise ValueError(f"unknown fusion_mode {fusion_mode!r}; expected 'rrf' or 'convex'")
         if coverage_lambda > 0.0:
             fused = _coverage_select(index, fused, limit, coverage_lambda,
                                      use_redundancy=coverage_redundancy)
@@ -1465,6 +1484,7 @@ class RagEngine:
                 rrf_k=self.config.fusion_k,
                 sparse_hits=self._sparse_hits(claim, recall_k),
                 sparse_weight=self.config.sparse_weight,
+                fusion_mode=self.config.fusion_mode,
             )
             if trust_active:
                 before = len(hits)

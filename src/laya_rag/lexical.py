@@ -442,3 +442,41 @@ def reciprocal_rank_fusion(
             scores[identifier] = scores.get(identifier, 0.0) + weight / (k + rank + 1)
     ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
     return ordered[:limit] if limit is not None else ordered
+
+
+def convex_combination(
+    channels: Sequence[Sequence[tuple[str, float]]],
+    *,
+    limit: int | None = None,
+    weights: Sequence[float] | None = None,
+) -> list[tuple[str, float]]:
+    """Fuse scored channels by a weighted sum of min-max normalised scores.
+
+    RRF throws the scores away and keeps only the ranks, which is robust when the channels
+    are not comparable (BM25 is unbounded, cosine is in [-1, 1]) but also discards how much
+    better the top hit is. The published evidence says a tuned convex combination can beat
+    RRF in-domain and out-of-domain — as long as the scores are normalised and the weights
+    are tuned — so this is the alternative the fusion ablation needs behind a flag.
+
+    Each channel is normalised independently to ``[0, 1]`` (a flat channel contributes 1.0
+    to everything it contains, so presence still counts), then the weighted scores are
+    summed. A weight of 0 drops a channel, as in :func:`reciprocal_rank_fusion`.
+    """
+    channel_list = [list(channel) for channel in channels]
+    if weights is None:
+        weights = [1.0] * len(channel_list)
+    elif len(weights) != len(channel_list):
+        raise ValueError(f"got {len(channel_list)} channels but {len(weights)} weights")
+
+    scores: dict[str, float] = {}
+    for channel, weight in zip(channel_list, weights):
+        if weight == 0.0 or not channel:
+            continue
+        values = [float(score) for _identifier, score in channel]
+        low, high = min(values), max(values)
+        span = high - low
+        for identifier, value in channel:
+            normalised = (float(value) - low) / span if span > 0.0 else 1.0
+            scores[identifier] = scores.get(identifier, 0.0) + weight * normalised
+    ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+    return ordered[:limit] if limit is not None else ordered
