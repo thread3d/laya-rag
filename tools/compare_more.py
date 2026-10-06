@@ -198,26 +198,31 @@ def chart_frames_arms(outdir: Path, plt) -> dict[str, Any]:
 #: arm here: a multi-million-document embedding pass buys little when the lexical row is the question.
 PUBLISHED_BM25_LARGE = {"nq": 0.329, "hotpotqa": 0.603, "dbpedia-entity": 0.313,
                         "climate-fever": 0.213, "fever": 0.753}
-LEXICAL_ONLY = ["nq", "dbpedia-entity", "climate-fever", "fever"]
+LEXICAL_ONLY = ["nq", "dbpedia-entity", "climate-fever", "fever", "hotpotqa"]
 
-#: Corpora measured on a *seeded subset* rather than the full query set, with the subset size. They are
-#: charted with the estimate named in the label: a 600-query sample has sampling noise of roughly the
-#: same size as the gaps the chart is used to read, so it must not look like a full-set number.
+#: Corpora measured on a *seeded subset* rather than the full query set, with the subset size. These
+#: are a **fallback**: once a full-set report exists the corpus is pulled in through `LEXICAL_ONLY`
+#: above and the estimate is skipped, because a 600-query sample must not outrank the full run.
 SUBSET_ESTIMATES = {"hotpotqa": ("hotpotqa-subset", 600)}
 
 
 def lexical_vs_published() -> list[dict[str, Any]]:
     """Every dataset where both our lexical arm and a published BM25 anchor exist."""
     rows: list[dict[str, Any]] = []
+    full: set[str] = set()
     for dataset in compare.DATASET_ORDER:
         if dataset in compare.PUBLISHED_BM25:
             rows.append({"dataset": dataset, "ours": dataset_mean(dataset, "bm25-engine"),
                          "published": compare.PUBLISHED_BM25[dataset]})
+            full.add(dataset)
     for dataset in LEXICAL_ONLY:
         if (ROOT / "eval" / "beir" / f"{dataset}.json").is_file():
             rows.append({"dataset": dataset, "ours": dataset_mean(dataset, "bm25-engine"),
                          "published": PUBLISHED_BM25_LARGE[dataset]})
+            full.add(dataset)
     for dataset, (report, size) in SUBSET_ESTIMATES.items():
+        if dataset in full:
+            continue  # the full query set is measured, so the seeded estimate is superseded
         if (ROOT / "eval" / "beir" / f"{report}.json").is_file():
             # The report file is named for the run and the dataset key inside it is the corpus, so
             # these do not go through `dataset_mean`, which assumes the two are the same string.

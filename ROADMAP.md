@@ -269,7 +269,7 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 ## 7. Phase 4 — scale to 18 datasets, and own the encoder (weeks; mixed)
 
 **Coverage today: 12 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
-DBPedia-entity, NQ, HotpotQA (600-query subset), webis-touche2020, **Climate-FEVER** (lexical, nDCG@10
+DBPedia-entity, NQ, HotpotQA (full 7,405 queries), webis-touche2020, **Climate-FEVER** (lexical, nDCG@10
 0.1610) and **FEVER** (lexical, **0.6323** over all 6,666 queries), counted from the reports present in
 `eval/beir/` by `tools/consistency_check.py`; TREC-COVID has a 40,000-document subsample and is not
 counted. The counts inside the 4.2 log below are the historical values at each dated step, and
@@ -694,3 +694,11 @@ overrides deliberately. See `docs/findings-heavy-job-lock.md`.
   natural-language claims, Quora's and NQ's natural-language questions), which is a pattern and not a
   cause. The consistency and claim gates failed first and named every stale site; documents, findings
   index and pins were updated together. HotpotQA is next in the queue.
+- 2026-10-06 — **HotpotQA's full query set done; the seeded estimate retired.** All **7,405** queries
+  read **nDCG@10 0.6352** (Recall@10 0.6602, **MRR@10 0.8065**, MAP@100 0.5517) against a published
+  0.603 — **+0.032**, one of two corpora where the lexical arm beats its anchor. The earlier 600-query
+  estimate (0.6365, +0.034) was accurate to 0.0013 but the machinery never retired it;
+  `tools/compare_more.py` now treats seeded estimates as a **fallback** that any full report
+  supersedes, so a sample can never stand in for a full run again. Coverage is unchanged at **12 of
+  18** — the subset had already counted HotpotQA — and the lexical-control counts are unchanged.
+  2WikiMultiHopQA is next.

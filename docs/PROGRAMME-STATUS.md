@@ -50,8 +50,10 @@ Negatives are results here, and these are the ones worth keeping:
    **~0.04 q/s** on its later queries, which is 10–40 hours for one lexical-only row.
    `--limit-queries` gives a labelled seeded subset (~1 h per corpus).
 2. **Phase 4.4, the MTEB submission.** Requires an upload; not offline work.
-3. **HotpotQA's full query set.** Its 600-query subset reads **0.6365** against a published 0.603; the
-   full 7,405-query run is owed and resumes from a checkpoint (**3,062/7,405** at the last restart).
+3. **HotpotQA's full query set — done.** The full **7,405** queries read **nDCG@10 0.6352** (MRR@10
+   0.8065) against a published 0.603 — a **+0.032** gap. The earlier 600-query subset estimate (0.6365,
+   +0.034) is superseded: `tools/compare_more.py` now prefers a full report over a seeded estimate, so
+   the lexical control uses the full row.
 
 **The runs are queued one at a time.** Three corpus builds plus a harness launched together
 **crashed this host**; no work was lost (every job resumes), and the rule is now enforced by an

@@ -79,13 +79,13 @@ drawing rather than assuming. Twelve corpora now have both our number and a publ
 | **Quora** | 522,931 | 0.7689 | 0.789 | **−0.020** |
 | **NQ** | 2,681,468 | 0.3118 | 0.329 | **−0.017** |
 | **DBPedia-entity** | 4,635,922 | 0.3053 | 0.313 | **−0.008** |
-| HotpotQA (600-query subset) | 5,233,329 | 0.6365 | 0.603 | **+0.034** |
+| HotpotQA | 5,233,329 | 0.6352 | 0.603 | **+0.032** |
 | **Climate-FEVER** | 5,416,593 | 0.1610 | 0.213 | **−0.052** |
 | **FEVER** | 5,416,568 | 0.6323 | 0.753 | **−0.121** |
 
 **8 of the 12 corpora agree within ±0.02** (5 within ±0.008). ArguAna and HotpotQA sit *above* their
-anchors — HotpotQA by +0.034 on a 600-query subset, so it carries sampling noise roughly the size of
-that margin. **FEVER (−0.121, the largest gap measured by far)**, Climate-FEVER (−0.052), Quora
+anchors — HotpotQA by +0.032 on the **full 7,405 queries** (its earlier +0.034 was a 600-query subset,
+now superseded). **FEVER (−0.121, the largest gap measured by far)**, Climate-FEVER (−0.052), Quora
 (−0.020) and NQ (−0.017) sit below. An earlier version of this line claimed "eight of nine agree
 within ±0.008", which was simply a miscount; the table is the record.
 
