@@ -1118,10 +1118,10 @@ class RagEngine:
             )
             else candidate_k
         )
-        # The predicate is pushed into the dense scan rather than applied only to the fused
-        # list: both vector backends take `allow`, so a filtered search chooses from the
-        # whole index and cannot come back short. The post-fusion filter stays as the
-        # authority for the lexical and sparse channels, which have no predicate.
+        # The predicate is pushed into *every* channel before fusion: both vector backends
+        # take `allow` for the dense scan, and the lexical/sparse hits are screened here so
+        # a disallowed document cannot consume a fusion slot (or force a deeper over-fetch)
+        # only to be dropped afterwards. The post-fusion filter stays as a safety net.
         allow_path: Any = None
         if trust_active:
             manifest, minimum, identity, acl = (
@@ -1132,6 +1132,23 @@ class RagEngine:
                 if acl and not manifest.tenant_allowed(path, identity):
                     return False
                 return manifest.allows(path, minimum, identity)
+
+        def screen(hits: Sequence[Any], chunk_id_of: Any) -> tuple[list[Any], int, int]:
+            """Drop disallowed hits early, returning ``(kept, trust_dropped, acl_dropped)``."""
+            if allow_path is None:
+                return list(hits), 0, 0
+            kept: list[Any] = []
+            dropped_trust = dropped_acl = 0
+            for hit in hits:
+                chunk = index.get(chunk_id_of(hit)) if index is not None else None
+                path = chunk.path if chunk is not None else None
+                if allow_path(path):
+                    kept.append(hit)
+                elif acl_active and not trust_manifest.tenant_allowed(path, tenant):
+                    dropped_acl += 1
+                else:
+                    dropped_trust += 1
+            return kept, dropped_trust, dropped_acl
 
         dense_hits: list[Hit] = []
         lexical_hits: list[Any] = []
@@ -1151,6 +1168,10 @@ class RagEngine:
                 dense_hits = index.search(self._query_vector(query), k=recall_k, allow=allow_path)
             lexical_hits = lexical.search(query, k=recall_k) if lexical else []
             sparse_hits = self._sparse_hits(query, recall_k)
+            lexical_hits, pre_trust, pre_acl = screen(lexical_hits, lambda hit: hit.chunk_id)
+            sparse_hits, s_trust, s_acl = screen(sparse_hits, lambda pair: pair[0])
+            pre_trust += s_trust
+            pre_acl += s_acl
             candidates = self._fuse(
                 index,
                 dense_hits,
@@ -1166,8 +1187,8 @@ class RagEngine:
                 sparse_weight=self.config.sparse_weight,
                 fusion_mode=self.config.fusion_mode,
             )
-            trust_filtered = 0
-            acl_filtered = 0
+            trust_filtered = pre_trust
+            acl_filtered = pre_acl
             if trust_active:
                 pre_filter = list(candidates)
                 if acl_active:
@@ -1175,13 +1196,13 @@ class RagEngine:
                         hit for hit in pre_filter
                         if trust_manifest.tenant_allowed(hit.chunk.path, tenant)
                     ]
-                    acl_filtered = len(pre_filter) - len(allowed)
+                    acl_filtered += len(pre_filter) - len(allowed)
                     pre_filter = allowed
                 remaining = len(pre_filter)
                 pre_filter = filter_candidates(
                     pre_filter, trust_manifest, effective_min_trust, tenant
                 )
-                trust_filtered = remaining - len(pre_filter)
+                trust_filtered += remaining - len(pre_filter)
                 candidates = pre_filter
             # Enough survived, nothing more to fetch, or the window already covers the index.
             if (not trust_active) or len(candidates) >= candidate_k or recall_k >= limit:

@@ -377,3 +377,45 @@ def test_ondisk_backend_pushes_the_acl_predicate_into_the_dense_scan(tmp_path):
 
     anonymous = engine.query("acme secret codename")
     assert anonymous.passages == []
+
+
+def test_the_tier_predicate_screens_the_lexical_channel_before_fusion(tmp_path):
+    """With both channels on, a disallowed lexical hit is dropped before it can take a slot.
+
+    The deepening test next door runs lexical-only (the shipped default dense weight is 0).
+    This pins the same contract with the dense channel active, where the lexical hits are
+    screened by the predicate rather than surviving into the post-fusion filter.
+    """
+    root = tmp_path / "corpus"
+    root.mkdir(parents=True, exist_ok=True)
+    for i in range(12):
+        (root / f"poison{i}.md").write_text(
+            f"# Poison {i}\n\nThe launch sequence code is alpha-bravo-{i} and is restricted.\n",
+            encoding="utf-8",
+        )
+    for i in range(2):
+        (root / f"trusted{i}.md").write_text(
+            f"# Trusted {i}\n\nThe launch sequence code policy is reviewed annually.\n",
+            encoding="utf-8",
+        )
+    manifest = tmp_path / "trust.json"
+    manifest.write_text(
+        json.dumps({"default": "untrusted", "rules": {"*/trusted*.md": "trusted"}}),
+        encoding="utf-8",
+    )
+    config = make_config(
+        tmp_path,
+        trust_manifest=str(manifest),
+        query_min_trust="trusted",
+        dense_weight=1.0,
+        retrieve_k=3,
+        rerank_k=3,
+        relevance_threshold=0.0,
+        answerability_threshold=0.0,
+    )
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([str(root)])
+    result = engine.query("what is the launch sequence code")
+    assert result.trust_filtered > 0
+    assert result.passages
+    assert all("poison" not in passage["path"] for passage in result.passages)

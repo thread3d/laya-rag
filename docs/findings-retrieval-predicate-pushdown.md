@@ -21,18 +21,21 @@ previous code path, unchanged.
 ## The engine passes it
 
 `RagEngine.query` builds one predicate from the trust manifest — tenant ACL first, then the tier
-minimum — and passes it to the dense search. The post-fusion filter stays, because the lexical and
-sparse channels have no predicate yet; it is now the authority for those channels only.
+minimum — and applies it to **every channel before fusion**: it goes into the dense scan as `allow`,
+and the lexical and sparse hits are screened by the same predicate before they reach the fusion, so
+a disallowed document cannot consume a fusion slot or force a deeper over-fetch only to be dropped
+afterwards. The screening preserves the reported `trust_filtered`/`acl_filtered` counts, and the
+post-fusion filter stays as a safety net.
 
 ## What this fixes, and what it does not
 
 - **Fixed:** the two vector backends have predicate parity, and the engine no longer ignores the
-  parameter — a dense search under an ACL selects from the whole index rather than a fixed
-  over-fetch window.
-- **Not yet:** the lexical and sparse channels still filter after fusion (they expose no
-  predicate), so the cost win is partial, and the on-disk backend still refuses incremental
-  updates. Delete-by-id is now reachable by HTTP and CLI
-  ([`findings-delete-documents.md`](findings-delete-documents.md)); MCP is not yet wired.
+  parameter — a filtered search selects from the whole index rather than a fixed over-fetch window,
+  and no channel spends fusion slots on a document the filter will drop.
+- **Not yet:** the lexical and sparse channels still expose no predicate of their own — the engine
+  screens their *hits*, which is one record read per candidate rather than a scan-time mask — and the
+  on-disk backend still refuses in-place content replacement. Delete-by-id is now reachable by HTTP,
+  CLI and MCP ([`findings-delete-documents.md`](findings-delete-documents.md)).
 
 ## Verification
 
