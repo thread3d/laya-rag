@@ -145,3 +145,15 @@ make heavy-status          # is a corpus job running?
 New entry points: `make mteb-eval`, `make calibration-report`, `make audit-verify`,
 `make nugget-recall`, `make leakage-audit`, `make labelling-queue`, `make two-wiki`,
 `make generator-free-iteration`, `make quantization-probe`, `make heavy-status`.
+
+## A note on the Laya version
+
+The `vendor/laya` submodule was updated after these measurements, from `ce939d4` (Laya **0.3.23**)
+to `2b60aed` (Laya **v0.3.28**, 317 commits), in commit `bc787b9`. The venv installs `laya` editable
+from the submodule, so the change is live. **Every measurement in this report and in
+`docs/findings-*.md` was produced under 0.3.23.** The update was compatibility-verified — 1410
+offline tests pass, `lint` is clean, `make doctor` loads the multilingual checkpoint (dim 768), and
+an end-to-end index+query smoke over `vendor/laya/docs` returns evidence — but it was **not**
+measurement-re-verified: a decision-path change between 0.3.23 and 0.3.28 could move a number, so
+re-run a benchmark before claiming a recorded figure reproduces under 0.3.28. The `pyproject.toml`
+floor `laya>=0.3.23` is unchanged (0.3.28 satisfies it).
