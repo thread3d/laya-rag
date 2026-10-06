@@ -781,13 +781,16 @@ def score_fusion_rankings(
     stem: bool = True,
     titles: Mapping[str, str] | None = None,
     title_boost: int = 1,
+    normalise: str = "max",
 ) -> dict[str, list[str]]:
-    """Score fusion (CombSUM) instead of rank fusion.
+    """Score fusion (CombSUM, or a min-max convex combination) instead of rank fusion.
 
-    RRF throws away score magnitudes; CombSUM keeps them but has to reconcile BM25's
-    unbounded scores with cosine, so each channel is max-normalised per query first.
-    Same channels, same weights, different fusion -- the comparison isolates the fusion
-    method rather than the retrievers.
+    RRF throws away score magnitudes; score fusion keeps them but has to reconcile BM25's
+    unbounded scores with cosine, so each channel is normalised per query first. ``max`` is
+    the historical CombSUM normalisation; ``minmax`` maps each channel to ``[0, 1]`` over its
+    own range, which is the convex-combination variant the fusion ablation asks for. Same
+    channels, same weights, different fusion — the comparison isolates the fusion method
+    rather than the retrievers.
     """
     lexical_corpus = corpus
     if titles and title_boost > 1:
@@ -801,20 +804,31 @@ def score_fusion_rankings(
     dense.add(make_chunks(corpus), vectors)
     query_vectors = np.asarray(embedder.embed_queries(list(queries.values())), dtype=np.float32)
 
+    def scale(values: Sequence[float], value: float) -> float:
+        if not values:
+            return 0.0
+        if normalise == "minmax":
+            low, high = min(values), max(values)
+            return (value - low) / (high - low) if high > low else 1.0
+        top = max(values)
+        return value / top if top else 0.0
+
     fused: dict[str, list[str]] = {}
     for (query_id, text), query_vector in zip(queries.items(), query_vectors):
         dense_hits = dense.search(query_vector, k=top_k)
         lexical_hits = lexical.search(text, k=top_k)
-        dense_max = max((hit.score for hit in dense_hits), default=0.0) or 1.0
-        lexical_max = max((hit.score for hit in lexical_hits), default=0.0) or 1.0
+        dense_values = [hit.score for hit in dense_hits]
+        lexical_values = [hit.score for hit in lexical_hits]
         scores: dict[str, float] = {}
         for hit in dense_hits:
             scores[hit.chunk.chunk_id] = (
-                scores.get(hit.chunk.chunk_id, 0.0) + dense_weight * hit.score / dense_max
+                scores.get(hit.chunk.chunk_id, 0.0)
+                + dense_weight * scale(dense_values, hit.score)
             )
         for hit in lexical_hits:
             scores[hit.chunk_id] = (
-                scores.get(hit.chunk_id, 0.0) + lexical_weight * hit.score / lexical_max
+                scores.get(hit.chunk_id, 0.0)
+                + lexical_weight * scale(lexical_values, hit.score)
             )
         fused[query_id] = [
             doc_id for doc_id, _ in sorted(scores.items(), key=lambda item: -item[1])[:top_k]
@@ -906,6 +920,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--prf-weight", type=int, default=2, help="times each expansion term is repeated")
     parser.add_argument("--combsum", action="store_true",
                         help="also report a score-fused (CombSUM) row alongside RRF")
+    parser.add_argument("--convex", action="store_true",
+                        help="also report a min-max normalised convex-combination row alongside RRF")
     parser.add_argument("--no-titles", action="store_true",
                         help="index document text only, excluding the title field")
     parser.add_argument("--dense-text-only", action="store_true",
@@ -1160,6 +1176,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                         titles=titles, title_boost=args.title_boost,
                     )
                     results["hybrid-combsum"] = {"note": "CombSUM, max-normalised per query"}
+
+                if args.convex:
+                    rankings["hybrid-convex"] = score_fusion_rankings(
+                        corpus, queries, encoder, vectors, args.top_k,
+                        dense_weight=args.biencoder_weight,
+                        lexical_weight=config.lexical_weight,
+                        k1=args.k1, b=args.b, stem=args.stem,
+                        titles=titles, title_boost=args.title_boost,
+                        normalise="minmax",
+                    )
+                    results["hybrid-convex"] = {
+                        "note": "convex combination, min-max normalised per query"
+                    }
 
                 if "hybrid-biencoder" in wanted:
                     rankings["hybrid-biencoder"] = hybrid_rankings(

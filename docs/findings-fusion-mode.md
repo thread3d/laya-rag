@@ -26,9 +26,11 @@ making the comparison runnable.
 
 ## What this does not show
 
-- **The convex arm is not yet measured here.** This change makes the ablation runnable; it does not
-  produce a number, and no fusion gain is claimed. Running `tools/beir.py` (or the engine) with
-  `FUSION_MODE=convex` against the recorded `rrf-*` arms is the measurement.
+- **The convex arm is measured on one corpus, in the replica.**
+  [`findings-fusion-ablation.md`](findings-fusion-ablation.md) runs it on SciFact against RRF and
+  CombSUM: convex is the best arm (0.7412) but its +0.0092 over RRF (k=60) is **not significant**
+  (p=0.139), while its +0.0263 over max-normalised CombSUM is. It is not measured on the engine's own
+  path or on MultiHop, and the weights are not tuned.
 - **The weights are not tuned.** `dense_weight`/`lexical_weight`/`sparse_weight` are reused as the
   convex weights; a tuned convex combination is exactly the thing the ablation has to find.
 - Normalisation is per query and per channel, so a channel with a single candidate contributes

@@ -463,7 +463,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `SPARSE_WEIGHT` / `SPARSE_TOP_K` | `1.0` / `128` | its RRF weight and the terms kept per vector |
 | `SPARSE_BATCH_TEXTS` | `16` | texts per encoder batch |
 | `FUSION_K` | `5` | reciprocal-rank-fusion constant for the dense+lexical first stage; lower weights each channel's top hit more heavily. `5` is the measured setting (MultiHop MAP@10 +0.0040 over the historical `60`, BEIR +0.004–0.009) and is what the benchmark harnesses already used |
-| `FUSION_MODE` | `rrf` | `rrf` (shipped, measured) or `convex`: a weighted sum of per-channel min-max normalised scores. `convex` exists so the audit's `FUSION_K`-vs-convex ablation is runnable; it is **not measured here** and is not the default |
+| `FUSION_MODE` | `rrf` | `rrf` (shipped, measured) or `convex`: a weighted sum of per-channel min-max normalised scores. Measured on SciFact in the replica, convex is the best arm (0.7412) but only **+0.0092 over RRF (k=60), not significant** (p=0.139); it is significantly better than max-normalised CombSUM (+0.0263). Not the default |
 | `RECALL_DEDUP_THRESHOLD` | `0.0` | drop a fused candidate whose cosine to a kept chunk is at or above this; `0.9` is the measured MultiHop-RAG setting, `0.0` disables it |
 | `RECALL_COVERAGE_LAMBDA` | `0.0` | evidence-set coverage selection on the fused pool (sentence-atom submodular max-coverage); `0.5` is the measured MultiHop-RAG setting (MAP@10 0.2850), `0.0` disables it |
 | `RECALL_COVERAGE_REDUNDANCY` | `false` | keep the dense-gram redundancy penalty inside the coverage objective; full-protocol at `λ=0.5` dropping it lifts MAP@10 0.2835 → 0.2850 and Hits@4 0.7197 → 0.7326, while at `λ=0.7` the penalty helps (+0.0036) |
