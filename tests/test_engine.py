@@ -577,3 +577,27 @@ def test_chunk_chars_auto_defaults_on_and_can_be_disabled(tmp_path):
     )
     report = engine.index_paths([write_corpus(tmp_path / "corpus")])
     assert report.derived_chunk_chars == 0
+
+
+def test_a_query_reports_the_shape_of_its_retrieval_pool(tmp_path):
+    """The pool's depth and per-channel contributions travel with the result."""
+    corpus = write_corpus(tmp_path / "corpus")
+    engine = stub_engine(tmp_path)
+    engine.index_paths([corpus])
+
+    result = engine.query("How long does a refund take?")
+    pool = result.pool
+    assert {"requested", "searched", "deepened", "dense", "lexical", "sparse", "candidates"} <= set(pool)
+    assert pool["requested"] >= 1
+    assert pool["searched"] >= pool["requested"]
+    assert pool["candidates"] >= len(result.passages)
+    assert result.as_dict()["pool"] == pool
+
+
+def test_a_default_query_result_has_no_pool():
+    """An early-return result (no index, error) carries no pool, and `as_dict` omits it."""
+    from laya_rag.engine import QueryResult
+
+    result = QueryResult(query="anything at all")
+    assert result.pool == {}
+    assert "pool" not in result.as_dict()

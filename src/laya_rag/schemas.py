@@ -122,6 +122,7 @@ class QueryResponse(BaseModel):
     timings: Timings
     usage: dict[str, Any]
     note: str | None = None
+    pool: dict[str, Any] = Field(default_factory=dict)
 
 
 # -- corpus listings ---------------------------------------------------------

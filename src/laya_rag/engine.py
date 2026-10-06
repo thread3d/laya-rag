@@ -119,6 +119,10 @@ class QueryResult:
     usage: dict[str, Any] = field(default_factory=dict)
     checkpoint: str = ""
     note: str | None = None
+    #: The retrieval pool's shape: how deep the search went and what each channel contributed.
+    #: Gold *completeness* needs qrels and is instrumented in `tools/multihop_diagnostics.py`;
+    #: this is the engine's own account of the pool it built.
+    pool: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -139,6 +143,8 @@ class QueryResult:
             },
             "usage": self.usage,
         }
+        if self.pool:
+            payload["pool"] = self.pool
         if self.answerability is not None:
             payload["answerability"] = round(self.answerability, 4)
         if self.note:
@@ -1361,6 +1367,15 @@ class RagEngine:
             usage=reranked.usage,
             checkpoint=self.config.checkpoint,
             note=None if lexical is not None or not len(index) else degraded,
+            pool={
+                "requested": candidate_k,
+                "searched": recall_k,
+                "deepened": recall_k > candidate_k,
+                "dense": len(dense_hits),
+                "lexical": len(lexical_hits),
+                "sparse": len(sparse_hits),
+                "candidates": len(candidates),
+            },
         )
 
     def query_extractive(

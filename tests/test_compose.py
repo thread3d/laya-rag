@@ -512,7 +512,7 @@ def test_the_query_response_carries_no_generated_text(ctx):
     allowed = {
         "query", "answerable", "answerability", "answerability_measured", "passages",
         "considered", "kept", "dropped_below_threshold", "trust_filtered", "acl_filtered",
-        "checkpoint", "timings", "usage", "note",
+        "checkpoint", "timings", "usage", "note", "pool",
     }
     assert set(body) <= allowed, f"unexpected keys: {set(body) - allowed}"
     # The point of the guarantee: no field of /v1/query is ever model-generated.
