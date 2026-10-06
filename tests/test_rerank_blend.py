@@ -294,3 +294,44 @@ def test_min_docs_zero_keeps_the_pure_passage_order():
 def test_min_docs_never_drops_a_passage():
     kept = _keep(_four_hits(), min_docs=4).passages
     assert sorted(passage.chunk_id for passage in kept) == ["a", "b", "c", "d"]
+
+
+def test_bridge_feature_feeds_the_conditioned_score_into_the_gate(monkeypatch):
+    """With GATE_BRIDGE_FEATURE on, the gate's vector carries `s(q, b, c)`'s best value."""
+    from laya_rag import answerability
+
+    seen: dict = {}
+    real = answerability.extract_features
+
+    def spy(query, passages, *, bridge_conditioned=None):
+        seen["bridge"] = bridge_conditioned
+        return real(query, passages, bridge_conditioned=bridge_conditioned)
+
+    monkeypatch.setattr(answerability, "extract_features", spy)
+    hits = [_hit("c0", "the bridge passage", 0.9), _hit("c1", "another passage", 0.5)]
+    gate = _FakeGate(0.7)
+    LayaReranker(StubModel()).rerank(
+        "which company", hits, top_k=2, relevance_threshold=0.0,
+        answerability_threshold=0.0, gate=gate, scores=[0.9, 0.5], bridge_feature=True,
+    )
+    assert seen.get("bridge") is not None
+    assert gate.seen and gate.seen[0].shape[1] == len(FEATURE_NAMES)
+
+
+def test_bridge_feature_off_leaves_the_gate_vector_unchanged(monkeypatch):
+    from laya_rag import answerability
+
+    seen: dict = {}
+    real = answerability.extract_features
+
+    def spy(query, passages, *, bridge_conditioned=None):
+        seen["bridge"] = bridge_conditioned
+        return real(query, passages, bridge_conditioned=bridge_conditioned)
+
+    monkeypatch.setattr(answerability, "extract_features", spy)
+    hits = [_hit("c0", "the bridge passage", 0.9), _hit("c1", "another passage", 0.5)]
+    LayaReranker(StubModel()).rerank(
+        "which company", hits, top_k=2, relevance_threshold=0.0,
+        answerability_threshold=0.0, gate=_FakeGate(0.7), scores=[0.9, 0.5],
+    )
+    assert seen.get("bridge") is None

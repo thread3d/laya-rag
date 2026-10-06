@@ -436,6 +436,14 @@ class EngineConfig:
     answerability_gate_path: str = field(
         default_factory=lambda: _env("ANSWERABILITY_GATE_PATH") or ""
     )
+    # Add the bridge-conditioned `s(q, b, c)` column to the feature gate's inputs. Off by
+    # default: it costs an extra Laya forward pass per query and the 13-feature gate has not
+    # been trained/measured here, so enabling it changes the vector only for a gate trained
+    # with it. The bridge is the top-ranked kept passage and the column is the best
+    # conditional decision over the rest.
+    gate_bridge_feature: bool = field(
+        default_factory=lambda: _env_bool("GATE_BRIDGE_FEATURE", False)
+    )
     # Optional NLI cross-encoder used as an answerability scorer, e.g.
     # "cross-encoder/nli-deberta-v3-base". Empty keeps Laya's decision (or the gate).
     # This is a different model with its own calibration, so it is explicit, not default.

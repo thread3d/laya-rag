@@ -64,10 +64,18 @@ FEATURE_NAMES: tuple[str, ...] = (
     "max_passage_coverage",
     "coverage_spread",
     "pairwise_redundancy",
+    # The BridgeRAG conditioning, as an optional column: `s(q, b, c)`'s best value over the
+    # evidence, where the bridge is the top ranked passage. The mechanism was validated
+    # (+0.0293 AUC over a shuffled-bridge control) but is a weak ranker; this column is for
+    # the *gate*, and it is supplied by the caller (the engine's reranker) because it needs a
+    # model call, not a text feature. Zero when it is not computed, so a gate trained without
+    # it is unaffected. Off unless `GATE_BRIDGE_FEATURE=1`.
+    "bridge_conditioned",
 )
 
-#: Names of the appended evidence-shape features, in :data:`FEATURE_NAMES` order.
-SHAPE_FEATURE_NAMES: tuple[str, ...] = FEATURE_NAMES[-3:]
+#: Names of the appended evidence-shape features, in :data:`FEATURE_NAMES` order. Explicit
+#: slicing, not `[-3:]`, because the optional bridge column follows them.
+SHAPE_FEATURE_NAMES: tuple[str, ...] = FEATURE_NAMES[9:12]
 
 _SHAPE_TOKEN = re.compile(r"[a-z0-9]+")
 
@@ -179,7 +187,12 @@ def _query_term_coverage(query: str, evidence: str) -> float:
     return len(terms & present) / len(terms)
 
 
-def extract_features(query: str, passages: Sequence[Any]) -> np.ndarray:
+def extract_features(
+    query: str,
+    passages: Sequence[Any],
+    *,
+    bridge_conditioned: float | None = None,
+) -> np.ndarray:
     """Describe one query/evidence set as a vector in :data:`FEATURE_NAMES` order.
 
     ``passages`` are objects with ``.text`` and ``.relevance`` (the engine's
@@ -187,6 +200,10 @@ def extract_features(query: str, passages: Sequence[Any]) -> np.ndarray:
     ``.chunk_id``. Every attribute access is defensive: a missing or malformed
     field becomes ``0.0`` or ``""`` rather than an exception, because this gate
     must not become a new failure point in the pipeline.
+
+    ``bridge_conditioned`` is the optional BridgeRAG column: the best bridge-conditioned
+    decision ``s(q, b, c)`` over the evidence, computed by the caller because it needs a
+    model call. ``None`` writes ``0.0``, so a gate trained without the column is unchanged.
 
     Returns a 1-D ``float64`` array of length ``len(FEATURE_NAMES)``.
     """
@@ -239,6 +256,7 @@ def extract_features(query: str, passages: Sequence[Any]) -> np.ndarray:
             max_passage_coverage(query, texts),
             coverage_spread(query, texts),
             pairwise_redundancy(texts),
+            float(bridge_conditioned or 0.0),
         ],
         dtype=np.float64,
     )

@@ -10,6 +10,7 @@ import pytest
 
 from laya_rag.answerability import (
     FEATURE_NAMES,
+    SHAPE_FEATURE_NAMES,
     LogisticGate,
     evaluate_gate,
     extract_features,
@@ -29,6 +30,7 @@ EXPECTED_FEATURES = (
     "max_passage_coverage",
     "coverage_spread",
     "pairwise_redundancy",
+    "bridge_conditioned",
 )
 
 #: The nine score features every earlier artefact names, and the shape features appended
@@ -66,9 +68,11 @@ def _separable_dataset(seed: int = 7, noise: float = 0.15) -> tuple[np.ndarray, 
 
 def test_feature_names_are_documented_and_ordered():
     assert FEATURE_NAMES == EXPECTED_FEATURES
-    assert len(FEATURE_NAMES) == 12
+    assert len(FEATURE_NAMES) == 13
     assert LogisticGate.FEATURE_NAMES is FEATURE_NAMES
     assert len(set(FEATURE_NAMES)) == len(FEATURE_NAMES)
+    # The shape features stay at 9..11; the optional bridge column follows them.
+    assert SHAPE_FEATURE_NAMES == FEATURE_NAMES[9:12]
 
 
 # -- extract_features ------------------------------------------------------
@@ -375,3 +379,14 @@ def test_fit_rejects_single_class_labels():
         LogisticGate().fit(X, np.ones(4))
     with pytest.raises(ValueError):
         LogisticGate().fit(X, np.zeros(4))
+
+
+def test_the_bridge_column_defaults_to_zero_and_carries_a_supplied_value():
+    """The optional BridgeRAG column is zero unless the caller computes it."""
+    passages = [_Passage("alpha", relevance=0.5, recall_score=1.0, path="/a.md")]
+    index = _feature("bridge_conditioned")
+    default = extract_features("alpha", passages)
+    assert default[index] == 0.0
+    supplied = extract_features("alpha", passages, bridge_conditioned=0.7)
+    assert supplied[index] == pytest.approx(0.7)
+    assert np.allclose(np.delete(default, index), np.delete(supplied, index))

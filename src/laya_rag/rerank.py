@@ -334,6 +334,7 @@ class LayaReranker:
         gate: Any | None = None,
         answerability_fn: Any | None = None,
         min_docs: int = 0,
+        bridge_feature: bool = False,
     ) -> RerankResult:
         """Apply a relevance decision to the candidates and gate on answerability.
 
@@ -453,10 +454,23 @@ class LayaReranker:
         elif gate is not None:
             # A trained feature gate replaces the one-scalar decision. The features are
             # the evidence signals the engine already has, so this needs no extra model
-            # call and can be calibrated on a domain's own null/answerable split.
+            # call — except the optional bridge column, which does, and is off by default.
             from .answerability import extract_features
 
-            features = extract_features(query, kept)
+            bridge_value: float | None = None
+            if bridge_feature and len(kept) >= 2:
+                # BridgeRAG conditioning s(q, b, c): the bridge is the top-ranked passage
+                # and the column is the best conditional decision over the rest. A model
+                # failure degrades to 0.0 rather than failing the query.
+                try:
+                    bridge_scores, bridge_usage = self.score_relevance_conditioned(
+                        query, kept[0].text, [passage.text for passage in kept[1:]]
+                    )
+                    bridge_value = max(bridge_scores) if bridge_scores else None
+                    _merge_usage(result.usage, bridge_usage)
+                except DecisionError:
+                    bridge_value = None
+            features = extract_features(query, kept, bridge_conditioned=bridge_value)
             answerability = float(np.asarray(gate.predict_proba([features])).reshape(-1)[0])
         else:
             answerability, answer_usage = self.check_answerability(query, kept)

@@ -1340,6 +1340,7 @@ class RagEngine:
             gate=self.answerability_gate,
             answerability_fn=nli.score if nli is not None else None,
             min_docs=self.config.rerank_min_docs,
+            bridge_feature=self.config.gate_bridge_feature,
         )
         rerank_seconds = time.perf_counter() - rerank_started
 

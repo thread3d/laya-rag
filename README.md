@@ -478,6 +478,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `RELEVANCE_THRESHOLD` | `0.5` | minimum Laya P(relevant) to keep a passage |
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
 | `ANSWERABILITY_GATE_PATH` | unset | persisted feature-based answerability gate (see `tools/answerability_train.py`); unset uses Laya's own scalar decision |
+| `GATE_BRIDGE_FEATURE` | `false` | add the bridge-conditioned `s(q,b,c)` column to the feature gate's inputs (bridge = top ranked passage; costs one extra Laya pass per query). The 13-feature gate is **not trained/measured here**, so leave off unless you train one |
 | `ANSWERABILITY_NLI_MODEL` | unset | NLI cross-encoder used as an answerability scorer (e.g. `cross-encoder/nli-deberta-v3-base`); takes precedence over the gate and Laya's scalar |
 | `TRUST_MANIFEST` | unset | JSON file mapping path globs to a trust tier (`quarantined` < `untrusted` < `trusted`) and, optionally, `tenants` to per-caller path globs; unset means no trust or ACL filtering |
 | `TRUST_DEFAULT_TIER` | `untrusted` | tier for a path the manifest does not name, when a manifest is configured (an allow-list is the safe default) |
