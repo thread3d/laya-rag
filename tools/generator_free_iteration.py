@@ -13,6 +13,8 @@ pool; from the top of that pool it mines **capitalised entity runs absent from t
 probe retrieves again into the pool; coverage is the benchmark's own normalised whole-fact
 substring test against the pool. A **shuffled-probe control** runs the identical procedure with
 another query's probes, so a gain can be attributed to the bridge rather than to "more retrieval".
+It also reports the **pool ceiling MAP@10** per round — an oracle ordering of the pool — so the
+answer says whether the added coverage is headroom for ordering, not only a larger set.
 
     .venv/bin/python tools/generator_free_iteration.py --limit-queries 400
     .venv/bin/python tools/generator_free_iteration.py          # full answerable set
@@ -92,16 +94,39 @@ def probes_from(
     return [entity for entity, _count in ranked[:max_probes]]
 
 
-def coverage(pool: Sequence[str], facts: Sequence[str], evidence: nugget.Evidence) -> float:
-    """Fraction of a query's gold facts present anywhere in the pool."""
+def fact_counts(
+    pool: Sequence[str], facts: Sequence[str], evidence: nugget.Evidence
+) -> tuple[int, int]:
+    """``(gold facts present anywhere in the pool, gold facts total)``."""
     wanted = [fact for fact in facts if fact and fact.strip()]
     if not wanted:
-        return 0.0
+        return 0, 0
     found = sum(
         1 for fact in wanted
         if any(evidence.covers_fact(chunk_id, fact) for chunk_id in pool)
     )
-    return found / len(wanted)
+    return found, len(wanted)
+
+
+def coverage(pool: Sequence[str], facts: Sequence[str], evidence: nugget.Evidence) -> float:
+    """Fraction of a query's gold facts present anywhere in the pool."""
+    found, total = fact_counts(pool, facts, evidence)
+    return found / total if total else 0.0
+
+
+def ceiling_map_at_10(covered: int, gold: int, top_k: int = 10) -> float:
+    """The best MAP@10 an oracle ordering of this pool could reach.
+
+    MAP@10 normalises by ``min(gold, top_k)``, and an oracle places candidates so that each
+    rank reveals one new fact, so the ceiling is ``sum(1/r for r in 1..min(covered, top_k)) /
+    min(gold, top_k)`` — an upper bound (a chunk covering several facts can only do better).
+    Comparing it across rounds answers whether extra *coverage* is headroom for *ordering*.
+    """
+    if gold <= 0:
+        return 0.0
+    # You cannot reveal more distinct facts than exist, so the ranks cap at the gold count too.
+    reveal = min(covered, gold, top_k)
+    return sum(1.0 / rank for rank in range(1, reveal + 1)) / min(gold, top_k)
 
 
 def load_queries(path: Path = ITEMS, *, limit: int | None = None) -> tuple[dict[str, str], dict[str, list[str]]]:
@@ -141,6 +166,8 @@ def run(
     shuffled_pools: dict[str, set[str]] = {query_id: set() for query_id in order}
     real_coverage: dict[str, dict[str, float]] = {query_id: {} for query_id in order}
     shuffled_coverage: dict[str, dict[str, float]] = {query_id: {} for query_id in order}
+    real_ceiling: dict[str, dict[str, float]] = {query_id: {} for query_id in order}
+    shuffled_ceiling: dict[str, dict[str, float]] = {query_id: {} for query_id in order}
     real_probes: dict[str, list[str]] = {}
     shuffled_probes: dict[str, list[str]] = {}
 
@@ -154,13 +181,25 @@ def run(
         complete = 0
         real_values: dict[str, float] = {}
         shuffled_values: dict[str, float] = {}
+        real_ceilings: list[float] = []
+        shuffled_ceilings: list[float] = []
         for query_id in order:
-            real = coverage(sorted(real_pools[query_id]), golds[query_id], evidence)
-            shuffled = coverage(sorted(shuffled_pools[query_id]), golds[query_id], evidence)
+            real_found, total = fact_counts(sorted(real_pools[query_id]), golds[query_id], evidence)
+            shuffled_found, _total = fact_counts(
+                sorted(shuffled_pools[query_id]), golds[query_id], evidence
+            )
+            real = real_found / total if total else 0.0
+            shuffled = shuffled_found / total if total else 0.0
             real_coverage[query_id][str(iteration)] = round(real, 4)
             shuffled_coverage[query_id][str(iteration)] = round(shuffled, 4)
             real_values[query_id] = real
             shuffled_values[query_id] = shuffled
+            real_ceiling_value = ceiling_map_at_10(real_found, total)
+            shuffled_ceiling_value = ceiling_map_at_10(shuffled_found, total)
+            real_ceiling[query_id][str(iteration)] = round(real_ceiling_value, 4)
+            shuffled_ceiling[query_id][str(iteration)] = round(shuffled_ceiling_value, 4)
+            real_ceilings.append(real_ceiling_value)
+            shuffled_ceilings.append(shuffled_ceiling_value)
             complete += 1 if real >= 1.0 else 0
             sizes_real += len(real_pools[query_id])
             sizes_shuffled += len(shuffled_pools[query_id])
@@ -168,6 +207,8 @@ def run(
             "iteration": iteration,
             "real_coverage": round(sum(real_values.values()) / len(order), 4),
             "shuffled_coverage": round(sum(shuffled_values.values()) / len(order), 4),
+            "real_ceiling_map@10": round(sum(real_ceilings) / len(order), 4),
+            "shuffled_ceiling_map@10": round(sum(shuffled_ceilings) / len(order), 4),
             "complete_fraction": round(complete / len(order), 4),
             "mean_pool_size": round(sizes_real / len(order), 2),
         })
@@ -199,14 +240,26 @@ def run(
         {q: shuffled_coverage[q][str(iterations)] for q in order},
         {q: real_coverage[q][str(iterations)] for q in order},
     )
+    paired_ceiling = evalkit.paired_bootstrap(
+        {q: real_ceiling[q]["0"] for q in order},
+        {q: real_ceiling[q][str(iterations)] for q in order},
+    )
+    paired_ceiling_control = evalkit.paired_bootstrap(
+        {q: shuffled_ceiling[q][str(iterations)] for q in order},
+        {q: real_ceiling[q][str(iterations)] for q in order},
+    )
     return {
         "iterations": per_iteration,
         "paired": {
             "real_expansion_vs_baseline": paired_real,
             "real_vs_shuffled_at_final": paired_control,
+            "ceiling_expansion_vs_baseline": paired_ceiling,
+            "ceiling_real_vs_shuffled_at_final": paired_ceiling_control,
         },
         "per_query_real": real_coverage,
         "per_query_shuffled": shuffled_coverage,
+        "per_query_real_ceiling": real_ceiling,
+        "per_query_shuffled_ceiling": shuffled_ceiling,
     }
 
 
@@ -230,12 +283,14 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"{report['_settings']['iterations']} expansion round(s), "
         f"<= {report['_settings']['max_probes']} entity probes per round",
         "",
-        "| iteration | real coverage | shuffled-probe coverage | complete | mean pool |",
-        "| --- | --- | --- | --- | --- |",
+        "| iteration | real coverage | shuffled-probe coverage | real ceiling MAP@10 | "
+        "shuffled ceiling MAP@10 | complete | mean pool |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in report["iterations"]:
         lines.append(
             f"| {row['iteration']} | {row['real_coverage']:.4f} | {row['shuffled_coverage']:.4f} | "
+            f"{row['real_ceiling_map@10']:.4f} | {row['shuffled_ceiling_map@10']:.4f} | "
             f"{row['complete_fraction']:.4f} | {row['mean_pool_size']:.1f} |"
         )
     paired = report["paired"]

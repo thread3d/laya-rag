@@ -19,22 +19,30 @@ query's probes, so a gain can be attributed to the bridge rather than to "more r
 
 2,255 answerable queries over the 17,259-chunk corpus:
 
-| iteration | real coverage | shuffled-probe coverage | complete | mean pool |
-| --- | --- | --- | --- | --- |
-| 0 | 0.8326 | 0.8326 | 0.6115 | 100.0 |
-| 1 | **0.8937** | 0.8428 | **0.7277** | 326.7 |
-| 2 | 0.8937 | 0.8428 | 0.7277 | 326.7 |
+| iteration | real coverage | shuffled coverage | real ceiling MAP@10 | shuffled ceiling | complete | mean pool |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0.8326 | 0.8326 | 0.5955 | 0.5955 | 0.6115 | 100.0 |
+| 1 | **0.8937** | 0.8428 | **0.6203** | 0.5994 | **0.7277** | 326.7 |
+| 2 | 0.8937 | 0.8428 | 0.6203 | 0.5994 | 0.7277 | 326.7 |
 
 | comparison | delta | 95% CI | p |
 | --- | --- | --- | --- |
-| real expansion − baseline | **+0.0611** | [+0.0555, +0.0670] | 0.0000 |
-| real − shuffled at the final round | **+0.0510** | [+0.0453, +0.0568] | 0.0000 |
+| real expansion − baseline (coverage) | **+0.0611** | [+0.0555, +0.0670] | 0.0000 |
+| real − shuffled at the final round (coverage) | **+0.0510** | [+0.0453, +0.0568] | 0.0000 |
+| real expansion − baseline (ceiling MAP@10) | **+0.0248** | [+0.0222, +0.0277] | 0.0000 |
+| real − shuffled at the final round (ceiling MAP@10) | **+0.0210** | [+0.0183, +0.0237] | 0.0000 |
 
 **The mechanism is real, and it is the bridge.** One round of entity-probe expansion raises
 gold-fact coverage by **+6.11 points** and lifts the share of queries with complete evidence from
 **61.2% to 72.8%**; **+5.10 of those points survive the shuffled-probe control**, so the gain is the
 conditioning, not the extra retrieval. The control is not zero (+1.02 points), which is the honest
 reading: generic "search more" helps a little, and the bridge is five times that.
+
+**And part of it is ordering headroom, not just a bigger set.** The pool's oracle **ceiling MAP@10
+rises 0.5955 → 0.6203 (+0.0248)**, of which **+0.0210 survives the control** — so about **40%** of
+the coverage gain is reachable MAP@10 for a ranker that can order the larger pool, and almost all of
+that headroom is the bridge. The baseline ceiling (0.5955) sits just under the diagnostics' fused
+depth-100 ceiling (0.6088), as it should for the lexical-only channel.
 
 Two further readings fall out. **One round saturates** at these settings — iteration 2 moves nothing
 — so a controller should run one expansion and stop, which makes the cost bounded. And the pool
@@ -47,9 +55,9 @@ second stage then has to order.
   procedure with the dense channel added, not run here.
 - **No answerability controller.** The audit's Bet 1 gates expansion on the head's decision; this
   measures the mechanism with a fixed one round, which is what Stage 1 asks.
-- **Coverage is not MAP@10.** The coverage objective *falsified on MuSiQue* (−0.0109 MAP@10), so the
-  open question is now whether this extra pool coverage translates into ordering — the next stage,
-  not established here.
+- **The ceiling is a bound, not an achieved MAP@10.** The **+0.0248** is what an *oracle* ordering of
+  the larger pool could reach; no ranker has captured it here, and the coverage objective itself
+  falsified on MuSiQue (−0.0109 MAP@10). Whether a selector realizes the headroom is the next stage.
 - **Probe mining is capitalised entities only.** "Noun chunks" and rarer selection rules are
   untried; one round already saturates, so a better probe set is the way to more.
 

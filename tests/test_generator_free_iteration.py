@@ -97,6 +97,24 @@ def test_expansion_reaches_a_gold_fact_the_first_pool_misses():
     assert expanded["real_coverage"] == 1.0
     # The shuffled-probe control uses another query's entity, which cannot cover this one's gold.
     assert expanded["shuffled_coverage"] == 0.0
+    # And the added coverage is headroom for an oracle ordering.
+    assert baseline["real_ceiling_map@10"] == 0.0
+    assert expanded["real_ceiling_map@10"] == 1.0
+
+
+def test_ceiling_map_at_10_is_the_oracle_ordering():
+    assert gi.ceiling_map_at_10(1, 1) == 1.0
+    assert gi.ceiling_map_at_10(2, 2) == 0.75          # (1 + 1/2) / 2
+    assert gi.ceiling_map_at_10(0, 2) == 0.0
+    assert gi.ceiling_map_at_10(5, 1) == 1.0           # capped by the gold count
+
+
+def test_fact_counts_returns_found_and_total():
+    import nugget_recall as nugget
+
+    evidence = nugget.Evidence({"c0": "the cat sat", "c1": "a dog ran"})
+    assert gi.fact_counts(["c0"], ["the cat sat", "a dog ran"], evidence) == (1, 2)
+    assert gi.fact_counts([], ["the cat sat"], evidence) == (0, 1)
 
 
 def test_load_queries_skips_null_queries(tmp_path):
