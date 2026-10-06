@@ -73,8 +73,9 @@ CALIBRATION_ARGS ?= --chart $(CHARTS_DIR)/reliability.png
 AUDIT_LOG ?= eval/audit.jsonl
 AUDIT_VERIFY_ARGS ?= --log $(AUDIT_LOG)
 NUGGET_ARGS ?=
+LEAKAGE_ARGS ?= --check
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report audit-verify nugget-recall job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report audit-verify nugget-recall leakage-audit job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -489,6 +490,10 @@ audit-verify:
 # The generator-free nugget / claim-recall protocol over the cached pool and CE scores.
 nugget-recall:
 	$(PY) tools/nugget_recall.py $(NUGGET_ARGS)
+
+# A contamination/leakage audit over the reports: the dilution signature and empty held-out blocks.
+leakage-audit:
+	$(PY) tools/leakage_audit.py $(LEAKAGE_ARGS)
 
 # What resumable work is in flight? Reads the `<stem>.manifest.json` sidecars jobkit writes.
 job-status:
