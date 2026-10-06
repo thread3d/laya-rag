@@ -76,8 +76,9 @@ NUGGET_ARGS ?=
 LEAKAGE_ARGS ?= --check
 LABELLING_ARGS ?= --help
 TWO_WIKI_ARGS ?=
+GFI_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report audit-verify nugget-recall leakage-audit labelling-queue heavy-status two-wiki job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report audit-verify nugget-recall leakage-audit labelling-queue heavy-status two-wiki generator-free-iteration job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -508,6 +509,10 @@ heavy-status:
 # 2WikiMultiHopQA retrieval on the distractor split (fetch dev.json first; see tools/twowiki.py).
 two-wiki:
 	$(PY) tools/twowiki.py $(TWO_WIKI_ARGS)
+
+# Bet 1 Stage 1: does entity-probe pool expansion raise gold-fact coverage? (lexical, no model)
+generator-free-iteration:
+	$(PY) tools/generator_free_iteration.py $(GFI_ARGS)
 
 # What resumable work is in flight? Reads the `<stem>.manifest.json` sidecars jobkit writes.
 job-status:
