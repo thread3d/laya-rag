@@ -32,14 +32,27 @@ is the macro mean over queries.
 | @10 | **0.7438** | **0.7803** |
 | @100 | 0.9676 | 0.9676 |
 
-Two readings:
+The same runs scored by **whole-gold-fact recall** — the benchmark's own normalised substring test,
+which is what the diagnostics report — with both arms seeing the same pool:
 
-1. **The cross-encoder's ordering gain is +0.0365 claim recall at 10** on the same pool — it is not
-   only a MAP effect. Reordering the same 100 candidates puts measurably more of each gold fact into
-   the top 10.
-2. **The pool covers 96.8% of nuggets at depth 100**, and the two arms are identical there (as they
-   must be — the CE only reorders). So the top-10 shortfall is **ordering, not recall**, which
-   independently reproduces the diagnostics conclusion with a metric that is not single-gold.
+| depth | fused fact-recall | cross-encoder fact-recall |
+| --- | --- | --- |
+| @10 | **0.4644** | **0.5452** |
+| @100 | 0.8480 | 0.8480 |
+
+Three readings:
+
+1. **The cross-encoder's ordering gain is +0.0365 claim recall and +0.0808 whole-fact recall at 10**
+   on the same pool — it is not only a MAP effect. Reordering the same 100 candidates puts
+   measurably more of each gold fact into the top 10.
+2. **The pool covers 96.8% of nuggets and 84.8% of whole facts at depth 100**, and the two arms are
+   identical there (as they must be — the CE only reorders). So the top-10 shortfall is **ordering,
+   not recall**, which independently reproduces the diagnostics conclusion (its depth-100 fact
+   recall is 0.8509) with a metric that is not single-gold.
+3. **This is a partial reranker-fairness pack.** It measures the CE's gain on a pool the CE did not
+   build — its ordering alone — but it is **not** the "reranker-excluded union pool" the audit asks
+   for, because per-channel rankings are not persisted; and it stops at the pool's depth (100), so
+   there is no R@1000.
 
 ## What this does not show
 

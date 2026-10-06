@@ -120,6 +120,10 @@ class Evidence:
             return value in self._tokens.get(chunk_id, set())
         return normalize(value) in self._normalized.get(chunk_id, "")
 
+    def covers_fact(self, chunk_id: str, fact: str) -> bool:
+        """Whether the whole gold fact appears, the benchmark's own normalised substring test."""
+        return normalize(fact) in self._normalized.get(chunk_id, "")
+
 
 def claim_recall(
     rankings: Mapping[str, Iterable[str]],
@@ -180,6 +184,40 @@ def build_arm_rankings(path: Path = SCORES) -> tuple[dict[str, list[str]], dict[
     return fused, ce
 
 
+def fact_recall(
+    rankings: Mapping[str, Iterable[str]],
+    golds: Mapping[str, Sequence[str]],
+    evidence: Evidence,
+    *,
+    k: int,
+) -> dict[str, Any]:
+    """Macro gold-*fact* recall@k per arm: the benchmark's own whole-fact substring test.
+
+    This is the reranker-fairness reading: both arms see the same pool (the CE only reorders it),
+    so recall@100 is identical by construction, while recall@10 shows how many more whole gold
+    facts the cross-encoder's ordering lifts into the top 10. It is a *partial* realisation of the
+    fairness pack — it is not a reranker-excluded union pool.
+    """
+    per_arm: dict[str, dict[str, Any]] = {}
+    for arm, by_query in rankings.items():
+        per_query: dict[str, float] = {}
+        for query_id, facts in golds.items():
+            wanted = [fact for fact in facts if fact and fact.strip()]
+            if not wanted:
+                continue
+            top = list(by_query.get(query_id, []))[:k]
+            found = sum(
+                1 for fact in wanted if any(evidence.covers_fact(chunk_id, fact) for chunk_id in top)
+            )
+            per_query[query_id] = round(found / len(wanted), 4)
+        values = list(per_query.values())
+        per_arm[arm] = {
+            "mean": round(sum(values) / len(values), 4) if values else 0.0,
+            "queries": len(values),
+        }
+    return per_arm
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="nugget_recall.py")
     ap.add_argument("--corpus", default=str(CORPUS))
@@ -207,9 +245,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "depths": {},
     }
     for depth in [int(value) for value in args.depths.split(",")]:
-        report["depths"][str(depth)] = claim_recall(
-            {"fused": fused, "ce": ce}, golds, evidence, k=depth
-        )
+        arms = claim_recall({"fused": fused, "ce": ce}, golds, evidence, k=depth)
+        arms["facts"] = fact_recall({"fused": fused, "ce": ce}, golds, evidence, k=depth)
+        report["depths"][str(depth)] = arms
     out = Path(args.out)
     evalkit.write_json(out.with_suffix(".json"), report)
     evalkit.write_text(out.with_suffix(".md"), render_markdown(report))
@@ -232,6 +270,21 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     ]
     for depth, arms in report["depths"].items():
         lines.append(f"| @{depth} | {arms['fused']['mean']:.4f} | {arms['ce']['mean']:.4f} |")
+    lines += [
+        "",
+        "The same runs scored by whole-gold-fact recall (the benchmark's own normalised substring",
+        "test); both arms see the same pool, so @100 is identical by construction and the @10",
+        "difference is the cross-encoder's ordering alone:",
+        "",
+        "| depth | fused fact-recall | cross-encoder fact-recall |",
+        "| --- | --- | --- |",
+    ]
+    for depth, arms in report["depths"].items():
+        facts = arms.get("facts") or {}
+        lines.append(
+            f"| @{depth} | {facts.get('fused', {}).get('mean', 0.0):.4f} | "
+            f"{facts.get('ce', {}).get('mean', 0.0):.4f} |"
+        )
     lines += [
         "",
         "Neither arm is reordered beyond the pool for the fused row; the CE row sorts the same",

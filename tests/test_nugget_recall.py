@@ -83,3 +83,21 @@ def test_the_report_is_written_when_the_inputs_exist(tmp_path):
     assert nr.main(["--out", str(out), "--depths", "10"]) == 0
     assert out.with_suffix(".json").is_file()
     assert out.with_suffix(".md").is_file()
+
+
+def test_fact_recall_uses_the_whole_fact_not_its_nuggets():
+    evidence = nr.Evidence({"c1": "Refunds take five days.", "c2": "Refunds take five."})
+    golds = {"q": ["Refunds take five days."]}
+    out = nr.fact_recall({"a": {"q": ["c1"]}, "b": {"q": ["c2"]}}, golds, evidence, k=1)
+    assert out["a"]["mean"] == 1.0
+    assert out["b"]["mean"] == 0.0
+
+
+def test_fact_recall_is_identical_at_pool_depth():
+    """Reordering the same pool cannot change whole-fact recall at the pool's own depth."""
+    evidence = nr.Evidence({"c1": "one", "c2": "two"})
+    golds = {"q": ["one"]}
+    fused = {"q": ["c1", "c2"]}
+    ce = {"q": ["c2", "c1"]}
+    out = nr.fact_recall({"fused": fused, "ce": ce}, golds, evidence, k=2)
+    assert out["fused"]["mean"] == out["ce"]["mean"] == 1.0
