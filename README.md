@@ -443,6 +443,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `TORCH_THREADS` | `16` | torch intra-op threads; oversubscription hurts on high-core hosts |
 | `INDEX_DIR` | `./indexes/default` | where the index is persisted |
 | `INDEX_BACKEND` | `memory` | `memory` or `ondisk`; `ondisk` streams vectors to a memory-mapped file and packs BM25 postings into one mmap so query-time memory stops scaling with corpus size (append-only; rebuild on change) |
+| `AUDIT_LOG` | *(unset)* | optional path for a **hash-chained** log of index mutations (`index`/`delete`/`reset`); verify with `make audit-verify`. Off by default |
 | `CHUNK_CHARS` / `CHUNK_OVERLAP_CHARS` | `1200` / `400` | chunking budget; a fact up to the overlap survives any split, a cut inside a sentence backs up to the sentence start, and the overlap is clamped below `CHUNK_CHARS` |
 | `CHUNK_CHARS_AUTO` / `CHUNK_CHARS_AUTO_MAX` | `true` / `2000` | derive the chunk size from the corpus (p90 of document lengths, clamped into `[CHUNK_CHARS, MAX]`), so deriving can only chunk **less** aggressively than the floor. Measured: SciFact nDCG@10 0.7264 → **0.7417** (p=0.023) with 40% fewer chunks, vendored-docs MRR 0.6429 → **0.7143**; `false` restores the fixed size |
 | `MIN_CHUNK_CHARS` | `80` | a shorter trailing chunk is folded into the previous one |

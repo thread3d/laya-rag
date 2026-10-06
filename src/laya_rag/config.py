@@ -47,6 +47,12 @@ def _env(name: str) -> str | None:
     return value or None
 
 
+def _env_path(name: str) -> Path | None:
+    """An optional filesystem path from the environment; unset/empty means None."""
+    value = _env(name)
+    return Path(value) if value else None
+
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = _env(name)
     if raw is None:
@@ -97,6 +103,9 @@ class EngineConfig:
     # one mmap, so query-time residency no longer scales with corpus size (the route to
     # the large BEIR corpora). The on-disk backend is append-only and rebuilds on change.
     index_backend: str = field(default_factory=lambda: _env("INDEX_BACKEND") or "memory")
+    # Optional tamper-evident log of index mutations (AUDIT_LOG). Off by default: the log is a
+    # durable side effect and most deployments do not need one. See `laya_rag.audit`.
+    audit_log: Path | None = field(default_factory=lambda: _env_path("AUDIT_LOG"))
     checkpoint: str = field(default_factory=lambda: _env("CHECKPOINT") or "multilingual")
     # "auto" defers to Laya's CUDA -> MPS -> CPU selection. On this host that picks
     # MPS (Metal), which measured 1.6-3x faster than CPU in the Laya checkout.

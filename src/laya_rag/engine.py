@@ -25,6 +25,7 @@ from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 
+from .audit import AuditLog
 from .chunking import (
     DEFAULT_EXTENSIONS,
     MAX_FILE_BYTES,
@@ -436,6 +437,8 @@ class RagEngine:
         self._sparse: Any | None = None
         self._sparse_encoder: Any | None = None
         self._sparse_query_cache: dict[str, Any] = {}
+        # Optional hash-chained audit log of index mutations (config.audit_log).
+        self._audit: AuditLog | None = None
         # Optional persisted feature gate for answerability (see config). Loaded lazily:
         # a missing or damaged file must not stop the engine from answering, it only
         # falls back to Laya's own decision.
@@ -600,6 +603,23 @@ class RagEngine:
         self._sparse = index
         return time.perf_counter() - started
 
+    def _record_audit(self, action: str, detail: dict[str, Any]) -> None:
+        """Append a mutation to the optional hash-chained audit log.
+
+        A logging failure must not undo a successful mutation: the index is already written,
+        so a broken log path is swallowed here and surfaces through `audit` verification
+        rather than as a failed request. `actor` is not known at the engine layer.
+        """
+        path = self.config.audit_log
+        if path is None:
+            return
+        if self._audit is None:
+            self._audit = AuditLog(path)
+        try:
+            self._audit.append(action, detail=detail)
+        except OSError:
+            return
+
     def reset(self) -> None:
         """Delete the on-disk index and drop the in-memory copies.
 
@@ -610,6 +630,7 @@ class RagEngine:
         self._build_active.set()
         try:
             self._reset_unlocked()
+            self._record_audit("reset", {"index_dir": str(self.config.index_dir)})
         finally:
             self._build_active.clear()
             self._build_lock.release()
@@ -673,6 +694,15 @@ class RagEngine:
         self._sparse_query_cache = {}
         if self.config.sparse_enabled and chunks:
             self._build_sparse(chunks)
+        self._record_audit(
+            "delete",
+            {
+                "paths": [str(p) for p in paths],
+                "doc_ids": list(doc_ids),
+                "removed_chunks": removed,
+                "total_chunks": len(chunks),
+            },
+        )
         return removed
 
     @property
@@ -752,7 +782,7 @@ class RagEngine:
             raise BuildInProgressError("another index build is already running")
         self._build_active.set()
         try:
-            return self._index_paths_locked(
+            report = self._index_paths_locked(
                 paths,
                 rebuild=rebuild,
                 extensions=extensions,
@@ -760,6 +790,18 @@ class RagEngine:
                 progress=progress,
                 prune=prune,
             )
+            self._record_audit(
+                "index",
+                {
+                    "paths": [str(path) for path in paths],
+                    "rebuild": bool(rebuild),
+                    "prune": bool(prune),
+                    "documents": report.documents,
+                    "chunks": report.chunks,
+                    "removed_chunks": report.removed_chunks,
+                },
+            )
+            return report
         finally:
             self._build_active.clear()
             self._build_lock.release()
