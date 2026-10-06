@@ -69,8 +69,9 @@ CONSISTENCY_ARGS ?=
 MTEB_TASK ?= SciFact
 MTEB_CACHE ?= eval/mteb-cache
 MTEB_HF_HOME ?= $(CURDIR)/eval/mteb-hf-home
+CALIBRATION_ARGS ?= --chart $(CHARTS_DIR)/reliability.png
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -472,6 +473,11 @@ consistency-check:
 # scores the retrieval system (chunking, fusion, second stage) rather than one embedding model.
 mteb-eval:
 	HF_HOME=$(MTEB_HF_HOME) $(PY) tools/mteb_search.py --task $(MTEB_TASK) --cache $(MTEB_CACHE)
+
+# The calibration row: reliability, ECE, Brier, NLL and risk-coverage for the answerability
+# decision, plus the reliability diagram. No standard benchmark grades this axis.
+calibration-report:
+	$(PY) tools/calibration_report.py $(CALIBRATION_ARGS)
 
 # What resumable work is in flight? Reads the `<stem>.manifest.json` sidecars jobkit writes.
 job-status:
