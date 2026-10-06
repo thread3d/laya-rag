@@ -76,7 +76,7 @@ NUGGET_ARGS ?=
 LEAKAGE_ARGS ?= --check
 LABELLING_ARGS ?= --help
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report audit-verify nugget-recall leakage-audit labelling-queue job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report audit-verify nugget-recall leakage-audit labelling-queue heavy-status job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -499,6 +499,10 @@ leakage-audit:
 # Build/score a review queue for the owed hand-labelled sets; it never writes a label.
 labelling-queue:
 	$(PY) tools/labelling_queue.py $(LABELLING_ARGS)
+
+# Is a heavyweight job running? Run long jobs one at a time (see README).
+heavy-status:
+	$(PY) tools/heavylock.py --status
 
 # What resumable work is in flight? Reads the `<stem>.manifest.json` sidecars jobkit writes.
 job-status:

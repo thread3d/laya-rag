@@ -721,6 +721,42 @@ And **Laya's decision head is a stronger filter than a ranker** — reordering B
 lowered nDCG@10 on both datasets (SciFact 0.654 → 0.470). It still filters and still gates
 answerability, which is what those decisions are calibrated for.
 
+## Running long jobs: one at a time
+
+**Do not run two corpus-scale jobs on this machine at once.** Three multi-million-document lexical
+builds plus a retrieval harness, launched together, **crashed the host**. Every one was resumable so
+no work was lost, but the crash was avoidable, and this is not a preference: the jobs are I/O- and
+memory-heavy enough that the combination is unsafe even on a 56-core, 256 GB machine.
+
+The rule is now enforced, not only written down. The heavy runners — `tools/beir.py`,
+`tools/twowiki.py`, `tools/musique.py` and the `tools/engine_*.py` harnesses — take an exclusive
+`flock` on `eval/.heavy-job.lock` before doing any work:
+
+```sh
+.venv/bin/python tools/heavylock.py --status    # who, if anyone, holds it
+make heavy-status
+```
+
+A second job exits `2` with the holder's name, pid and start time instead of piling on. The kernel
+releases the lock when a process dies, so a crashed or killed job leaves **no stale lock** to clean
+up. To run two deliberately — e.g. one tiny read-only probe beside a real run — set
+`LAYA_RAG_ALLOW_CONCURRENT=1`.
+
+**Every long job checkpoints, so a crash resumes rather than restarts.** Re-issue the same command
+after an interruption; the checkpoint is keyed to the run's settings and is refused if they changed.
+
+| job | checkpoint | resume |
+| --- | --- | --- |
+| `tools/beir.py` lexical rows | `--lexical-checkpoint` (per query) | same command |
+| `tools/beir.py` dense rows | `--embed-chunk N` (per N docs) | same command |
+| `tools/twowiki.py`, `tools/musique.py` | `--embed-chunk N` (default 20,000) | same command |
+| `tools/musique.py` cross-encoder | CE cache with settings check | same command |
+| `tools/engine_beir.py`, `engine_multihop.py`, `engine_musique.py` | jobkit manifest | same command |
+| any of them | — | `make job-status` lists what is in flight |
+
+If a job dies mid-run, do not start a second one to "make up time": re-issue the first, let it
+resume, and only then start the next.
+
 ## How it compares: the honest case
 
 This section is the summary of every benchmark comparison made here, including the ones that

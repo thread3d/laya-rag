@@ -80,6 +80,7 @@ make claim-check                 # 58 prose claims against their reports
 make consistency-check           # documents agree with each other on the shared quantities
 make charts && make charts-more  # regenerate every figure in the README
 make job-status                  # any long job and how far it got
+make heavy-status                # is a heavyweight job running? run long jobs one at a time
 ```
 
 Everything long is resumable: `--lexical-checkpoint` per query, `--embed-chunk` per embedding batch,

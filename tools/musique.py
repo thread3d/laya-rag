@@ -138,12 +138,18 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--coverage-lambda", type=float, default=0.7)
     ap.add_argument("--min-docs", type=int, default=3)
     ap.add_argument("--samples", type=int, default=1000)
+    ap.add_argument("--embed-chunk", type=int, default=20000,
+                    help="checkpoint the embedding pass every N paragraphs, so a crash resumes "
+                         "at the next chunk")
     ap.add_argument("--out", default=str(ROOT_BENCH / "retrieval"))
     return ap.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("musique.py")
     split_path = ROOT_BENCH / f"{args.split}.json"
     if not split_path.is_file():
         raise SystemExit(f"{split_path} is missing; run tools/fetch_musique.py first")
@@ -155,7 +161,7 @@ def main(argv=None) -> int:
     model_id = MODELS.get(args.model, args.model)
     encoder = beir.BiEncoder(model_id)
     cache = ROOT_BENCH / f"cache-{args.split}-{encoder.name}"
-    vectors = beir.cached_embed(encoder, corpus, cache)
+    vectors = beir.cached_embed(encoder, corpus, cache, chunk=args.embed_chunk)
     print("  lexical ranking...", flush=True)
     lexical = beir.bm25_rankings(corpus, queries, args.depth, stem=True, drop_stopwords=True,
                                  titles=titles, title_boost=2)

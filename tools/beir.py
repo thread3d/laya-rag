@@ -962,6 +962,9 @@ def _parse_pairs(spec: str) -> dict[str, str]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    from heavylock import heavy_job_guard
+
+    heavy_job_guard("beir.py")
     data_root = Path(args.data_root)
     dataset_names = [name.strip() for name in args.datasets.split(",") if name.strip()]
     wanted = [name.strip() for name in args.retrievers.split(",") if name.strip()]
