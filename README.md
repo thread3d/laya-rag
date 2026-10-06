@@ -498,6 +498,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `COMPOSE_API` | `ollama` | `ollama` calls the native `/api/chat`; `openai` calls any OpenAI-compatible `/v1/chat/completions` |
 | `COMPOSE_TIMEOUT_S` | `300` | how long composition may take before it is abandoned |
 | `COMPOSE_MAX_TOKENS` | `1200` | token budget for one composed answer; hitting it is reported as truncated |
+| `COMPOSE_EVIDENCE_TOKENS` | `0` | budget for the evidence region of a composed prompt (chars/4 estimate); `0` keeps every passage, a positive value keeps the highest-ranked document blocks that fit and always at least one |
 | `MCP_BACKEND` | `local` | MCP server backend: `local` runs the engine in-process, `http` proxies to a running service |
 | `MCP_URL` | `http://127.0.0.1:8077` | service URL when `MCP_BACKEND=http` |
 | `MCP_API_KEY` | `API_KEY` | bearer token the MCP HTTP backend sends |

@@ -470,6 +470,14 @@ class EngineConfig:
     # can spend a few hundred more reasoning even with thinking disabled: at 600,
     # two runs in three hit the ceiling and stopped mid-answer.
     compose_max_tokens: int = field(default_factory=lambda: _env_int("COMPOSE_MAX_TOKENS", 1200))
+    # Budget for the *evidence* region of a composed prompt, estimated at 4 characters per
+    # token. `0` keeps every retrieved passage (the historical behaviour); a positive value
+    # keeps the highest-ranked document blocks that fit, so a long answer cannot push the
+    # question out of the model's window. The builder is order-aware: it never reorders,
+    # and it always keeps at least one block.
+    compose_evidence_tokens: int = field(
+        default_factory=lambda: _env_int("COMPOSE_EVIDENCE_TOKENS", 0)
+    )
 
     # Service
     host: str = field(default_factory=lambda: _env("HOST") or "127.0.0.1")

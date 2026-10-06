@@ -517,3 +517,46 @@ def test_the_query_response_carries_no_generated_text(ctx):
     assert set(body) <= allowed, f"unexpected keys: {set(body) - allowed}"
     # The point of the guarantee: no field of /v1/query is ever model-generated.
     assert not set(body) & {"answer", "composed", "completion", "prose", "text"}
+
+
+# ── budgeted, order-aware evidence ───────────────────────────────────────
+
+def _evidence(messages):
+    body = messages[1]["content"]
+    return body.split("Evidence:\n\n", 1)[1]
+
+
+def test_no_budget_keeps_every_document_block():
+    messages = build_messages("q", [("a.md", "first"), ("b.md", "second")])
+    evidence = _evidence(messages)
+    assert "first" in evidence and "second" in evidence
+
+
+def test_a_small_budget_keeps_the_highest_ranked_block():
+    messages = build_messages(
+        "q", [("a.md", "first"), ("b.md", "second")], max_evidence_tokens=3
+    )
+    evidence = _evidence(messages)
+    assert "first" in evidence
+    assert "second" not in evidence
+
+
+def test_a_generous_budget_keeps_everything():
+    messages = build_messages(
+        "q", [("a.md", "first"), ("b.md", "second")], max_evidence_tokens=10_000
+    )
+    evidence = _evidence(messages)
+    assert "first" in evidence and "second" in evidence
+
+
+def test_at_least_one_block_is_always_kept():
+    messages = build_messages("q", [("a.md", "x" * 4000)], max_evidence_tokens=1)
+    assert "x" * 10 in _evidence(messages)
+
+
+def test_the_budget_does_not_reorder_blocks():
+    messages = build_messages(
+        "q", [("a.md", "first"), ("b.md", "second")], max_evidence_tokens=10_000
+    )
+    evidence = _evidence(messages)
+    assert evidence.index("first") < evidence.index("second")
