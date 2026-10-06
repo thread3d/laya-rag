@@ -5,7 +5,7 @@ retrieval and decision engine, with a command line, an HTTP API and a web interf
 
 Clients meet the engine over a local HTTP service:
 
-![Architecture: browser, curl and CLI clients call the local Python engine over HTTP on port 8077; the engine chunks, embeds and indexes (delete-by-id tombstones, compact reclaims), recalls with dense + BM25 screened by the trust/ACL predicate before fusion and reports the pool's shape, re-ranks and gates answerability with Laya (an optional feature gate, with the bridge-conditioned column opt-in), and returns an evidence bundle with calibrated probabilities, from which an extractive composer emits verbatim spans. Every index mutation is written to a hash-chained audit log. It loads a Laya torch checkpoint, and the caller composes the answer, or not.](docs/architecture.png)
+![Architecture: browser, HTTP and MCP clients, and the CLI reach the local Python engine through its three interfaces — an HTTP API on port 8077, an MCP server over stdio or HTTP, and the command line. The engine chunks, embeds and indexes (delete-by-id tombstones, compact reclaims), recalls with dense + BM25 screened by the trust/ACL predicate before fusion and reports the pool's shape, re-ranks and gates answerability with Laya (an optional feature gate, with the bridge-conditioned column opt-in), and returns an evidence bundle with calibrated probabilities, from which an extractive composer emits verbatim spans. Every index mutation is written to a hash-chained audit log. It loads a Laya torch checkpoint, and the caller composes the answer, or not.](docs/architecture.png)
 
 ## Why the split is shaped this way
 

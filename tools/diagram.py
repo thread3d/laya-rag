@@ -69,50 +69,58 @@ def _arrow(ax, start, end, *, color=BLUE, lw=1.7, style="-|>", linestyle="-",
 
 def draw(out: Path) -> None:
     plt = _plt()
-    fig = plt.figure(figsize=(12, 5.8))
+    fig = plt.figure(figsize=(12, 6.6))
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, 12)
-    ax.set_ylim(0.42, 5.56)
+    ax.set_ylim(0.42, 6.36)
     ax.set_aspect("equal")
     ax.axis("off")
 
     # ── panels ───────────────────────────────────────────────────────────
-    _box(ax, 0.15, 1.40, 3.00, 4.05, "", face=PANEL_CLIENT, edge=EDGE_CLIENT,
+    _box(ax, 0.15, 1.55, 3.00, 4.70, "", face=PANEL_CLIENT, edge=EDGE_CLIENT,
          radius=0.10, lw=1.3, zorder=1)
-    _box(ax, 4.75, 1.40, 7.10, 4.05, "", face=PANEL_ENGINE, edge=EDGE_ENGINE,
+    _box(ax, 4.75, 1.55, 7.10, 4.70, "", face=PANEL_ENGINE, edge=EDGE_ENGINE,
          radius=0.10, lw=1.3, zorder=1)
 
-    ax.text(0.45, 5.15, "Clients", fontsize=11.5, fontweight="bold", color=INK,
+    ax.text(0.45, 6.05, "Clients", fontsize=11.5, fontweight="bold", color=INK,
             ha="left", va="center")
-    ax.text(5.05, 5.15, "Laya RAG engine  (Python)", fontsize=11.5, fontweight="bold",
+    ax.text(5.05, 6.05, "Laya RAG engine  (Python)", fontsize=11.5, fontweight="bold",
             color=BLUE_DEEP, ha="left", va="center")
 
     # ── clients ──────────────────────────────────────────────────────────
     clients = [
         ("browser", "the GUI at  /"),
-        ("curl", "the HTTP API"),
+        ("HTTP client", "curl, SDKs"),
+        ("MCP client", "Claude, Cursor, \u2026"),
         ("cli", "the laya-rag CLI"),
     ]
     for i, (name, detail) in enumerate(clients):
-        y = 4.15 - i * 0.85
-        _box(ax, 0.45, y, 2.40, 0.68, "", face="#ffffff", edge="#9aa7b4", radius=0.06)
-        ax.text(0.62, y + 0.34, name, fontsize=10, fontweight="bold", color=INK,
+        y = 5.10 - i * 0.80
+        _box(ax, 0.45, y, 2.40, 0.62, "", face="#ffffff", edge="#9aa7b4", radius=0.06)
+        ax.text(0.60, y + 0.31, name, fontsize=9.6, fontweight="bold", color=INK,
                 ha="left", va="center", zorder=4)
-        ax.text(1.32, y + 0.34, f"—  {detail}", fontsize=9, color=GREY,
+        ax.text(1.62, y + 0.31, f"\u2014  {detail}", fontsize=8.6, color=GREY,
                 ha="left", va="center", zorder=4)
 
-    ax.text(1.65, 1.92, "the caller composes the answer, or not", fontsize=8.8,
+    ax.text(1.65, 2.15, "the caller composes the answer, or not", fontsize=8.8,
             style="italic", color=GREY, ha="center", va="center")
 
-    # ── engine pipeline ──────────────────────────────────────────────────
+    # ── the three interfaces the engine exposes, then the pipeline ───────
+    xs, width = 5.05, 6.50
+    _box(ax, xs, 5.20, width, 0.60,
+         "interfaces:   HTTP API  (:8077)   \u00b7   MCP server  (stdio / HTTP)   \u00b7   CLI",
+         face=CHECK_FACE, edge=CHECK_EDGE, fontsize=9.4, weight="bold",
+         color="#7a5410", radius=0.05, lw=1.2)
+
     stages = [
         "chunk  \u2192  embed  \u2192  index\n(delete-by-id tombstones; compact reclaims)",
         "hybrid recall  (dense + BM25)\ntrust/ACL-screened before fusion; pool shape reported",
         "Laya re-rank  +  answerability gate\n(optional feature gate; bridge column opt-in)",
         "evidence bundle, with calibrated probabilities\nextractive composer emits verbatim spans",
     ]
-    xs, width, height = 5.05, 6.50, 0.55
-    ys = [4.45, 3.60, 2.75, 1.90]
+    height = 0.55
+    ys = [4.35, 3.55, 2.75, 1.95]
+    _arrow(ax, (xs + width / 2, 5.20), (xs + width / 2, ys[0] + height), lw=1.5, scale=13)
     for i, (text, y) in enumerate(zip(stages, ys)):
         last = i == len(stages) - 1
         _box(ax, xs, y, width, height, text,
@@ -124,25 +132,24 @@ def draw(out: Path) -> None:
             _arrow(ax, (xs + width / 2, ys[i - 1]), (xs + width / 2, y + height),
                    lw=1.5, scale=13)
 
-    ax.text(xs + 0.02, 1.20,
+    ax.text(xs + 0.02, 1.72,
             "index mutations are hash-chained (make audit-verify)",
             fontsize=8.4, style="italic", color=GREY, ha="left", va="center")
 
-    # ── the two directions across the wire ───────────────────────────────
-    _arrow(ax, (3.15, 3.92), (4.75, 3.92))
-    _arrow(ax, (4.75, 3.34), (3.15, 3.34))
-    ax.text(3.95, 4.16, "HTTP", fontsize=9.5, fontweight="bold", color=BLUE,
+    # ── the wire across to the interfaces: HTTP and MCP ──────────────────
+    _arrow(ax, (3.15, 5.62), (5.05, 5.62))
+    _arrow(ax, (5.05, 5.38), (3.15, 5.38))
+    ax.text(4.10, 5.84, "HTTP  \u00b7  MCP", fontsize=9.4, fontweight="bold", color=BLUE,
             ha="center", va="center")
-    ax.text(3.95, 3.63, "port 8077", fontsize=8.5, color=GREY, ha="center", va="center")
-    ax.text(3.95, 3.08, "request  /  evidence", fontsize=8.2, color=GREY,
+    ax.text(4.10, 5.16, "request  /  evidence", fontsize=8.2, color=GREY,
             ha="center", va="center")
 
     # ── checkpoint the engine loads ──────────────────────────────────────
     cx = 4.75 + 7.10 / 2
-    _box(ax, cx - 1.85, 0.52, 3.70, 0.62, "Laya checkpoint  (torch)",
+    _box(ax, cx - 1.85, 0.72, 3.70, 0.62, "Laya checkpoint  (torch)",
          face=CHECK_FACE, edge=CHECK_EDGE, fontsize=9.8, weight="bold",
          color="#7a5410", radius=0.05, lw=1.2)
-    _arrow(ax, (cx, 1.40), (cx, 1.14), color=CHECK_EDGE, lw=1.3,
+    _arrow(ax, (cx, 1.55), (cx, 1.34), color=CHECK_EDGE, lw=1.3,
            linestyle=(0, (4, 3)), style="-|>", scale=12)
 
     out.parent.mkdir(parents=True, exist_ok=True)
