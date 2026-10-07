@@ -823,14 +823,20 @@ resume, and only then start the next.
 
 This section is the summary of every benchmark comparison made here, including the ones that
 went badly. The retrieval programme behind it is in [`RANKINGS.md`](RANKINGS.md); the survey of
-what could and could not be run is in [`BENCHMARKS.md`](BENCHMARKS.md). Everything below is
-reproducible with `tools/beir.py`, `tools/multihop_official.py`, `tools/multihop_gate.py`, and
-`tools/compare.py` — the last of which prints the tables here and draws the charts:
+what could and could not be run is in [`BENCHMARKS.md`](BENCHMARKS.md). **The figures alone — nine
+cross-system comparison charts, this engine against five published retrieval systems and against
+the open-source field — are collected in [`docs/COMPARISONS.md`](docs/COMPARISONS.md)**, which is the
+page to read if you want the picture rather than the argument. Everything below is reproducible with
+`tools/beir.py`, `tools/multihop_official.py`, `tools/multihop_gate.py`, and `tools/compare.py` — the
+last of which prints the tables here and draws the charts:
 
 ```sh
 make beir                    # the BEIR reports the numbers come from
 make charts                  # tables + error bars + docs/charts/*.png, from those reports
+make charts-compare          # the cross-system comparison figures alone, no reruns
 ```
+
+![BEIR nDCG@10 by system and dataset: this engine against five published systems, with our unmeasured datasets left as gaps](docs/charts/cmp_beir18_matrix.png)
 
 Drawing the charts needs `matplotlib` (declared in the `eval` extra), and nothing else new:
 it was installed here without disturbing the pinned `torch`/`transformers`, which is worth
