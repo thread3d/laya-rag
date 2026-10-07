@@ -45,22 +45,26 @@ reports the agreement with the (absent) proposal, the per-label counts, and **re
 
 ## The verifier set — composed answers with the shipped generator
 
-`--mode verifier --generate 200` runs the engine over the first 200 answerable queries, composes an
+`--mode verifier --generate N` runs the engine over the first N answerable queries, composes an
 answer from the retrieved evidence with the configured generator (`ornith-1.5:35b` at the default
 Ollama endpoint) and writes each record — query, answer, evidence — to a checkpointed JSONL sidecar
-as it is produced. A re-run resumes: two hours of generation must not be one crash away from
-starting over, which this repository has now had to learn three times.
+as it is produced. A re-run resumes, and `--answers` reads that sidecar directly, so an interrupted
+run still yields a smaller queue rather than nothing: two hours of generation must not be one crash
+away from starting over, which this repository has now had to learn three times.
 
 ```sh
-.venv/bin/python tools/labelling_pairs.py --mode verifier --generate 200 \
+.venv/bin/python tools/labelling_pairs.py --mode verifier --generate 320 \
     --out eval/labelling/verifier-pairs.json              # resumable via verifier-pairs.jsonl
 .venv/bin/python tools/labelling_queue.py build \
     --input eval/labelling/verifier-pairs.json \
-    --out eval/labelling/verifier-queue.jsonl
+    --out eval/labelling/verifier-queue.jsonl             # 202 unlabelled items
 ```
 
-The reviewer decides whether each answer is faithful to its evidence; the deterministic verifier's
-flags are then scored against those labels, which is the precision the Phase 5.3 item asks for.
+Over **320** answerable queries that produced **202 composed answers** — 118 were abstentions (the
+engine declined, or the composer returned nothing), a 37% abstention rate on this convenience
+sample — at roughly 15 s/query. The reviewer decides whether each answer is faithful to its
+evidence; the deterministic verifier's flags are then scored against those labels, which is the
+precision the Phase 5.3 item asks for.
 
 ## What this does not show
 
@@ -76,9 +80,11 @@ flags are then scored against those labels, which is the precision the Phase 5.3
   demonstration covers the third on constructed claims).
 - **The verifier set is the local generator's prose**, not a frontier model's, and it is one model on
   one corpus; precision measured on it is a statement about that generator.
-- **The first 200 answerable queries are not a random sample of the benchmark** — they are dataset
-  order, which front-loads the FTX/Trump-era records. A reviewer should read the queue as a
+- **The first 320 answerable queries are not a random sample of the benchmark** — they are dataset
+  order, which front-loads the 2023 crypto/tech records. A reviewer should read the queue as a
   convenience sample, and the roadmap's item is the *labelling*, not a benchmark claim.
+- **The 118 abstentions are dropped, not labelled.** Whether the engine *should* have answered is
+  the Phase 5.2/5.3 question about the gate, not the verifier; the queue is composed answers only.
 
 ## Reproduction
 
