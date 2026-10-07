@@ -10,7 +10,7 @@ to catch.
 
 | quantity | where it disagreed | authoritative value | why the disagreement happened |
 | --- | --- | --- | --- |
-| BEIR coverage | `BENCHMARKS.md` "5 of 18"; `ROADMAP.md` "7 of 18" and later; `PROGRAMME-STATUS.md` "10 of 18" | **10 of 18** (counted from `eval/beir/*.json`) | the count is a moving target written into three documents by hand at three times, and never recomputed |
+| BEIR coverage | `BENCHMARKS.md` "5 of 18"; `ROADMAP.md` "7 of 18" and later; `PROGRAMME-STATUS.md` "10 of 18" | **12 of 18** (counted from `eval/beir/*.json`) | the count is a moving target written into three documents by hand at three times, and never recomputed |
 | published `voyage-02` + reranker | `README.md` 0.662 / 0.479; `BENCHMARKS.md` 0.663 / 0.480 | **0.6625 / 0.4795** (paper Table 5, pinned in `tools/compare.py` `PUBLISHED_MH`) | one table truncated to three decimals, the other rounded half-up |
 | recalibration half-splits | `recalibration.md` 300; `README.md` and `BENCHMARKS.md` 500 | **300** (`recalibration.json` `transfer.splits`) | the two prose copies were written from memory of an earlier draft |
 | lexical-control agreement | `findings-beir-breadth.md` pinned at 5/10 and 8/10; the `docs/FINDINGS.md` index said "8 of 9 within ±0.008" | **5 of 10** within ±0.008, **8 of 10** within ±0.02 | the index carried its own hand-typed copy of a sentence the breadth document had already had corrected once |
@@ -26,7 +26,9 @@ quantity → authority → every document site that states it, and fails when:
   rule that makes 0.6625 render as 0.663 rather than 0.662;
 - a superseded report is present without a quarantine marker, names a different replacement, or is
   cited by a document or by a `claim_check` claim;
-- the computed BEIR coverage count disagrees with any document that states it.
+- the computed BEIR coverage count disagrees with any document that states it;
+- a document in the audit set above the repository breaks one of the two conventions in the next
+  section.
 
 Three design choices matter:
 
@@ -36,11 +38,39 @@ Three design choices matter:
    but does not count toward "of 18".
 2. **The external authority is read from the one place it is pinned.** The `voyage-02` row comes
    from `tools/compare.py`'s `PUBLISHED_MH`, so the docs and the chart cannot disagree about the
-   same transcribed number.
+   same transcribed number. Corpus rows the audit quotes are read the same way, from the report's
+   own `retrievers.bm25-engine` block.
 3. **Superseded is machine-readable.** Ten pre-fix BEIR reports (the ArguAna BM25 row before the
    flat-control fix: 0.295 against 0.3935) sit beside their corrected replacements by design. Each
    now carries a `<stem>.superseded.json` marker; `--fix` writes them, and the check refuses to let
    one be read as a result.
+
+## The audit set above the repository
+
+`best-in-the-world/` (`measurement-audit.md`, `proposal-ledger.md` and the two briefs) reads this
+repository's numbers from outside it and is **not committed to this repository**, so it has no
+registry entry and cannot have required sites. It drifted exactly as the repository documents did:
+after FEVER and the full HotpotQA run landed, its coverage count stayed at 10 and 11 of 18 and its
+corpus table still called FEVER "queued". `check_audit_documents` holds it to two conventions:
+
+- **A `> **Currency:**` banner** in every audit document, saying which sections are pinned and
+  which are dated findings. Without it a reader cannot tell a current number from a snapshot.
+- **The computed coverage count on every unfenced "of 18".** A dated finding keeps the number it was
+  written with, but only inside a fence:
+
+  ```markdown
+  <!-- consistency: snapshot 2026-10-06 -->
+  the audit found the count stated as 5, 7 and 10 of 18
+  <!-- consistency: /snapshot -->
+  ```
+
+  The opening marker must carry a date; an undated or unclosed fence fails, and the fenced lines are
+  removed before the count is read, so history is exempt only while it is declared as history.
+
+A superseded report cited from an audit document is a failure too: `check_references` scans the
+audit set alongside the repository. Because the directory is a sibling of the repository and not
+part of it, an absent `best-in-the-world/` skips every audit check — a checkout of `laya-rag` alone
+still passes, exactly as it does with `eval/` absent.
 
 ## Reproduction
 
@@ -60,7 +90,9 @@ make consistency-check
   superseded-report registry is the mitigation for the second case, and it is a human-maintained
   list, not a detection rule.
 - **It does not scan every prose claim, only registered sites.** A quantity that is stated once and
-  never registered is out of scope; `claim-check` is the tool for report-backed prose.
+  never registered is out of scope; `claim-check` is the tool for report-backed prose. The audit set
+  above the repository is the one exception: it is scanned generically for "of 18", because that
+  count is the quantity its documents drifted on, and it carries no registry of its own.
 - **The coverage count can over-count** if a stale report not in the superseded registry is left on
   disk, because membership is a union over every report present. The registry is the guard, and it
   needs the same discipline as `SUPERSEDED` above.

@@ -161,6 +161,114 @@ def test_a_missing_authority_report_is_a_skip_not_a_failure(tmp_path):
     assert cc.run_checks([quantity], root=tmp_path) == []
 
 
+# ── the audit set above the repository (best-in-the-world/) ──────────────
+
+def _audit_doc(tmp_path: Path, name: str, body: str, *, banner: bool = True) -> Path:
+    audit = tmp_path / "best-in-the-world"
+    audit.mkdir(parents=True, exist_ok=True)
+    text = ("> **Currency:** pinned by `make consistency-check`.\n\n" if banner else "") + body
+    (audit / name).write_text(text, encoding="utf-8")
+    return audit
+
+
+def test_an_audit_document_must_carry_a_currency_banner(tmp_path):
+    audit = _audit_doc(tmp_path, "a.md", "coverage is 12 of 18\n", banner=False)
+    failures = cc.check_audit_documents(root=tmp_path, coverage_count=12, audit_dir=audit)
+    assert any("Currency" in f for f in failures)
+
+
+def test_an_audit_count_must_match_the_computed_value(tmp_path):
+    audit = _audit_doc(tmp_path, "a.md", "coverage is 10 of 18\n")
+    failures = cc.check_audit_documents(root=tmp_path, coverage_count=12, audit_dir=audit)
+    assert len(failures) == 1 and "computed 12 of 18" in failures[0]
+
+
+def test_a_fenced_dated_finding_may_keep_a_superseded_count(tmp_path):
+    """The point of the fence: history is allowed, but only when it is dated as history."""
+    body = (
+        "<!-- consistency: snapshot 2026-10-06 -->\n"
+        "the audit found the count stated as 5, 7 and 10 of 18\n"
+        "<!-- consistency: /snapshot -->\n\n"
+        "coverage is 12 of 18\n"
+    )
+    audit = _audit_doc(tmp_path, "a.md", body)
+    assert cc.check_audit_documents(root=tmp_path, coverage_count=12, audit_dir=audit) == []
+
+
+def test_a_snapshot_fence_must_name_a_date(tmp_path):
+    """An undated fence is not a fence, so its historical count is read as a current claim."""
+    body = (
+        "<!-- consistency: snapshot -->\n"
+        "the audit found 10 of 18\n"
+        "<!-- consistency: /snapshot -->\n"
+    )
+    audit = _audit_doc(tmp_path, "a.md", body)
+    failures = cc.check_audit_documents(root=tmp_path, coverage_count=12, audit_dir=audit)
+    assert any("computed 12 of 18" in f for f in failures)
+
+
+def test_an_unclosed_snapshot_fence_fails(tmp_path):
+    audit = _audit_doc(
+        tmp_path / "unclosed", "a.md",
+        "<!-- consistency: snapshot 2026-10-06 -->\nold 10 of 18\n",
+    )
+    failures = cc.check_audit_documents(
+        root=tmp_path / "unclosed", coverage_count=12, audit_dir=audit
+    )
+    assert any("never closed" in f for f in failures)
+
+
+def test_a_snapshot_closure_with_nothing_open_fails(tmp_path):
+    audit = _audit_doc(tmp_path, "a.md", "<!-- consistency: /snapshot -->\n")
+    failures = cc.check_audit_documents(root=tmp_path, coverage_count=12, audit_dir=audit)
+    assert any("nothing open" in f for f in failures)
+
+
+def test_a_missing_audit_directory_skips_the_check(tmp_path):
+    """The audit set is not committed here: a checkout without it must still pass."""
+    assert cc.check_audit_documents(
+        root=tmp_path, coverage_count=12, audit_dir=tmp_path / "absent"
+    ) == []
+
+
+def test_an_optional_site_skips_a_missing_companion_document(tmp_path):
+    quantity = cc.Quantity(
+        name="x",
+        sites=(cc.Site("best-in-the-world/absent.md", r"^row", 1.0, optional=True),),
+        authority=lambda: {"v": 1.0}, key="v", provenance="test",
+    )
+    assert cc.run_checks([quantity], root=tmp_path) == []
+    assert cc.checked_site_count([quantity], root=tmp_path) == 0
+
+
+def test_a_required_site_still_fails_when_its_document_is_missing(tmp_path):
+    """Only the audit sites are optional; a typo in a repo document stays a failure."""
+    quantity = cc.Quantity(
+        name="x",
+        sites=(cc.Site("absent.md", r"^row", 1.0),),
+        authority=lambda: {"v": 1.0}, key="v", provenance="test",
+    )
+    assert any("matched no line" in f for f in cc.run_checks([quantity], root=tmp_path))
+
+
+def test_citing_a_superseded_report_from_the_audit_set_is_a_failure(tmp_path):
+    audit = tmp_path / "audit"
+    audit.mkdir()
+    (audit / "a.md").write_text("see eval/beir/three-base.json\n")
+    failures = cc.check_references(root=tmp_path, audit_dir=audit)
+    assert any("three-base" in f for f in failures)
+
+
+def test_the_audit_documents_are_pinned():
+    """The integration guard for the audit set, when the workspace carries it."""
+    if not cc.AUDIT_DIR.is_dir():
+        pytest.skip("best-in-the-world/ is not present")
+    count = cc.measured_beir()["count"]
+    if count == 0:
+        pytest.skip("no eval/beir reports to check against")
+    assert cc.check_audit_documents(root=cc.ROOT, coverage_count=count) == []
+
+
 def test_the_committed_documents_agree():
     """The integration guard: the repository's own docs pass the gate when eval/ is present."""
     if cc.measured_beir()["count"] == 0:

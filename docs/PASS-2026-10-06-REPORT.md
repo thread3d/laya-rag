@@ -138,7 +138,7 @@ zero findings over 392 reports.
 make test                  # 1410 passed, 5 deselected
 make lint                  # src/tests compile + GUI syntax
 make claim-check           # 58 prose claims vs their reports
-make consistency-check     # 12 of 18, 12 sites agree
+make consistency-check     # 12 of 18; every registered site agrees, the audit set included
 make leakage-audit         # 392 reports, zero findings
 make heavy-status          # is a corpus job running?
 ```

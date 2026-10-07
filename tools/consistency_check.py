@@ -17,6 +17,13 @@ The gate fails when a site's anchor is missing, when a site states a value that 
 rounded half-up to the site's precision, or when a superseded report is read as current. A missing
 report is a *skip*, as in `claim_check`: `eval/` is gitignored and regenerable.
 
+The audit set one level above the repository (`best-in-the-world/`) reads these same numbers and is
+not committed to this repository, so it is held to two conventions instead of a registry:
+`check_audit_documents` requires a **Currency** banner in every audit document and the computed
+coverage count in every unfenced "of 18"; a dated finding is fenced with
+`<!-- consistency: snapshot YYYY-MM-DD -->` … `<!-- consistency: /snapshot -->`. A checkout without
+the audit directory skips both, exactly like a report that has not been generated.
+
     make consistency-check
     .venv/bin/python tools/consistency_check.py --fix     # write quarantine markers + coverage.json
 """
@@ -24,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -41,6 +49,25 @@ BEIR = ROOT / "eval" / "beir"
 MH = ROOT / "eval" / "benchmarks" / "multihop-rag"
 RECALIBRATION = MH / "recalibration.json"
 COMPARE = ROOT / "tools" / "compare.py"
+
+#: The audit set that reads this repository's numbers from outside it: the workspace sibling
+#: `best-in-the-world/`. It is not committed to this repository, so its sites are optional and its
+#: guards are the two conventions in `check_audit_documents` rather than a full registry entry.
+AUDIT_DIR = ROOT.parent / "best-in-the-world"
+AUDIT_PREFIX = "best-in-the-world/"
+
+#: The reader-facing contract for a dated finding. A **Currency** banner says which sections are
+#: pinned and which are snapshots; a fence pair marks a superseded number so the computed-count
+#: guard below does not read history as a current claim.
+CURRENCY_BANNER = re.compile(r"^> \*\*Currency:")
+SNAPSHOT_OPEN = re.compile(r"^\s*<!--\s*consistency:\s*snapshot\s+(\d{4}-\d{2}-\d{2})\b.*-->\s*$")
+SNAPSHOT_CLOSE = re.compile(r"^\s*<!--\s*consistency:\s*/snapshot\s*-->\s*$")
+
+
+def _audit_dir(root: Path) -> Path:
+    """The audit set beside a given repository root, so `--root` moves both together."""
+    return root.parent / "best-in-the-world"
+
 
 #: The denominator every "of 18" claim is measured against.
 BEIR_TOTAL = 18
@@ -145,6 +172,34 @@ def recalibration_splits() -> float | None:
         return None
 
 
+def beir_report_metric(report: str, dataset: str, key: str) -> Callable[[], float | None]:
+    """A BEIR report's engine row, so an audit's prose is pinned to the report and not to a copy."""
+
+    def authority() -> float | None:
+        data = _read_json(BEIR / f"{report}.json")
+        if not data:
+            return None
+        try:
+            return float(data["datasets"][dataset]["retrievers"]["bm25-engine"][key])
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    return authority
+
+
+def _doc_path(doc: str, root: Path) -> Path:
+    """Resolve a registered document. Audit documents live one level above the repository.
+
+    A path under `best-in-the-world/` is tried against the repository first so a test root can hold
+    its own copy, then against the workspace sibling. An absent document is the caller's decision:
+    an `optional` site skips it, a required one fails on a missing anchor.
+    """
+    direct = root / doc
+    if direct.is_file() or not doc.startswith(AUDIT_PREFIX):
+        return direct
+    return _audit_dir(root) / doc[len(AUDIT_PREFIX):]
+
+
 # ── the registry ─────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -155,6 +210,8 @@ class Site:
     anchor: str
     value: float
     decimals: int = 3
+    #: A document outside the repository (the audit set): absent, the site is skipped, not failed.
+    optional: bool = False
 
 
 @dataclass(frozen=True)
@@ -192,10 +249,41 @@ def registry() -> list[Quantity]:
                 Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 12, 0),
                 Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 12, 0),
                 Site("ROADMAP.md", r"Coverage today: \d+ of 18", 12, 0),
+                Site("README.md", r"BEIR's 18 datasets", 12, 0),
+                Site("RESEARCH.md", r"^\| Scale \|", 12, 0),
+                Site("docs/findings-consistency-gate.md", r"^\| BEIR coverage", 12, 0),
             ),
             authority=lambda: {"count": measured_beir()["count"]},
             key="count",
             provenance="eval/beir/*.json — the datasets with a report present",
+        ),
+        Quantity(
+            name="HotpotQA full-set nDCG@10",
+            sites=(
+                Site(f"{AUDIT_PREFIX}measurement-audit.md", r"^\| HotpotQA ", 0.6352, 4, optional=True),
+                Site(f"{AUDIT_PREFIX}proposal-ledger.md", r"^\| HotpotQA full", 0.6352, 4, optional=True),
+            ),
+            authority=beir_report_metric("hotpotqa", "hotpotqa", "nDCG@10"),
+            provenance="eval/beir/hotpotqa.json datasets.hotpotqa.retrievers.bm25-engine.nDCG@10",
+        ),
+        Quantity(
+            name="FEVER lexical nDCG@10",
+            sites=(
+                Site(f"{AUDIT_PREFIX}measurement-audit.md", r"^\| FEVER ", 0.6323, 4, optional=True),
+                Site(f"{AUDIT_PREFIX}proposal-ledger.md", r"^\| Open-loop items", 0.6323, 4, optional=True),
+            ),
+            authority=beir_report_metric("fever", "fever", "nDCG@10"),
+            provenance="eval/beir/fever.json datasets.fever.retrievers.bm25-engine.nDCG@10",
+        ),
+        Quantity(
+            name="Climate-FEVER lexical nDCG@10",
+            sites=(
+                Site(f"{AUDIT_PREFIX}measurement-audit.md", r"^\| Climate-FEVER ", 0.161, 4, optional=True),
+            ),
+            authority=beir_report_metric("climate-fever", "climate-fever", "nDCG@10"),
+            provenance=(
+                "eval/beir/climate-fever.json datasets.climate-fever.retrievers.bm25-engine.nDCG@10"
+            ),
         ),
         Quantity(
             name="voyage-02 + reranker Hits@4",
@@ -296,7 +384,7 @@ def check_superseded(*, root: Path, markers: bool) -> tuple[list[str], list[str]
     return failures, notes
 
 
-def check_references(*, root: Path) -> list[str]:
+def check_references(*, root: Path, audit_dir: Path | None = None) -> list[str]:
     """A superseded stem must not be a claim source or a path any document cites."""
     failures: list[str] = []
     for claim in claim_check.CHECKS:
@@ -306,13 +394,99 @@ def check_references(*, root: Path) -> list[str]:
                 f"claim_check claim {claim.label!r} sources superseded eval/beir/{stem}.json"
             )
     cited = re.compile(r"eval/beir/([\w.-]+)\.(?:json|md)")
-    for doc in sorted(root.glob("*.md")) + sorted((root / "docs").glob("**/*.md")):
+    for doc in _document_paths(root, audit_dir=audit_dir):
         for lineno, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
             for stem in cited.findall(line):
                 if stem in SUPERSEDED:
-                    failures.append(
-                        f"{doc.relative_to(root)}:{lineno} cites superseded {stem!r}"
-                    )
+                    failures.append(f"{_label(doc, root)}:{lineno} cites superseded {stem!r}")
+    return failures
+
+
+def _document_paths(root: Path, *, audit_dir: Path | None = None) -> list[Path]:
+    """Every document the gate scans for stale references: the repo's, plus the audit set."""
+    docs = sorted(root.glob("*.md")) + sorted((root / "docs").glob("**/*.md"))
+    directory = _audit_dir(root) if audit_dir is None else audit_dir
+    if directory.is_dir():
+        docs += sorted(directory.glob("*.md"))
+    return docs
+
+
+def _label(doc: Path, root: Path) -> Path:
+    """A doc's name relative to the repository; an audit doc keeps its workspace-relative name."""
+    try:
+        return doc.relative_to(root)
+    except ValueError:
+        return Path(os.path.relpath(doc, root))
+
+
+def snapshot_mask(lines: Sequence[str]) -> tuple[list[str], list[str]]:
+    """Blank the lines inside snapshot fences, and report a fence that is unclosed or undated.
+
+    A fence is `<!-- consistency: snapshot YYYY-MM-DD -->` … `<!-- consistency: /snapshot -->`. The
+    marker lines are blanked with the body, so a fenced block is invisible to the count guard and,
+    being blank, still terminates a paragraph the way a blank line does.
+    """
+    masked = list(lines)
+    failures: list[str] = []
+    opened: int | None = None
+    for index, line in enumerate(lines):
+        if SNAPSHOT_OPEN.match(line):
+            if opened is not None:
+                failures.append(f"line {index + 1}: a snapshot fence opens inside another")
+            else:
+                opened = index
+            masked[index] = ""
+        elif SNAPSHOT_CLOSE.match(line):
+            if opened is None:
+                failures.append(f"line {index + 1}: a snapshot fence closes with nothing open")
+            opened = None
+            masked[index] = ""
+        elif opened is not None:
+            masked[index] = ""
+    if opened is not None:
+        failures.append(f"line {opened + 1}: a snapshot fence is never closed")
+    return masked, failures
+
+
+def check_audit_documents(
+    *, root: Path, coverage_count: int | None, audit_dir: Path | None = None
+) -> list[str]:
+    """Pin the audit set above the repository, which is not committed here and has no registry.
+
+    `best-in-the-world/` reads this repository's numbers and drifted from them: the BEIR coverage
+    count stayed at 10 and 11 of 18 after FEVER and the full HotpotQA run landed, and its corpus
+    table still called FEVER "queued". So two conventions are enforced on every audit document:
+
+    * a `> **Currency:**` banner, which states which sections are pinned and which are dated;
+    * the computed coverage count on every line that says "of 18", unless the line is inside a
+      snapshot fence — a dated finding may keep a superseded number, but it may not read as current.
+
+    The audit directory is a sibling of the repository, so a checkout that does not carry it skips
+    this check entirely (returning no failures), like a report that has not been generated.
+    """
+    directory = _audit_dir(root) if audit_dir is None else audit_dir
+    if not directory.is_dir():
+        return []
+    expected = None if coverage_count is None else f"{coverage_count:.0f}"
+    failures: list[str] = []
+    for path in sorted(directory.glob("*.md")):
+        name = f"{AUDIT_PREFIX}{path.name}"
+        lines = path.read_text(encoding="utf-8").splitlines()
+        masked, fence_failures = snapshot_mask(lines)
+        failures += [f"{name}: {message}" for message in fence_failures]
+        if not any(CURRENCY_BANNER.match(line) for line in lines):
+            failures.append(
+                f"{name}: no `> **Currency:**` banner — a reader cannot tell a dated finding from "
+                f"a pinned quantity"
+            )
+        if expected is None:
+            continue
+        for lineno, line in enumerate(masked, 1):
+            if "of 18" in line and not claim_check._number_present(line, expected):
+                failures.append(
+                    f"{name}:{lineno} states a coverage count that is not the computed {expected} "
+                    f"of 18 (fence a dated finding with `<!-- consistency: snapshot YYYY-MM-DD -->`)"
+                )
     return failures
 
 
@@ -323,7 +497,7 @@ def run_checks(quantities: Sequence[Quantity], *, root: Path) -> list[str]:
 
     def lines_of(doc: str) -> list[str]:
         if doc not in cache:
-            path = root / doc
+            path = _doc_path(doc, root)
             cache[doc] = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
         return cache[doc]
 
@@ -332,6 +506,8 @@ def run_checks(quantities: Sequence[Quantity], *, root: Path) -> list[str]:
         if authority is None:
             continue                       # its report has not been generated: a skip
         for site in quantity.sites:
+            if site.optional and not _doc_path(site.doc, root).is_file():
+                continue                   # the audit set is not part of this repository
             regions = claim_check._regions(lines_of(site.doc), site.anchor)
             if not regions:
                 failures.append(
@@ -354,6 +530,19 @@ def run_checks(quantities: Sequence[Quantity], *, root: Path) -> list[str]:
                     f"({quantity.provenance}) renders {expected:.{site.decimals}f}"
                 )
     return failures
+
+
+def checked_site_count(quantities: Sequence[Quantity], *, root: Path) -> int:
+    """The sites actually checked: an authority absent or an optional document missing is a skip."""
+    total = 0
+    for quantity in quantities:
+        if _authority_value(quantity) is None:
+            continue
+        for site in quantity.sites:
+            if site.optional and not _doc_path(site.doc, root).is_file():
+                continue
+            total += 1
+    return total
 
 
 # ── entry point ──────────────────────────────────────────────────────────
@@ -381,21 +570,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     for note in notes:
         print(note)
     failures += check_references(root=root)
+    failures += check_audit_documents(
+        root=root, coverage_count=coverage["count"] if coverage["count"] else None
+    )
 
     if coverage["count"] == 0:
         print("consistency-check: SKIPPED — no eval/beir reports (nothing to pin)")
         return 1 if failures else 0
 
-    failures += run_checks(registry(), root=root)
-    checked = sum(len(q.sites) for q in registry())
+    quantities = registry()
+    failures += run_checks(quantities, root=root)
+    checked = checked_site_count(quantities, root=root)
     if failures:
         print(f"consistency-check: {len(failures)} failure(s) across {checked} sites")
         for line in failures:
             print(f"  - {line}")
         return 1
+    audit = f", plus {AUDIT_PREFIX}*" if _audit_dir(root).is_dir() else ""
     print(
         f"consistency-check: {checked} sites agree; coverage {coverage['count']} of "
-        f"{coverage['total']} ({', '.join(coverage['measured'])})"
+        f"{coverage['total']} ({', '.join(coverage['measured'])}){audit}"
     )
     return 0
 

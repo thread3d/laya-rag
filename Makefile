@@ -474,7 +474,8 @@ claim-check:
 
 # Do two documents disagree about the same quantity? `claim-check` pins prose to a report;
 # this pins the documents to each other, holds the BEIR coverage count computed from disk
-# rather than hand-typed, and refuses to read a superseded report as current.
+# rather than hand-typed, refuses to read a superseded report as current, and holds the
+# `best-in-the-world/` audit set (when present) to a Currency banner and the computed count.
 consistency-check:
 	$(PY) tools/consistency_check.py $(CONSISTENCY_ARGS)
 
