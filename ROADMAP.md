@@ -739,3 +739,22 @@ overrides deliberately. See `docs/findings-heavy-job-lock.md`.
   nothing left for coverage to buy and only the ordering cost remains. Stated limit: the relevance
   term is the fused score, not a cross-encoder, so this is coverage-vs-fused rather than
   coverage+CE-vs-CE. `docs/findings-2wiki.md`.
+- 2026-10-07 — **Two corpora measured, a membership error fixed, and the owed bridge-gate column
+  measured negative.** Four things landed. (1) **TREC-COVID on the full 171,332-document
+  collection**: `bm25-engine` nDCG@10 **0.6188** against Pyserini 2CR's BM25 flat **0.595**; the
+  40,000-document subsample had read **0.3062**, which is a corpus truncation against fixed qrels,
+  not a query subset, so it is quarantined as superseded and the row counts. Coverage **12 → 13 of
+  18**. (2) **MS MARCO (8,841,823 documents) is measured — and is not a member**: the audit called
+  it gated, but the mirror serves it and `BeIR/msmarco` answers 200 anonymously; `bm25-engine` reads
+  **0.4321**. The gate now counts over an explicit `BEIR_18` membership set and prints
+  `extras measured: msmarco; missing: bioasq, cqadupstack, robust04, signal1m, trec-news` — the
+  earlier prose had nineteen candidates for an eighteen-dataset denominator, named two non-members
+  and omitted CQADupStack. (3) **The bridge-conditioned gate column is measured, and it is
+  negative**: adding it to the twelve-feature gate moves AUC **−0.0023 [−0.0032, −0.0014]** and
+  risk@80 **+0.0012 [+0.0003, +0.0022]** while a shuffled-bridge control is flat, so the true first
+  hop makes the gate worse than an arbitrary one and `GATE_BRIDGE_FEATURE` stays off. (4) The first
+  run of that experiment produced **identical** arms to four decimals and a spurious +0.0040 gain —
+  the harness read JSON passage dicts with `getattr`, which is always empty; a control that matches
+  its treatment exactly is a bug signal, and `passage_text` plus two regression tests now read both
+  shapes. `docs/findings-trec-covid-full.md`, `docs/findings-msmarco.md`,
+  `docs/findings-bridge-gate-measurement.md`.

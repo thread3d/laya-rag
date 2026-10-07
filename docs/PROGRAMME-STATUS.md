@@ -67,6 +67,19 @@ have now finished, one at a time: **Climate-FEVER → FEVER → HotpotQA → 2Wi
 
 ## Newest results (2026-10-06 pass)
 
+- **The owed bridge-conditioned gate column is measured, and it is a negative.** Adding
+  `bridge_conditioned` (the query's own top passage as the bridge, max conditioned score over the
+  rest) to the twelve-feature answerability gate moves AUC **−0.0023 [−0.0032, −0.0014]** and
+  risk@80 **+0.0012 [+0.0003, +0.0022]**, while a shuffled-bridge control is flat: the true first hop
+  makes the gate worse than an arbitrary one, so `GATE_BRIDGE_FEATURE` stays off. The ranker's bridge
+  signal (AUC 0.559 against 0.530) does not transfer to the gate. An earlier run of the two arms was
+  identical to four decimals — the harness read JSON passage dicts with `getattr`, always empty —
+  and printed a spurious gain; a control that matches its treatment exactly is a bug signal.
+- **TREC-COVID on the full 171,332-document collection**: `bm25-engine` nDCG@10 **0.6188** against a
+  published BM25 of 0.595; the 40,000-document subsample (0.3062) was a corpus truncation, not a
+  subset, and is superseded. Coverage **12 → 13 of 18**. **MS MARCO** (8,841,823 documents) is
+  measured at **0.4321** as an *extra* — it is the training collection, not one of the 18.
+
 - **Generator-free iteration, Stage 1 — the mechanism holds.** One round of entity-probe pool
   expansion on 2,255 MultiHop queries raises gold-fact coverage **0.8326 → 0.8937**
   (**+0.0611** [+0.0555, +0.0670], p<0.0001), complete-evidence queries **61.2% → 72.8%**, and the

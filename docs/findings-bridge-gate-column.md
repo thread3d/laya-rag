@@ -18,27 +18,33 @@ the limit, and the valid place for the signal is the gate. This wires the column
   is configured, computes `score_relevance_conditioned(query, bridge, rest)` with the bridge being
   the **top-ranked kept passage**, takes the maximum over the rest, and feeds it to the gate. A
   model failure degrades to `0.0` rather than failing the query.
-- Off by default: it costs one extra Laya forward pass per query, and no 13-feature gate has been
-  trained.
-- **The column is now collectable.** `tools/multihop_gate.py --bridge-feature` records the
-  conditioned maximum as the 13th column beside the other twelve, and `--bridge-arm shuffled`
-  records the control (another query's top passage, by rotation) in a second file with identical
-  instruction text and scored count. `laya_rag.answerability.bridge_conditioned_max` and
-  `rotated_bridge_texts` make both importable and unit-tested without a model, so
-  `tools/answerability_features.py --prefix 12` can compare the twelve- and thirteen-feature gates
-  on one file, and the real-vs-shuffled pair is the control.
+- Off by default: it costs one extra Laya forward pass per query, and it has now been measured —
+  see below.
+- **The column is collectable, and now collected.** `tools/multihop_gate.py --bridge-feature`
+  records the conditioned maximum as the 13th column beside the other twelve, and
+  `--bridge-arm shuffled` records the control (another query's top passage, by rotation) in a second
+  file with identical instruction text and scored count. `laya_rag.answerability.bridge_conditioned_max`
+  and `rotated_bridge_texts` make both importable and unit-tested without a model, so
+  `tools/answerability_features.py --prefix 12` compares the twelve- and thirteen-feature gates on
+  one file.
+
+## Measured, and negative
+
+The owed measurement is in **[findings-bridge-gate-measurement.md](findings-bridge-gate-measurement.md)**:
+on the 300-query protocol, adding the real column moves AUC **−0.0023 [−0.0032, −0.0014]** and
+risk@80 **+0.0012 [+0.0003, +0.0022]** — every metric the wrong way — while the shuffled-bridge
+control is flat (AUC −0.0006, ns). So the cost is the conditioning content, not the extra column:
+the true first hop makes the gate *worse* than an arbitrary one. `GATE_BRIDGE_FEATURE` stays off.
 
 ## What this does not show
 
-- **The column is wired, not measured.** No 13-feature gate was trained or evaluated, so there is
-  no `GATE_BRIDGE_FEATURE=1` AUC or risk@80 here. Making the measurement runnable is what this
-  change does.
 - **The bridge choice is a guess.** "Top-ranked kept passage" is a plausible first-hop proxy, but
   the validating experiment used the benchmark's own bridge; a different choice is a different
-  feature, and `extract_features` accepts whatever the caller computes.
+  feature, and `extract_features` accepts whatever the caller computes. The negative above falsifies
+  this configuration, not every possible bridge column.
 - **The recorded feature files have no bridge values.** Retraining `tools/answerability_train.py`
-  on `gate-shape.json` yields a gate with the column identically zero until a run computes and
-  persists the conditioned scores per query.
+  on `gate-shape.json` yields a gate with the column identically zero; the measured files are
+  `gate-bridge-real.json` and `gate-bridge-shuffled.json`.
 - **It is a 13-wide vector now.** A saved 12-feature gate selects its twelve columns by name, so
   loading old artefacts is unaffected; the feature-count constant and its test were updated.
 
