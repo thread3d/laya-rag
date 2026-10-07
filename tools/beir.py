@@ -18,7 +18,7 @@ same qrels, same evaluator, same top-k, so the difference between rows is the re
     .venv/bin/python tools/beir.py --datasets scifact
     .venv/bin/python tools/beir.py --datasets scifact,nfcorpus --retrievers bm25,dense
 
-Datasets are downloaded from the BEIR mirror into ``eval/beir/data/`` and embeddings are
+Datasets are downloaded from the BEIR mirror into ``eval/beir/<name>/`` and embeddings are
 cached beside them, both gitignored. Needs network on the first run and the Laya
 checkpoints for the dense rows.
 """
@@ -56,6 +56,16 @@ from laya_rag.lexical import STOPWORDS, BM25Index, reciprocal_rank_fusion, token
 
 #: Public BEIR mirror used by the official scripts.
 BEIR_URL = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{name}.zip"
+
+#: The UKP mirror 404s these three zips — the files are gone, not stubbed, and the Wayback Machine
+#: never captured them — so `ensure_dataset` falls back to a **public, non-gated** mirror that
+#: re-publishes the same corpora in BEIR layout (`corpus.jsonl`, `queries.jsonl` and a four-column
+#: space-separated TREC qrels). The fallback keeps `make beir` able to regenerate the coverage the
+#: documentation states; it is a *technical* convenience, not a licence. Robust04 is TREC disks 4–5
+#: and TREC-NEWS is the Washington Post collection, both distributed by NIST under signed
+#: agreements, and Signal-1M is Twitter content. See `docs/findings-beir-recovered.md`.
+MIRROR_DATASETS: tuple[str, ...] = ("robust04", "trec-news", "signal1m")
+MIRROR_URL = "https://huggingface.co/datasets/liuqi6777/{name}/resolve/main/{file}"
 
 #: The BM25 configuration the published BEIR baselines are run at (Anserini/Pyserini).
 BEIR_K1 = 0.9
@@ -107,6 +117,34 @@ ANCHOR_TOLERANCE = 0.05
 
 # ── dataset loading ──────────────────────────────────────────────────────
 
+def _fetch_mirror_dataset(name: str, target: Path) -> None:
+    """Fetch one of the UKP-404'd corpora from the public mirror, converted to the loader's layout.
+
+    The mirror stores its qrels as **four space-separated** TREC columns (``qid iter docid rel``)
+    while :func:`load_qrels` reads **three tab-separated** ones. Handing the file over unconverted
+    fails *silently* rather than loudly: a non-numeric doc id fails the ``float()`` guard and the row
+    is skipped (robust04 yields an empty qrels), and a numeric one is read as the score, collapsing
+    every judgement onto the doc id ``"0"`` (signal1m). So the conversion happens here, once.
+    """
+    target.mkdir(parents=True, exist_ok=True)
+    for filename in ("corpus.jsonl", "queries.jsonl"):
+        url = MIRROR_URL.format(name=name, file=filename)
+        print(f"  downloading {url}", flush=True)
+        urllib.request.urlretrieve(url, target / filename)
+    raw = target / f"qrels.beir-v1.0.0-{name}.test.txt"
+    url = MIRROR_URL.format(name=name, file=raw.name)
+    print(f"  downloading {url}", flush=True)
+    urllib.request.urlretrieve(url, raw)
+    (target / "qrels").mkdir(exist_ok=True)
+    rows = []
+    for line in raw.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) >= 4:
+            rows.append(f"{parts[0]}\t{parts[2]}\t{parts[3]}")
+    (target / "qrels" / "test.tsv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    raw.unlink()
+
+
 def ensure_dataset(name: str, data_root: Path, *, download: bool = True) -> Path:
     """Return the local directory for ``name``, downloading and unzipping if needed."""
     target = data_root / name
@@ -115,16 +153,19 @@ def ensure_dataset(name: str, data_root: Path, *, download: bool = True) -> Path
     if not download:
         raise FileNotFoundError(f"{target} is not present and --no-download was given")
     data_root.mkdir(parents=True, exist_ok=True)
-    archive = data_root / f"{name}.zip"
-    if not archive.is_file():
-        url = BEIR_URL.format(name=name)
-        print(f"  downloading {url}", flush=True)
-        urllib.request.urlretrieve(url, archive)
-    print(f"  extracting {archive.name}", flush=True)
-    with zipfile.ZipFile(archive) as bundle:
-        bundle.extractall(data_root)
+    if name in MIRROR_DATASETS:
+        _fetch_mirror_dataset(name, target)
+    else:
+        archive = data_root / f"{name}.zip"
+        if not archive.is_file():
+            url = BEIR_URL.format(name=name)
+            print(f"  downloading {url}", flush=True)
+            urllib.request.urlretrieve(url, archive)
+        print(f"  extracting {archive.name}", flush=True)
+        with zipfile.ZipFile(archive) as bundle:
+            bundle.extractall(data_root)
     if not (target / "corpus.jsonl").is_file():
-        raise FileNotFoundError(f"{archive} did not contain {name}/corpus.jsonl")
+        raise FileNotFoundError(f"{name}: the download did not contain {name}/corpus.jsonl")
     return target
 
 
