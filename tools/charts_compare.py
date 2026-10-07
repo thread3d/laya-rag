@@ -648,6 +648,11 @@ def chart_coverage(outdir: Path, plt: Any) -> bool:
     states = coverage_states(measured["measured"], measured["extras"], dense)
     colours = {"measured-dense": OURS, "measured-lexical": OUR_ALT, "blocked": "#d9d9d9",
                "needs-adapter": "#f0c674", "extra": "#8fbf8f"}
+    legend = {"measured-dense": "measured, with a dense arm",
+              "measured-lexical": "measured, lexical only",
+              "blocked": "blocked (licensing or gated)",
+              "needs-adapter": "public, needs an adapter",
+              "extra": "measured extra (not one of the 18)"}
     fig, ax = plt.subplots(figsize=(8.6, 6.2))
     labels, kinds = [row["dataset"] for row in states], [row["kind"] for row in states]
     positions = range(len(states))
@@ -661,10 +666,11 @@ def chart_coverage(outdir: Path, plt: Any) -> bool:
     ax.set_xticks([])
     ax.set_title(f"BEIR-18 coverage, computed by make consistency-check "
                  f"({measured['count']} of {measured['total']} measured)")
-    handles = [plt.Rectangle((0, 0), 1, 1, color=colours[key]) for key in colours]
-    ax.legend(handles, ["measured, with a dense arm", "measured, lexical only",
-                        "blocked (licensing or gated)", "public, needs an adapter",
-                        "measured extra (not one of the 18)"],
+    # Only the states actually present: the legend is read as a key, so a colour with no bar under
+    # it (an adapter-needing member that is now measured, say) is noise rather than information.
+    present = [kind for kind in legend if kind in set(kinds)]
+    handles = [plt.Rectangle((0, 0), 1, 1, color=colours[kind]) for kind in present]
+    ax.legend(handles, [legend[kind] for kind in present],
               fontsize=7.5, frameon=False, loc="lower right")
     cmp._save(fig, outdir, "cmp_coverage.png", plt)
     return True

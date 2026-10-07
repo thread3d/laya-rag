@@ -13,6 +13,7 @@ MCP_PORT ?= 8078
 EVAL_ARGS ?=
 BENCH_ARGS ?=
 BEIR_ARGS ?=
+CQADUPSTACK_ARGS ?=
 BEIR_ABLATE_ARGS ?=
 BEIR_ATOM_ARGS ?=
 BEIR_COVERAGE_ARGS ?=
@@ -223,11 +224,17 @@ bench-index-parallel:
 bench-biencoder-parallel:
 	$(PY) tools/bench_biencoder_parallel.py $(BENCH_ARGS)
 
-# Standard-benchmark retrieval quality. Downloads the datasets into eval/beir/data and
+# Standard-benchmark retrieval quality. Downloads the datasets into eval/beir/<name>/ and
 # needs network on the first run plus the Laya checkpoints for the dense rows.
 # `make beir BEIR_ARGS="--datasets scifact --retrievers bm25"` narrows it.
 beir:
 	OMP_NUM_THREADS=16 $(PY) tools/beir.py $(BEIR_ARGS)
+
+# CQADupStack is twelve sub-collections behind one BEIR name, so it has its own runner: the
+# member's score is the macro-average of the twelve sub-forum scores, which the one-corpus
+# harness in tools/beir.py cannot express.
+cqadupstack:
+	OMP_NUM_THREADS=16 $(PY) tools/cqadupstack.py $(CQADUPSTACK_ARGS)
 
 # The ablation that chose the defaults (`make beir-ablate BEIR_ABLATE_ARGS="--datasets scifact"`).
 beir-ablate:

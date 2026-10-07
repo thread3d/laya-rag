@@ -147,6 +147,14 @@ def _fetch_mirror_dataset(name: str, target: Path) -> None:
 
 def ensure_dataset(name: str, data_root: Path, *, download: bool = True) -> Path:
     """Return the local directory for ``name``, downloading and unzipping if needed."""
+    if name == "cqadupstack":
+        # The zip extracts to `cqadupstack/<forum>/corpus.jsonl` for twelve forums, so the
+        # `corpus.jsonl` check below would fail *after* paying a 5.3 GB download. This harness models
+        # one corpus per dataset and cannot express the member; `tools/cqadupstack.py` can.
+        raise ValueError(
+            "cqadupstack is twelve sub-collections behind one BEIR name, not one corpus; "
+            "this harness loads one corpus per dataset. Run tools/cqadupstack.py instead."
+        )
     target = data_root / name
     if (target / "corpus.jsonl").is_file() and (target / "queries.jsonl").is_file():
         return target
