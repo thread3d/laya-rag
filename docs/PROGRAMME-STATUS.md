@@ -48,9 +48,11 @@ Negatives are results here, and these are the ones worth keeping:
    (**0.6323** over all 6,666 queries, against a published 0.753 — the largest lexical-control gap
    measured). NQ (2.68M) completed in ~25 min and HotpotQA's full 7,405-query set reads **0.6352**;
    the full **TREC-COVID** collection (171,332 documents, 50 queries) is measured at **0.6188** —
-   against a published BM25 of **0.595** — so coverage is **13 of 18**. **MS MARCO (8.8M) is *not*
-   gated** (the mirror serves `msmarco.zip` and `BeIR/msmarco` answers 200 anonymously); it is the one
-   remaining large corpus that access alone does not block, and it is unrun for size.
+   against a published BM25 of **0.595** — so coverage is **13 of 18**. **MS MARCO (8.8M) is now
+   measured as an *extra*, not as coverage**: it is the collection the BEIR encoders are trained on,
+   not a test dataset, and the gate counts over an explicit membership set. The canonical members
+   still missing are **BioASQ** (gated) and **CQADupStack** (public, but twelve per-forum
+   sub-collections, so it needs an adapter), beside the four 404/401 licensing blocks.
    `--limit-queries` gives a labelled seeded subset (~1 h per corpus).
 2. **Phase 4.4, the MTEB submission.** Requires an upload; not offline work.
 3. **HotpotQA's full query set — done.** The full **7,405** queries read **nDCG@10 0.6352** (MRR@10

@@ -98,6 +98,18 @@ SUPERSEDED: dict[str, tuple[str, str]] = {
 #: place to record one, because a bounded run is a legitimate measurement that must not be
 #: counted as a dataset.
 BOUNDED: dict[str, str] = {}
+
+#: The 18 datasets BEIR is defined over — `Thakur et al. 2021`, the same list `Resources for
+#: Brewing BEIR` (arXiv:2306.07471, Table 1) tabulates and this repository quotes its BM25
+#: anchors from. Membership is stated, never implied: the count is taken over these names, so a
+#: report for a corpus *outside* the benchmark (MS MARCO, SPECTER — both downloadable, neither a
+#: BEIR test dataset) is recorded as an extra and cannot inflate "of 18", and a member with no
+#: report shows up as missing rather than silently shrinking the set.
+BEIR_18: frozenset[str] = frozenset({
+    "scifact", "nfcorpus", "arguana", "scidocs", "fiqa", "quora", "dbpedia-entity", "nq",
+    "hotpotqa", "webis-touche2020", "climate-fever", "fever", "trec-covid", "bioasq",
+    "signal1m", "trec-news", "robust04", "cqadupstack",
+})
 #: Datasets measured on a seeded query subset rather than the full qrels.
 SUBSET: dict[str, str] = {"hotpotqa": "600-query seeded subset (seed 17)"}
 
@@ -126,6 +138,8 @@ def measured_beir(directory: Path | None = None) -> dict[str, Any]:
 
     A report contributes every dataset key it carries. Superseded stems are excluded, and a
     bounded run is listed but does not count: the count is the claim, so it may not be a literal.
+    Only the 18 names in :data:`BEIR_18` count; a report for anything else lands in ``extras``,
+    and a member with no report lands in ``missing``.
     """
     beir = BEIR if directory is None else directory
     contributors: dict[str, list[str]] = {}
@@ -141,13 +155,16 @@ def measured_beir(directory: Path | None = None) -> dict[str, Any]:
             continue
         for dataset in datasets:
             contributors.setdefault(dataset, []).append(stem)
-    counted = sorted(d for d in contributors if d not in BOUNDED)
+    counted = sorted(d for d in contributors if d in BEIR_18 and d not in BOUNDED)
+    bounded = sorted(d for d in contributors if d in BEIR_18 and d in BOUNDED)
     return {
         "total": BEIR_TOTAL,
         "count": len(counted),
         "measured": counted,
+        "extras": sorted(d for d in contributors if d not in BEIR_18),
+        "missing": sorted(BEIR_18 - set(contributors)),
         "subsets": {d: reason for d, reason in SUBSET.items() if d in counted},
-        "bounded": {d: reason for d, reason in BOUNDED.items() if d in contributors},
+        "bounded": {d: BOUNDED[d] for d in bounded},
         "contributors": {d: contributors[d] for d in sorted(contributors)},
     }
 
@@ -594,9 +611,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"  - {line}")
         return 1
     audit = f", plus {AUDIT_PREFIX}*" if _audit_dir(root).is_dir() else ""
+    extras = f"; extras measured: {', '.join(coverage['extras'])}" if coverage["extras"] else ""
+    missing = f"; missing: {', '.join(coverage['missing'])}" if coverage["missing"] else ""
     print(
         f"consistency-check: {checked} sites agree; coverage {coverage['count']} of "
-        f"{coverage['total']} ({', '.join(coverage['measured'])}){audit}"
+        f"{coverage['total']} ({', '.join(coverage['measured'])}){extras}{missing}{audit}"
     )
     return 0
 

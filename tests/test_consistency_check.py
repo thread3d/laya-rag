@@ -59,27 +59,39 @@ def test_coverage_excludes_bounded_and_superseded_reports(tmp_path, monkeypatch)
     beir = tmp_path / "beir"
     _write_report(beir, "five-small-fixed", ["scifact", "nfcorpus"])
     _write_report(beir, "hotpotqa-subset", ["hotpotqa"])
-    _write_report(beir, "msmarco-bounded", ["msmarco"])
+    _write_report(beir, "robust04-bounded", ["robust04"])
     _write_report(beir, "five-small", ["quora"])          # a superseded stem
     (beir / "coverage.json").write_text(json.dumps({"count": 99}))  # our own output, not a report
     # The shipped registry has no bounded dataset left (TREC-COVID's subsample is superseded by
     # the full run), so the mechanism is pinned by injecting one rather than by leaving a
     # placeholder in the registry.
-    monkeypatch.setattr(cc, "BOUNDED", {"msmarco": "40,000-document subsample"})
+    monkeypatch.setattr(cc, "BOUNDED", {"robust04": "40,000-document subsample"})
 
     measured = cc.measured_beir(beir)
     assert measured["count"] == 3
     assert measured["measured"] == ["hotpotqa", "nfcorpus", "scifact"]
-    assert "msmarco" in measured["bounded"] and "msmarco" not in measured["measured"]
+    assert "robust04" in measured["bounded"] and "robust04" not in measured["measured"]
     assert "quora" not in measured["measured"]
     assert measured["total"] == 18
 
 
 def test_a_bounded_run_does_not_count_toward_the_total(tmp_path, monkeypatch):
     beir = tmp_path / "beir"
-    _write_report(beir, "msmarco-bounded", ["msmarco"])
-    monkeypatch.setattr(cc, "BOUNDED", {"msmarco": "40,000-document subsample"})
+    _write_report(beir, "robust04-bounded", ["robust04"])
+    monkeypatch.setattr(cc, "BOUNDED", {"robust04": "40,000-document subsample"})
     assert cc.measured_beir(beir)["count"] == 0
+
+
+def test_only_the_eighteen_members_count_and_the_rest_are_extras(tmp_path):
+    """Membership is stated: MS MARCO is downloadable but is not one of BEIR's 18."""
+    beir = tmp_path / "beir"
+    _write_report(beir, "msmarco", ["msmarco"])
+    measured = cc.measured_beir(beir)
+    assert measured["count"] == 0
+    assert measured["extras"] == ["msmarco"]
+    assert "cqadupstack" in measured["missing"] and "bioasq" in measured["missing"]
+    assert len(cc.BEIR_18) == 18 and "msmarco" not in cc.BEIR_18 and "specter" not in cc.BEIR_18
+    assert "cqadupstack" in cc.BEIR_18
 
 
 # ── superseded reports ───────────────────────────────────────────────────

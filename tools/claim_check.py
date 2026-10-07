@@ -264,6 +264,16 @@ CHECKS: list[Claim] = [
           r"`bm25` \(published settings control\)", 0.5573,
           ("datasets", "trec-covid", "retrievers", "bm25", "nDCG@10"),
           report="eval/beir/trec-covid.json"),
+    # MS MARCO is measured but is not one of BEIR's 18; both lexical rows are pinned so the
+    # "gated" claim could not be retired with a hand-typed number either.
+    Claim("msmarco engine nDCG@10", "docs/findings-msmarco.md",
+          r"`bm25-engine` \(shipped lexical path\)", 0.4321,
+          ("datasets", "msmarco", "retrievers", "bm25-engine", "nDCG@10"),
+          report="eval/beir/msmarco.json"),
+    Claim("msmarco flat control nDCG@10", "docs/findings-msmarco.md",
+          r"`bm25` \(published settings control\)", 0.4162,
+          ("datasets", "msmarco", "retrievers", "bm25", "nDCG@10"),
+          report="eval/beir/msmarco.json"),
 ]
 
 FORBIDDEN: list[Forbidden] = [
