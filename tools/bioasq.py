@@ -13,7 +13,7 @@ account**, and BEIR's own reproduction instructions say exactly what to do with 
 
 This tool does those three things and then **refuses to finish unless the arithmetic lines up**: the
 corpus must contain every document the 500 test queries judge, and its size must match what the
-recipe predicts. That check is the point. `docs/findings-bioasq-unavailable.md` records a public
+recipe predicts. That check is the point. `docs/findings-bioasq.md` records a public
 mirror that is 813,939 documents short of the real corpus yet still holds 1,533 of the 1,549 gold
 documents — a run on it would land near the published anchor and look right. A silent shortfall here
 would be the same failure, so it is an assertion rather than a warning.
@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[1]
 #: with a "~"; the downloaded `allMeSH_2020.json` holds **one fewer**, 14,913,938. The gap is a single
 #: document out of 14.9M, well inside the source's own approximation, and it is not a truncation —
 #: the failure this constant exists to catch is the 813,939-document shortfall of the public mirror
-#: (`docs/findings-bioasq-unavailable.md`), which this rejects by a mile.
+#: (`docs/findings-bioasq.md`), which this rejects by a mile.
 #:
 #: The assertion is on lines parsed, not on distinct pmids: the dump repeats 84 pmids, and the
 #: reference preprocessing drops the later copy, so the corpus it builds is 14,913,854 articles plus
@@ -230,7 +230,7 @@ def build(
             f"{expect_articles - parsed}. (BioASQ's own table says 14,913,939 for this set and the "
             f"dump here holds 14,913,938 lines.) Do not score a truncated corpus: the qrels are "
             f"fixed, so a short corpus scores a defect rather than a retriever "
-            f"(docs/findings-bioasq-unavailable.md)."
+            f"(docs/findings-bioasq.md)."
         )
     if written_queries != expect_queries:
         raise AssertionError(

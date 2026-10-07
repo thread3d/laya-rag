@@ -1,10 +1,12 @@
-# BioASQ: why the last member is still not measured
+# BioASQ: the last member, and the mirror that would have faked it
 
-BioASQ is the only one of BEIR's eighteen datasets with no report here, and the only one whose
-blocker survives an honest search. The other four came back — three from a public mirror
+BioASQ was the only one of BEIR's eighteen datasets with no report here, and the only blocker that
+survived an honest search. The other four came back — three from a public mirror
 (`findings-beir-recovered.md`) and one, CQADupStack, from its own runner (`findings-cqadupstack.md`).
-This one does not, and the reason is worth writing down because a **plausible-looking public mirror
-exists and would produce a wrong number**.
+This one needed a **free BioASQ account**, and it is now measured: **18 of 18**.
+
+The detour is worth keeping, because a **plausible-looking public mirror exists and would have
+produced a wrong number** — one that passed every check available without the real corpus.
 
 ## What BEIR's own reproduction instructions require
 
@@ -114,30 +116,65 @@ advertises; BEIR's own note hedges it with a "~", and a single document out of 1
 mode this check exists for. 84 of those lines repeat an earlier pmid and are dropped, which is what
 the reference preprocessing does too.
 
-## What would finish it
+## The measurement
 
-Two files, both from a **free** BioASQ account (registration is open to anyone; the account is the
-gate, not a licence fee):
+```sh
+make beir BEIR_ARGS="--datasets bioasq --retrievers bm25-engine --no-download \
+  --out eval/beir/bioasq --lexical-checkpoint --lexical-backend ondisk"
+```
 
-1. **Task 9a training v2020** (~14,913,939 documents) — or `allMeSH_2020.json`, the BioASQ 2020
-   snapshot the corpus is derived from. Extract `pmid`, `title`, `abstractText`, plus the 750
-   manually-added documents BEIR step 3 names.
-2. **The 8B golden train and test sets** — **done**, see above.
+| dataset | documents | retriever | nDCG@10 | Recall@10 | nDCG@100 | Recall@100 | MRR@10 | MAP@100 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| bioasq | 14,914,604 | `bm25-engine` (shipped lexical path) | **0.5193** | 0.5496 | 0.5917 | 0.7764 | 0.5939 | 0.4683 |
 
-Together those are enough to write `corpus.jsonl`, `queries.jsonl` and `qrels/test.tsv` in the layout
-`tools/beir.py` reads, and the existing harness scores it unchanged.
+Published anchors for the member (`tools/published_beir18.py`): **BM25 0.465**, uniCOIL 0.477,
+**SPLADE 0.504** (the best of the five), TAS-B 0.371, Contriever 0.383.
 
-Two things to know before starting it. The run is **not cheap**: 14.9M documents is ~2.8× NQ, and
-this repository's own history records the 5.4M-document corpora as "compute-bound at ~6 h per corpus"
-— so a BioASQ lexical pass is a **~15–24 h** job, and it is why Phase 4.1's on-disk term dictionary
-exists at all. And because the corpus is 14.9M and one of the two inputs is a licensed-ish dump, the
-files should stay out of the repository, which is already the case (`eval/` is gitignored).
+So the engine's lexical row beats the published BM25 by **+0.0543**, and beats the *best* published
+system by **+0.0153** — making BioASQ one of the nine datasets where this engine leads, and the
+largest positive gap in the lexical control (HotpotQA's +0.032 was the previous high).
+
+**That gap deserves suspicion rather than celebration, and the honest statement is that it is
+unexplained.** Our row is not the like-for-like control: it runs at engine settings — query stopwords
+dropped and English stemming on — while the published anchor is Anserini's multi-field BM25. On the
+five small BEIR sets the engine row sits *closer* to the published anchor than the flat control does,
+by about 0.02; here the same settings move it 0.054 in our favour on 14.9M biomedical abstracts, where
+stemming plausibly does more work than on news or web text. Plausible is not measured. The
+published-settings `bm25` control row is being run for exactly this comparison, and until it lands the
++0.0543 should be read as "our settings, not our engine, beat the baseline here".
+
+## What this costs to reproduce
+
+The run is **not cheap**: 14.9 M documents is ~2.8× NQ, and this is the corpus that Phase 4.1's on-disk
+term dictionary exists for. The in-memory `BM25Index` cannot hold it, so `--lexical-backend ondisk`
+spills postings to a memory-mapped file — the index build alone took ~90 minutes and the whole pass
+~4.5 h. The corpus and its derived `corpus.jsonl` stay out of the repository (`eval/` is gitignored),
+which matters because one of the two inputs is a dump distributed under a BioASQ account.
+
+## Reproduction
+
+```sh
+.venv/bin/python tools/bioasq.py \
+    --source eval/bioasq-src/allMeSH_2020.json \
+    --additional eval/bioasq-src/additional_passages.tsv \
+    --golden eval/bioasq-src/Task8BGoldenEnriched \
+    --out eval/beir/bioasq
+make beir BEIR_ARGS="--datasets bioasq --retrievers bm25-engine --no-download \
+  --out eval/beir/bioasq --lexical-checkpoint --lexical-backend ondisk"
+make consistency-check     # 18 of 18, every registered site agrees, the audit set included
+```
 
 ## Status
 
-Coverage is **17 of 18** and this does not change it. Recording the negative result is the point:
-the corpus mirror is a trap that a later round would otherwise step into, and the distance between
-"looks like the corpus" and "is the corpus" here is 813,939 documents.
+Coverage is **18 of 18**, and this is the change that completes it. With BioASQ in, the engine's macro
+over its measured set is a genuine BEIR-18 average for the first time — **0.4665**, between the
+paper's Contriever (0.448) and SPLADE (0.474) — so the macro chart's *different membership — not
+comparable* annotation comes off, with the caveat that ours is a best-per-dataset row rather than one
+global configuration.
+
+The trap is recorded above rather than deleted: the distance between "looks like the corpus" and "is
+the corpus" here is 813,939 documents, and the next person to reach for that mirror should find this
+page first.
 
 ```sh
 make consistency-check     # 17 of 18, missing: bioasq

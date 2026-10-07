@@ -12,7 +12,7 @@ cost of getting it.
 | 1 — engine full-split runs | **complete** | MultiHop-RAG 2,255 both configurations; MuSiQue 2,417 hybrid plus a 200-query default |
 | 2 — ordering heads | **complete, entirely negative** | late interaction, relational NLI and an adapted cross-encoder all lose; 2.4 not adopted on licence |
 | 3 — end-to-end and cost | **complete** | FRAMES, a generation pilot, citation mechanics, and the cost axis |
-| 4 — scale | **partial** | 4.1, 4.3, 4.5 done; **4.2 at 17 of 18 datasets** (Climate-FEVER, FEVER and the full TREC-COVID collection landed 2026-10-06 and after; Robust04, TREC-NEWS and Signal-1M were recovered from a public mirror, and CQADupStack measured per sub-forum, afterwards); 4.4 is an external submission |
+| 4 — scale | **complete** | 4.1, 4.3, 4.5 done; **4.2 at 18 of 18 datasets** (Climate-FEVER, FEVER and the full TREC-COVID collection landed 2026-10-06 and after; Robust04, TREC-NEWS, Signal-1M, CQADupStack and BioASQ afterwards); 4.4 is an external submission |
 | 5 — trust | **complete** | trust report, three-state adjudication, verifier precision, poison-dose probe |
 
 The engine **beats the harness it replaced on MultiHop-RAG** (MAP@10 0.3128 against 0.2510) and
@@ -58,18 +58,18 @@ Negatives are results here, and these are the ones worth keeping:
    twelve independent sub-collections behind one name, which the one-corpus harness could not express,
    so it now has its own runner (`tools/cqadupstack.py`, `make cqadupstack`): twelve per-sub-forum
    retrieval runs, macro-averaged, where the flat control reads **0.2988** against a published BM25 of
-   **0.299** (a −0.0002 replication) and the engine row **0.2943**. Coverage is therefore **17 of 18**.
-   **MS MARCO
+   **0.299** (a −0.0002 replication) and the engine row **0.2943**. **BioASQ** — the one blocker that
+   survived an honest search, needing a **free BioASQ account** for both the task 9a corpus and the
+   8B golden sets — is now measured too: `bm25-engine` **0.5193** over **14,914,604 documents** and
+   500 queries, against a published BM25 of **0.465** and the best published system's **0.504**
+   (`tools/bioasq.py`, `docs/findings-bioasq.md`). Coverage is therefore **18 of 18** — the benchmark
+   is covered, and for the first time the engine's macro is over the complete BEIR-18: **0.4665**,
+   between the paper's Contriever (0.448) and SPLADE (0.474). **MS MARCO
    (8.8M) is measured as an *extra*, not as coverage**: it is the collection the BEIR encoders are
-   trained on, not a test dataset, and the gate counts over an explicit membership set. The one
-   canonical member still missing is **BioASQ**, and it is the one blocker that survived an honest
-   search. BEIR's own reproduction steps require a **free BioASQ account** for both inputs — the
-   task 9a corpus (~14,913,939 documents) and the 8B golden train/test sets — and every
-   participants-area endpoint resolves to a login page. The one public corpus mirror that exists
-   (`BeIR/bioasq-generated-queries`, BEIR layout, verified to contain `_id`/`title`/`text`) holds
-   **14,100,000 records against the 14,913,939 the qrels score against**: a 5.46% truncation, which is
-   the TREC-COVID subsample defect rather than a smaller measurement
-   (`docs/findings-bioasq-unavailable.md`). It would also be a ~15–24 h lexical pass. The three
+   trained on, not a test dataset, and the gate counts over an explicit membership set. The
+   public BioASQ corpus mirror (`BeIR/bioasq-generated-queries`) was **not** used: it holds
+   14,100,000 records against the 14,913,939 the qrels score against, a 5.46% truncation that would
+   score the TREC-COVID subsample defect rather than a smaller measurement. The three
    recovered corpora
    are third-party redistributions of NIST/TREC-agreement collections, so their licensing block is a
    policy question the measurement does not settle.

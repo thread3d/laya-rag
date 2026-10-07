@@ -83,9 +83,9 @@ drawing rather than assuming. Twelve corpora now have both our number and a publ
 | **Climate-FEVER** | 5,416,593 | 0.1610 | 0.213 | **−0.052** |
 | **FEVER** | 5,416,568 | 0.6323 | 0.753 | **−0.121** |
 
-**11 of the 16 corpora agree within ±0.02** (7 within ±0.008). ArguAna and HotpotQA sit *above* their
+**11 of the 17 corpora agree within ±0.02** (7 within ±0.008). ArguAna and HotpotQA sit *above* their
 anchors — HotpotQA by +0.032 on the **full 7,405 queries** (its earlier +0.034 was a 600-query subset,
-now superseded). **FEVER (−0.121, the largest gap measured by far)**, TREC-NEWS (−0.063),
+now superseded), and **BioASQ by +0.054**, now the largest positive gap and unexplained. **FEVER (−0.121, the largest gap measured by far)**, TREC-NEWS (−0.063),
 Climate-FEVER (−0.052), Quora
 (−0.020) and NQ (−0.017) sit below. An earlier version of this line claimed "eight of nine agree
 within ±0.008", which was simply a miscount; the table is the record.

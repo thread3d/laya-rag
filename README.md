@@ -912,19 +912,20 @@ Shipped `bge-small` bi-encoder, corrected evaluator, 95% bootstrap intervals ove
 last two columns are the multi-model dense ensemble: `bge-small` + `bge-base` + `bge-large`
 fused by RRF, alone and with BM25 — a single configuration, not a per-dataset choice:
 
-**17 of BEIR's 18 datasets now have a report**, counted from `eval/beir/` by
-`make consistency-check` (which fails if any document states a different number): the five below
+**All of BEIR's 18 datasets now have a report** — the benchmark is covered, counted from `eval/beir/`
+by `make consistency-check` (which fails if any document states a different number). The five below
 carry the multi-model comparison, while `nq`, `dbpedia-entity`, `quora`, `webis-touche2020`,
-`hotpotqa`, `climate-fever`, `fever`, `trec-covid`, `robust04`, `trec-news`, `signal1m` and
-`cqadupstack` have the lexical row. The last four were recovered earlier — three from a public
-non-gated mirror after the UKP zips went 404 (`docs/findings-beir-recovered.md`), and CQADupStack,
-which was never 404, through its own twelve-sub-forum runner (`docs/findings-cqadupstack.md`).
+`hotpotqa`, `climate-fever`, `fever`, `trec-covid`, `robust04`, `trec-news`, `signal1m`,
+`cqadupstack` and `bioasq` have the lexical row. The last five were the hard ones: three recovered
+from a public non-gated mirror after the UKP zips went 404 (`docs/findings-beir-recovered.md`),
+CQADupStack through its own twelve-sub-forum runner (`docs/findings-cqadupstack.md`), and BioASQ —
+the only one that genuinely needed its free registration — through `tools/bioasq.py`
+(`docs/findings-bioasq.md`).
 **FEVER** is the worst outlier in the lexical control below
-(**−0.121** against its published anchor). The last one, **BioASQ** (14.9M documents) is genuinely
-**access-gated**: BEIR's own reproduction steps require a (free) BioASQ account for both the corpus
-and the 8B golden train/test sets, no public copy of either was found, and the one public mirror that
-looks like the corpus is **813,939 documents short** of what the qrels score against — a truncation,
-not a smaller measurement (`docs/findings-bioasq-unavailable.md`). Not silently skipped.
+(**−0.121** against its published anchor). **BioASQ is the best result in the table**: `bm25-engine`
+reads **0.5193** against a published BM25 of **0.465**, and against the *best* of the five published
+systems (**SPLADE 0.504**) by **+0.0153** — though that gap is unexplained, and it is our *settings*
+rather than our engine that beat the baseline there.
 
 | dataset | queries | shipped lexical | bi-encoder | fused BM25 + bi-encoder | dense ensemble | **ensemble + BM25** |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1009,18 +1010,20 @@ column as the original five — "Resources for Brewing BEIR" ([arXiv:2306.07471]
 whose BM25 column reproduces the three anchors this project already quoted (ArguAna 0.397, SciFact
 0.679, FiQA 0.236) exactly.
 
-### The lexical control, on sixteen corpora including five multi-million-document ones
+### The lexical control, on seventeen corpora including six multi-million-document ones
 
 The lexical arm is the only component here checkable against an independent implementation, so it is
-drawn rather than assumed — and it is extended past the seven above with **nine corpora run
+drawn rather than assumed — and it is extended past the seven above with **ten corpora run
 lexical-only**, `nq` (2.68M documents), `dbpedia-entity` (4.64M), `climate-fever` (5.42M),
-`fever` (5.42M), `robust04` (528k), `trec-news` (595k), `signal1m` (2.87M) and
-`cqadupstack` (457k across twelve sub-forums, scored per forum and macro-averaged):
+`fever` (5.42M), `robust04` (528k), `trec-news` (595k), `signal1m` (2.87M),
+`cqadupstack` (457k across twelve sub-forums, scored per forum and macro-averaged) and
+`bioasq` (14.91M over 500 queries):
 
 ![Lexical arm against published BM25, by corpus](docs/charts/lexical_vs_published.png)
 
-**11 of the 16 measured corpora agree within ±0.02, and 7 within ±0.008** — with Touché reproducing
-its anchor to three decimals and CQADupStack landing within 0.005 of its. ArguAna (**+0.020**) and HotpotQA (**+0.032** on the full 7,405
+**11 of the 17 measured corpora agree within ±0.02, and 7 within ±0.008** — with Touché reproducing
+its anchor to three decimals and CQADupStack landing within 0.005 of its. **BioASQ (+0.054**, the
+largest positive gap measured**)**, ArguAna (**+0.020**) and HotpotQA (**+0.032** on the full 7,405
 queries) sit
 above their anchors; **FEVER (−0.121, the largest gap measured by far)**, TREC-NEWS (−0.063),
 Climate-FEVER (−0.052), Quora (**−0.020**) and NQ (**−0.017**) sit below. An earlier version of this paragraph miscounted
@@ -1576,8 +1579,10 @@ measured above, **and not usable as a probability out of domain**: on the only l
 here the shipped scalar is at chance (AUC **0.5087**, ECE **0.3085**), and the calibrated 12-feature
 replacement is a measured in-domain gate, not a shipped default. **The pool bet's ceiling is not
 realized**: entity-probe expansion raises gold coverage and the oracle ceiling, but no ranker here has
-converted that into MAP@10, and coverage alone already falsified on MuSiQue. **Seventeen of BEIR's
-eighteen datasets are measured** — the last one is access-gated, so there is no BEIR-18 average.
+converted that into MAP@10, and coverage alone already falsified on MuSiQue. **All eighteen of BEIR's
+datasets are measured**, so unlike every previous round there *is* a BEIR-18 average: **0.4665** over
+the engine's best measured row per dataset, between the paper's Contriever (0.448) and SPLADE (0.474)
+— a best-per-dataset figure, not one global configuration.
 **Stronger scorers did not pay off here**: besides the pointwise reranker and the failed fine-tune
 listed above, all three Phase 2 ordering heads lost to the baselines they targeted (topical late
 interaction, relational NLI stance, and a cross-encoder adapted on MuSiQue's own train pairs). And any

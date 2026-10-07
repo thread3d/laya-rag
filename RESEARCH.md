@@ -41,7 +41,7 @@ re-derived here.
 | MultiHop pool-reorder oracle | **0.609** at depth 100 (corrected, 2026-10-03) | the pool is **not** sufficient: 35.4% of depth-100 pools lack a gold fact, and the ceiling rises to 0.659 at depth 500 |
 | Answerability, out of domain | AUC **0.51** scalar; in-domain feature gate **0.81** | no portable calibrated abstention |
 | Cross-encoder (BEIR vs MultiHop) | −0.027…−0.318 on BEIR; **+0.0464 MAP@10** on MultiHop | a second stage must be *routed*, not global |
-| Scale | 17 of 18 BEIR datasets measured; BioASQ gated, and the only member left | ingestion is the wall, not query time |
+| Scale | **18 of 18 BEIR datasets measured** — the benchmark is covered; the engine's BEIR-18 macro is **0.4665** | ingestion was the wall, not query time; the last member needed a free BioASQ account |
 | Generation | opt-in Ollama only; no entity linker, no judge, no detector | cannot be scored end-to-end |
 | Security | no tenancy, no ACL, no injection defense | a poisoned file is model-visible |
 | ArguAna | pointwise CE 0.568 → 0.250 | relational (opposition) relevance is unmodelled |

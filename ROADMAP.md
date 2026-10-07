@@ -270,20 +270,20 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 
 ## 7. Phase 4 — scale to 18 datasets, and own the encoder (weeks; mixed)
 
-**Coverage today: 17 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
+**Coverage today: 18 of 18 — the benchmark is covered.** SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
 DBPedia-entity, NQ, HotpotQA (full 7,405 queries), webis-touche2020, **Climate-FEVER** (lexical, nDCG@10
 0.1610), **FEVER** (lexical, **0.6323** over all 6,666 queries), **TREC-COVID** (lexical,
 **0.6188** over the full 171,332-document collection, against a published BM25 of **0.595**),
 **Robust04** (lexical, **0.4077** against a published **0.407**), **TREC-NEWS** (lexical, **0.3351**
-against **0.398**), **Signal-1M** (lexical, **0.3131**) and **CQADupStack** (lexical, twelve
+against **0.398**), **Signal-1M** (lexical, **0.3131**), **CQADupStack** (lexical, twelve
 sub-forums scored independently and macro-averaged: flat control **0.2988** against a published
-**0.299**, engine row **0.2943**), counted
+**0.299**, engine row **0.2943**) and **BioASQ** (lexical, **0.5193** over **14,914,604 documents**
+and 500 queries, against a published BM25 of **0.465** and the best published system's **0.504**), counted
 from the reports present in `eval/beir/` by `tools/consistency_check.py`; the earlier 40,000-document
-TREC-COVID subsample is superseded by the full run and no longer counted, the last four were
-recovered or adapted afterwards (`docs/findings-beir-recovered.md`,
-`docs/findings-cqadupstack.md`), and **BioASQ** is the only member left — blocked on a free BioASQ
-account for both the corpus and the 8B golden set, with the one public corpus mirror 813,939
-documents short of what the qrels score against (`docs/findings-bioasq-unavailable.md`). The counts inside the 4.2
+TREC-COVID subsample is superseded by the full run and no longer counted, and the last five were
+recovered, adapted or registered for afterwards (`docs/findings-beir-recovered.md`,
+`docs/findings-cqadupstack.md`, `docs/findings-bioasq.md`). With coverage complete, the engine's macro
+is a genuine BEIR-18 figure for the first time: **0.4665**. The counts inside the 4.2
 log below are the historical values at each dated step, and `make consistency-check` fails if this
 line and the other documents disagree again.
 

@@ -33,12 +33,14 @@ plus the five systems the paper tabulates; columns are the 18 datasets in the be
 order. Dashes are datasets we have not run — the membership is visible in the figure rather than
 implied by it.
 
-**Where we lead.** Of the 17 datasets we have run, we are ahead of *the best of the five published
-systems* on **8**: ArguAna (+0.135), FiQA (+0.093), Touché (+0.075), SciFact (+0.068), SCIDOCS
-(+0.060), NFCorpus (+0.042), Signal-1M (+0.034), Quora (+0.023). One of those eight is a caveat
-rather than a result: Signal-1M is led by our **flat BM25 control** (0.3640), not by the shipped
+**Where we lead.** Of the 18 datasets we have run — all of them — we are ahead of *the best of the
+five published systems* on **9**: ArguAna (+0.135), FiQA (+0.093), Touché (+0.075), SciFact (+0.068),
+SCIDOCS (+0.060), NFCorpus (+0.042), Signal-1M (+0.034), Quora (+0.023) and BioASQ (+0.015, and
++0.054 against the published BM25 itself). Two of those nine are caveats
+rather than results: Signal-1M is led by our **flat BM25 control** (0.3640), not by the shipped
 engine path (0.3131, which is *behind* the published BM25 of 0.330) — that comparison is about the BM25
-convention of section 5, not about the engine.
+convention of section 5, not about the engine; and BioASQ's margin is unexplained, and is a statement
+about our *settings* on biomedical text rather than about the engine.
 
 **Where they lead.** Nine, and the losses are concentrated:
 
@@ -85,15 +87,16 @@ and the hybrid is the best arm on four of the six.
 
 ![BEIR-18 coverage](charts/cmp_coverage.png)
 
-Membership and blockers, taken from `make consistency-check` rather than typed: **17 of 18**
-measured (seven with a dense arm, ten lexical-only), **one** still out — BioASQ, blocked on a free
-BioASQ account for both the corpus and the 8B golden set, with the one public corpus mirror 5.46%
-short of what the qrels score against (`findings-bioasq-unavailable.md`) — and one measured corpus —
+Membership and blockers, taken from `make consistency-check` rather than typed: **18 of 18**
+measured (seven with a dense arm, eleven lexical-only), **nothing still out** — every dataset an
+eighteen-dataset denominator should hold has a report — and one measured corpus —
 MS MARCO — that is *not one of the 18* at all. That last row is the reason the count is computed over
 an explicit member set: before it, the prose had nineteen candidates for an eighteen-dataset
 denominator. The count moved 13 → 16 when Robust04, TREC-NEWS and Signal-1M were recovered from a
-public non-gated mirror (`findings-beir-recovered.md`), and 16 → 17 when CQADupStack — which was never
-404, only twelve sub-collections behind one name — got its own runner (`findings-cqadupstack.md`). The
+public non-gated mirror (`findings-beir-recovered.md`), 16 → 17 when CQADupStack — which was never
+404, only twelve sub-collections behind one name — got its own runner (`findings-cqadupstack.md`), and
+17 → 18 when BioASQ, the one member that genuinely needed its free registration, was ingested and
+measured (`findings-bioasq.md`). The
 three recovered corpora are third-party redistributions of
 NIST/TREC-agreement collections, so the licensing question is unchanged by the measurement.
 
@@ -107,11 +110,15 @@ Two panels, two memberships, and they are not interchangeable:
 
 - **Left.** The paper's 18-dataset macro for its five systems — SPLADE **0.474**, Contriever
   **0.448**, BM25 **0.429**, uniCOIL **0.428**, TAS-B **0.424** — beside this engine's macro over
-  the **17 datasets it has run: 0.4634**. The engine bar is drawn in the engine's colour and
-  annotated *different membership — not comparable*; it is a statement about our 17, not about
-  BEIR-18. (It read **0.4979 over 13** before the recovered corpora landed, then 0.4737 over 16, and
-  every addition since sits below its published best, so the wider membership keeps *lowering* the
-  mean — membership moves a BEIR average more than most method differences do.)
+  **all 18 datasets: 0.4665**. This is the first round in which the two bars are over the *same*
+  membership, so the *different membership — not comparable* annotation is gone: the engine lands
+  between Contriever and SPLADE, above BM25 and uniCOIL. (It read **0.4979 over 13** before the
+  recovered corpora landed, 0.4737 over 16 and 0.4634 over 17, so widening the membership moved the
+  mean more than most method differences did — and the last step, BioASQ, raised it for the first
+  time, because it is a win.) One caveat survives the membership finally matching: ours is a
+  **best-per-dataset** row — the best retriever for each corpus — while each published system is a
+  single global configuration, so the comparison flatters the engine by construction. The right-hand
+  panel is where like-for-like lives.
 - **Right.** The comparison that *is* like-for-like: the four datasets everybody has —
   SciFact, NFCorpus, ArguAna, SCIDOCS. There this engine reads **0.495** (best per dataset,
   computed 0.4947) and **0.507** (single 3-model ensemble fused with BM25, computed 0.5072) against
@@ -122,7 +129,7 @@ Two panels, two memberships, and they are not interchangeable:
 
 The same numbers against encoder size. The published dense models sit at 66M–1.2B parameters;
 this engine's shipped encoder is **33M** (`bge-small`), and its quality point is drawn on its own
-17-dataset mean, explicitly not comparable to the published 18-dataset axis. The honest reading is
+18-dataset mean, explicitly not comparable to the published 18-dataset axis. The honest reading is
 not "better per parameter" — it is that a 33M encoder plus lexical fusion lands in the same band as
 110M–335M models on the four datasets both sides have run.
 
@@ -140,8 +147,8 @@ claim ledger pins.
 
 This second figure is deliberately **not** that control. It compares our flat BM25 against the
 paper's **multi-field** BM25 — the same scoring function indexing title and body as separate
-fields — and one of its rows (Touché-2020) is a different collection release (v2). Ten of the 17
-corpora sit inside ±0.02 and seven do not, which is a statement about *convention and release*, not
+fields — and one of its rows (Touché-2020) is a different collection release (v2). Ten of the 18
+corpora sit inside ±0.02 and eight do not, which is a statement about *convention and release*, not
 about the retriever: SciFact moves from +0.011 against the multi-field column to −0.003 against the
 flat anchor, and Touché swings 0.075 for the same reason. It is on the page because a reader who
 sees one BM25 number next to another deserves to see how much of the gap is the index.
