@@ -55,25 +55,30 @@ def _write_report(directory: Path, stem: str, datasets) -> None:
     (directory / f"{stem}.json").write_text(json.dumps({"datasets": {d: {} for d in datasets}}))
 
 
-def test_coverage_excludes_bounded_and_superseded_reports(tmp_path):
+def test_coverage_excludes_bounded_and_superseded_reports(tmp_path, monkeypatch):
     beir = tmp_path / "beir"
     _write_report(beir, "five-small-fixed", ["scifact", "nfcorpus"])
     _write_report(beir, "hotpotqa-subset", ["hotpotqa"])
-    _write_report(beir, "trec-covid-bounded", ["trec-covid"])
+    _write_report(beir, "msmarco-bounded", ["msmarco"])
     _write_report(beir, "five-small", ["quora"])          # a superseded stem
     (beir / "coverage.json").write_text(json.dumps({"count": 99}))  # our own output, not a report
+    # The shipped registry has no bounded dataset left (TREC-COVID's subsample is superseded by
+    # the full run), so the mechanism is pinned by injecting one rather than by leaving a
+    # placeholder in the registry.
+    monkeypatch.setattr(cc, "BOUNDED", {"msmarco": "40,000-document subsample"})
 
     measured = cc.measured_beir(beir)
     assert measured["count"] == 3
     assert measured["measured"] == ["hotpotqa", "nfcorpus", "scifact"]
-    assert "trec-covid" in measured["bounded"] and "trec-covid" not in measured["measured"]
+    assert "msmarco" in measured["bounded"] and "msmarco" not in measured["measured"]
     assert "quora" not in measured["measured"]
     assert measured["total"] == 18
 
 
-def test_a_bounded_run_does_not_count_toward_the_total(tmp_path):
+def test_a_bounded_run_does_not_count_toward_the_total(tmp_path, monkeypatch):
     beir = tmp_path / "beir"
-    _write_report(beir, "trec-covid-bounded", ["trec-covid"])
+    _write_report(beir, "msmarco-bounded", ["msmarco"])
+    monkeypatch.setattr(cc, "BOUNDED", {"msmarco": "40,000-document subsample"})
     assert cc.measured_beir(beir)["count"] == 0
 
 

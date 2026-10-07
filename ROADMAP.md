@@ -270,12 +270,14 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 
 ## 7. Phase 4 — scale to 18 datasets, and own the encoder (weeks; mixed)
 
-**Coverage today: 12 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
+**Coverage today: 13 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
 DBPedia-entity, NQ, HotpotQA (full 7,405 queries), webis-touche2020, **Climate-FEVER** (lexical, nDCG@10
-0.1610) and **FEVER** (lexical, **0.6323** over all 6,666 queries), counted from the reports present in
-`eval/beir/` by `tools/consistency_check.py`; TREC-COVID has a 40,000-document subsample and is not
-counted. The counts inside the 4.2 log below are the historical values at each dated step, and
-`make consistency-check` fails if this line and the other documents disagree again.
+0.1610), **FEVER** (lexical, **0.6323** over all 6,666 queries) and **TREC-COVID** (lexical,
+**0.6188** over the full 171,332-document collection, against a published BM25 of **0.595**), counted
+from the reports present in `eval/beir/` by `tools/consistency_check.py`; the earlier 40,000-document
+TREC-COVID subsample is superseded by the full run and no longer counted. The counts inside the 4.2
+log below are the historical values at each dated step, and `make consistency-check` fails if this
+line and the other documents disagree again.
 
 | # | item | needs | change | falsify | status |
 | --- | --- | --- | --- | --- | --- |
@@ -340,7 +342,7 @@ and a report under `eval/` plus a `docs/findings-*.md` entry added to
 | --- | --- |
 | MTEB submission (4.4) | **code blocker gone; run + upload external.** The engine itself is representable — `tools/mteb_search.py` implements MTEB v2's `SearchProtocol` and is verified against mteb 2.22.5. A full SciFact evaluation forked ~33 harness workers and stalled in this environment, so no score is claimed; the upload remains external |
 | TREC RAG, KILT | external — NIST corpus/gold-nugget access; an entity linker and a full submission stack |
-| BioASQ / FEVER / NQ at full size | **not disk-bound** (this host has 471 GB free). BioASQ is **gated** on HuggingFace; FEVER and Climate-FEVER are downloadable and are running as lexical rows; HotpotQA's full run resumes from its checkpoint |
+| BioASQ / MS MARCO at full size | **not disk-bound** (this host has 534 GiB free). BioASQ (14.9M) is **gated** on HuggingFace; **MS MARCO (8.8M) is *not* gated** — the mirror serves `msmarco.zip` (1.08 GB) and `BeIR/msmarco` is public — it is unrun for size, not access. FEVER, Climate-FEVER and HotpotQA's full query set are **measured** lexical rows |
 | Robust04 / TREC-NEWS / specter / signal1m | **licensing-gated** — the UKP mirror now 404s them and the HuggingFace copies return 401 anonymously; not a mirror glitch or a disk problem |
 | MIRACL / MMTEB | per-language Wikipedia indexes; the multilingual encoder would need measuring |
 | ViDoRe / MIRACL-VISION | the engine is text-only: no OCR or vision path |

@@ -249,6 +249,21 @@ CHECKS: list[Claim] = [
           5, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
     Claim("findings index within 0.02", "docs/FINDINGS.md", r"within \u00b10\.02 on \d+",
           8, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
+    # TREC-COVID's full collection replaced a bounded 40,000-document subsample. The subsample's
+    # 0.3062 is cited as history, so it is pinned too: a superseded number that is still quoted is
+    # still a number that can drift.
+    Claim("trec-covid engine nDCG@10 (findings index)", "docs/FINDINGS.md",
+          r"TREC-COVID, full collection", 0.6188,
+          ("datasets", "trec-covid", "retrievers", "bm25-engine", "nDCG@10"),
+          report="eval/beir/trec-covid.json"),
+    Claim("trec-covid engine nDCG@10 (benchmarks)", "BENCHMARKS.md",
+          r"\*\*TREC-COVID\*\* \(lexical", 0.6188,
+          ("datasets", "trec-covid", "retrievers", "bm25-engine", "nDCG@10"),
+          report="eval/beir/trec-covid.json"),
+    Claim("trec-covid flat control nDCG@10", "docs/findings-trec-covid-full.md",
+          r"`bm25` \(published settings control\)", 0.5573,
+          ("datasets", "trec-covid", "retrievers", "bm25", "nDCG@10"),
+          report="eval/beir/trec-covid.json"),
 ]
 
 FORBIDDEN: list[Forbidden] = [

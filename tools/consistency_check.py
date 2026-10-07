@@ -87,10 +87,17 @@ SUPERSEDED: dict[str, tuple[str, str]] = {
     "large-splade": ("large-splade-fixed", "pre-fix ArguAna BM25 row (0.295 vs 0.3935)"),
     "report": ("report-final", "pre-fix fused order; superseded by report-after then report-final"),
     "report-after": ("report-final", "superseded by report-final, which adds the cross-encoder arm"),
+    "trec-covid-bounded": (
+        "trec-covid",
+        "40,000-document subsample; superseded by the full 171,332-document run",
+    ),
 }
 
 #: Bounded runs: measured, but not on the full collection, so they do not count toward "of 18".
-BOUNDED: dict[str, str] = {"trec-covid": "40,000-document subsample (full collection not run)"}
+#: Empty today — TREC-COVID's subsample was superseded by the full run above — but kept as the
+#: place to record one, because a bounded run is a legitimate measurement that must not be
+#: counted as a dataset.
+BOUNDED: dict[str, str] = {}
 #: Datasets measured on a seeded query subset rather than the full qrels.
 SUBSET: dict[str, str] = {"hotpotqa": "600-query seeded subset (seed 17)"}
 
@@ -246,12 +253,12 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR coverage count",
             sites=(
-                Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 12, 0),
-                Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 12, 0),
-                Site("ROADMAP.md", r"Coverage today: \d+ of 18", 12, 0),
-                Site("README.md", r"BEIR's 18 datasets", 12, 0),
-                Site("RESEARCH.md", r"^\| Scale \|", 12, 0),
-                Site("docs/findings-consistency-gate.md", r"^\| BEIR coverage", 12, 0),
+                Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 13, 0),
+                Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 13, 0),
+                Site("ROADMAP.md", r"Coverage today: \d+ of 18", 13, 0),
+                Site("README.md", r"BEIR's 18 datasets", 13, 0),
+                Site("RESEARCH.md", r"^\| Scale \|", 13, 0),
+                Site("docs/findings-consistency-gate.md", r"^\| BEIR coverage", 13, 0),
             ),
             authority=lambda: {"count": measured_beir()["count"]},
             key="count",

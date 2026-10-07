@@ -906,12 +906,14 @@ Shipped `bge-small` bi-encoder, corrected evaluator, 95% bootstrap intervals ove
 last two columns are the multi-model dense ensemble: `bge-small` + `bge-base` + `bge-large`
 fused by RRF, alone and with BM25 — a single configuration, not a per-dataset choice:
 
-**12 of BEIR's 18 datasets now have a report**, counted from `eval/beir/` by
+**13 of BEIR's 18 datasets now have a report**, counted from `eval/beir/` by
 `make consistency-check` (which fails if any document states a different number): the five below
 carry the multi-model comparison, while `nq`, `dbpedia-entity`, `quora`, `webis-touche2020`,
-`hotpotqa`, `climate-fever` and `fever` have the lexical row. `climate-fever` is also the worst
-outlier in the lexical control below (**−0.052** against its published anchor). The other six are
-**access-gated** — the mirror 404s them and the HuggingFace copies are gated — not silently skipped.
+`hotpotqa`, `climate-fever`, `fever` and `trec-covid` have the lexical row. `climate-fever` is also the worst
+outlier in the lexical control below (**−0.052** against its published anchor). The other five are
+**access-gated or unrun for size** — the mirror 404s Robust04 / TREC-NEWS / `specter` / `signal1m` with
+gated HuggingFace copies, BioASQ is gated at 14.9M documents, and MS MARCO (8.8M) is public but unrun —
+not silently skipped.
 
 | dataset | queries | shipped lexical | bi-encoder | fused BM25 + bi-encoder | dense ensemble | **ensemble + BM25** |
 | --- | --- | --- | --- | --- | --- | --- |

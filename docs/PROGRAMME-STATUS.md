@@ -12,7 +12,7 @@ cost of getting it.
 | 1 — engine full-split runs | **complete** | MultiHop-RAG 2,255 both configurations; MuSiQue 2,417 hybrid plus a 200-query default |
 | 2 — ordering heads | **complete, entirely negative** | late interaction, relational NLI and an adapted cross-encoder all lose; 2.4 not adopted on licence |
 | 3 — end-to-end and cost | **complete** | FRAMES, a generation pilot, citation mechanics, and the cost axis |
-| 4 — scale | **partial** | 4.1, 4.3, 4.5 done; **4.2 at 12 of 18 datasets** (Climate-FEVER and FEVER landed 2026-10-06); 4.4 is an external submission |
+| 4 — scale | **partial** | 4.1, 4.3, 4.5 done; **4.2 at 13 of 18 datasets** (Climate-FEVER, FEVER and the full TREC-COVID collection landed 2026-10-06 and after); 4.4 is an external submission |
 | 5 — trust | **complete** | trust report, three-state adjudication, verifier precision, poison-dose probe |
 
 The engine **beats the harness it replaced on MultiHop-RAG** (MAP@10 0.3128 against 0.2510) and
@@ -46,8 +46,11 @@ Negatives are results here, and these are the ones worth keeping:
    or a token, so the block is **access/licensing**, not disk. **Both of the "blocked" 5.4M-document
    corpora are now done** as lexical rows: **Climate-FEVER** (nDCG@10 **0.1610**) and **FEVER**
    (**0.6323** over all 6,666 queries, against a published 0.753 — the largest lexical-control gap
-   measured). NQ (2.68M) completed in ~25 min; HotpotQA is next in the queue and degrades to
-   **~0.04 q/s** on its later queries, which is 10–40 hours for one lexical-only row.
+   measured). NQ (2.68M) completed in ~25 min and HotpotQA's full 7,405-query set reads **0.6352**;
+   the full **TREC-COVID** collection (171,332 documents, 50 queries) is measured at **0.6188** —
+   against a published BM25 of **0.595** — so coverage is **13 of 18**. **MS MARCO (8.8M) is *not*
+   gated** (the mirror serves `msmarco.zip` and `BeIR/msmarco` answers 200 anonymously); it is the one
+   remaining large corpus that access alone does not block, and it is unrun for size.
    `--limit-queries` gives a labelled seeded subset (~1 h per corpus).
 2. **Phase 4.4, the MTEB submission.** Requires an upload; not offline work.
 3. **HotpotQA's full query set — done.** The full **7,405** queries read **nDCG@10 0.6352** (MRR@10
