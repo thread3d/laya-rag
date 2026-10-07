@@ -262,6 +262,24 @@ def extract_features(
     )
 
 
+def passage_text(passage: Any) -> str:
+    """Text of a passage whether it is a ``ScoredPassage``, a ``Hit``, or a mapping.
+
+    ``ScoredPassage`` and JSON rows carry ``text`` directly; a retrieval ``Hit`` carries it under
+    ``chunk``. A dict has no attributes, so an accessor written with ``getattr`` silently returns
+    the empty string for every JSON passage — which is how a bridge-conditioned experiment can
+    run, look plausible and measure nothing. Everything that needs a passage's text goes through
+    here.
+    """
+    text = _field(passage, "text", None)
+    if text:
+        return _as_text(text)
+    chunk = _field(passage, "chunk", None)
+    if chunk is not None:
+        return _as_text(_field(chunk, "text", ""))
+    return ""
+
+
 def bridge_conditioned_max(
     scorer: Any,
     query: str,
@@ -286,8 +304,8 @@ def bridge_conditioned_max(
     items = [] if passages is None else list(passages)
     if len(items) < 2:
         return None
-    head = _as_text(_field(items[0], "text", "")) if bridge is None else str(bridge)
-    texts = [_as_text(_field(item, "text", "")) for item in items[1:]]
+    head = passage_text(items[0]) if bridge is None else str(bridge)
+    texts = [passage_text(item) for item in items[1:]]
     scores, _usage = scorer.score_relevance_conditioned(query, head, texts, wording=wording)
     return max(scores) if scores else None
 
@@ -649,22 +667,6 @@ def _softmax(logits: np.ndarray) -> np.ndarray:
     return exponentials / exponentials.sum(axis=-1, keepdims=True)
 
 
-def _passage_text(passage: Any) -> str:
-    """Text of a passage whether it is a ScoredPassage, a Hit, or a mapping.
-
-    ``ScoredPassage`` and JSON rows carry ``text`` directly; a retrieval ``Hit`` carries
-    it under ``chunk``. Both must read the same, so an NLI scorer cannot silently see an
-    empty premise for one of them.
-    """
-    text = _field(passage, "text", None)
-    if text:
-        return _as_text(text)
-    chunk = _field(passage, "chunk", None)
-    if chunk is not None:
-        return _as_text(_field(chunk, "text", ""))
-    return ""
-
-
 class NLIAnswerability:
     """Score ``P(evidence entails an answer to query)`` with an NLI cross-encoder.
 
@@ -731,7 +733,7 @@ class NLIAnswerability:
         *refutes* and one the corpus is merely *silent* about both score low on entailment, and
         only the contradiction column tells them apart.
         """
-        premise = "\n\n".join(_passage_text(passage) for passage in passages)
+        premise = "\n\n".join(passage_text(passage) for passage in passages)
         if not premise.strip():
             return {"entailment": 0.0, "contradiction": 0.0}
         if self._verdict_scorer is not None:
@@ -762,7 +764,7 @@ class NLIAnswerability:
 
     def score(self, query: str, passages: Sequence[Any]) -> float:
         """Return ``P(entailment)`` for the query against the assembled evidence."""
-        premise = "\n\n".join(_passage_text(passage) for passage in passages)
+        premise = "\n\n".join(passage_text(passage) for passage in passages)
         if not premise.strip():
             return 0.0
         if self._scorer is not None:

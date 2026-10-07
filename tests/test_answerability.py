@@ -15,6 +15,7 @@ from laya_rag.answerability import (
     bridge_conditioned_max,
     evaluate_gate,
     extract_features,
+    passage_text,
     roc_auc,
     rotated_bridge_texts,
 )
@@ -392,6 +393,31 @@ def test_the_bridge_column_defaults_to_zero_and_carries_a_supplied_value():
     supplied = extract_features("alpha", passages, bridge_conditioned=0.7)
     assert supplied[index] == pytest.approx(0.7)
     assert np.allclose(np.delete(default, index), np.delete(supplied, index))
+
+
+def test_passage_text_reads_objects_mappings_and_retrieval_hits():
+    """The accessor the bridge harness uses: a dict has no attributes, so getattr reads it empty."""
+    assert passage_text(_Passage("object text", 0.5, 1.0, "/a.md")) == "object text"
+    assert passage_text({"text": "mapping text", "path": "/a.md"}) == "mapping text"
+    # A Hit carries its content under `chunk`, not `text`.
+    assert passage_text({"chunk": {"text": "hit text"}}) == "hit text"
+    assert passage_text({}) == ""
+    assert passage_text(None) == ""
+
+
+def test_the_bridge_harness_head_is_the_mapping_text_not_the_empty_getattr():
+    """Regression: `getattr(dict, 'text', '')` is '', which made both arms identical."""
+    passages = [
+        {"text": "the real first hop", "path": "/a.md"},
+        {"text": "candidate", "path": "/a.md"},
+    ]
+    scorer = _StubScorer([0.5])
+    bridge_conditioned_max(scorer, "q", passages)
+    assert scorer.calls[0][1] == "the real first hop"
+    assert scorer.calls[0][1] == passage_text(passages[0])
+    # And a rotated arm must actually receive a different head.
+    rotated = rotated_bridge_texts([passage_text(p) for p in passages])
+    assert rotated[0] == "candidate"
 
 
 # -- the bridge-conditioned column (the 13th) ------------------------------

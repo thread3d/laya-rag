@@ -23,6 +23,7 @@ from laya_rag.answerability import (  # noqa: E402
     FEATURE_NAMES,
     bridge_conditioned_max,
     extract_features,
+    passage_text,
     rotated_bridge_texts,
 )
 from laya_rag.config import EngineConfig          # noqa: E402
@@ -83,8 +84,11 @@ if args.bridge_feature:
 
 
 def top_text(result):
+    # The engine's passages arrive as dicts on the JSON-facing path and as ScoredPassage objects
+    # in-process, and a dict has no attributes: `getattr(passage, "text", "")` reads every dict as
+    # empty, which would make both bridge arms identical. passage_text reads both shapes.
     passages = getattr(result, 'passages', None) or []
-    return str(getattr(passages[0], 'text', '')) if passages else ''
+    return passage_text(passages[0]) if passages else ''
 
 
 def run(group, label, answerable_label):
