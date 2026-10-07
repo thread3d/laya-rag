@@ -63,6 +63,10 @@ CURRENCY_BANNER = re.compile(r"^> \*\*Currency:")
 SNAPSHOT_OPEN = re.compile(r"^\s*<!--\s*consistency:\s*snapshot\s+(\d{4}-\d{2}-\d{2})\b.*-->\s*$")
 SNAPSHOT_CLOSE = re.compile(r"^\s*<!--\s*consistency:\s*/snapshot\s*-->\s*$")
 
+#: Every "N of 18" coverage count on a line, so the guard compares the number *stated* rather than
+#: checking that 18 is merely present somewhere — see `check_audit_documents`.
+AUDIT_COUNT = re.compile(r"(\d+)\s+of\s+18\b")
+
 
 def _audit_dir(root: Path) -> Path:
     """The audit set beside a given repository root, so `--root` moves both together."""
@@ -270,12 +274,12 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR coverage count",
             sites=(
-                Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 17, 0),
-                Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 17, 0),
-                Site("ROADMAP.md", r"Coverage today: \d+ of 18", 17, 0),
-                Site("README.md", r"BEIR's 18 datasets", 17, 0),
-                Site("RESEARCH.md", r"^\| Scale \|", 17, 0),
-                Site("docs/findings-consistency-gate.md", r"^\| BEIR coverage", 17, 0),
+                Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 18, 0),
+                Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 18, 0),
+                Site("ROADMAP.md", r"Coverage today: \d+ of 18", 18, 0),
+                Site("README.md", r"BEIR's 18 datasets", 18, 0),
+                Site("RESEARCH.md", r"^\| Scale \|", 18, 0),
+                Site("docs/findings-consistency-gate.md", r"^\| BEIR coverage", 18, 0),
             ),
             authority=lambda: {"count": measured_beir()["count"]},
             key="count",
@@ -506,7 +510,12 @@ def check_audit_documents(
         if expected is None:
             continue
         for lineno, line in enumerate(masked, 1):
-            if "of 18" in line and not claim_check._number_present(line, expected):
+            stated = AUDIT_COUNT.findall(line)
+            # The count *before* "of 18" is what has to match. Testing merely that the number 18
+            # appears anywhere on the line is vacuous once coverage reaches 18 — every line reading
+            # "N of 18" contains it — so a fully covered repository could say anything. Each count
+            # on the line has to be the computed one, which leaves a dated line to be fenced.
+            if stated and any(count != expected for count in stated):
                 failures.append(
                     f"{name}:{lineno} states a coverage count that is not the computed {expected} "
                     f"of 18 (fence a dated finding with `<!-- consistency: snapshot YYYY-MM-DD -->`)"

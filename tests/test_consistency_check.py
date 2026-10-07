@@ -212,6 +212,33 @@ def test_a_fenced_dated_finding_may_keep_a_superseded_count(tmp_path):
     assert cc.check_audit_documents(root=tmp_path, coverage_count=12, audit_dir=audit) == []
 
 
+def test_the_audit_guard_is_not_vacuous_at_full_coverage(tmp_path):
+    """At 18 of 18, "is the number 18 on this line?" is true of every line that says "N of 18".
+
+    That is a real hole rather than a hypothetical: the guard tests for the presence of the computed
+    value, and the string "of 18" *is* the computed value once coverage is complete. So the stated
+    count has to be compared, not merely detected — otherwise a fully covered repository could say
+    anything at all and the gate would agree.
+    """
+    audit = _audit_doc(tmp_path, "a.md", "coverage is 17 of 18\n")
+    failures = cc.check_audit_documents(root=tmp_path, coverage_count=18, audit_dir=audit)
+    assert len(failures) == 1 and "computed 18 of 18" in failures[0]
+
+    # A second document stating the computed count must pass, alongside the failing one.
+    _audit_doc(tmp_path, "b.md", "coverage is 18 of 18\n")
+    failures = cc.check_audit_documents(root=tmp_path, coverage_count=18, audit_dir=audit)
+    assert [f for f in failures if "b.md" in f] == []
+
+
+def test_every_count_on_an_audit_line_has_to_agree(tmp_path):
+    """A line naming several counts is only current if each of them is the computed one."""
+    audit = _audit_doc(
+        tmp_path, "a.md", "the documents said 15 of 18, and now say 18 of 18\n"
+    )
+    failures = cc.check_audit_documents(root=tmp_path, coverage_count=18, audit_dir=audit)
+    assert len(failures) == 1, "a stale count hiding beside a current one must still fail"
+
+
 def test_a_snapshot_fence_must_name_a_date(tmp_path):
     """An undated fence is not a fence, so its historical count is read as a current claim."""
     body = (
