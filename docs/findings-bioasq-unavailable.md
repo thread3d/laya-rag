@@ -53,6 +53,19 @@ repo name suggests. It looks exactly like the thing that is missing.
 It is not. Streaming the archive and counting gives **14,100,000 records** — a round number, and
 **813,939 short of the 14,913,939** the benchmark scores against, a **5.46% corpus truncation**.
 
+**How much of the gold set survives that truncation was measured, and the answer is most of it —
+which is what makes this dangerous rather than merely wrong.** Against the 500-query 8B golden set
+(2,298 distinct judged documents, of which 749 are supplied by BEIR's manual-add list and 1,549 must
+come from the corpus), the mirror contains **1,533 of the 1,549 corpus-expected gold documents, and
+misses 16**. It contains **0 of the 749** manual-add documents, which independently confirms that
+list is exactly "in the qrels, absent from the corpus".
+
+So a run on this mirror would not collapse the way the TREC-COVID subsample did — it would keep
+98.97% of the documents the metric rewards, and the 813,939 missing documents would perturb the
+*rankings* rather than delete the answers. The result would land within a few thousandths of the real
+row, in an unpredictable direction, and there is no public qrels-complete corpus to check it against.
+That is a worse failure mode than an obvious one: it is the shape of a number that gets published.
+
 Using it would not be a slightly smaller measurement. It is the defect
 `findings-trec-covid-full.md` is written about: the 500 test qrels are fixed and reference documents
 across the whole collection, so truncating the corpus removes gold documents the qrels still ask for
@@ -64,16 +77,37 @@ makes it dangerous: it would land *near* the published anchor and look like a re
 No public copy of the 8B golden queries or qrels was found either, so the truncation cannot even be
 detected from the public side — there is nothing to score against.
 
+## Status: the golden half is in hand
+
+**Obtained (2026-10-07).** `Task8BGoldenEnriched.zip` from the BioASQ participants area, in hand and
+verified:
+
+- five batches, `8B1_golden.json` … `8B5_golden.json`, **100 questions each, 500 total** — exactly the
+  member's test split;
+- **2,359 judgements over 2,298 distinct documents**, written to `queries.jsonl` and `qrels/test.tsv`
+  in the layout `tools/beir.py` reads and validated through its loader;
+- every question has `body` (the query) and `documents` (PubMed URLs, PMID taken from the final path
+  segment), so the binary rule needs no interpretation.
+
+The manual-add list came out public after all: BEIR step 3's spreadsheet resolves to a plain CSV
+(775 rows, 749 distinct PMIDs), and **all 749 appear in the 8B qrels while 0 appear in the mirror
+above** — so it is exactly the "in the qrels, missing from the corpus" supplement, and it is already
+written to `additional_passages.tsv`.
+
+**Still needed.** The corpus: **Task A → `Training v.2020` → txt** (7.51 GB zipped / 24.4 GB
+unzipped, 14,913,939 articles), i.e. `allMeSH_2020.json`. Not v.2021 or v.2022, which are different
+collections, and not the Lucene distribution. With that, the ingest is a streaming pass and the
+harness scores the dataset unchanged.
+
 ## What would finish it
 
 Two files, both from a **free** BioASQ account (registration is open to anyone; the account is the
 gate, not a licence fee):
 
 1. **Task 9a training v2020** (~14,913,939 documents) — or `allMeSH_2020.json`, the BioASQ 2020
-   snapshot the corpus is derived from. Extract `pmid`, `title`, `abstractText`, plus the handful of
+   snapshot the corpus is derived from. Extract `pmid`, `title`, `abstractText`, plus the 749
    manually-added documents BEIR step 3 names.
-2. **The 8B golden train and test sets** — question `id`, `body`, and `documents`; every document in
-   `documents` becomes a relevant judgement, which is BEIR's binary rule.
+2. **The 8B golden train and test sets** — **done**, see above.
 
 Together those are enough to write `corpus.jsonl`, `queries.jsonl` and `qrels/test.tsv` in the layout
 `tools/beir.py` reads, and the existing harness scores it unchanged.
