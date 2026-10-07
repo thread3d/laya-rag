@@ -53,6 +53,7 @@ from laya_rag.chunking import Chunk  # noqa: E402
 from laya_rag.config import EngineConfig  # noqa: E402
 from laya_rag.index_store import VectorIndex  # noqa: E402
 from laya_rag.lexical import STOPWORDS, BM25Index, reciprocal_rank_fusion, tokenize  # noqa: E402
+from laya_rag.ondisk import OnDiskBM25  # noqa: E402
 
 #: Public BEIR mirror used by the official scripts.
 BEIR_URL = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{name}.zip"
@@ -530,6 +531,50 @@ def cached_embed(
 
 # ── retrievers ───────────────────────────────────────────────────────────
 
+def _open_or_build_ondisk(
+    directory: Path,
+    corpus: Mapping[str, str],
+    *,
+    k1: float,
+    b: float,
+    drop_stopwords: bool,
+    stem: bool,
+) -> OnDiskBM25:
+    """A reusable on-disk lexical index for a corpus too large to index in memory.
+
+    `BM25Index` keeps a `Counter` per document and a `term -> postings` dict, so its residency
+    scales with the corpus; at 14.9M documents that, not the scoring, is what makes BioASQ
+    unreachable. `OnDiskBM25` spills postings to sorted runs and merges them into a
+    memory-mapped file, bounding the build and leaving only the term dictionary in RAM. Its
+    scoring is term-for-term the same formula and its sort ties the same way, so the two
+    backends produce identical rankings — which is what lets the switch be validated against a
+    small dataset rather than trusted.
+
+    The index is keyed by its own stored settings *and* document count, so a directory left by a
+    different `top_k`/stem/corpus cannot be read as this run's.
+    """
+    if OnDiskBM25.exists_on_disk(directory):
+        index = OnDiskBM25.open(directory)
+        same = (
+            index.k1 == k1
+            and index.b == b
+            and index.drop_stopwords == drop_stopwords
+            and index.stem == stem
+            and index.n_docs == len(corpus)
+        )
+        if same:
+            print(f"  reusing the on-disk lexical index at {directory}", flush=True)
+            return index
+        print(f"  the on-disk lexical index at {directory} is for different settings; rebuilding",
+              flush=True)
+        shutil.rmtree(directory, ignore_errors=True)
+    print(f"  building the on-disk lexical index at {directory} ({len(corpus)} documents)",
+          flush=True)
+    index = OnDiskBM25(directory, k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
+    index.build(((doc_id, text) for doc_id, text in corpus.items()))
+    return index
+
+
 def bm25_rankings(
     corpus: Mapping[str, str],
     queries: Mapping[str, str],
@@ -541,6 +586,8 @@ def bm25_rankings(
     titles: Mapping[str, str] | None = None,
     title_boost: int = 1,
     checkpoint: Path | None = None,
+    backend: str = "memory",
+    index_dir: Path | None = None,
 ) -> dict[str, list[str]]:
     """Lexical ranking at the published BEIR BM25 settings.
 
@@ -564,8 +611,15 @@ def bm25_rankings(
             doc_id: (titles.get(doc_id, "") + " ") * title_boost + text
             for doc_id, text in corpus.items()
         }
-    index = BM25Index(k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
-    index.build(make_chunks(corpus))
+    if backend == "ondisk":
+        if index_dir is None:
+            raise ValueError("the on-disk lexical backend needs an index directory")
+        index: Any = _open_or_build_ondisk(
+            Path(index_dir), corpus, k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem
+        )
+    else:
+        index = BM25Index(k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
+        index.build(make_chunks(corpus))
 
     def rank(query_id: str, text: str) -> list[str]:
         return [hit.chunk_id for hit in index.search(text, k=top_k)]
@@ -935,6 +989,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--lexical-checkpoint", action="store_true",
                         help="checkpoint the engine lexical ranking per query at <out>.lexical.jsonl "
                              "so an interrupted lexical pass resumes instead of restarting")
+    parser.add_argument("--lexical-backend", default="memory", choices=("memory", "ondisk"),
+                        help="memory (default) or ondisk: the latter spills BM25 postings to a "
+                             "memory-mapped file and is what a multi-million-document corpus "
+                             "needs, since the in-memory index keeps a Counter per document")
     parser.add_argument("--embed-chunk", type=int, default=0,
                         help="checkpoint the corpus embedding every N documents so an interrupted "
                              "run resumes instead of restarting; 0 keeps the single-pass behaviour")
@@ -1070,6 +1128,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "rerank_model": args.rerank_model if "crossencoder" in wanted else None,
             "rerank_depth": args.rerank_depth,
             "limit_docs": args.limit_docs,
+            "lexical_backend": args.lexical_backend,
             "ignore_identical_ids": not args.keep_identical_ids,
             "baseline": args.baseline,
             "bootstrap_samples": args.bootstrap_samples,
@@ -1117,6 +1176,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         rankings: dict[str, dict[str, list[str]]] = {}
         lexical: dict[str, list[str]] | None = None
 
+        def on_disk(label: str) -> dict[str, Any]:
+            """The on-disk backend's index directory for one lexical row, or nothing at all.
+
+            Each row gets its own directory because each has its own settings — the control runs
+            unstemmed and keeps stopwords, the engine row does neither — and an index built for
+            one must not be read as the other. No-op unless `--lexical-backend ondisk`.
+            """
+            if args.lexical_backend != "ondisk":
+                return {}
+            return {"backend": "ondisk", "index_dir": cache_dir / f"{name}.{label}.bm25"}
+
         if "bm25" in wanted:
             started = time.perf_counter()
             # The control row is checkpointed too. It runs at *published* settings, so it does not
@@ -1126,6 +1196,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 corpus, queries, args.top_k, k1=args.k1, b=args.b,
                 checkpoint=(Path(str(args.out) + ".lexical-control.jsonl")
                             if args.lexical_checkpoint else None),
+                **on_disk("control"),
             )
             results["bm25"] = {"seconds": round(time.perf_counter() - started, 2)}
 
@@ -1137,6 +1208,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             drop_stopwords=True, stem=args.stem,
             checkpoint=(Path(str(args.out) + ".lexical.jsonl")
                         if args.lexical_checkpoint else None),
+            **on_disk("engine"),
         )
         rankings["bm25-engine"] = lexical
         results["bm25-engine"] = {

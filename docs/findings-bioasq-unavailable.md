@@ -55,9 +55,9 @@ It is not. Streaming the archive and counting gives **14,100,000 records** — a
 
 **How much of the gold set survives that truncation was measured, and the answer is most of it —
 which is what makes this dangerous rather than merely wrong.** Against the 500-query 8B golden set
-(2,298 distinct judged documents, of which 749 are supplied by BEIR's manual-add list and 1,549 must
-come from the corpus), the mirror contains **1,533 of the 1,549 corpus-expected gold documents, and
-misses 16**. It contains **0 of the 749** manual-add documents, which independently confirms that
+(2,298 distinct judged documents, of which 750 are supplied by BEIR's manual-add list and 1,548 must
+come from the corpus), the mirror contains **1,533 of the 1,548 corpus-expected gold documents, and
+misses 15**. It contains **0 of the 750** manual-add documents, which independently confirms that
 list is exactly "in the qrels, absent from the corpus".
 
 So a run on this mirror would not collapse the way the TREC-COVID subsample did — it would keep
@@ -77,27 +77,42 @@ makes it dangerous: it would land *near* the published anchor and look like a re
 No public copy of the 8B golden queries or qrels was found either, so the truncation cannot even be
 detected from the public side — there is nothing to score against.
 
-## Status: the golden half is in hand
+## Status: both inputs in hand, ingested and asserted
 
-**Obtained (2026-10-07).** `Task8BGoldenEnriched.zip` from the BioASQ participants area, in hand and
-verified:
+**Obtained (2026-10-07) from the BioASQ participants area.**
 
-- five batches, `8B1_golden.json` … `8B5_golden.json`, **100 questions each, 500 total** — exactly the
-  member's test split;
+The golden half — `Task8BGoldenEnriched.zip`, five batches `8B1`…`8B5` of **100 questions each, 500
+total**, exactly the member's test split:
+
 - **2,359 judgements over 2,298 distinct documents**, written to `queries.jsonl` and `qrels/test.tsv`
-  in the layout `tools/beir.py` reads and validated through its loader;
+  in the layout `tools/beir.py` reads;
 - every question has `body` (the query) and `documents` (PubMed URLs, PMID taken from the final path
   segment), so the binary rule needs no interpretation.
 
-The manual-add list came out public after all: BEIR step 3's spreadsheet resolves to a plain CSV
-(775 rows, 749 distinct PMIDs), and **all 749 appear in the 8B qrels while 0 appear in the mirror
-above** — so it is exactly the "in the qrels, missing from the corpus" supplement, and it is already
-written to `additional_passages.tsv`.
+The corpus half — `allMeSH_2020.zip` → `allMeSH_2020.json`, **26.2 GB, one article per line inside a
+single `articles` array**. `tools/bioasq.py` streams it (never `json.load`-ing 26 GB), merges the
+manual-add rows first, and **asserts the membership before writing a report**:
 
-**Still needed.** The corpus: **Task A → `Training v.2020` → txt** (7.51 GB zipped / 24.4 GB
-unzipped, 14,913,939 articles), i.e. `allMeSH_2020.json`. Not v.2021 or v.2022, which are different
-collections, and not the Lucene distribution. With that, the ingest is a streaming pass and the
-harness scores the dataset unchanged.
+```
+corpus 14,914,604 documents (14,913,854 distinct pmids from 14,913,938 article lines,
+84 duplicates dropped; 750 manual-add), 500 queries, 2,359 judgements over 2,298 distinct
+documents, in 291.7s
+```
+
+Three things that check caught, each of which would otherwise have scored a subtly wrong corpus:
+
+- **The array closer shares the last article's line.** The file ends `...}]}`, not with a line of its
+  own, so a per-line `json.loads` succeeds fourteen-million times and then reports *"Extra data"* on
+  the final record. It reads like a corrupt download; it is an off-by-one.
+- **The dump is latin-1, not UTF-8.** Reading it as UTF-8 with replacement turns accented characters
+  in the abstracts into `U+FFFD` — silently, and across the whole corpus.
+- **The manual-add CSV has no header.** Treating its first row as one drops PMID `25941654`, a judged
+  document, and the count then comes up *one judgement short* rather than failing.
+
+The article count is **14,913,938 lines, one fewer than the 14,913,939** the participants-area table
+advertises; BEIR's own note hedges it with a "~", and a single document out of 14.9M is not the failure
+mode this check exists for. 84 of those lines repeat an earlier pmid and are dropped, which is what
+the reference preprocessing does too.
 
 ## What would finish it
 
@@ -105,7 +120,7 @@ Two files, both from a **free** BioASQ account (registration is open to anyone; 
 gate, not a licence fee):
 
 1. **Task 9a training v2020** (~14,913,939 documents) — or `allMeSH_2020.json`, the BioASQ 2020
-   snapshot the corpus is derived from. Extract `pmid`, `title`, `abstractText`, plus the 749
+   snapshot the corpus is derived from. Extract `pmid`, `title`, `abstractText`, plus the 750
    manually-added documents BEIR step 3 names.
 2. **The 8B golden train and test sets** — **done**, see above.
 
