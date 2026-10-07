@@ -228,27 +228,27 @@ CHECKS: list[Claim] = [
     # The lexical-control counts. These exist because the prose summarising the table was wrong: the
     # tables are generated from reports and cannot drift, while the sentence describing them can, and
     # did. The summary is now generated too (tools/lexical_control.py) and the prose is pinned to it.
-    Claim("lexical control corpora", README, r"of the 15 measured corpora agree within",
-          15, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("lexical control corpora", README, r"of the 16 measured corpora agree within",
+          16, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
     Claim("lexical control within 0.02", README, r"agree within \u00b10\.02, and",
-          10, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
+          11, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
     Claim("lexical control within 0.008", README, r"within \u00b10\.008\*\*",
-          6, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
-    Claim("breadth corpora", "docs/findings-beir-breadth.md", r"of the 15 corpora agree within",
-          15, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
+          7, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
+    Claim("breadth corpora", "docs/findings-beir-breadth.md", r"of the 16 corpora agree within",
+          16, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
     Claim("breadth within 0.02", "docs/findings-beir-breadth.md", r"agree within \u00b10\.02\*\*",
-          10, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
+          11, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
     Claim("breadth within 0.008", "docs/findings-beir-breadth.md", r"within \u00b10\.008\)",
-          6, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
+          7, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
     # The findings index carried its own drifted copy of the same sentence ("8 of 9 corpora within
     # ±0.008"), which the breadth pin did not reach because it pins a different file. Same source,
     # one more site: a quantity quoted twice is a quantity that can disagree with itself.
     Claim("findings index corpora", "docs/FINDINGS.md", r"\d+ measured corpora the lexical arm agrees",
-          15, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
+          16, ("counts", "corpora"), decimals=0, report="eval/beir/lexical-control.json"),
     Claim("findings index within 0.008", "docs/FINDINGS.md", r"within \u00b10\.008 on \d+",
-          6, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
+          7, ("counts", "within_0.008"), decimals=0, report="eval/beir/lexical-control.json"),
     Claim("findings index within 0.02", "docs/FINDINGS.md", r"within \u00b10\.02 on \d+",
-          10, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
+          11, ("counts", "within_0.02"), decimals=0, report="eval/beir/lexical-control.json"),
     # TREC-COVID's full collection replaced a bounded 40,000-document subsample. The subsample's
     # 0.3062 is cited as history, so it is pinned too: a superseded number that is still quoted is
     # still a number that can drift.

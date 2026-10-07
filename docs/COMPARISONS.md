@@ -33,14 +33,14 @@ plus the five systems the paper tabulates; columns are the 18 datasets in the be
 order. Dashes are datasets we have not run — the membership is visible in the figure rather than
 implied by it.
 
-**Where we lead.** Of the 16 datasets we have run, we are ahead of *the best of the five published
+**Where we lead.** Of the 17 datasets we have run, we are ahead of *the best of the five published
 systems* on **8**: ArguAna (+0.135), FiQA (+0.093), Touché (+0.075), SciFact (+0.068), SCIDOCS
 (+0.060), NFCorpus (+0.042), Signal-1M (+0.034), Quora (+0.023). One of those eight is a caveat
 rather than a result: Signal-1M is led by our **flat BM25 control** (0.3640), not by the shipped
-engine path (0.3131, which is *behind* the published 0.330) — that comparison is about the BM25
+engine path (0.3131, which is *behind* the published BM25 of 0.330) — that comparison is about the BM25
 convention of section 5, not about the engine.
 
-**Where they lead.** Eight, and the losses are concentrated:
+**Where they lead.** Nine, and the losses are concentrated:
 
 | dataset | ours | best published | gap |
 | --- | --- | --- | --- |
@@ -52,17 +52,20 @@ convention of section 5, not about the engine.
 | Climate-FEVER | 0.161 | TAS-B 0.237 | −0.076 |
 | Robust04 | 0.408 | Contriever 0.473 | −0.065 |
 | HotpotQA | 0.635 | SPLADE 0.686 | −0.051 |
+| CQADupStack | 0.299 | Contriever 0.345 | −0.046 |
 
 The pattern in the losses is not size — DBPedia at 4.6M is our smallest loss among the big ones
 and NFCorpus at 3.6k is a win. It is that the three largest losses (NQ, FEVER, DBPedia) are
 **lexical-only runs**: those corpora were measured with the shipped BM25 path and no dense arm,
 because the multi-million-document embedding pass was not run. The comparison is therefore as much
-a statement about what we spent compute on as about the system, and the three corpora recovered in
-this round are lexical-only too — two of them (TREC-NEWS, Robust04) land on the losing side.
+a statement about what we spent compute on as about the system, and every corpus added since
+(TREC-NEWS, Robust04, CQADupStack) is lexical-only too — all three land on the losing side.
 
 One result is worth isolating because it is the strongest lexical evidence in the repository:
 **Robust04 reads 0.4077 against a published BM25 of 0.407** — the control reproduces an external
-anchor to one thousandth on a 528,155-document corpus that had never been run here.
+anchor to one thousandth on a 528,155-document corpus that had never been run here. CQADupStack is
+the second such replication: its **0.2988 against a published 0.299** is a −0.0002 agreement over
+twelve independently scored sub-forums.
 
 ## 2. BRIGHT — reasoning-intensive retrieval, against its published leader
 
@@ -82,13 +85,15 @@ and the hybrid is the best arm on four of the six.
 
 ![BEIR-18 coverage](charts/cmp_coverage.png)
 
-Membership and blockers, taken from `make consistency-check` rather than typed: **16 of 18**
-measured (seven with a dense arm, nine lexical-only), **two** still out — BioASQ, gated with no public
-drop-in copy, and CQADupStack, public but needing a per-forum adapter — and one measured corpus —
+Membership and blockers, taken from `make consistency-check` rather than typed: **17 of 18**
+measured (seven with a dense arm, ten lexical-only), **one** still out — BioASQ, gated with no public
+drop-in copy — and one measured corpus —
 MS MARCO — that is *not one of the 18* at all. That last row is the reason the count is computed over
 an explicit member set: before it, the prose had nineteen candidates for an eighteen-dataset
 denominator. The count moved 13 → 16 when Robust04, TREC-NEWS and Signal-1M were recovered from a
-public non-gated mirror (`findings-beir-recovered.md`); those are third-party redistributions of
+public non-gated mirror (`findings-beir-recovered.md`), and 16 → 17 when CQADupStack — which was never
+404, only twelve sub-collections behind one name — got its own runner (`findings-cqadupstack.md`). The
+three recovered corpora are third-party redistributions of
 NIST/TREC-agreement collections, so the licensing question is unchanged by the measurement.
 
 ---
@@ -101,11 +106,11 @@ Two panels, two memberships, and they are not interchangeable:
 
 - **Left.** The paper's 18-dataset macro for its five systems — SPLADE **0.474**, Contriever
   **0.448**, BM25 **0.429**, uniCOIL **0.428**, TAS-B **0.424** — beside this engine's macro over
-  the **16 datasets it has run: 0.4737**. The engine bar is drawn in the engine's colour and
-  annotated *different membership — not comparable*; it is a statement about our 16, not about
-  BEIR-18. (It read **0.4979 over 13** before the three recovered corpora landed, and all three sit
-  below their published best, so the wider membership *lowers* the mean — membership moves a BEIR
-  average more than most method differences do.)
+  the **17 datasets it has run: 0.4634**. The engine bar is drawn in the engine's colour and
+  annotated *different membership — not comparable*; it is a statement about our 17, not about
+  BEIR-18. (It read **0.4979 over 13** before the recovered corpora landed, then 0.4737 over 16, and
+  every addition since sits below its published best, so the wider membership keeps *lowering* the
+  mean — membership moves a BEIR average more than most method differences do.)
 - **Right.** The comparison that *is* like-for-like: the four datasets everybody has —
   SciFact, NFCorpus, ArguAna, SCIDOCS. There this engine reads **0.495** (best per dataset,
   computed 0.4947) and **0.507** (single 3-model ensemble fused with BM25, computed 0.5072) against
@@ -116,7 +121,7 @@ Two panels, two memberships, and they are not interchangeable:
 
 The same numbers against encoder size. The published dense models sit at 66M–1.2B parameters;
 this engine's shipped encoder is **33M** (`bge-small`), and its quality point is drawn on its own
-16-dataset mean, explicitly not comparable to the published 18-dataset axis. The honest reading is
+17-dataset mean, explicitly not comparable to the published 18-dataset axis. The honest reading is
 not "better per parameter" — it is that a 33M encoder plus lexical fusion lands in the same band as
 110M–335M models on the four datasets both sides have run.
 
@@ -134,7 +139,7 @@ claim ledger pins.
 
 This second figure is deliberately **not** that control. It compares our flat BM25 against the
 paper's **multi-field** BM25 — the same scoring function indexing title and body as separate
-fields — and one of its rows (Touché-2020) is a different collection release (v2). Nine of the 16
+fields — and one of its rows (Touché-2020) is a different collection release (v2). Ten of the 17
 corpora sit inside ±0.02 and seven do not, which is a statement about *convention and release*, not
 about the retriever: SciFact moves from +0.011 against the multi-field column to −0.003 against the
 flat anchor, and Touché swings 0.075 for the same reason. It is on the page because a reader who

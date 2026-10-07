@@ -36,15 +36,18 @@ MS MARCO is not a BEIR test dataset, so there is no like-for-like row to compare
   nineteen candidates for an eighteen-dataset denominator, one of which (`CQADupStack`, 457,199
   documents, public on the mirror) was never named at all. The gate reported
   `missing: bioasq, cqadupstack, robust04, signal1m, trec-news` beside the measured set at the time
-  (it now reads `missing: bioasq, cqadupstack`), so the
+  (it now reads `missing: bioasq`), so the
   denominator cannot drift again without a failure.
 - **Coverage was 13 of 18 at this step.** MS MARCO does not move it; TREC-COVID's full collection
   did. It has since moved to **16 of 18** when Robust04, TREC-NEWS and Signal-1M were recovered from
-  a public mirror (`findings-beir-recovered.md`); MS MARCO still does not count.
-- **`CQADupStack` is the one canonical member that is both public and unrun.** It is not a
+  a public mirror (`findings-beir-recovered.md`) and **17 of 18** when CQADupStack was measured
+  (`findings-cqadupstack.md`); MS MARCO still does not count.
+- **`CQADupStack` was the one canonical member that is both public and unrun** at this step. It is
+  not a
   drop-in `--datasets cqadupstack` job: the BEIR release ships it as twelve per-forum
   sub-collections with one qrels each, so it needs an adapter that aggregates them — engineering,
-  not access.
+  not access. That adapter now exists (`tools/cqadupstack.py`), which is the one item of this finding
+  the later round retired.
 
 ## What this does not show
 

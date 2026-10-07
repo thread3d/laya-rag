@@ -83,7 +83,9 @@ Published BM25 anchors, from the same column as the rest of this repository's la
 
 ## What moved as a result
 
-- **Coverage: 13 → 16 of 18.** The two remaining members are **BioASQ** and **CQADupStack**.
+- **Coverage: 13 → 16 of 18.** The two remaining members at this step were **BioASQ** and
+  **CQADupStack**; CQADupStack followed in the next round (`findings-cqadupstack.md`), leaving BioASQ
+  as the only one.
 - **The engine's macro over its measured set: 0.4979 over 13 → 0.4737 over 16.** All three new
   corpora sit below their published best (Contriever 0.473 and 0.428, BM25 0.330), so the wider
   membership *lowers* the mean — the same lesson the breadth finding drew, from the other direction.
@@ -116,7 +118,7 @@ Published BM25 anchors, from the same column as the rest of this repository's la
 ## Reproduction
 
 ```sh
-make consistency-check      # 16 of 18, every registered site agrees, the audit set included
+make consistency-check      # 17 of 18 today (16 of 18 when this finding was written)
 .venv/bin/python tools/lexical_control.py     # 15 corpora: 6 within ±0.008, 10 within ±0.02
 .venv/bin/python -m pytest tests/test_charts_compare.py tests/test_lexical_control.py -q
 ```

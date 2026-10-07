@@ -66,7 +66,7 @@ See `findings-beir-recovered.md`; BioASQ remains the only member without a publi
 
 ```sh
 make beir BEIR_ARGS="--datasets trec-covid --retrievers bm25,bm25-engine --out eval/beir/trec-covid --lexical-checkpoint"
-make consistency-check     # 16 of 18 today (13 of 18 when this finding was written)
+make consistency-check     # 17 of 18 today (13 of 18 when this finding was written)
 ```
 
 The run resumes from `<out>.lexical.jsonl` per query; the corpus is fetched and extracted by
