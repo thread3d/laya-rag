@@ -62,10 +62,15 @@ Negatives are results here, and these are the ones worth keeping:
    **MS MARCO
    (8.8M) is measured as an *extra*, not as coverage**: it is the collection the BEIR encoders are
    trained on, not a test dataset, and the gate counts over an explicit membership set. The one
-   canonical member still missing is **BioASQ** — no public drop-in copy was found; it needs a
-   BioASQ-registration corpus (the 2020 PubMed snapshot plus the Task 8B golden set) and a rebuild,
-   and a later 23M-document snapshot would not reproduce BEIR's 14.9M collection. The three recovered
-   corpora
+   canonical member still missing is **BioASQ**, and it is the one blocker that survived an honest
+   search. BEIR's own reproduction steps require a **free BioASQ account** for both inputs — the
+   task 9a corpus (~14,913,939 documents) and the 8B golden train/test sets — and every
+   participants-area endpoint resolves to a login page. The one public corpus mirror that exists
+   (`BeIR/bioasq-generated-queries`, BEIR layout, verified to contain `_id`/`title`/`text`) holds
+   **14,100,000 records against the 14,913,939 the qrels score against**: a 5.46% truncation, which is
+   the TREC-COVID subsample defect rather than a smaller measurement
+   (`docs/findings-bioasq-unavailable.md`). It would also be a ~15–24 h lexical pass. The three
+   recovered corpora
    are third-party redistributions of NIST/TREC-agreement collections, so their licensing block is a
    policy question the measurement does not settle.
    `--limit-queries` gives a labelled seeded subset (~1 h per corpus).

@@ -86,8 +86,9 @@ and the hybrid is the best arm on four of the six.
 ![BEIR-18 coverage](charts/cmp_coverage.png)
 
 Membership and blockers, taken from `make consistency-check` rather than typed: **17 of 18**
-measured (seven with a dense arm, ten lexical-only), **one** still out — BioASQ, gated with no public
-drop-in copy — and one measured corpus —
+measured (seven with a dense arm, ten lexical-only), **one** still out — BioASQ, blocked on a free
+BioASQ account for both the corpus and the 8B golden set, with the one public corpus mirror 5.46%
+short of what the qrels score against (`findings-bioasq-unavailable.md`) — and one measured corpus —
 MS MARCO — that is *not one of the 18* at all. That last row is the reason the count is computed over
 an explicit member set: before it, the prose had nineteen candidates for an eighteen-dataset
 denominator. The count moved 13 → 16 when Robust04, TREC-NEWS and Signal-1M were recovered from a

@@ -281,7 +281,9 @@ sub-forums scored independently and macro-averaged: flat control **0.2988** agai
 from the reports present in `eval/beir/` by `tools/consistency_check.py`; the earlier 40,000-document
 TREC-COVID subsample is superseded by the full run and no longer counted, the last four were
 recovered or adapted afterwards (`docs/findings-beir-recovered.md`,
-`docs/findings-cqadupstack.md`), and **BioASQ** is the only member left. The counts inside the 4.2
+`docs/findings-cqadupstack.md`), and **BioASQ** is the only member left — blocked on a free BioASQ
+account for both the corpus and the 8B golden set, with the one public corpus mirror 813,939
+documents short of what the qrels score against (`docs/findings-bioasq-unavailable.md`). The counts inside the 4.2
 log below are the historical values at each dated step, and `make consistency-check` fails if this
 line and the other documents disagree again.
 

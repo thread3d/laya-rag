@@ -920,8 +920,11 @@ carry the multi-model comparison, while `nq`, `dbpedia-entity`, `quora`, `webis-
 non-gated mirror after the UKP zips went 404 (`docs/findings-beir-recovered.md`), and CQADupStack,
 which was never 404, through its own twelve-sub-forum runner (`docs/findings-cqadupstack.md`).
 **FEVER** is the worst outlier in the lexical control below
-(**−0.121** against its published anchor). The last one, **BioASQ** (14.9M documents, gated, with no
-public drop-in copy), is **access-gated** — not silently skipped.
+(**−0.121** against its published anchor). The last one, **BioASQ** (14.9M documents) is genuinely
+**access-gated**: BEIR's own reproduction steps require a (free) BioASQ account for both the corpus
+and the 8B golden train/test sets, no public copy of either was found, and the one public mirror that
+looks like the corpus is **813,939 documents short** of what the qrels score against — a truncation,
+not a smaller measurement (`docs/findings-bioasq-unavailable.md`). Not silently skipped.
 
 | dataset | queries | shipped lexical | bi-encoder | fused BM25 + bi-encoder | dense ensemble | **ensemble + BM25** |
 | --- | --- | --- | --- | --- | --- | --- |
