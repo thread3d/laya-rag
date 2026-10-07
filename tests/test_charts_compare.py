@@ -214,6 +214,41 @@ def test_multihop_gaps_subtract_per_metric():
     assert gaps[0]["gaps"] == {"Hits@10": 0.1, "Hits@4": 0.0, "MAP@10": -0.15, "MRR@10": 0.05}
 
 
+def test_bright_rows_reads_both_reports_and_reports_the_macro(tmp_path, monkeypatch):
+    def report(subset, documents, queries, bm25, dense, hybrid):
+        return {subset: {"documents": documents, "queries": queries, "summary": {
+            "bm25": {"nDCG@10": bm25}, "dense": {"nDCG@10": dense}, "hybrid": {"nDCG@10": hybrid},
+        }}}
+
+    first, second = tmp_path / "report.json", tmp_path / "report-small.json"
+    first.write_text(json.dumps({"subsets": report("pony", 7894, 112, 0.1221, 0.0398, 0.1281)}))
+    second.write_text(json.dumps({"subsets": report("biology", 57359, 103, 0.2089, 0.1076, 0.1789)}))
+    monkeypatch.setattr(ch, "BRIGHT_REPORTS", (str(first), str(second)))
+    rows = ch.bright_rows()
+    assert [row["subset"] for row in rows] == ["pony", "biology"]
+    assert rows[0]["arms"] == {"bm25": 0.1221, "dense": 0.0398, "hybrid": 0.1281}
+    macro = sum(row["arms"]["hybrid"] for row in rows) / len(rows)
+    assert macro == pytest.approx(0.1535, abs=1e-4)
+
+
+def test_bright_skips_a_missing_report_rather_than_inventing_a_subset(tmp_path, monkeypatch):
+    monkeypatch.setattr(ch, "BRIGHT_REPORTS", (str(tmp_path / "absent.json"),))
+    assert ch.bright_rows() == []
+
+
+def test_the_bright_chart_writes_a_figure(tmp_path, monkeypatch):
+    plt = _plt_or_skip()
+    source = tmp_path / "report.json"
+    source.write_text(json.dumps({"subsets": {"pony": {
+        "documents": 7894, "queries": 112,
+        "summary": {"bm25": {"nDCG@10": 0.12}, "dense": {"nDCG@10": 0.04},
+                    "hybrid": {"nDCG@10": 0.13}},
+    }}}))
+    monkeypatch.setattr(ch, "BRIGHT_REPORTS", (str(source),))
+    assert ch.chart_bright(tmp_path, plt) is True
+    assert (tmp_path / "cmp_bright.png").is_file()
+
+
 # -- the open-source survey ------------------------------------------------
 
 

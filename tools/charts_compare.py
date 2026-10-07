@@ -79,6 +79,12 @@ DENSE_RETRIEVERS = frozenset({
     "splade", "hybrid-splade",
 })
 
+#: BRIGHT's published leader scores ~21 nDCG@10 macro over its 12 reasoning-intensive subsets
+#: (arXiv:2407.12883). The comparison on this page is deliberately not like-for-like: ours is a
+#: 33M encoder with no reranker on 6 of the 12 subsets, and the repository quotes it as such.
+BRIGHT_PUBLISHED_BEST = 0.21
+BRIGHT_REPORTS = ("eval/bright/report.json", "eval/bright/report-small.json")
+
 #: Published encoder sizes in millions of parameters, from the paper's model sections and the
 #: model cards. BM25 has none; the two `bge-small` rows of ours are 33M.
 PARAMS = {"BM25": None, "uniCOIL": 110, "SPLADE": 110, "TAS-B": 66, "Contriever": 110}
@@ -507,6 +513,64 @@ def chart_beir_macro(outdir: Path, plt: Any) -> bool:
     return True
 
 
+def bright_rows(reports: Sequence[Path] | None = None) -> list[dict[str, Any]]:
+    """BRIGHT subsets this repository has run, with the three arms' nDCG@10.
+
+    The two reports cover six of the benchmark's twelve subsets between them; a missing report is
+    skipped, so the figure shrinks rather than inventing a subset.
+    """
+    paths = [ROOT / name for name in BRIGHT_REPORTS] if reports is None else list(reports)
+    out: list[dict[str, Any]] = []
+    for path in paths:
+        if not Path(path).is_file():
+            continue
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        for subset, report in (payload.get("subsets") or {}).items():
+            arms = {
+                arm: float(values["nDCG@10"])
+                for arm, values in (report.get("summary") or {}).items()
+                if isinstance(values, Mapping) and isinstance(values.get("nDCG@10"), (int, float))
+            }
+            if arms:
+                out.append({"subset": subset, "documents": report.get("documents"),
+                            "queries": report.get("queries"), "arms": arms})
+    return out
+
+
+def chart_bright(outdir: Path, plt: Any) -> bool:
+    """BRIGHT by subset and arm, against the published leader — with the incomparability stated."""
+    import numpy as np
+
+    rows = bright_rows()
+    if not rows:
+        print("charts-compare: skip cmp_bright.png (no BRIGHT reports)")
+        return False
+    rows.sort(key=lambda row: row["subset"])
+    arms = [arm for arm in ("bm25", "dense", "hybrid") if all(arm in row["arms"] for row in rows)] or \
+           sorted({arm for row in rows for arm in row["arms"]})
+    positions = np.arange(len(rows))
+    width = 0.26
+    colours = {"bm25": OUR_ALT, "dense": "#f0c674", "hybrid": OURS}
+    fig, ax = plt.subplots(figsize=(9.0, 4.4))
+    for index, arm in enumerate(arms):
+        ax.bar(positions + (index - (len(arms) - 1) / 2) * width,
+               [row["arms"].get(arm, 0.0) for row in rows], width, label=arm,
+               color=colours.get(arm, PUB_DARK))
+    ax.axhline(BRIGHT_PUBLISHED_BEST, color=ACCENT, ls="--", lw=1.1)
+    ax.annotate(f"published leader ≈ {BRIGHT_PUBLISHED_BEST:.2f} (12 subsets, much larger models)",
+                xy=(len(rows) - 1.2, BRIGHT_PUBLISHED_BEST + 0.006), fontsize=8, color=ACCENT)
+    macro_hybrid = sum(row["arms"].get("hybrid", 0.0) for row in rows) / len(rows)
+    ax.set_xticks(positions)
+    ax.set_xticklabels([f"{row['subset']}\n({row['queries']} q)" for row in rows], fontsize=8)
+    ax.set_ylabel("nDCG@10")
+    ax.set_ylim(0.0, 0.30)
+    ax.set_title(f"BRIGHT on {len(rows)} of 12 subsets — hybrid macro {macro_hybrid:.4f} "
+                 f"with a 33M encoder and no reranker")
+    ax.legend(fontsize=8, frameon=False)
+    cmp._save(fig, outdir, "cmp_bright.png", plt)
+    return True
+
+
 def chart_lexical_gap(outdir: Path, plt: Any) -> bool:
     """Our flat BM25 minus the paper's multi-field BM25 — a convention gap, not the control.
 
@@ -846,8 +910,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
     wrote = False
     for render in (chart_beir_matrix, chart_beir_macro, chart_parameters, chart_coverage,
-                   chart_lexical_gap, chart_multihop_delta, chart_reranker, chart_oss_landscape,
-                   chart_oss_categories):
+                   chart_lexical_gap, chart_bright, chart_multihop_delta, chart_reranker,
+                   chart_oss_landscape, chart_oss_categories):
         wrote = render(outdir, plt) or wrote
     if not wrote:
         print("charts-compare: nothing to render")

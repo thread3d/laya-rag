@@ -54,7 +54,21 @@ and NFCorpus at 3.6k is a win. It is that the three largest losses (NQ, FEVER, D
 because the multi-million-document embedding pass was not run. The comparison is therefore as much
 a statement about what we spent compute on as about the system.
 
-## 2. What of the benchmark is measured, and why the rest is not
+## 2. BRIGHT — reasoning-intensive retrieval, against its published leader
+
+![BRIGHT on six of twelve subsets](charts/cmp_bright.png)
+
+BRIGHT is the benchmark where dense-only retrieval is *supposed* to be weak and BM25 competitive,
+and it is the one place a published leader number is quoted here: **≈0.21 nDCG@10 macro**, from
+models vastly larger than this engine's. On the six subsets the repository has run, the hybrid
+macro is **0.1436** — a −0.066 gap, and the repository quotes it as explicitly not comparable (6 of
+12 subsets, a 33M encoder, no reranker). The per-subset detail is the interesting part: BM25 beats
+dense on `biology` (−0.101) and `pony` (−0.082), dense beats BM25 on `theoremqa_theorems` (+0.028),
+and the hybrid is the best arm on four of the six.
+
+---
+
+## 3. What of the benchmark is measured, and why the rest is not
 
 ![BEIR-18 coverage](charts/cmp_coverage.png)
 
@@ -66,7 +80,7 @@ member set: before it, the prose had nineteen candidates for an eighteen-dataset
 
 ---
 
-## 3. Macro averages are only comparable inside one dataset set
+## 4. Macro averages are only comparable inside one dataset set
 
 ![Macro averages by system and dataset set](charts/cmp_beir18_macro.png)
 
@@ -93,7 +107,7 @@ not "better per parameter" — it is that a 33M encoder plus lexical fusion land
 
 ---
 
-## 4. The lexical control, and a convention trap
+## 5. The lexical control, and a convention trap
 
 ![Lexical arm against published BM25](charts/lexical_vs_published.png)
 
@@ -113,7 +127,7 @@ sees one BM25 number next to another deserves to see how much of the gap is the 
 
 ---
 
-## 5. Multi-hop: where the published systems still win
+## 6. Multi-hop: where the published systems still win
 
 ![MultiHop-RAG against the paper's Table 5](charts/cmp_multihop_delta.png)
 
@@ -138,7 +152,7 @@ gap the programme has chased since Phase 2 is visible as the red block.
 
 ---
 
-## 6. A second stage is a per-corpus instrument
+## 7. A second stage is a per-corpus instrument
 
 ![The cross-encoder's effect per corpus](charts/cmp_reranker.png)
 
@@ -158,7 +172,7 @@ the query against the document, not length or domain.
 
 ---
 
-## 7. The open-source field this engine lives in
+## 8. The open-source field this engine lives in
 
 ![The surveyed open-source field](charts/cmp_oss_landscape.png)
 
@@ -193,11 +207,11 @@ a crowded, actively maintained field, which is why it composes them instead of r
 
 ---
 
-## 8. What is deliberately not on this page
+## 9. What is deliberately not on this page
 
 - **The MTEB leaderboard.** Its retrieval subset overlaps BEIR but the aggregate is over a
   different dataset set, and this engine has no submission. A row there would be a comparison
-  across memberships — the thing section 3 exists to prevent.
+  across memberships — the thing section 4 exists to prevent.
 - **BEIR-13 against BEIR-18 aggregates.** Never mixed. Every macro on this page names its set.
 - **MS MARCO as a BEIR row.** It is measured (8,841,823 documents, lexical nDCG@10 0.4321) and it is
   the collection BEIR's encoders are trained on, not a test dataset; it is charted only as an extra.
