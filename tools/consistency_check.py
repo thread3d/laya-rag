@@ -270,12 +270,12 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR coverage count",
             sites=(
-                Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 13, 0),
-                Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 13, 0),
-                Site("ROADMAP.md", r"Coverage today: \d+ of 18", 13, 0),
-                Site("README.md", r"BEIR's 18 datasets", 13, 0),
-                Site("RESEARCH.md", r"^\| Scale \|", 13, 0),
-                Site("docs/findings-consistency-gate.md", r"^\| BEIR coverage", 13, 0),
+                Site("BENCHMARKS.md", r"\*\*BEIR\*\*.*of 18", 16, 0),
+                Site("docs/PROGRAMME-STATUS.md", r"4\.2 at \d+ of 18", 16, 0),
+                Site("ROADMAP.md", r"Coverage today: \d+ of 18", 16, 0),
+                Site("README.md", r"BEIR's 18 datasets", 16, 0),
+                Site("RESEARCH.md", r"^\| Scale \|", 16, 0),
+                Site("docs/findings-consistency-gate.md", r"^\| BEIR coverage", 16, 0),
             ),
             authority=lambda: {"count": measured_beir()["count"]},
             key="count",

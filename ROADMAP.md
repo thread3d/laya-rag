@@ -270,12 +270,15 @@ containment rate on the same answers — and (b) at **~36 s/query** the full 2,2
 
 ## 7. Phase 4 — scale to 18 datasets, and own the encoder (weeks; mixed)
 
-**Coverage today: 13 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
+**Coverage today: 16 of 18** — SciFact, NFCorpus, ArguAna, SCIDOCS, FiQA-2018, Quora,
 DBPedia-entity, NQ, HotpotQA (full 7,405 queries), webis-touche2020, **Climate-FEVER** (lexical, nDCG@10
-0.1610), **FEVER** (lexical, **0.6323** over all 6,666 queries) and **TREC-COVID** (lexical,
-**0.6188** over the full 171,332-document collection, against a published BM25 of **0.595**), counted
+0.1610), **FEVER** (lexical, **0.6323** over all 6,666 queries), **TREC-COVID** (lexical,
+**0.6188** over the full 171,332-document collection, against a published BM25 of **0.595**),
+**Robust04** (lexical, **0.4077** against a published **0.407**), **TREC-NEWS** (lexical, **0.3351**
+against **0.398**) and **Signal-1M** (lexical, **0.3131**), counted
 from the reports present in `eval/beir/` by `tools/consistency_check.py`; the earlier 40,000-document
-TREC-COVID subsample is superseded by the full run and no longer counted. The counts inside the 4.2
+TREC-COVID subsample is superseded by the full run and no longer counted, and the last three were
+recovered from a public non-gated mirror (`docs/findings-beir-recovered.md`). The counts inside the 4.2
 log below are the historical values at each dated step, and `make consistency-check` fails if this
 line and the other documents disagree again.
 

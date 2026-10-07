@@ -197,8 +197,10 @@ def chart_frames_arms(outdir: Path, plt) -> dict[str, Any]:
 #: column as the anchors `compare.py` pins -- NFCorpus 0.325 reproduces there too. These have no dense
 #: arm here: a multi-million-document embedding pass buys little when the lexical row is the question.
 PUBLISHED_BM25_LARGE = {"nq": 0.329, "hotpotqa": 0.603, "dbpedia-entity": 0.313,
-                        "climate-fever": 0.213, "fever": 0.753}
-LEXICAL_ONLY = ["nq", "dbpedia-entity", "climate-fever", "fever", "hotpotqa"]
+                        "climate-fever": 0.213, "fever": 0.753,
+                        "robust04": 0.407, "trec-news": 0.398, "signal1m": 0.330}
+LEXICAL_ONLY = ["nq", "dbpedia-entity", "climate-fever", "fever", "hotpotqa",
+                "robust04", "trec-news", "signal1m"]
 
 #: Corpora measured on a *seeded subset* rather than the full query set, with the subset size. These
 #: are a **fallback**: once a full-set report exists the corpus is pulled in through `LEXICAL_ONLY`

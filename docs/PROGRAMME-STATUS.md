@@ -12,7 +12,7 @@ cost of getting it.
 | 1 — engine full-split runs | **complete** | MultiHop-RAG 2,255 both configurations; MuSiQue 2,417 hybrid plus a 200-query default |
 | 2 — ordering heads | **complete, entirely negative** | late interaction, relational NLI and an adapted cross-encoder all lose; 2.4 not adopted on licence |
 | 3 — end-to-end and cost | **complete** | FRAMES, a generation pilot, citation mechanics, and the cost axis |
-| 4 — scale | **partial** | 4.1, 4.3, 4.5 done; **4.2 at 13 of 18 datasets** (Climate-FEVER, FEVER and the full TREC-COVID collection landed 2026-10-06 and after); 4.4 is an external submission |
+| 4 — scale | **partial** | 4.1, 4.3, 4.5 done; **4.2 at 16 of 18 datasets** (Climate-FEVER, FEVER and the full TREC-COVID collection landed 2026-10-06 and after; Robust04, TREC-NEWS and Signal-1M were recovered from a public mirror afterwards); 4.4 is an external submission |
 | 5 — trust | **complete** | trust report, three-state adjudication, verifier precision, poison-dose probe |
 
 The engine **beats the harness it replaced on MultiHop-RAG** (MAP@10 0.3128 against 0.2510) and
@@ -39,20 +39,30 @@ Negatives are results here, and these are the ones worth keeping:
 
 ## What is left, and what it costs
 
-1. **Phase 4.2, the remaining datasets.** Not a code problem, and the reason has changed since
-   this page was first written. The UKP mirror now returns **404** for `robust04`, `trec-news`,
-   `specter`, `signal1m` and `bioasq` (not a transient stub — the files are gone), and the
-   HuggingFace copies under `BeIR/*` are **gated** (401 anonymously): they need a signed license
-   or a token, so the block is **access/licensing**, not disk. **Both of the "blocked" 5.4M-document
-   corpora are now done** as lexical rows: **Climate-FEVER** (nDCG@10 **0.1610**) and **FEVER**
-   (**0.6323** over all 6,666 queries, against a published 0.753 — the largest lexical-control gap
-   measured). NQ (2.68M) completed in ~25 min and HotpotQA's full 7,405-query set reads **0.6352**;
-   the full **TREC-COVID** collection (171,332 documents, 50 queries) is measured at **0.6188** —
-   against a published BM25 of **0.595** — so coverage is **13 of 18**. **MS MARCO (8.8M) is now
-   measured as an *extra*, not as coverage**: it is the collection the BEIR encoders are trained on,
-   not a test dataset, and the gate counts over an explicit membership set. The canonical members
-   still missing are **BioASQ** (gated) and **CQADupStack** (public, but twelve per-forum
-   sub-collections, so it needs an adapter), beside the four 404/401 licensing blocks.
+1. **Phase 4.2, the remaining datasets.** Not a code problem, and the reason has changed twice since
+   this page was first written. The UKP mirror returns **404** for `robust04`, `trec-news`,
+   `specter`, `signal1m` and `bioasq` (not a transient stub — the files are gone), and the Wayback
+   Machine has **no snapshot** of any of them. The `BeIR/*` HuggingFace organisation does **not**
+   carry those four corpora at all, and its **401** to an anonymous request is the same answer it
+   gives for a name that does not exist, so the earlier reading that they are "gated" there was
+   wrong. Three of the four are in fact available from a **public, non-gated third-party mirror in
+   BEIR layout** and are now measured as lexical rows: **Robust04** (**0.4077**, against a published
+   BM25 of **0.407** — the control reproduces its anchor to 0.001), **TREC-NEWS** (**0.3351** against
+   0.398) and **Signal-1M** (**0.3131** on the engine row, with the published-settings flat control
+   at **0.3640** against a published 0.330) — see `docs/findings-beir-recovered.md`. **Both of the
+   "blocked" 5.4M-document corpora are done** as lexical rows: **Climate-FEVER** (nDCG@10 **0.1610**)
+   and **FEVER** (**0.6323** over all 6,666 queries, against a published 0.753 — the largest
+   lexical-control gap measured). NQ (2.68M) completed in ~25 min and HotpotQA's full 7,405-query set
+   reads **0.6352**; the full **TREC-COVID** collection (171,332 documents, 50 queries) is measured at
+   **0.6188** — against a published BM25 of **0.595** — so coverage is **16 of 18**. **MS MARCO
+   (8.8M) is measured as an *extra*, not as coverage**: it is the collection the BEIR encoders are
+   trained on, not a test dataset, and the gate counts over an explicit membership set. The canonical
+   members still missing are **BioASQ** (no public drop-in copy was found; it needs a
+   BioASQ-registration corpus — the 2020 PubMed snapshot plus the Task 8B golden set — and a rebuild,
+   and a later 23M-document snapshot would not reproduce BEIR's 14.9M collection) and **CQADupStack**
+   (public, but twelve per-forum sub-collections, so it needs an adapter). The three recovered corpora
+   are third-party redistributions of NIST/TREC-agreement collections, so their licensing block is a
+   policy question the measurement does not settle.
    `--limit-queries` gives a labelled seeded subset (~1 h per corpus).
 2. **Phase 4.4, the MTEB submission.** Requires an upload; not offline work.
 3. **HotpotQA's full query set — done.** The full **7,405** queries read **nDCG@10 0.6352** (MRR@10

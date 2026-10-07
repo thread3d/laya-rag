@@ -542,13 +542,15 @@ of the three into one encoder (or a two-model subset) is the obvious next questi
 
 **Long-document passage retrieval is untested, not disproven.** Passages hurt on SciFact,
 NFCorpus and TREC-COVID (item 4), but TREC-COVID's abstracts are *shorter* than NFCorpus's and
-Robust04/TREC-NEWS are not on the BEIR mirror this project uses. Reaching them means a
-different source, an adaptive passage budget, and aggregation beyond max-pool.
+Robust04/TREC-NEWS were not on the BEIR mirror this project uses. Both have since been reached from
+a different source and measured lexical-only (Robust04 0.4077, TREC-NEWS 0.3351,
+`docs/findings-beir-recovered.md`), so the passage question is now askable on the two corpora it was
+written for — an adaptive passage budget and aggregation beyond max-pool are still unbuilt.
 
 **The full 18-dataset BEIR average now needs only scale work, not new modelling.** The
-on-disk postings and streaming vectors landed; what remains for BioASQ (14.9M), FEVER (5.4M)
-and NQ (2.7M) is a bounded external merge for the term dictionary and an on-disk ANN index,
-then the 13 datasets the mirror can serve.
+on-disk postings and streaming vectors landed; what remains for BioASQ (14.9M) is a bounded external
+merge for the term dictionary and an on-disk ANN index, plus a BioASQ-registration corpus fetch. FEVER
+(5.4M) and NQ (2.7M) are measured, and 16 of the 18 members now have a report.
 
 **SciDocs is still the relative shortfall.** 0.199 against a published 0.225 for BGE-large, and
 the ensemble is the first thing measured that moves it; a per-dataset look (representation,

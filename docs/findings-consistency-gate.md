@@ -10,7 +10,7 @@ to catch.
 
 | quantity | where it disagreed | authoritative value | why the disagreement happened |
 | --- | --- | --- | --- |
-| BEIR coverage | `BENCHMARKS.md` "5 of 18"; `ROADMAP.md` "7 of 18" and later; `PROGRAMME-STATUS.md` "10 of 18" | **13 of 18** (counted from `eval/beir/*.json`) | the count is a moving target written into three documents by hand at three times, and never recomputed |
+| BEIR coverage | `BENCHMARKS.md` "5 of 18"; `ROADMAP.md` "7 of 18" and later; `PROGRAMME-STATUS.md` "10 of 18" | **16 of 18** (counted from `eval/beir/*.json`; it read **13 of 18** when this gate was built, and the registry site moved with the reports) | the count is a moving target written into three documents by hand at three times, and never recomputed |
 | published `voyage-02` + reranker | `README.md` 0.662 / 0.479; `BENCHMARKS.md` 0.663 / 0.480 | **0.6625 / 0.4795** (paper Table 5, pinned in `tools/compare.py` `PUBLISHED_MH`) | one table truncated to three decimals, the other rounded half-up |
 | recalibration half-splits | `recalibration.md` 300; `README.md` and `BENCHMARKS.md` 500 | **300** (`recalibration.json` `transfer.splits`) | the two prose copies were written from memory of an earlier draft |
 | lexical-control agreement | `findings-beir-breadth.md` pinned at 5/10 and 8/10; the `docs/FINDINGS.md` index said "8 of 9 within ±0.008" | **5 of 10** within ±0.008, **8 of 10** within ±0.02 | the index carried its own hand-typed copy of a sentence the breadth document had already had corrected once |

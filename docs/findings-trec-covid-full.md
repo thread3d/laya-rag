@@ -44,6 +44,10 @@ The UKP mirror serves `msmarco.zip` (1.08 GB) and `BeIR/msmarco` answers 200 ano
 unrun because 8.8M documents is a heavy build, not because access is denied. Only BioASQ (14.9M,
 gated) and the four licensing-gated corpora — Robust04, TREC-NEWS, `specter`, `signal1m`, each 404
 on the mirror with 401 HF copies even with the local token — remain access-blocked.
+**Superseded in part (later round):** three of those four were subsequently recovered from a public
+non-gated mirror and measured, and the `BeIR/*` "gated copies" reading turned out to be wrong — that
+organisation does not carry the corpora at all, and its 401 is returned for nonexistent names too.
+See `findings-beir-recovered.md`; BioASQ remains the only member without a public drop-in copy.
 
 ## What this does not show
 
@@ -62,7 +66,7 @@ on the mirror with 401 HF copies even with the local token — remain access-blo
 
 ```sh
 make beir BEIR_ARGS="--datasets trec-covid --retrievers bm25,bm25-engine --out eval/beir/trec-covid --lexical-checkpoint"
-make consistency-check     # 13 of 18, every registered site agrees, the audit set included
+make consistency-check     # 16 of 18 today (13 of 18 when this finding was written)
 ```
 
 The run resumes from `<out>.lexical.jsonl` per query; the corpus is fetched and extracted by

@@ -62,7 +62,8 @@ DATASET_ORDER = ["scifact", "nfcorpus", "arguana", "scidocs", "fiqa",
 #: dense arm that was never run for them.
 DATASET_REPORT = {"quora": "quora", "webis-touche2020": "touche",
                   "nq": "nq", "hotpotqa": "hotpotqa", "dbpedia-entity": "dbpedia-entity",
-                  "climate-fever": "climate-fever", "fever": "fever"}
+                  "climate-fever": "climate-fever", "fever": "fever",
+                  "robust04": "robust04", "trec-news": "trec-news", "signal1m": "signal1m"}
 #: Display names, because `capitalize()` mangles the hyphenated one.
 DATASET_LABEL = {"webis-touche2020": "Touché-2020", "quora": "Quora"}
 FOUR = ["scifact", "nfcorpus", "arguana", "scidocs"]
