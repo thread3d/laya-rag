@@ -12,9 +12,11 @@ from laya_rag.answerability import (
     FEATURE_NAMES,
     SHAPE_FEATURE_NAMES,
     LogisticGate,
+    bridge_conditioned_max,
     evaluate_gate,
     extract_features,
     roc_auc,
+    rotated_bridge_texts,
 )
 
 EXPECTED_FEATURES = (
@@ -390,3 +392,114 @@ def test_the_bridge_column_defaults_to_zero_and_carries_a_supplied_value():
     supplied = extract_features("alpha", passages, bridge_conditioned=0.7)
     assert supplied[index] == pytest.approx(0.7)
     assert np.allclose(np.delete(default, index), np.delete(supplied, index))
+
+
+# -- the bridge-conditioned column (the 13th) ------------------------------
+
+
+class _StubScorer:
+    """A stand-in for ``LayaReranker`` that records the conditioned call it receives."""
+
+    def __init__(self, values, *, error: Exception | None = None) -> None:
+        self.values = list(values)
+        self.error = error
+        self.calls: list[tuple] = []
+
+    def score_relevance_conditioned(self, query, bridge, texts, wording="bridge"):
+        self.calls.append((query, bridge, list(texts), wording))
+        if self.error is not None:
+            raise self.error
+        return self.values[: len(texts)], {}
+
+
+def test_bridge_column_scores_the_rest_against_the_top_passage():
+    passages = [
+        _Passage("bridge text", relevance=0.9, recall_score=1.0, path="/a.md"),
+        _Passage("candidate one", relevance=0.5, recall_score=1.0, path="/a.md"),
+        _Passage("candidate two", relevance=0.4, recall_score=1.0, path="/a.md"),
+    ]
+    scorer = _StubScorer([0.2, 0.8])
+    value = bridge_conditioned_max(scorer, "q", passages)
+    assert value == pytest.approx(0.8)
+    # The bridge is the top-ranked passage and never scores itself against itself.
+    assert scorer.calls == [("q", "bridge text", ["candidate one", "candidate two"], "bridge")]
+
+
+def test_bridge_column_accepts_a_foreign_bridge_but_still_skips_the_same_slot():
+    """The shuffled arm holds the scored count fixed by excluding the same slot."""
+    passages = [
+        _Passage("own top", relevance=0.9, recall_score=1.0, path="/a.md"),
+        _Passage("candidate one", relevance=0.5, recall_score=1.0, path="/a.md"),
+    ]
+    scorer = _StubScorer([0.6])
+    assert bridge_conditioned_max(scorer, "q", passages, bridge="another query") == pytest.approx(0.6)
+    assert scorer.calls[0][1] == "another query"
+    assert scorer.calls[0][2] == ["candidate one"]
+
+
+def test_bridge_column_is_unmeasured_without_a_rest():
+    scorer = _StubScorer([0.5])
+    assert bridge_conditioned_max(scorer, "q", []) is None
+    assert bridge_conditioned_max(
+        scorer, "q", [_Passage("only", relevance=0.5, recall_score=1.0, path="/a.md")]
+    ) is None
+    assert scorer.calls == []          # no model call for a column that cannot exist
+
+
+def test_bridge_column_is_unmeasured_when_the_scorer_returns_nothing():
+    passages = [
+        _Passage("a", relevance=0.9, recall_score=1.0, path="/a.md"),
+        _Passage("b", relevance=0.5, recall_score=1.0, path="/a.md"),
+    ]
+    # An empty list is "not measured", not a score of zero.
+    assert bridge_conditioned_max(_StubScorer([]), "q", passages) is None
+
+
+def test_bridge_column_reads_mapping_passages():
+    passages = [
+        {"text": "top", "relevance": 0.9, "recall_score": 1.0, "path": "/a.md"},
+        {"text": "rest", "relevance": 0.5, "recall_score": 1.0, "path": "/a.md"},
+    ]
+    scorer = _StubScorer([0.7])
+    assert bridge_conditioned_max(scorer, "q", passages) == pytest.approx(0.7)
+    assert scorer.calls[0][1] == "top"
+
+
+def test_bridge_column_does_not_swallow_a_scorer_failure():
+    """The collection tool owns the fallback; the helper must not turn a crash into a zero."""
+    passages = [
+        _Passage("a", relevance=0.9, recall_score=1.0, path="/a.md"),
+        _Passage("b", relevance=0.5, recall_score=1.0, path="/a.md"),
+    ]
+    with pytest.raises(RuntimeError):
+        bridge_conditioned_max(_StubScorer([0.5], error=RuntimeError("model down")), "q", passages)
+
+
+def test_the_bridge_column_reaches_the_feature_vector():
+    passages = [
+        _Passage("bridge text", relevance=0.9, recall_score=1.0, path="/a.md"),
+        _Passage("candidate one", relevance=0.5, recall_score=1.0, path="/a.md"),
+    ]
+    value = bridge_conditioned_max(_StubScorer([0.8]), "q", passages)
+    vector = extract_features("q", passages, bridge_conditioned=value)
+    assert vector[_feature("bridge_conditioned")] == pytest.approx(0.8)
+
+
+def test_rotated_bridges_never_hand_a_query_its_own_first_hop():
+    texts = ["q1", "q2", "q3"]
+    rotated = rotated_bridge_texts(texts)
+    assert rotated == ["q2", "q3", "q1"]
+    assert all(left != right for left, right in zip(texts, rotated))
+    # A rotation preserves the multiset, so the control's only difference is the content.
+    assert sorted(rotated) == sorted(texts)
+
+
+def test_rotated_bridges_with_one_item_cannot_avoid_itself():
+    assert rotated_bridge_texts(["only"]) == ["only"]
+
+
+def test_rotated_bridges_rejects_an_offset_that_is_the_real_arm():
+    with pytest.raises(ValueError):
+        rotated_bridge_texts(["a", "b"], offset=0)
+    with pytest.raises(ValueError):
+        rotated_bridge_texts(["a", "b"], offset=2)   # a multiple of n rotates to itself

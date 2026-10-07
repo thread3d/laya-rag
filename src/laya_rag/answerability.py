@@ -262,6 +262,55 @@ def extract_features(
     )
 
 
+def bridge_conditioned_max(
+    scorer: Any,
+    query: str,
+    passages: Sequence[Any],
+    *,
+    bridge: str | None = None,
+    wording: str = "bridge",
+) -> float | None:
+    """The 13th gate column: the best bridge-conditioned decision ``s(q, b, c)`` over the rest.
+
+    ``scorer`` is anything exposing ``score_relevance_conditioned(query, bridge, texts,
+    wording=...) -> (scores, usage)`` — :class:`laya_rag.rerank.LayaReranker` in production, a
+    stub in tests. The bridge defaults to the top-ranked passage (the first hop's own evidence)
+    and the scored list is the **rest**, so the bridge never scores itself against itself; a
+    caller passing a foreign bridge still excludes the same slot, which holds the scored count
+    fixed between the real and shuffled arms.
+
+    ``None`` means *not measured* — fewer than two passages, or a scorer that returned nothing —
+    and is deliberately distinct from ``0.0``: :func:`extract_features` writes ``0.0`` for both,
+    so the caller that wants to count failures must read this return value, not the vector.
+    """
+    items = [] if passages is None else list(passages)
+    if len(items) < 2:
+        return None
+    head = _as_text(_field(items[0], "text", "")) if bridge is None else str(bridge)
+    texts = [_as_text(_field(item, "text", "")) for item in items[1:]]
+    scores, _usage = scorer.score_relevance_conditioned(query, head, texts, wording=wording)
+    return max(scores) if scores else None
+
+
+def rotated_bridge_texts(texts: Sequence[str], offset: int = 1) -> list[str]:
+    """The shuffled-bridge control: every query conditioned on *another* query's first hop.
+
+    A plain rotation keeps the multiset of bridge texts identical to the real arm and never
+    hands a query its own bridge (unless there is only one), so a gain that appears in both
+    arms is the instruction text rather than the conditioning. ``offset`` must be non-zero and
+    smaller than the list, because an offset of zero is the real arm wearing a control's name.
+    """
+    items = [str(text) for text in texts]
+    if len(items) < 2:
+        return items
+    if offset == 0:
+        raise ValueError("a shuffled-bridge offset of 0 is the real arm; use a non-zero offset")
+    step = int(offset) % len(items)
+    if step == 0:
+        raise ValueError(f"offset {offset} is a multiple of {len(items)} and rotates to itself")
+    return items[step:] + items[:step]
+
+
 def _sigmoid(z: np.ndarray) -> np.ndarray:
     """Logistic function, clipped so extreme logits cannot overflow ``exp``."""
     return 1.0 / (1.0 + np.exp(-np.clip(z, -60.0, 60.0)))

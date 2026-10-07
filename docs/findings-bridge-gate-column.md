@@ -20,6 +20,13 @@ the limit, and the valid place for the signal is the gate. This wires the column
   model failure degrades to `0.0` rather than failing the query.
 - Off by default: it costs one extra Laya forward pass per query, and no 13-feature gate has been
   trained.
+- **The column is now collectable.** `tools/multihop_gate.py --bridge-feature` records the
+  conditioned maximum as the 13th column beside the other twelve, and `--bridge-arm shuffled`
+  records the control (another query's top passage, by rotation) in a second file with identical
+  instruction text and scored count. `laya_rag.answerability.bridge_conditioned_max` and
+  `rotated_bridge_texts` make both importable and unit-tested without a model, so
+  `tools/answerability_features.py --prefix 12` can compare the twelve- and thirteen-feature gates
+  on one file, and the real-vs-shuffled pair is the control.
 
 ## What this does not show
 
