@@ -79,7 +79,7 @@ TWO_WIKI_ARGS ?=
 GFI_ARGS ?=
 QUANT_ARGS ?= --cache eval/beir/cache/scidocs.bge-small-en-v1.5.cls.npy
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -504,6 +504,10 @@ reranker-fairness:
 # A contamination/leakage audit over the reports: the dilution signature and empty held-out blocks.
 leakage-audit:
 	$(PY) tools/leakage_audit.py $(LEAKAGE_ARGS)
+
+# Produce the records for the two owed hand-labelled sets; it never writes a label.
+labelling-pairs:
+	$(PY) tools/labelling_pairs.py $(LABELLING_PAIRS_ARGS)
 
 # Build/score a review queue for the owed hand-labelled sets; it never writes a label.
 labelling-queue:

@@ -53,15 +53,35 @@ From `rerank-experiment-full.json`, the same pool for both arms:
 Paired bootstrap over the 2,255 queries: **+0.0401 [+0.0321, +0.0484]**, p<0.001 (the report's own
 machinery). The reranker's gain is real and it is entirely inside the pool.
 
-## R@1000
+## R@1000, measured
 
-**Not measurable from cache, and the pack says so.** The deepest cached pool is depth 500 and the
-cross-encoder pool is depth 100, so R@1000 is reported as a bound with its reason rather than
-invented. This is the Tier 0.5 falsifier handled honestly: *if gold support is not exhaustive at
-depth 1000 the ceiling is still a floor* — at depth 500 the pool already holds **0.9811** of gold
-facts, and the reorder oracle over the pool is the already-measured ceiling (0.6088 at depth 100,
-rising to 0.6592 at depth 500). A depth-1000 diagnostics run turns the bound into a number without
-changing the reading; `--deep <report>` folds one in when it exists.
+A depth-1000 diagnostics run (`--max-depth 1000 --depths 10,100,1000`, ~15 min against the cached
+embeddings) turns the bound into a number:
+
+| depth | pool gold-fact recall | ceiling MAP@10 | hop-2 recall |
+| --- | --- | --- | --- |
+| 10 | 0.4647 | 0.3971 | 0.2319 |
+| 100 | 0.8505 | 0.6086 | 0.6955 |
+| **1000** | **0.9939** | **0.6636** | **1.0000** |
+
+Paired over the 2,255 queries: **+0.1433 [+0.1344, +0.1527]** fact recall and **+0.0551
+[+0.0512, +0.0592]** ceiling from 100 → 1000, both significant; hop-2 recall reaches **1.0000** at
+depth 1000.
+
+The reading is the pack's point, now with a full curve behind it. R@1000 = **0.9939** belongs to the
+**first stage**: it is the pool's recall, and the cross-encoder — which sees the depth-100 pool —
+cannot change it at all. What the deeper pool buys is *headroom for a selector* (ceiling 0.6086 →
+0.6636, +0.0551), not a reranker gain. So the Tier 0.5 claim "the gain holds on a pool constructed
+without the reranker, and improves R@1000" is half-right and half category error: the gain holds,
+and the R@1000 improvement is the retriever's.
+
+Reproduce the deeper point with:
+
+```sh
+make multihop-diagnostics DIAGNOSTICS_ARGS="--max-depth 1000 --depths 10,100,1000 \
+    --out eval/benchmarks/multihop-rag/diagnostics-1000"
+make reranker-fairness FAIRNESS_ARGS="--deep eval/benchmarks/multihop-rag/diagnostics-1000.json"
+```
 
 ## What this does not show
 
