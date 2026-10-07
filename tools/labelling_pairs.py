@@ -335,6 +335,26 @@ def _generate_answers(args: argparse.Namespace) -> list[dict[str, Any]]:
     return [done[str(record["query"])] for record in records if str(record["query"]) in done]
 
 
+def load_answers(path: Path) -> list[dict[str, Any]]:
+    """Answers from a report, a JSON list, or the generator's checkpointed JSONL sidecar.
+
+    The sidecar matters: a two-hour generation that is interrupted has no final report, and the
+    already-produced rows must still be usable as a (smaller) queue rather than thrown away.
+    """
+    text = Path(path).read_text(encoding="utf-8")
+    stripped = text.lstrip()
+    try:
+        payload: Any = json.loads(stripped)
+    except json.JSONDecodeError:
+        payload = None          # a JSONL sidecar is not one JSON document
+    if isinstance(payload, list):
+        return [dict(row) for row in payload]
+    if isinstance(payload, Mapping):
+        per_query = payload.get("per_query") or {}
+        return list(per_query.values()) if isinstance(per_query, Mapping) else list(per_query)
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.check:
@@ -357,9 +377,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     else:
         if args.answers:
-            report = json.loads(Path(args.answers).read_text(encoding="utf-8"))
-            per_query = report.get("per_query") or {}
-            answers = list(per_query.values()) if isinstance(per_query, Mapping) else list(per_query)
+            answers = load_answers(Path(args.answers))
         elif args.generate:
             answers = _generate_answers(args)
         else:

@@ -130,6 +130,21 @@ def test_verifier_records_skip_abstentions_and_keep_evidence():
     assert rows[0]["proposed_label"] is None and rows[0]["evidence"]
 
 
+def test_load_answers_reads_a_checkpointed_sidecar(tmp_path):
+    sidecar = tmp_path / "verifier-pairs.jsonl"
+    sidecar.write_text('{"query": "q", "answer": "a"}\n\n{"query": "q2", "answer": "b"}\n')
+    assert [row["query"] for row in lp.load_answers(sidecar)] == ["q", "q2"]
+
+
+def test_load_answers_reads_a_report_and_a_plain_list(tmp_path):
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps({"per_query": {"0": {"query": "q", "answer": "a"}}}))
+    assert lp.load_answers(report)[0]["answer"] == "a"
+    listing = tmp_path / "list.json"
+    listing.write_text(json.dumps([{"query": "q", "answer": "a"}]))
+    assert lp.load_answers(listing)[0]["query"] == "q"
+
+
 def test_main_writes_records_without_labels(tmp_path, capsys):
     dataset = _dataset(tmp_path)
     scores = tmp_path / "scores.json"
