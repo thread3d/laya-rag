@@ -1641,7 +1641,7 @@ laya-rag/
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
 ├── eval/                  generated evaluation reports and caches (gitignored)
-└── vendor/                submodule: laya (pinned v0.3.28)
+└── vendor/                submodule: laya (pinned v0.4.0)
 ```
 
 ## Known limits
@@ -1723,17 +1723,28 @@ budget at the default thresholds.
 
 ## The vendored submodule
 
-The Laya checkout lives under `vendor/` and is pinned as a git submodule at **v0.3.28**
-(`2b60aed`, `github.com/thread3d/laya`), which the venv installs editable so `import laya` resolves to
-the pinned checkout. It was originally at `laya/`, but a top-level `laya/` directory shadows the
-installed `laya` Python package for any process started from the repository root, so `import laya`
-resolved to the checkout folder. Moving it under `vendor/` removed the collision. The Python package
-for this project is `laya_rag`, which does not collide.
+The Laya checkout lives under `vendor/` and is pinned as a git submodule at **v0.4.0**
+(`0362118`, `github.com/thread3d/laya`), the newest upstream release. The fork's `main` carries its
+own portability patches on top of upstream, so the update merges the `v0.4.0` tag into that branch
+rather than moving to a bare upstream commit. The venv installs the checkout editable, so `import
+laya` resolves to the pinned checkout. It was originally at `laya/`, but a top-level `laya/`
+directory shadows the installed `laya` Python package for any process started from the repository
+root, so `import laya` resolved to the checkout folder. Moving it under `vendor/` removed the
+collision. The Python package for this project is `laya_rag`, which does not collide.
+
+Laya 0.4.0 makes a **breaking** change to `Router(default=...)`, which now falls back to the
+`multilingual` checkpoint for text whose language detection abstains (was `english`). This project
+does not use `Router`: it loads a checkpoint with `laya.load` and calls `Agent.predict` /
+`predict_batch` directly (`src/laya_rag/model.py` is the only module that touches Laya's API), so the
+change is outside the surface the engine exercises. The update also carries everything between
+0.3.28 and 0.4.0, so it is compatibility-verified end to end: the full offline suite (1513 passed),
+`make doctor` (the multilingual checkpoint loads, embedding dim 768), and an index+query smoke over
+`vendor/laya/docs` returning evidence.
 
 Measurements quoted in this README and in `docs/findings-*.md` were produced under Laya **0.3.23**;
-the submodule was updated to **0.3.28** afterwards and the update is compatibility-verified (the full
-offline suite, `make doctor`, and an end-to-end index+query smoke), but a decision-path change could
-move a number, so re-run a benchmark before treating a recorded figure as reproducible.
+the submodule was updated to **0.3.28** and then to **0.4.0** afterwards, and each update is
+compatibility-verified but **not** measurement-re-verified, so a decision-path change could move a
+number. Re-run a benchmark before treating a recorded figure as reproducible under 0.4.0.
 
 ## License
 
