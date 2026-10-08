@@ -119,12 +119,13 @@ the reference preprocessing does too.
 ## The measurement
 
 ```sh
-make beir BEIR_ARGS="--datasets bioasq --retrievers bm25-engine --no-download \
+make beir BEIR_ARGS="--datasets bioasq --retrievers bm25,bm25-engine --no-download \
   --out eval/beir/bioasq --lexical-checkpoint --lexical-backend ondisk"
 ```
 
 | dataset | documents | retriever | nDCG@10 | Recall@10 | nDCG@100 | Recall@100 | MRR@10 | MAP@100 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| bioasq | 14,914,604 | `bm25` (published settings control) | **0.5168** | 0.5342 | 0.5869 | 0.7563 | 0.6049 | 0.4669 |
 | bioasq | 14,914,604 | `bm25-engine` (shipped lexical path) | **0.5193** | 0.5496 | 0.5917 | 0.7764 | 0.5939 | 0.4683 |
 
 Published anchors for the member (`tools/published_beir18.py`): **BM25 0.465**, uniCOIL 0.477,
@@ -134,14 +135,32 @@ So the engine's lexical row beats the published BM25 by **+0.0543**, and beats t
 system by **+0.0153** — making BioASQ one of the nine datasets where this engine leads, and the
 largest positive gap in the lexical control (HotpotQA's +0.032 was the previous high).
 
-**That gap deserves suspicion rather than celebration, and the honest statement is that it is
-unexplained.** Our row is not the like-for-like control: it runs at engine settings — query stopwords
-dropped and English stemming on — while the published anchor is Anserini's multi-field BM25. On the
-five small BEIR sets the engine row sits *closer* to the published anchor than the flat control does,
-by about 0.02; here the same settings move it 0.054 in our favour on 14.9M biomedical abstracts, where
-stemming plausibly does more work than on news or web text. Plausible is not measured. The
-published-settings `bm25` control row is being run for exactly this comparison, and until it lands the
-+0.0543 should be read as "our settings, not our engine, beat the baseline here".
+### The control row, and a hypothesis it killed
+
+I wrote the first version of this section with an explanation attached: that the gap was our
+*settings* rather than our engine — stemmed, stopword-dropped text doing more work on biomedical
+abstracts than on news, and the engine row being anyway not the like-for-like control. It read
+plausibly. **The control row falsifies it.**
+
+The `bm25` row runs at the *published* settings — no stemming, no stopword dropping — and it reads
+**0.5168**, which is
+
+- **+0.0518 above the published BM25 anchor**, and
+- within **0.0025** of the engine row.
+
+So essentially all of the +0.05 is *not* a settings effect. Both rows sit about 0.05 above the
+published baseline, and whichever way the difference arises — the harness's tokenisation, the
+corpus as this repository builds it, or the published row having been measured under a convention
+this one does not reproduce — **it is not attributable to the engine, and it is not explained here**.
+What can be said is what the numbers say: on this corpus our flat BM25 control and the published BM25
+column do not agree, by five times the margin the control is meant to stay inside, and the two rows
+this repository can compare to each other agree to 0.0025.
+
+That is the same class of finding as NQ's and FEVER's gaps, in the opposite direction, and it is
+recorded as a gap in the *control* rather than as a result. It is also why the honest headline for
+BioASQ is "measured, and beats the best published system by 0.0153" — not "beats published BM25 by
+0.054".
+
 
 ## What this costs to reproduce
 

@@ -922,10 +922,12 @@ CQADupStack through its own twelve-sub-forum runner (`docs/findings-cqadupstack.
 the only one that genuinely needed its free registration — through `tools/bioasq.py`
 (`docs/findings-bioasq.md`).
 **FEVER** is the worst outlier in the lexical control below
-(**−0.121** against its published anchor). **BioASQ is the best result in the table**: `bm25-engine`
+(**−0.121** against its published anchor). **BioASQ is the largest positive gap in it**: `bm25-engine`
 reads **0.5193** against a published BM25 of **0.465**, and against the *best* of the five published
-systems (**SPLADE 0.504**) by **+0.0153** — though that gap is unexplained, and it is our *settings*
-rather than our engine that beat the baseline there.
+systems (**SPLADE 0.504**) by **+0.0153**. But the published-settings control reads **0.5168** — a
+**+0.0518** gap of its own, within 0.0025 of the engine row — so almost none of it is a settings or
+engine effect; the control and the published column simply do not agree here, and the cause is
+unidentified (`docs/findings-bioasq.md`).
 
 | dataset | queries | shipped lexical | bi-encoder | fused BM25 + bi-encoder | dense ensemble | **ensemble + BM25** |
 | --- | --- | --- | --- | --- | --- | --- |

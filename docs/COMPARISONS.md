@@ -39,8 +39,10 @@ SCIDOCS (+0.060), NFCorpus (+0.042), Signal-1M (+0.034), Quora (+0.023) and BioA
 +0.054 against the published BM25 itself). Two of those nine are caveats
 rather than results: Signal-1M is led by our **flat BM25 control** (0.3640), not by the shipped
 engine path (0.3131, which is *behind* the published BM25 of 0.330) — that comparison is about the BM25
-convention of section 5, not about the engine; and BioASQ's margin is unexplained, and is a statement
-about our *settings* on biomedical text rather than about the engine.
+convention of section 5, not about the engine; and BioASQ's margin is not an engine result at all — its
+published-settings control reads **0.5168**, a **+0.052** gap of its own against the published BM25
+column, so the two BM25 implementations disagree there by five times the control's tolerance and
+nothing attributes that to the retriever (`findings-bioasq.md`).
 
 **Where they lead.** Nine, and the losses are concentrated:
 

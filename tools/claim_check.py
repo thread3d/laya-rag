@@ -264,6 +264,17 @@ CHECKS: list[Claim] = [
           r"`bm25` \(published settings control\)", 0.5573,
           ("datasets", "trec-covid", "retrievers", "bm25", "nDCG@10"),
           report="eval/beir/trec-covid.json"),
+    # BioASQ's control row decides how its result is read: the flat published-settings run lands
+    # within 0.0025 of the engine row while sitting 0.052 above the published BM25 column, which is
+    # why the +0.054 is reported as a control disagreement rather than an engine gain. A number
+    # carrying that much interpretive weight is worth pinning to the report that produced it.
+    Claim("bioasq flat control nDCG@10", README, r"published-settings control reads", 0.5168,
+          ("datasets", "bioasq", "retrievers", "bm25", "nDCG@10"),
+          report="eval/beir/bioasq.json"),
+    Claim("bioasq engine nDCG@10", "docs/findings-bioasq.md",
+          r"`bm25-engine` \(shipped lexical path\)", 0.5193,
+          ("datasets", "bioasq", "retrievers", "bm25-engine", "nDCG@10"),
+          report="eval/beir/bioasq.json"),
     # MS MARCO is measured but is not one of BEIR's 18; both lexical rows are pinned so the
     # "gated" claim could not be retired with a hand-typed number either.
     Claim("msmarco engine nDCG@10", "docs/findings-msmarco.md",
