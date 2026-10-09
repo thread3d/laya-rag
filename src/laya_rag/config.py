@@ -123,6 +123,12 @@ class EngineConfig:
     # ~0.65. Setting this to a retrieval-trained model (e.g. "BAAI/bge-small-en-v1.5")
     # replaces the dense channel and makes fusing it worthwhile. Laya still owns the
     # decisions either way.
+    #
+    # A retrieval adaptation of Laya's *own* encoder (`tools/laya_encoder_finetune.py`)
+    # is auto-detected at `models/laya-retrieval/` when this is unset, so `make laya-finetune`
+    # followed by a rebuild is all it takes to make the shipped default dense-native. Its
+    # directory carries a `laya_retrieval.json` marker, which is also what selects the tuned
+    # fusion weight below.
     embed_model: str = field(default_factory=lambda: _env("EMBED_MODEL") or "")
     # BGE-family models are trained with [CLS] pooling, not mean pooling; "auto" picks
     # CLS for them and mean otherwise. Their retrieval query instruction is optional for
@@ -130,6 +136,15 @@ class EngineConfig:
     embed_pooling: str = field(default_factory=lambda: _env("EMBED_POOLING") or "auto")
     embed_query_instruction: bool = field(
         default_factory=lambda: _env_bool("EMBED_QUERY_INSTRUCTION", False)
+    )
+    # The RRF weight an auto-detected Laya retrieval adaptation is fused at. `1.0` — the
+    # historical "a dense model is configured, so weight it fully" rule — measurably over-
+    # dilutes a channel that is real but still weaker than BM25: on SciFact the adapted
+    # encoder reads nDCG@10 0.6459 at 1.0 and 0.6799 at 0.3, against lexical-only 0.6762.
+    # The optimum is corpus-dependent (≈0.1–0.5 where BM25 dominates, ≈1.0 where the dense
+    # channel does), so this is the deployable single default and `DENSE_WEIGHT` overrides it.
+    adapted_dense_weight: float = field(
+        default_factory=lambda: _env_float("ADAPTED_DENSE_WEIGHT", 0.3)
     )
 
     # Optional retrieval-trained cross-encoder that orders and filters the candidate
@@ -313,11 +328,42 @@ class EngineConfig:
         default_factory=lambda: _env_bool("RECALL_COVERAGE_REDUNDANCY", False)
     )
 
+    def __post_init__(self) -> None:
+        """Adopt a locally trained Laya retrieval encoder when one is present.
+
+        The adapted encoder lives under `models/`, which is gitignored, so the default cannot
+        be a hard-coded path: it is adopted only when the artefact exists. A fresh clone has
+        nothing there and behaves exactly as before (Laya's own encoder, dense weight 0), and
+        `make laya-finetune` + `tools/package_model.py` is what turns the default dense-native.
+        """
+        if not (self.embed_model or "").strip():
+            candidate = self.models_dir / "laya-retrieval"
+            if (candidate / "model.safetensors").is_file():
+                self.embed_model = str(candidate)
+
+    @property
+    def adapted_retrieval_model(self) -> Path | None:
+        """The configured embedder's directory when it is a Laya retrieval adaptation.
+
+        The `laya_retrieval.json` marker is written by `tools/laya_encoder_finetune.py`'s
+        export (and carried by `tools/package_model.py`), so a plain bi-encoder is never
+        mistaken for one: the two need different fusion weights.
+        """
+        model = (self.embed_model or "").strip()
+        if not model:
+            return None
+        path = Path(model).expanduser()
+        if not path.is_absolute():
+            path = REPO_ROOT / path
+        return path if (path / "laya_retrieval.json").is_file() else None
+
     @property
     def resolved_dense_weight(self) -> float:
         """The dense RRF weight actually used: explicit, or auto from the embedder."""
         if self.dense_weight >= 0.0:
             return self.dense_weight
+        if self.adapted_retrieval_model is not None:
+            return self.adapted_dense_weight
         return 1.0 if (self.embed_model or "").strip() else 0.0
 
     @property

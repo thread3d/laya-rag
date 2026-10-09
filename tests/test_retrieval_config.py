@@ -7,6 +7,8 @@ configured, which is the only case where it earned a weight.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -19,8 +21,46 @@ from .support import StubModel, make_config, write_corpus
 
 # ── auto dense weight ────────────────────────────────────────────────────
 
-def test_dense_weight_defaults_to_off_for_layas_own_encoder():
-    assert EngineConfig().resolved_dense_weight == 0.0
+def _fresh_models(tmp_path) -> "Path":
+    """A models directory with no trained retrieval encoder — i.e. a fresh clone."""
+    models = tmp_path / "models"
+    models.mkdir(parents=True, exist_ok=True)
+    return models
+
+
+def _adapted_models(tmp_path) -> "Path":
+    """A models directory carrying a trained Laya retrieval adaptation."""
+    model = _fresh_models(tmp_path) / "laya-retrieval"
+    model.mkdir(parents=True)
+    (model / "model.safetensors").write_bytes(b"")
+    (model / "laya_retrieval.json").write_text("{}", encoding="utf-8")
+    return tmp_path / "models"
+
+
+def test_dense_weight_defaults_to_off_for_layas_own_encoder(tmp_path):
+    assert EngineConfig(models_dir=_fresh_models(tmp_path)).resolved_dense_weight == 0.0
+
+
+def test_a_trained_laya_retrieval_encoder_is_adopted_and_fused_at_the_tuned_weight(tmp_path):
+    """`make laya-finetune` packages models/laya-retrieval; the default then uses it at 0.3."""
+    config = EngineConfig(models_dir=_adapted_models(tmp_path))
+    assert config.embed_model.endswith("laya-retrieval")
+    assert config.adapted_retrieval_model is not None
+    assert config.resolved_dense_weight == 0.3
+
+
+def test_an_explicit_embed_model_beats_auto_detection_and_keeps_the_stock_weight(tmp_path):
+    config = EngineConfig(
+        models_dir=_adapted_models(tmp_path), embed_model="BAAI/bge-small-en-v1.5"
+    )
+    assert config.embed_model == "BAAI/bge-small-en-v1.5"
+    # A stock bi-encoder is not a Laya adaptation, so it keeps the historical weight.
+    assert config.resolved_dense_weight == 1.0
+
+
+def test_the_adapted_weight_is_configurable(tmp_path):
+    config = EngineConfig(models_dir=_adapted_models(tmp_path), adapted_dense_weight=0.15)
+    assert config.resolved_dense_weight == 0.15
 
 
 def test_the_chunk_overlap_is_clamped_below_the_chunk_size():
@@ -45,14 +85,22 @@ def test_an_explicit_zero_beats_a_configured_embedder():
     assert config.resolved_dense_weight == 0.0
 
 
-def test_blank_embed_model_is_treated_as_unset():
-    assert EngineConfig(embed_model="   ").resolved_dense_weight == 0.0
+def test_blank_embed_model_is_treated_as_unset(tmp_path):
+    assert EngineConfig(
+        models_dir=_fresh_models(tmp_path), embed_model="   "
+    ).resolved_dense_weight == 0.0
 
 
-def test_stats_report_the_resolved_weight_not_the_auto_sentinel():
-    payload = EngineConfig().as_dict()
+def test_stats_report_the_resolved_weight_not_the_auto_sentinel(tmp_path):
+    payload = EngineConfig(models_dir=_fresh_models(tmp_path)).as_dict()
     assert payload["dense_weight"] == -1.0
     assert payload["dense_weight_resolved"] == 0.0
+
+
+def test_stats_report_the_adapted_weight_when_the_encoder_is_adopted(tmp_path):
+    payload = EngineConfig(models_dir=_adapted_models(tmp_path)).as_dict()
+    assert payload["dense_weight"] == -1.0
+    assert payload["dense_weight_resolved"] == 0.3
 
 
 # ── engine wiring ────────────────────────────────────────────────────────

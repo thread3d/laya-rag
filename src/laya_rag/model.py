@@ -31,7 +31,7 @@ os.environ.setdefault("USE_TORCH", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
-from .config import EngineConfig  # noqa: E402  (import after the env defaults)
+from .config import REPO_ROOT, EngineConfig  # noqa: E402  (import after the env defaults)
 
 CHECKPOINT_SUBFOLDERS: dict[str, str | None] = {
     "laya": None,
@@ -61,8 +61,19 @@ class LayaModel:
         """Return ``(model_id_or_path, subfolder)`` for the configured checkpoint."""
         name = self.config.checkpoint
         if name not in CHECKPOINT_SUBFOLDERS:
+            # A checkpoint the engine trained itself rather than one shipped under models/:
+            # a directory path, absolute or relative to the project root. This is what lets
+            # a fine-tuned encoder be served through the Laya-native path (EMBED_MODEL="").
+            candidate = Path(name).expanduser()
+            if not candidate.is_absolute():
+                candidate = REPO_ROOT / candidate
+            if candidate.is_dir() and (candidate / "model.safetensors").is_file():
+                return str(candidate), None
             known = ", ".join(sorted(CHECKPOINT_SUBFOLDERS))
-            raise ModelUnavailableError(f"unknown checkpoint {name!r}; known checkpoints: {known}")
+            raise ModelUnavailableError(
+                f"unknown checkpoint {name!r}: not one of {known} and not a checkpoint "
+                f"directory (no {candidate / 'model.safetensors'})"
+            )
         subfolder = CHECKPOINT_SUBFOLDERS[name]
 
         bundle = self.config.models_dir / "laya"
