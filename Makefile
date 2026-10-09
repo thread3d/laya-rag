@@ -26,6 +26,10 @@ RECALIBRATE_ARGS ?=
 ROUTING_ARGS ?=
 FINETUNE_ARGS ?=
 DISTILL_EVAL_ARGS ?=
+LAYA_FINETUNE_ARGS ?=
+LAYA_PROBE_ARGS ?=
+QUERY_ADAPTER_ARGS ?=
+JUDGE_ARGS ?=
 ONDISK_ARGS ?=
 ANSWERABILITY_ARGS ?=
 DIAGNOSTICS_ARGS ?=
@@ -80,7 +84,7 @@ TWO_WIKI_ARGS ?=
 GFI_ARGS ?=
 QUANT_ARGS ?= --cache eval/beir/cache/scidocs.bge-small-en-v1.5.cls.npy
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -118,6 +122,10 @@ help:
 	@echo "beir-routing per-corpus channel selection, measured out of sample"
 	@echo "finetune     in-domain domain adaptation (adapted, not zero-shot)"
 	@echo "distill-eval  distilled student vs zero-shot vs teacher ensemble"
+	@echo "laya-finetune  adapt Laya's own encoder for retrieval (Bet 3; resumable)"
+	@echo "laya-finetune-probe  encoder throughput + checkpoint round-trip, no training"
+	@echo "laya-query-adapter  is the query side the linear bottleneck? (cached embeddings)"
+	@echo "laya-judge-check  did encoder adaptation damage the relevance head?"
 	@echo "gate-calibration  learned threshold / temperature vs fixed 0.5 and raw"
 	@echo "engine-beir    the engine itself on BEIR (not the tools replica)"
 	@echo "engine-multihop  the engine itself on MultiHop-RAG under its own chunking (resumable)"
@@ -453,6 +461,23 @@ finetune:
 # Evaluate a distilled student against its zero-shot self and the teacher ensemble.
 distill-eval:
 	$(PY) tools/distill_eval.py $(DISTILL_EVAL_ARGS)
+
+# Adapt Laya's own encoder for retrieval (Bet 3). Checkpoints/resumes; see
+# docs/study-laya-finetuning.md. The result is served as EMBED_MODEL, not as CHECKPOINT.
+laya-finetune:
+	OMP_NUM_THREADS=16 $(PY) tools/laya_encoder_finetune.py $(LAYA_FINETUNE_ARGS)
+
+# Encoder throughput + checkpoint round-trip on this host, no training.
+laya-finetune-probe:
+	$(PY) tools/laya_finetune_probe.py $(LAYA_PROBE_ARGS)
+
+# Is the query side the linear bottleneck? Query-only adapter on cached embeddings.
+laya-query-adapter:
+	$(PY) tools/laya_query_adapter.py $(QUERY_ADAPTER_ARGS)
+
+# Did adapting the encoder damage the decision head's relevance judgement?
+laya-judge-check:
+	$(PY) tools/laya_judge_check.py $(JUDGE_ARGS)
 
 # On-disk postings + streaming dense index, the route to the large BEIR corpora.
 ondisk:
