@@ -158,25 +158,42 @@ def chart_channel_reversal(outdir: Path, plt) -> list[dict[str, Any]]:
     return rows
 
 
+def _frames_adapted() -> Mapping[str, Mapping[str, float]] | None:
+    """The adapted Laya encoder's FRAMES arms, when that run has been made.
+
+    Kept beside the `bge-small`/ensemble arms rather than replacing them: on FRAMES the adapted
+    encoder beats lexical (0.6839 against 0.6586) but is below `bge-small` (0.7505), so a chart
+    that showed only one of them would misstate the trade.
+    """
+    path = ROOT / "eval" / "frames-eval-laya.json"
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text()).get("summary")
+
+
 def chart_frames_arms(outdir: Path, plt) -> dict[str, Any]:
     report = json.loads(FRAMES_REPORT.read_text())
     summary: Mapping[str, Mapping[str, float]] = report["summary"]
-    arms = [("lexical", "lexical", OURS_LIGHT),
-            ("dense", "dense (bge-small)", OURS_ALT),
-            ("ensemble", "3-model ensemble", ENSEMBLE),
-            ("ensemble+bm25", "ensemble + BM25", ACCENT)]
+    adapted = _frames_adapted()
+    arms = [("lexical", "lexical", OURS_LIGHT, summary)]
+    if adapted and "dense" in adapted:
+        arms.append(("dense", "dense (Laya adapted)", OURS, adapted))
+    arms += [("dense", "dense (bge-small)", OURS_ALT, summary),
+             ("ensemble", "3-model ensemble", ENSEMBLE, summary),
+             ("ensemble+bm25", "ensemble + BM25", ACCENT, summary)]
     ks = (1, 10, 20)
     import numpy as np
 
     x = np.arange(len(ks))
-    width = 0.2
+    count = len(arms)
+    width = 0.8 / count
     fig, ax = plt.subplots(figsize=(9.0, 4.8))
-    for index, (arm, label, colour) in enumerate(arms):
-        values = [summary[arm][f"recall@{k}"] for k in ks]
-        bars = ax.bar(x + (index - 1.5) * width, values, width, color=colour, label=label)
+    for index, (arm, label, colour, source) in enumerate(arms):
+        values = [source[arm][f"recall@{k}"] for k in ks]
+        bars = ax.bar(x + (index - (count - 1) / 2) * width, values, width, color=colour, label=label)
         for bar, value in zip(bars, values):
             ax.text(bar.get_x() + bar.get_width() / 2, value + 0.008, f"{value:.3f}",
-                    ha="center", fontsize=7)
+                    ha="center", fontsize=6.5)
     ax.set_xticks(x)
     ax.set_xticklabels([f"recall@{k}" for k in ks])
     ax.set_ylabel("recall (document level)")
@@ -189,8 +206,8 @@ def chart_frames_arms(outdir: Path, plt) -> dict[str, Any]:
             "so the chart compares our arms only.",
             transform=ax.transAxes, ha="center", fontsize=7.5, color="#444")
     compare._save(fig, outdir, "frames_arms.png", plt)
-    return {"arms": {label: {f"recall@{k}": summary[arm][f"recall@{k}"] for k in ks}
-                     for arm, label, _c in arms}}
+    return {"arms": {label: {f"recall@{k}": source[arm][f"recall@{k}"] for k in ks}
+                     for arm, label, _c, source in arms}}
 
 
 #: Published BM25 nDCG@10 for the large corpora measured lexical-only, read from the same table and

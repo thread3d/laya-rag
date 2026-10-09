@@ -84,6 +84,9 @@ DENSE_RETRIEVERS = frozenset({
 #: 33M encoder with no reranker on 6 of the 12 subsets, and the repository quotes it as such.
 BRIGHT_PUBLISHED_BEST = 0.21
 BRIGHT_REPORTS = ("eval/bright/report.json", "eval/bright/report-small.json")
+#: The adapted Laya encoder's BRIGHT run. Merged in as an extra arm when present; a checkout
+#: without it gets exactly the previous two-report figure.
+BRIGHT_ADAPTED_REPORT = "eval/bright/report-laya.json"
 
 #: Published encoder sizes in millions of parameters, from the paper's model sections and the
 #: model cards. BM25 has none; the two `bge-small` rows of ours are 33M.
@@ -401,10 +404,22 @@ def category_totals(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [{"category": name, "projects": counts[name], "stars": stars[name]} for name in order]
 
 
+def multihop_shipped_row(official: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Our shipped MultiHop-RAG hybrid row, preferring the adapted encoder's when measured."""
+    candidates = [key for key in official
+                  if key.endswith(" hybrid@ov200")
+                  and ("adapted" in key.lower() or "laya" in key.lower())]
+    candidates.append("hybrid (ours)@ov200")
+    for key in candidates:
+        if official.get(key):
+            return official[key]
+    return {}
+
+
 def multihop_gaps(official: Mapping[str, Any], published_rows: Sequence[Sequence[Any]]) -> list[dict[str, Any]]:
     """Our MultiHop-RAG row minus each published row, per metric."""
     metrics = ("Hits@10", "Hits@4", "MAP@10", "MRR@10")
-    ours = official.get("hybrid (ours)@ov200") or {}
+    ours = multihop_shipped_row(official)
     out: list[dict[str, Any]] = []
     for name, h10, h4, mp, mrr in published_rows:
         theirs = {"Hits@10": h10, "Hits@4": h4, "MAP@10": mp, "MRR@10": mrr}
@@ -534,6 +549,18 @@ def bright_rows(reports: Sequence[Path] | None = None) -> list[dict[str, Any]]:
             if arms:
                 out.append({"subset": subset, "documents": report.get("documents"),
                             "queries": report.get("queries"), "arms": arms})
+    # The adapted Laya encoder's dense arm is merged in beside the bge one rather than
+    # replacing it: on BRIGHT the adapted channel is far below BM25, so a figure that showed
+    # only it — or only the bge arm — would misstate the trade. An explicit `reports` list is
+    # honoured exactly, so a caller that pins its own files gets no surprise arm.
+    adapted_path = ROOT / BRIGHT_ADAPTED_REPORT
+    if reports is None and adapted_path.is_file():
+        adapted = json.loads(adapted_path.read_text(encoding="utf-8")).get("subsets") or {}
+        for row in out:
+            report = adapted.get(row["subset"]) or {}
+            dense = (report.get("summary") or {}).get("dense", {})
+            if isinstance(dense.get("nDCG@10"), (int, float)):
+                row["arms"]["dense (Laya adapted)"] = float(dense["nDCG@10"])
     return out
 
 
@@ -546,11 +573,13 @@ def chart_bright(outdir: Path, plt: Any) -> bool:
         print("charts-compare: skip cmp_bright.png (no BRIGHT reports)")
         return False
     rows.sort(key=lambda row: row["subset"])
-    arms = [arm for arm in ("bm25", "dense", "hybrid") if all(arm in row["arms"] for row in rows)] or \
+    wanted = ("bm25", "dense", "dense (Laya adapted)", "hybrid")
+    arms = [arm for arm in wanted if all(arm in row["arms"] for row in rows)] or \
            sorted({arm for row in rows for arm in row["arms"]})
     positions = np.arange(len(rows))
-    width = 0.26
-    colours = {"bm25": OUR_ALT, "dense": "#f0c674", "hybrid": OURS}
+    width = 0.8 / len(arms)
+    colours = {"bm25": OUR_ALT, "dense": "#f0c674", "dense (Laya adapted)": "#e08b3a",
+               "hybrid": OURS}
     fig, ax = plt.subplots(figsize=(9.0, 4.4))
     for index, arm in enumerate(arms):
         ax.bar(positions + (index - (len(arms) - 1) / 2) * width,

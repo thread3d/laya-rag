@@ -103,7 +103,44 @@ def per_query(name: str, dataset: str, retriever: str) -> list[float]:
 
 def per_query_for(dataset: str, retriever: str) -> list[float]:
     """Per-query nDCG@10 for a dataset from whichever report measured it."""
-    return per_query(DATASET_REPORT.get(dataset, "five-small-fixed"), dataset, retriever)
+    return per_query(DATASET_REPORT.get(dataset, shipped_beir_report()), dataset, retriever)
+
+
+def per_query_bge_reference(dataset: str, retriever: str) -> list[float]:
+    """The same routing, but forced back to the historical `bge-small` report."""
+    return per_query(DATASET_REPORT.get(dataset, FALLBACK_BEIR_REPORT), dataset, retriever)
+
+
+#: The report the shipped dense channel is measured in. `tools/beir.py` writes it with the
+#: adapted Laya encoder as the bi-encoder (`--biencoder-model models/laya-retrieval`), which
+#: exists only after `tools/laya_encoder_finetune.py` has run. Charts fall back to the
+#: historical bge report rather than turning every cell into a gap, and the series labels
+#: follow the report actually read, so a figure never claims the adapted encoder it is not
+#: showing.
+SHIPPED_BEIR_REPORT = "five-adapted"
+FALLBACK_BEIR_REPORT = "five-small-fixed"
+
+
+def shipped_beir_report() -> str:
+    """`five-adapted` when the adapted-encoder report is on disk, else the bge report."""
+    return (
+        SHIPPED_BEIR_REPORT
+        if (BEIR_DIR / f"{SHIPPED_BEIR_REPORT}.json").is_file()
+        else FALLBACK_BEIR_REPORT
+    )
+
+
+def shipped_biencoder_label() -> str:
+    return (
+        "bi-encoder (Laya adapted)"
+        if shipped_beir_report() == SHIPPED_BEIR_REPORT
+        else "bi-encoder (bge-small)"
+    )
+
+
+def shipped_deployable_params() -> str:
+    """Laya's multilingual encoder is 307M, against bge-small's 33M."""
+    return "307M" if shipped_beir_report() == SHIPPED_BEIR_REPORT else "33M"
 
 
 #: The three-model dense ensemble was measured in two runs; route each dataset to its report.
@@ -149,6 +186,8 @@ def ranking_chart(rows, label: str, label_width: int = 34, scale: float = 0.52) 
 OURS = "#1b6ca8"
 OURS_ALT = "#79b4d9"
 OURS_LIGHT = "#bdd7e7"
+#: The higher-scoring `bge-small` configuration, drawn beside the shipped Laya-adapted one.
+BGE_REFERENCE = "#b08d3f"
 ENSEMBLE = "#1f7a4d"
 PUBLISHED = "#c9c9c9"
 PUBLISHED_DARK = "#8a8a8a"
@@ -233,15 +272,38 @@ def chart_beir_ranking(outdir: Path, best: float, ci, deploy: float, ensemble, e
     _save(fig, outdir, "beir_ranking.png", plt)
 
 
+def beir_series() -> list[tuple[str, str, str, bool, "str | None"]]:
+    """``(label, retriever, colour, is_ensemble, report override)`` for the per-dataset bars.
+
+    The adapted Laya encoder is the shipped dense channel, but it is a 0.06 regression against
+    `bge-small` on the 4-dataset deployable mean (0.4092 against 0.4689), so the bge configuration
+    is drawn beside it as the higher-scoring alternative rather than replaced. Nothing is hidden
+    and neither arm is implied to be the other.
+    """
+    if shipped_beir_report() != SHIPPED_BEIR_REPORT:
+        return [
+            ("shipped lexical", "bm25-engine", OURS_LIGHT, False, None),
+            ("bi-encoder (bge-small)", "biencoder", OURS_ALT, False, None),
+            ("fused BM25 + bge-small", "hybrid-biencoder", OURS, False, None),
+            ("3-model ensemble + BM25", "hybrid-ensemble", ENSEMBLE, True, None),
+        ]
+    return [
+        ("shipped lexical", "bm25-engine", OURS_LIGHT, False, None),
+        ("bi-encoder (Laya adapted)", "biencoder", OURS_ALT, False, None),
+        ("fused BM25 + Laya adapted", "hybrid-biencoder", OURS, False, None),
+        ("fused BM25 + bge-small (alternative)", "hybrid-biencoder", BGE_REFERENCE, False,
+         FALLBACK_BEIR_REPORT),
+        ("3-model ensemble + BM25", "hybrid-ensemble", ENSEMBLE, True, None),
+    ]
+
+
 def chart_beir_datasets(outdir: Path, plt) -> None:
-    series = [("shipped lexical", "bm25-engine", OURS_LIGHT, False),
-              ("bi-encoder (bge-small)", "biencoder", OURS_ALT, False),
-              ("fused BM25 + bi-encoder", "hybrid-biencoder", OURS, False),
-              ("3-model ensemble + BM25", "hybrid-ensemble", ENSEMBLE, True)]
+    series = beir_series()
     x = np.arange(len(DATASET_ORDER))
-    width = 0.2
+    count = len(series)
+    width = 0.8 / count
     fig, ax = plt.subplots(figsize=(12.0, 4.8))
-    for i, (label, key, color, is_ensemble) in enumerate(series):
+    for i, (label, key, color, is_ensemble, report) in enumerate(series):
         vals, lo, hi = [], [], []
         for ds in DATASET_ORDER:
             if is_ensemble and ds not in ENSEMBLE_REPORT:
@@ -249,12 +311,19 @@ def chart_beir_datasets(outdir: Path, plt) -> None:
                 # implying a measurement that does not exist.
                 vals.append(float("nan")); lo.append(float("nan")); hi.append(float("nan"))
                 continue
-            values = per_query_ensemble(ds) if is_ensemble else per_query_for(ds, key)
+            if is_ensemble:
+                values = per_query_ensemble(ds)
+            elif report == FALLBACK_BEIR_REPORT:
+                values = per_query_bge_reference(ds, key)
+            elif report:
+                values = per_query(report, ds, key)
+            else:
+                values = per_query_for(ds, key)
             m, low, high = bootstrap_ci(values)
             vals.append(m)
             lo.append(m - low)
             hi.append(high - m)
-        ax.bar(x + (i - 1.5) * width, vals, width, color=color, label=label,
+        ax.bar(x + (i - (count - 1) / 2) * width, vals, width, color=color, label=label,
                yerr=np.vstack([lo, hi]), capsize=2.5, error_kw=dict(lw=0.9, ecolor="#444"))
 
     anchored = [d for d in DATASET_ORDER if d in PUBLISHED_BM25]
@@ -275,11 +344,28 @@ def chart_beir_datasets(outdir: Path, plt) -> None:
     _save(fig, outdir, "beir_datasets.png", plt)
 
 
+def multihop_arm(official: dict, arm: str, overlap: str = "ov200") -> str:
+    """The row to quote for `arm` (``dense`` or ``hybrid``), preferring the adapted encoder's.
+
+    `tools/multihop_official.py --models laya-adapted` adds `laya-adapted hybrid@ov200`; the
+    bge rows stay beside it, so once the adapted run exists it becomes the shipped arm and the
+    bge row is the comparison rather than the figure's subject. Falls back to the older keys so
+    a tree without the adapted run still draws.
+    """
+    suffix = f" {arm}@{overlap}"
+    keys = [key for key in official if key.endswith(suffix) and (official[key].get("_per_query"))]
+    if not keys:
+        raise KeyError(f"no MultiHop row for {arm}@{overlap}")
+    adapted = [key for key in keys if "adapted" in key.lower() or "laya" in key.lower()]
+    legacy = [key for key in keys if key.startswith("hybrid (ours)")]
+    return (adapted or legacy or keys)[0]
+
+
 def chart_multihop(outdir: Path, official: dict, plt) -> None:
     keys = ["Hits@10", "Hits@4", "MAP@10", "MRR@10"]
-    ours = [("this system - hybrid", "hybrid (ours)@ov200", OURS),
+    ours = [("this system - hybrid", multihop_arm(official, "hybrid"), OURS),
             ("this system - BM25", "bm25@ov200", OURS_ALT),
-            ("this system - bge-small dense", "bge-small dense@ov200", OURS_LIGHT)]
+            ("this system - dense", multihop_arm(official, "dense"), OURS_LIGHT)]
     blocks = []
     for label, key, color in ours:
         vals, lo, hi = [], [], []
@@ -340,7 +426,11 @@ def chart_abstention(outdir: Path, plt) -> None:
 
 
 def chart_overlap(outdir: Path, official: dict, plt) -> None:
-    names = ["bm25", "bm25-engine", "bge-small dense", "hybrid (ours)"]
+    # The shipped dense and hybrid arms follow whichever encoder was measured; the base name is
+    # shared with the overlap=0 rows so both bars are one configuration.
+    dense_base = multihop_arm(official, "dense").rsplit("@", 1)[0]
+    hybrid_base = multihop_arm(official, "hybrid").rsplit("@", 1)[0]
+    names = ["bm25", "bm25-engine", dense_base, hybrid_base]
     a = [official[f"{n}@ov200"]["Hits@10"] for n in names]
     b = [official[f"{n}@ov0"]["Hits@10"] for n in names]
     x = np.arange(len(names))
@@ -550,7 +640,8 @@ def main(argv=None) -> int:
     print()
     print("4-dataset means (SciFact, NFCorpus, ArguAna, SciDocs)")
     print("-" * 78)
-    deploy = [np.mean([np.mean(per_query("five-small-fixed", d, "hybrid-biencoder")) for d in FOUR])]
+    deploy = [np.mean([np.mean(per_query(shipped_beir_report(), d, "hybrid-biencoder")) for d in FOUR])]
+    deploy_bge = [np.mean([np.mean(per_query(FALLBACK_BEIR_REPORT, d, "hybrid-biencoder")) for d in FOUR])]
     best_pools = {d: per_query(BEST_PER_DATASET[d][0], d, BEST_PER_DATASET[d][1]) for d in FOUR}
     ensemble_pools = {d: per_query_ensemble(d) for d in FOUR}
     best = [np.mean([np.mean(v) for v in best_pools.values()])]
@@ -559,12 +650,14 @@ def main(argv=None) -> int:
     print(f"  this system — 3-model ensemble   {ens_mean:.3f}  [{ens_lo:.3f},{ens_hi:.3f}]")
     print(f"  this system — best per dataset   {best[0]:.3f}  [{best_lo:.3f},{best_hi:.3f}]")
     print(f"  this system — one deployable cfg {deploy[0]:.3f}")
+    print(f"  this system — bge-small cfg      {deploy_bge[0]:.3f}")
     print(f"  BGE-large-v1.5 (published)       0.491")
 
     rows = [("this system — 3-model ensemble", "478M", ens_mean),
             ("this system — best per dataset", "mixed", best[0]),
             ("BGE-large-v1.5", "335M", 0.491),
-            ("this system — deployable config", "33M", deploy[0]),
+            ("this system — deployable config", shipped_deployable_params(), deploy[0]),
+            ("this system — bge-small config", "33M", deploy_bge[0]),
             ("SPLADE++", "110M", 0.433)] + PUBLISHED_4[2:]
     ranking_chart(rows, "BEIR 4-dataset mean, nDCG@10 — this system vs published")
 
@@ -578,9 +671,9 @@ def main(argv=None) -> int:
     for name, h10, h4, mp, mrr in PUBLISHED_MH:
         print(f"{(name + ' (published)'):<30} " + " ".join(
             f"{v:>18.3f}" for v in (h10, h4, mp, mrr)))
-    for key, label in [("hybrid (ours)@ov200", "hybrid (ours)"),
+    for key, label in [(multihop_arm(official, "hybrid"), "hybrid (shipped)"),
                        ("bm25@ov200", "BM25"),
-                       ("bge-small dense@ov200", "bge-small dense")]:
+                       (multihop_arm(official, "dense"), "dense (shipped)")]:
         rows_pq = official[key]["_per_query"]
         cells = []
         for k in metric_keys:
@@ -588,11 +681,12 @@ def main(argv=None) -> int:
             cells.append(f"{m:.3f} [{low:.2f},{high:.2f}]".rjust(18))
         print(f"{label:<30} " + " ".join(cells))
 
-    mh_rows = [("this system — hybrid (ours)", "", official["hybrid (ours)@ov200"]["Hits@10"]),
+    hybrid_key = multihop_arm(official, "hybrid")
+    dense_key = multihop_arm(official, "dense")
+    mh_rows = [(f"this system — {hybrid_key}", "", official[hybrid_key]["Hits@10"]),
                ("this system — BM25", "", official["bm25@ov200"]["Hits@10"])]
     mh_rows += [(n + " (published)", "", h10) for n, h10, _, _, _ in PUBLISHED_MH]
-    mh_rows.append(("this system — bge-small dense", "",
-                    official["bge-small dense@ov200"]["Hits@10"]))
+    mh_rows.append((f"this system — {dense_key}", "", official[dense_key]["Hits@10"]))
     ranking_chart(mh_rows, "MultiHop-RAG Hits@10 (overlap=200) — this system vs published",
                   label_width=32, scale=0.86)
 

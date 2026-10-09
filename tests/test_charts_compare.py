@@ -224,11 +224,35 @@ def test_bright_rows_reads_both_reports_and_reports_the_macro(tmp_path, monkeypa
     first.write_text(json.dumps({"subsets": report("pony", 7894, 112, 0.1221, 0.0398, 0.1281)}))
     second.write_text(json.dumps({"subsets": report("biology", 57359, 103, 0.2089, 0.1076, 0.1789)}))
     monkeypatch.setattr(ch, "BRIGHT_REPORTS", (str(first), str(second)))
+    # The adapted-encoder arm would otherwise be merged in from the working tree; this test is
+    # about the two pinned reports only.
+    monkeypatch.setattr(ch, "BRIGHT_ADAPTED_REPORT", "eval/bright/absent-for-this-test.json")
     rows = ch.bright_rows()
     assert [row["subset"] for row in rows] == ["pony", "biology"]
     assert rows[0]["arms"] == {"bm25": 0.1221, "dense": 0.0398, "hybrid": 0.1281}
     macro = sum(row["arms"]["hybrid"] for row in rows) / len(rows)
     assert macro == pytest.approx(0.1535, abs=1e-4)
+
+
+def test_bright_rows_merges_the_adapted_arm_beside_the_bge_one(tmp_path, monkeypatch):
+    """The adapted encoder is drawn as an extra arm, never as a replacement for the bge one."""
+    base = tmp_path / "report.json"
+    base.write_text(json.dumps({"subsets": {"pony": {
+        "documents": 7894, "queries": 112,
+        "summary": {"bm25": {"nDCG@10": 0.1221}, "dense": {"nDCG@10": 0.0398},
+                    "hybrid": {"nDCG@10": 0.1281}},
+    }}}))
+    adapted = tmp_path / "report-laya.json"
+    adapted.write_text(json.dumps({"subsets": {"pony": {
+        "summary": {"bm25": {"nDCG@10": 0.1221}, "dense": {"nDCG@10": 0.0196},
+                    "hybrid": {"nDCG@10": 0.0715}},
+    }}}))
+    monkeypatch.setattr(ch, "BRIGHT_REPORTS", (str(base),))
+    # An absolute path is used verbatim by the `ROOT / name` join.
+    monkeypatch.setattr(ch, "BRIGHT_ADAPTED_REPORT", str(adapted))
+    rows = ch.bright_rows()
+    assert rows[0]["arms"]["dense"] == 0.0398
+    assert rows[0]["arms"]["dense (Laya adapted)"] == 0.0196
 
 
 def test_bright_skips_a_missing_report_rather_than_inventing_a_subset(tmp_path, monkeypatch):
