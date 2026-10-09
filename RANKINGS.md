@@ -70,6 +70,28 @@ with BGE-large*, not ahead of it. The caveat is unchanged and still matters: thi
 configuration per dataset. A single deployable configuration (`bge-small` + fused BM25) is 0.452
 on the five-dataset mean, which is a different and weaker claim than 0.495.
 
+### The Laya-native dense channel (adapted encoder)
+
+The engine now auto-adopts a retrieval adaptation of Laya's **own** encoder when one is on disk
+(`models/laya-retrieval`, built by `make laya-finetune`), fusing it at `ADAPTED_DENSE_WEIGHT=0.3`
+instead of the historical `auto → 1.0`. Its rows (`eval/beir/five-adapted.json`):
+
+| dataset | shipped lexical | adapted dense | adapted + fused BM25 | `bge-small` + fused BM25 |
+| --- | --- | --- | --- | --- |
+| SciFact | 0.676 | 0.531 | **0.688** | 0.741 |
+| NFCorpus | 0.324 | 0.270 | **0.339** | 0.367 |
+| ArguAna | 0.417 | 0.475 | **0.462** | 0.568 |
+| SciDocs | 0.150 | 0.129 | **0.164** | 0.199 |
+| FiQA-2018 | 0.239 | 0.217 | **0.280** | 0.382 |
+| **mean (4)** | **0.392** | — | **0.413** | **0.469** |
+
+A 307M Laya-native encoder replaces a 33M `bge-small` and improves on lexical-only on all five,
+but it is a **0.056 regression against the `bge-small` configuration**, and it loses to BM25 on
+MultiHop-RAG ordering (MAP@10 0.2490 vs 0.2534) and on BRIGHT dense. Both configurations are
+therefore kept and drawn side by side: the `bge-small` row is labelled the higher-scoring
+alternative, not hidden. Full refresh and the judge trade-off:
+[`docs/findings-encoder-adaptation.md`](docs/findings-encoder-adaptation.md).
+
 ## The evaluator was mis-scoring ArguAna
 
 ArguAna is the one BEIR corpus whose queries **are** corpus documents: 1,298 of its 1,406 test

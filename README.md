@@ -464,10 +464,11 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
 | `RERANK_MIN_DOCS` | `0` | guarantee that the first N kept passages are N distinct documents (prefix diversity for an evidence bundle). It left document-level nDCG exactly unchanged on 300 SciFact queries and can add documents a shorter `top_k` would cut; `0` keeps the pure passage order |
 | `QUERY_CACHE_SIZE` | `128` | recent query embeddings cached in memory, so a repeated question skips its one dense cost; `0` disables it (vectors only, never results) |
-| `EMBED_MODEL` | unset | retrieval-trained bi-encoder for the dense channel; unset uses Laya's own encoder |
+| `EMBED_MODEL` | auto-detected at `models/laya-retrieval` | dense-channel embedder. Auto-adopted when a retrieval adaptation of Laya's own encoder is on disk (built by `make laya-finetune` + `tools/package_model.py`); `models/` is gitignored, so a fresh clone falls back to Laya's own encoder and the channel stays off. An explicit value always wins |
 | `EMBED_POOLING` | `auto` | `cls` for BGE-family models, `mean` otherwise — BGE is trained with `[CLS]` |
 | `EMBED_QUERY_INSTRUCTION` | `false` | prepend the model's retrieval instruction to queries |
-| `DENSE_WEIGHT` / `LEXICAL_WEIGHT` | `auto` / `1.0` | RRF channel weights; `auto` is `0` for Laya's encoder and `1` for a configured `EMBED_MODEL` |
+| `DENSE_WEIGHT` / `LEXICAL_WEIGHT` | `auto` / `1.0` | RRF channel weights. `auto` is `0` for Laya's own encoder (unweighted dense lowered every BEIR score), **`0.3` for an auto-detected Laya retrieval adaptation** (`ADAPTED_DENSE_WEIGHT`; `1.0` over-diluted it — SciFact 0.6459 → **0.6799** at 0.3), and `1` for any other configured `EMBED_MODEL` |
+| `ADAPTED_DENSE_WEIGHT` | `0.3` | the `auto` weight used for an auto-detected Laya retrieval adaptation. The measured optimum is corpus-dependent (≈0.1–0.5 where BM25 dominates, ≈1.0 where the dense channel does), so this is the deployable single default and `DENSE_WEIGHT` overrides it |
 | `SPARSE_MODEL` | unset | learned-sparse (SPLADE-style) third channel; measured on BEIR at **+0.03–0.14** over BM25 alone. At the engine level on SciFact it is **+0.0179** (p=0.025) under fixed chunking and **+0.0048** (ns) under the now-default corpus-aware chunking — the two recover overlapping loss, and the combination scores best (0.7465). Indexing encodes every chunk with it, so it is opt-in |
 | `SPARSE_WEIGHT` / `SPARSE_TOP_K` | `1.0` / `128` | its RRF weight and the terms kept per vector |
 | `SPARSE_BATCH_TEXTS` | `16` | texts per encoder batch |
@@ -937,6 +938,17 @@ unidentified (`docs/findings-bioasq.md`).
 | SciDocs | 1000 | 0.150 | 0.197 | 0.199 | 0.222 | **0.225** |
 | FiQA-2018 | 648 | 0.239 | 0.385 | 0.382 | 0.438 | **0.444** |
 | **5-dataset mean** | — | **0.361** | **0.447** | **0.452** | **0.490** | **0.495** |
+
+**The Laya-native dense channel.** The engine's *own* encoder is now retrieval-adapted
+(`make laya-finetune`) and auto-adopted as the default dense channel at
+`ADAPTED_DENSE_WEIGHT=0.3`, so a fresh checkout with `models/laya-retrieval` present is
+dense-native instead of lexical-only. It beats the shipped lexical column on **all five**
+datasets — 4-dataset deployable mean **0.392 → 0.413** — but it is **below the `bge-small`
+column it would replace** (**0.469**), and it loses to BM25 on MultiHop-RAG ordering
+(MAP@10 0.2490 vs 0.2534) and on BRIGHT dense. Both configurations are therefore kept and
+drawn side by side, with the `bge-small` row labelled the higher-scoring alternative. The
+trade-off is stated in full in
+[docs/findings-encoder-adaptation.md](docs/findings-encoder-adaptation.md).
 
 The ensemble is the one lever in this programme that beat its estimate, and it beats it on every
 corpus: against the corresponding single-model row it is +0.025 SciFact, +0.019 NFCorpus, +0.083

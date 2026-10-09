@@ -257,6 +257,16 @@ published system in the benchmark's own Table 5, reranking included — with the
 that the published table has no lexical baseline and plain BM25 already beats it. A model-free
 coverage pass lifts MAP@10 from 0.255 to 0.279.
 
+**The shipped dense channel has changed, and it is not yet the best one.** The engine now
+auto-adopts a retrieval adaptation of Laya's **own** encoder (`models/laya-retrieval`, built by
+`make laya-finetune`) at `ADAPTED_DENSE_WEIGHT=0.3`. Measured with Run D (460k MS MARCO-heavy
+pairs, batch 64), it beats the lexical-only default on all five BEIR datasets — 4-dataset
+deployable mean **0.392 → 0.413** — but remains **below the 33M `bge-small` configuration
+(0.469)**, and loses to BM25 on MultiHop-RAG ordering (MAP@10 0.2490 vs 0.2534) and on BRIGHT
+dense. Both configurations are kept and drawn side by side: the `bge-small` row is the
+higher-scoring alternative. Detail and the judge trade-off:
+[`docs/findings-encoder-adaptation.md`](docs/findings-encoder-adaptation.md).
+
 **Cannot be claimed.** There is no end-to-end **ranking**: the first `engine + <generator>` row
 exists only as a **pilot** — 12 answerable plus 8 `null_query` records through the engine at its
 shipped defaults with the local `ornith-1.5:35b`, where **EM 0.000 sits beside a 0.667
