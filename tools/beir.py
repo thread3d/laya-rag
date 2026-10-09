@@ -74,6 +74,32 @@ BEIR_B = 0.4
 
 DEFAULT_DATA_ROOT = ROOT / "eval" / "beir"
 
+#: Where `tools/laya_encoder_finetune.py` + `tools/package_model.py` leave a retrieval
+#: adaptation of Laya's own encoder. `models/` is gitignored, so harnesses adopt it only when
+#: it exists; a fresh clone falls back to the stock bi-encoder rows exactly as before.
+ADAPTED_RETRIEVAL_DIR = ROOT / "models" / "laya-retrieval"
+#: The short name harnesses accept for it, so a report row reads `laya-adapted dense` rather
+#: than a filesystem path, and so the same alias works across every harness.
+ADAPTED_RETRIEVAL_ALIAS = "laya-adapted"
+
+
+def adapted_retrieval_model() -> str | None:
+    """Path to the locally trained Laya retrieval encoder, or None when it is absent."""
+    return (
+        str(ADAPTED_RETRIEVAL_DIR)
+        if (ADAPTED_RETRIEVAL_DIR / "model.safetensors").is_file()
+        else None
+    )
+
+
+def model_aliases(base: dict[str, str]) -> dict[str, str]:
+    """``base`` plus the adapted-encoder alias when the artefact is on disk."""
+    resolved = dict(base)
+    path = adapted_retrieval_model()
+    if path:
+        resolved[ADAPTED_RETRIEVAL_ALIAS] = path
+    return resolved
+
 REFERENCES = {
     "BEIR paper": "https://arxiv.org/abs/2104.08663",
     "BEIR code": "https://github.com/UKPLab/beir",
@@ -299,13 +325,25 @@ class LayaEmbedder:
 
         self._model = LayaModel(config)
         self._model.ensure_loaded()
-        self.name = f"laya-{config.checkpoint}"
+        # A checkpoint may be a name (`multilingual`) or a path to an adapted checkpoint;
+        # the path must not leak separators into the embedding-cache filename.
+        checkpoint = str(config.checkpoint)
+        label = Path(checkpoint).name
+        if label.startswith("laya-"):
+            label = label[len("laya-"):]
+        self.name = f"laya-{label}"
 
-    def embed(self, texts: Sequence[str]) -> np.ndarray:
+    def embed(self, texts: Sequence[str], fixed_length: bool = False) -> np.ndarray:
+        """Embed documents; ``fixed_length`` is accepted for parity and ignored.
+
+        ``BiEncoder`` uses a fixed-width mode so streaming construction does not grow torch's
+        per-shape MPS graph cache. Laya's pooled ``embed_fn`` pads dynamically and exposes no
+        such mode, so the flag is a no-op here rather than a second code path.
+        """
         return np.asarray(self._model.embed(list(texts)), dtype=np.float32)
 
-    def embed_queries(self, texts: Sequence[str]) -> np.ndarray:
-        return self.embed(texts)
+    def embed_queries(self, texts: Sequence[str], fixed_length: bool = False) -> np.ndarray:
+        return self.embed(texts, fixed_length=fixed_length)
 
 
 class BiEncoder:

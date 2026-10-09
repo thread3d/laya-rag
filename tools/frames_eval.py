@@ -150,6 +150,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--title-map", default=str(FRAMES / "title-map.json"),
                     help="dataset-title -> canonical-title map; without it gold coverage is understated")
     ap.add_argument("--model", default="BAAI/bge-small-en-v1.5")
+    ap.add_argument("--batch-size", type=int, default=32,
+                    help="encoder batch size; the 307M Laya-adapted encoder needs 8 on MPS")
+    ap.add_argument("--max-length", type=int, default=512,
+                    help="encoder sequence budget; FRAMES articles are long and ModernBERT "
+                         "advertises 8192, which allocates an 8 GB attention buffer at batch 32")
     ap.add_argument("--top-k", type=int, default=20)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--ensemble-models", default=None,
@@ -195,8 +200,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from sentence_transformers import SentenceTransformer
 
         model = SentenceTransformer(args.model)
+        if args.max_length:
+            model.max_seq_length = args.max_length
         started = time.perf_counter()
-        vectors = model.encode(texts, normalize_embeddings=True, batch_size=32,
+        vectors = model.encode(texts, normalize_embeddings=True, batch_size=args.batch_size,
                                show_progress_bar=False)
         print(f"  embedded {len(titles)} articles in {time.perf_counter() - started:.1f}s", flush=True)
         dense = (titles, vectors, model)
@@ -207,8 +214,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if not name:
                     continue
                 member = SentenceTransformer(name)
+                if args.max_length:
+                    member.max_seq_length = args.max_length
                 started = time.perf_counter()
-                member_vectors = member.encode(texts, normalize_embeddings=True, batch_size=32,
+                member_vectors = member.encode(texts, normalize_embeddings=True,
+                                               batch_size=args.batch_size,
                                                show_progress_bar=False)
                 print(f"  embedded with {name} in {time.perf_counter() - started:.1f}s", flush=True)
                 ensemble.append((name, member, member_vectors))

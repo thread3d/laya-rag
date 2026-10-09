@@ -30,12 +30,13 @@ import beir, evalkit  # noqa: E402
 
 ROOT_BENCH = ROOT / "eval" / "benchmarks" / "multihop-rag"
 
-# Short names accepted on the command line, mapped to the Hub ids the harness embeds.
-MODELS = {
+# Short names accepted on the command line, mapped to the Hub ids the harness embeds. The
+# `laya-adapted` alias is added only when `models/laya-retrieval` exists (see `beir`).
+MODELS = beir.model_aliases({
     "bge-small": "BAAI/bge-small-en-v1.5",
     "bge-base": "BAAI/bge-base-en-v1.5",
     "bge-large": "BAAI/bge-large-en-v1.5",
-}
+})
 
 
 def chunk_text(text: str, size: int, overlap: int) -> list[str]:

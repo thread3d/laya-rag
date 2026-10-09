@@ -43,10 +43,10 @@ from multihop_rerank_experiment import (  # noqa: E402
 )
 
 ROOT_BENCH = ROOT / "eval" / "benchmarks" / "musique"
-MODELS = {
+MODELS = beir.model_aliases({
     "bge-small": "BAAI/bge-small-en-v1.5",
     "bge-base": "BAAI/bge-base-en-v1.5",
-}
+})
 METRICS = ("Hits@10", "Hits@4", "MAP@10", "MRR@10")
 
 
