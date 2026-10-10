@@ -360,13 +360,16 @@ competitive with a retrieval-trained 33M model, and it pays for the gain with th
 
 ## What this does not show
 
-- **The answerability/calibration rows were re-run, but the gate re-fit did not complete.** The
-  served configuration keeps `CHECKPOINT=multilingual` as the judge, so the gate's *scalar* input is
-  unchanged; its pool-derived features do move with the encoder, so a re-fit was attempted. The null
-  half ran in 908 s, but the positive half was still running after ~83 min (roughly 20× the null
-  half's per-query cost) and was stopped. `make answerability-features` and `make calibration-report`
-  were re-run against the existing `gate.json`, so the reliability row still describes the shipped
-  judge. Re-fitting the 13-feature gate on a Run D pool is the outstanding measurement.
+- **The answerability gate was re-fitted on the shipped encoder's pool, and it did not move.** On
+  the 150+150 protocol `gate-features.json` uses, the 13-feature gate reads ROC-AUC **0.8098**
+  [0.7577, 0.8537], ECE 0.0782 and risk@80 0.4099, against the shipped pool's **0.8106** / 0.0695 /
+  0.4097 — every interval overlaps, so swapping the dense channel neither breaks nor improves the
+  gate. The full 601-query re-fit was attempted first and abandoned: the null half takes ~13 s per
+  query against ~1.7 s for the answerable half, so 301 nulls alone are ~20 min of engine calls and
+  the run was stopped after the positive half had not finished. The served configuration keeps
+  `CHECKPOINT=multilingual` as the judge regardless, so the shipped reliability row is the one to
+  quote; the re-fit lives in `eval/calibration-runD.*`, `eval/answerability-features-runD.json` and
+  `docs/charts/reliability-runD.png`.
 - **One seed, one recipe family.** Five runs (A external; B and C adding in-domain pairs; D a larger
   external mix at batch 64; E the `english` checkpoint, not shipped), one epoch each, and D uses
   ~460k of ~1M available gold pairs, with no explicit hard negatives. A GPU-scale run with real hard
