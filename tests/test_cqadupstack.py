@@ -10,6 +10,7 @@ id.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -106,3 +107,61 @@ def test_the_one_corpus_harness_refuses_cqadupstack_with_a_pointer():
     beir = _load("laya_rag_beir_guard", "beir.py")
     with pytest.raises(ValueError, match="cqadupstack.py"):
         beir.ensure_dataset("cqadupstack", ROOT / "eval" / "beir", download=False)
+
+
+# ── the title-weighted row, which `beir.py` emits and this harness did not ──
+
+def _subforum_dir(tmp_path: Path) -> Path:
+    """A one-sub-forum fixture in the release's layout: `corpus.jsonl`, `queries.jsonl`, qrels."""
+    directory = tmp_path / "forum"
+    (directory / "qrels").mkdir(parents=True)
+    rows = [
+        {"_id": "d1", "title": "refund policy billing", "text": "quiet body"},
+        {"_id": "d2", "title": "unrelated", "text": "refund policy billing"},
+    ]
+    (directory / "corpus.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    (directory / "queries.jsonl").write_text(
+        json.dumps({"_id": "q1", "text": "refund policy billing"}) + "\n", encoding="utf-8")
+    (directory / "qrels" / "test.tsv").write_text(
+        "query-id\tcorpus-id\tscore\nq1\td2\t1\n", encoding="utf-8")
+    return directory
+
+
+def test_the_title_row_is_produced_and_scored(tmp_path):
+    cqa = _cqadupstack()
+    detail = cqa.rank_subforum(
+        _subforum_dir(tmp_path), ["bm25-engine", "bm25-title"], top_k=10, k1=0.9, b=0.4,
+        stem=True, include_titles=True, ignore_identical_ids=True, title_boost=2,
+    )
+    assert "bm25-title" in detail["retrievers"]
+    assert "nDCG@10" in detail["retrievers"]["bm25-title"]
+    assert "bm25-title" in detail["per_query_nDCG@10"]
+
+
+def test_the_title_row_is_given_the_titles_and_the_boost(tmp_path, monkeypatch):
+    """The row is only correct if `bm25_rankings` actually receives both."""
+    cqa = _cqadupstack()
+    seen: list[dict] = []
+    real = cqa.beir.bm25_rankings
+
+    def spy(corpus, queries, top_k, **kwargs):
+        seen.append(kwargs)
+        return real(corpus, queries, top_k, **kwargs)
+
+    monkeypatch.setattr(cqa.beir, "bm25_rankings", spy)
+    cqa.rank_subforum(
+        _subforum_dir(tmp_path), ["bm25-title"], top_k=10, k1=0.9, b=0.4,
+        stem=True, include_titles=True, ignore_identical_ids=True, title_boost=2,
+    )
+    assert any(kwargs.get("title_boost") == 2 and kwargs.get("titles") for kwargs in seen)
+
+
+def test_the_title_row_refuses_a_boost_of_one(tmp_path):
+    """A `bm25-title` row at boost 1 would silently be a duplicate of the engine row."""
+    cqa = _cqadupstack()
+    with pytest.raises(SystemExit, match="title-boost"):
+        cqa.rank_subforum(
+            _subforum_dir(tmp_path), ["bm25-title"], top_k=10, k1=0.9, b=0.4,
+            stem=True, include_titles=True, ignore_identical_ids=True, title_boost=1,
+        )

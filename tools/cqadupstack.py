@@ -60,7 +60,7 @@ PUBLISHED_BM25_CQADUPSTACK: float = published.NDCG10["CQADupStack"]["BM25"]
 #: The retrievers this tool can run. Every other corpus row in this repository that was measured
 #: lexical-only is lexical-only for the same reason — a dense arm needs its own embedding pass over
 #: the whole corpus — so the second stage is deliberately absent rather than quietly unsupported.
-LEXICAL_RETRIEVERS: tuple[str, ...] = ("bm25", "bm25-engine")
+LEXICAL_RETRIEVERS: tuple[str, ...] = ("bm25", "bm25-engine", "bm25-title")
 
 
 def ensure_subforums(data_root: Path, *, download: bool = True) -> Path:
@@ -105,6 +105,7 @@ def rank_subforum(
     stem: bool,
     include_titles: bool,
     ignore_identical_ids: bool,
+    title_boost: int = 1,
 ) -> dict[str, Any]:
     """Run each retriever over one sub-forum and score it exactly as `beir.py` scores a dataset."""
     corpus = beir.load_corpus(directory, include_titles=include_titles)
@@ -112,6 +113,10 @@ def rank_subforum(
     qrels = beir.load_qrels(directory)
     # Only rank the queries that have qrels; that is what BEIR scores.
     queries = {qid: text for qid, text in all_queries.items() if qid in qrels}
+    # `bm25-title` repeats each document's title before its body, the same BM25F-style variant
+    # `beir.py` emits. It is keyed off the boost rather than off the retriever name there, and the
+    # same convention is kept here so one `--title-boost` means one thing across both harnesses.
+    titles = beir.load_titles(directory) if title_boost > 1 else None
 
     results: dict[str, Any] = {}
     per_query: dict[str, dict[str, float]] = {}
@@ -119,6 +124,13 @@ def rank_subforum(
         started = time.perf_counter()
         if retriever == "bm25":
             ranking = beir.bm25_rankings(corpus, queries, top_k, k1=k1, b=b)
+        elif retriever == "bm25-title":
+            if title_boost <= 1:
+                raise SystemExit("bm25-title needs --title-boost above 1")
+            ranking = beir.bm25_rankings(
+                corpus, queries, top_k, k1=k1, b=b, drop_stopwords=True, stem=stem,
+                titles=titles, title_boost=title_boost,
+            )
         else:  # bm25-engine
             ranking = beir.bm25_rankings(
                 corpus, queries, top_k, k1=k1, b=b, drop_stopwords=True, stem=stem
@@ -214,6 +226,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--b", type=float, default=beir.BEIR_B)
     parser.add_argument("--no-stem", dest="stem", action="store_false")
     parser.add_argument("--no-titles", action="store_true")
+    parser.add_argument("--title-boost", type=int, default=1,
+                        help="repeat each title N times before the body for a bm25-title row; "
+                             "2 is the setting the rest of the BEIR rows use")
     parser.add_argument("--keep-identical-ids", action="store_true")
     parser.add_argument("--baseline", default="bm25-engine")
     parser.add_argument("--bootstrap-samples", type=int, default=10000)
@@ -259,6 +274,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             directory, wanted, top_k=args.top_k, k1=args.k1, b=args.b, stem=stem,
             include_titles=not args.no_titles,
             ignore_identical_ids=not args.keep_identical_ids,
+            title_boost=args.title_boost,
         )
         per_forum[name] = detail
         engine = detail["retrievers"].get("bm25-engine", {})

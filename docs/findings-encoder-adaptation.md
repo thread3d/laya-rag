@@ -298,7 +298,7 @@ parameter-count extrapolation predicts. Bucketed padding (`--pad-bucket`, the ne
 per-shape MPS graph cache bounded without paying for absent tokens, but recovered only ~3% here
 because these batches already sit near 128 tokens.
 
-## The BEIR-18 pass — six cells up, and the caption corrected
+## The BEIR-18 pass — seven cells up, and the caption corrected
 
 The figure's engine row is a **best-per-dataset over everything measured here**, so improving it means
 improving individual cells. Two moves, both cheap relative to the multi-million-document members:
@@ -311,7 +311,15 @@ tool keys the `bm25-title` row off the boost, not off the retriever name):
 | NQ | 0.3118 | **0.3264** |
 | DBPedia-entity | 0.3053 | **0.3166** |
 | Climate-FEVER | 0.1610 | **0.1657** |
+| CQADupStack | 0.2988 | **0.3046** |
 | ROBUST04 / Signal-1M / Quora / Touché-2020 | — | no-op or worse |
+
+CQADupStack needed a tooling fix first: `tools/beir.py` refuses it (twelve sub-collections behind one
+BEIR name) and `tools/cqadupstack.py`, the adapter that exists for exactly that reason, had no
+title-boost flag, so the member could not be given the row the others had. It now takes
+`--title-boost` and emits a `bm25-title` row through the same `beir.bm25_rankings` path, with the
+`bm25` and `bm25-engine` rows reproducing exactly (0.2988 and 0.2943), which is what makes the new
+row trustworthy rather than merely higher.
 
 **The adapted dense channel, fused at weight 0.3**, on the members whose corpora this host can embed:
 
@@ -321,7 +329,7 @@ tool keys the `bm25-title` row off the boost, not off the retriever name):
 | ROBUST04 | 0.4077 | 0.3688 | **0.4405** |
 | TREC-NEWS | 0.3351 | 0.3353 | **0.3745** |
 
-Together the engine's **BEIR-18 best-per-dataset macro moves 0.4665 → 0.4760 (+0.0095)**. The
+Together the engine's **BEIR-18 best-per-dataset macro moves 0.4665 → 0.4764 (+0.0099)**. The
 unaffected cells are unchanged. The matrix figure's caption was also wrong and is corrected: it said
 dashes marked datasets this engine had not run, but the grid is six systems across eighteen datasets
 and **none of the 108 cells is missing** — all five published systems report all 18, and so does the
@@ -330,9 +338,8 @@ engine — so the figure draws no dashes and no longer claims to.
 **Culled, with the reason.** `fever` (6,666 judged queries over 5.4M documents) and `hotpotqa` (7,405
 over 5.2M) cost roughly 8 h each for an uncertain gain; `bioasq` (14.9M) about 5 h for one cell that
 already beats the best published system; and `msmarco` is a training collection rather than one of the
-18, so it cannot move this row at all. Also culled after a failed run: `cqadupstack` is twelve
-sub-collections behind one name, so `tools/beir.py` refuses it and `tools/cqadupstack.py` has no
-title-boost flag.
+18, so it cannot move this row at all. CQADupStack was culled for the same reason on the first pass —
+its adapter had no title-boost flag — and is now closed rather than culled.
 
 ## What the pre-registered bar says
 
