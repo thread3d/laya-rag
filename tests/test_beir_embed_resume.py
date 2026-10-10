@@ -137,3 +137,66 @@ def test_parts_are_cleaned_up_after_a_successful_pass(tmp_path):
     cache = tmp_path / "c"
     beir.cached_embed(FakeEmbedder(), _corpus(15), cache, chunk=5)
     assert not Path(str(cache) + ".parts").exists()
+
+
+# ── the cache must not outlive the model it was built from ────────────────
+#
+# The cache filename is a model *basename*, so retraining a model and packaging it at the
+# same path kept the name and silently reused the previous model's vectors. That happened
+# during the adapted-encoder campaign and produced three benchmarks' worth of wrong rows.
+
+class FingerprintedEmbedder(FakeEmbedder):
+    def __init__(self, fingerprint: str, fail_on_call: int | None = None):
+        super().__init__(fail_on_call)
+        self.fingerprint = fingerprint
+
+
+def test_a_changed_model_fingerprint_re_embeds(tmp_path):
+    corpus = _corpus(10)
+    cache = tmp_path / "c"
+    beir.cached_embed(FingerprintedEmbedder("aaa"), corpus, cache, chunk=0)
+    changed = FingerprintedEmbedder("bbb")
+    beir.cached_embed(changed, corpus, cache, chunk=0)
+    assert changed.calls, "a repackaged model must not inherit the old vectors"
+    assert json.loads(Path(str(cache) + ".meta.json").read_text())["model"] == "bbb"
+
+
+def test_the_same_fingerprint_still_reuses_the_cache(tmp_path):
+    corpus = _corpus(10)
+    cache = tmp_path / "c"
+    beir.cached_embed(FingerprintedEmbedder("same"), corpus, cache, chunk=0)
+    again = FingerprintedEmbedder("same")
+    beir.cached_embed(again, corpus, cache, chunk=0)
+    assert again.calls == []
+
+
+def test_a_legacy_cache_is_adopted_once_and_stamped(tmp_path):
+    """Caches written before fingerprints existed are kept, then protected from then on."""
+    corpus = _corpus(8)
+    cache = tmp_path / "c"
+    vectors = beir.cached_embed(FingerprintedEmbedder("v1"), corpus, cache, chunk=0)
+    meta = Path(str(cache) + ".meta.json")
+    payload = json.loads(meta.read_text())
+    payload.pop("model")
+    meta.write_text(json.dumps(payload))
+
+    adopted = FingerprintedEmbedder("v2")
+    assert np.array_equal(beir.cached_embed(adopted, corpus, cache, chunk=0), vectors)
+    assert adopted.calls == [], "an unstamped cache is adopted, not thrown away"
+    assert json.loads(meta.read_text())["model"] == "v2"
+
+    changed = FingerprintedEmbedder("v3")
+    beir.cached_embed(changed, corpus, cache, chunk=0)
+    assert changed.calls, "once stamped, the next repackage is caught"
+
+
+def test_model_fingerprint_tracks_the_contents_of_a_directory(tmp_path):
+    model = tmp_path / "m"
+    model.mkdir()
+    (model / "config.json").write_text("{}", encoding="utf-8")
+    (model / "model.safetensors").write_bytes(b"weights")
+    first = beir.model_fingerprint(str(model))
+    (model / "model.safetensors").write_bytes(b"different weights")
+    assert beir.model_fingerprint(str(model)) != first
+    # A Hub id has no local contents, so the id is its own identity.
+    assert beir.model_fingerprint("BAAI/bge-small-en-v1.5") == "BAAI/bge-small-en-v1.5"

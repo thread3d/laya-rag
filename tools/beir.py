@@ -35,6 +35,7 @@ import time
 import urllib.request
 import zipfile
 from pathlib import Path
+import hashlib
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -99,6 +100,29 @@ def model_aliases(base: dict[str, str]) -> dict[str, str]:
     if path:
         resolved[ADAPTED_RETRIEVAL_ALIAS] = path
     return resolved
+
+
+def model_fingerprint(model_id: str) -> str:
+    """A short fingerprint of an embedder's *contents*, for embedding-cache identity.
+
+    Embedding caches are named from the model's directory basename, which does not change when
+    a retrained model is packaged at the same path — so a repackage silently reuses the
+    previous model's vectors. That happened during the adapted-encoder campaign: MultiHop,
+    BRIGHT and MuSiQue reported the old encoder's numbers under the new one's name.
+
+    A local directory is fingerprinted over the ``(relative path, size, mtime)`` of every file
+    in it, which changes as soon as the weights do. A Hub id is its own identity, because there
+    is nothing local to hash. Recorded in the cache's ``.meta.json`` and checked on reuse.
+    """
+    path = Path(model_id).expanduser()
+    if not path.is_dir():
+        return model_id
+    digest = hashlib.sha1()
+    for candidate in sorted(item for item in path.rglob("*") if item.is_file()):
+        stat = candidate.stat()
+        digest.update(candidate.relative_to(path).as_posix().encode("utf-8"))
+        digest.update(f":{stat.st_size}:{int(stat.st_mtime)}".encode("utf-8"))
+    return digest.hexdigest()[:12]
 
 REFERENCES = {
     "BEIR paper": "https://arxiv.org/abs/2104.08663",
@@ -332,6 +356,8 @@ class LayaEmbedder:
         if label.startswith("laya-"):
             label = label[len("laya-"):]
         self.name = f"laya-{label}"
+        # The cache is named from `name`, so the weights must be fingerprinted separately.
+        self.fingerprint = model_fingerprint(str(self._model.weights_path()))
 
     def embed(self, texts: Sequence[str], fixed_length: bool = False) -> np.ndarray:
         """Embed documents; ``fixed_length`` is accepted for parity and ignored.
@@ -391,6 +417,8 @@ class BiEncoder:
         # Documents never take the query instruction, so the embedding cache is keyed by
         # model and pooling only — the instruction setting is a query-side choice.
         self.name = f"{model_id.rsplit('/', 1)[-1]}.{pooling}"
+        # `name` is a basename, so a repackaged directory keeps it; fingerprint the contents.
+        self.fingerprint = model_fingerprint(model_id)
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModel.from_pretrained(model_id).to(device).eval()
 
@@ -486,6 +514,14 @@ class CrossEncoder:
         return out
 
 
+def write_cache_meta(meta_file: Path, chunk: int, count: int, fingerprint: str | None) -> None:
+    """Record what a cached embedding pass was built from (chunk size and model contents)."""
+    payload: dict[str, Any] = {"chunk": chunk, "count": count}
+    if fingerprint:
+        payload["model"] = fingerprint
+    meta_file.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def cached_embed(
     embedder: Any,
     corpus: Mapping[str, str],
@@ -515,15 +551,32 @@ def cached_embed(
     ids_file = Path(str(cache) + ".ids.json")
     vectors_file = Path(str(cache) + ".npy")
     meta_file = Path(str(cache) + ".meta.json")
+    # The cache name is a basename, so the model's *contents* are checked separately: a
+    # retrained encoder packaged at the same path must not inherit the old vectors.
+    fingerprint = getattr(embedder, "fingerprint", None)
     if use_cache and vectors_file.is_file() and ids_file.is_file():
         if json.loads(ids_file.read_text(encoding="utf-8")) == ids:
             recorded = 0
+            recorded_model = None
             if meta_file.is_file():
-                recorded = int(json.loads(meta_file.read_text(encoding="utf-8")).get("chunk", 0))
-            if recorded == chunk:
+                recorded_meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                recorded = int(recorded_meta.get("chunk", 0))
+                recorded_model = recorded_meta.get("model")
+            if recorded != chunk:
+                print(f"  cache was built at chunk={recorded}, want {chunk}; re-embedding", flush=True)
+            elif fingerprint and recorded_model not in (None, fingerprint):
+                print(f"  cache holds a different {embedder.name} "
+                      f"({recorded_model} vs {fingerprint}); re-embedding", flush=True)
+            else:
+                if fingerprint and recorded_model is None:
+                    # Legacy cache written before fingerprints existed. Adopt it once and
+                    # stamp it, so the next repackage is caught rather than every old cache
+                    # being thrown away.
+                    write_cache_meta(meta_file, chunk, len(ids), fingerprint)
+                    print(f"  cache predates model fingerprints; stamped {embedder.name} "
+                          f"as {fingerprint}", flush=True)
                 print(f"  reusing cached {embedder.name} embeddings ({vectors_file.name})", flush=True)
                 return np.load(vectors_file)
-            print(f"  cache was built at chunk={recorded}, want {chunk}; re-embedding", flush=True)
 
     print(f"  embedding {len(ids)} documents with {embedder.name}", flush=True)
     started = time.perf_counter()
@@ -561,7 +614,7 @@ def cached_embed(
         cache.parent.mkdir(parents=True, exist_ok=True)
         np.save(vectors_file, vectors)
         ids_file.write_text(json.dumps(ids), encoding="utf-8")
-        meta_file.write_text(json.dumps({"chunk": chunk, "count": len(ids)}), encoding="utf-8")
+        write_cache_meta(meta_file, chunk, len(ids), fingerprint)
         if chunk > 0:
             shutil.rmtree(Path(str(cache) + ".parts"), ignore_errors=True)
     return vectors

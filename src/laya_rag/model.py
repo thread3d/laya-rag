@@ -91,6 +91,17 @@ class LayaModel:
             "holding laya/ (plus laya-multilingual/ and laya-typed-decisions/)."
         )
 
+    def weights_path(self) -> Path:
+        """The directory holding the weights this handle serves (checkpoint root + subfolder).
+
+        Embedding caches are named from a model's basename, which does not move when a
+        retrained checkpoint is packaged at the same path; exposing the resolved directory lets
+        a caller fingerprint its contents and notice the change.
+        """
+        spec, subfolder = self._resolve_spec()
+        root = Path(spec)
+        return root / subfolder if subfolder else root
+
     def ensure_loaded(self) -> Any:
         """Load the checkpoint on first use and return the agent."""
         with self._lock:
