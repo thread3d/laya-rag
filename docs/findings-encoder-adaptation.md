@@ -322,9 +322,10 @@ tool keys the `bm25-title` row off the boost, not off the retriever name):
 | TREC-NEWS | 0.3351 | 0.3353 | **0.3745** |
 
 Together the engine's **BEIR-18 best-per-dataset macro moves 0.4665 → 0.4760 (+0.0095)**. The
-unaffected cells are unchanged, and **every one of the 18 is measured**, so the matrix's caption is
-corrected: a dash is a cell a *published* system does not report, not a dataset of ours that has not
-been run.
+unaffected cells are unchanged. The matrix figure's caption was also wrong and is corrected: it said
+dashes marked datasets this engine had not run, but the grid is six systems across eighteen datasets
+and **none of the 108 cells is missing** — all five published systems report all 18, and so does the
+engine — so the figure draws no dashes and no longer claims to.
 
 **Culled, with the reason.** `fever` (6,666 judged queries over 5.4M documents) and `hotpotqa` (7,405
 over 5.2M) cost roughly 8 h each for an uncertain gain; `bioasq` (14.9M) about 5 h for one cell that

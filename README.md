@@ -837,7 +837,7 @@ make charts                  # tables + error bars + docs/charts/*.png, from tho
 make charts-compare          # the cross-system comparison figures alone, no reruns
 ```
 
-![BEIR nDCG@10 by system and dataset: this engine against five published systems. All 18 datasets are measured here, so a dash is a cell a published system does not report](docs/charts/cmp_beir18_matrix.png)
+![BEIR nDCG@10 by system and dataset: this engine against five published systems, all six on all 18 datasets](docs/charts/cmp_beir18_matrix.png)
 
 Drawing the charts needs `matplotlib` (declared in the `eval` extra), and nothing else new:
 it was installed here without disturbing the pinned `torch`/`transformers`, which is worth
