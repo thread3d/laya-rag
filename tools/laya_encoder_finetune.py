@@ -101,10 +101,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--query-len", type=int, default=64)
     ap.add_argument("--max-len", type=int, default=128)
     ap.add_argument("--dynamic-padding", action="store_true",
-                    help="pad each batch to its own longest sequence. Faster per step, but on "
-                         "MPS torch caches a graph per shape and the cache grows until the run "
-                         "OOMs (measured at 35 GB after ~150 steps at batch 64), so fixed-width "
-                         "padding is the default")
+                    help="pad each batch to its own longest sequence. Fastest per step in "
+                         "theory, but on MPS torch caches a graph per shape and the cache grows "
+                         "until the run OOMs (measured at 35 GB after ~150 steps at batch 64)")
+    ap.add_argument("--pad-bucket", type=int, default=32,
+                    help="pad each batch up to the next multiple of this many tokens: a handful "
+                         "of shapes (bounded MPS graph cache) without paying for tokens the batch "
+                         "does not have. 0 pads to the exact batch maximum; ignored with "
+                         "--pad-to-max")
+    ap.add_argument("--pad-to-max", action="store_true",
+                    help="pad every batch to --max-len/--query-len (the previous default; "
+                         "correct but wastes the difference on short passages)")
     ap.add_argument("--empty-cache-steps", type=int, default=50,
                     help="release the MPS allocator every N optimiser steps (0 disables)")
     ap.add_argument("--seed", type=int, default=17)
@@ -353,21 +360,42 @@ def batch_vectors(
     max_length: int,
     device: str,
     pad_to_max: bool = True,
+    bucket: int = 32,
 ) -> Any:
     """Mean-pooled embeddings for one batch.
 
-    ``pad_to_max`` is the default because torch's MPS backend caches a compiled graph **per
-    tensor shape**: dynamic padding gives every batch a different width, so the cache grows
-    without bound until the run dies with an MPS OOM (measured: 35 GB of "other allocations"
-    after ~150 steps at batch 64). Padding to a constant width keeps the shape fixed.
+    Padding width is chosen to keep torch's MPS graph cache bounded **without** wasting
+    compute. The backend caches a compiled graph per tensor shape, so fully dynamic padding
+    grows that cache without bound until the run dies with an MPS OOM (measured: 35 GB of
+    "other allocations" after ~150 steps at batch 64 while thrashing). Padding every batch to
+    the full ``max_length`` fixes the cache but pays for tokens that are not there: MS MARCO
+    passages average ~50 tokens, so a 128-wide pad doubles the work for nothing.
+
+    The default is therefore to pad up to the next multiple of ``bucket`` — at most
+    ``max_length`` padded positions are rounded up to the next bucket, which gives a handful of
+    distinct shapes (bounded cache) and close to the batch's real width (little waste).
+    ``bucket=0`` pads to the exact batch maximum, and ``pad_to_max`` restores full-width padding.
+    Padded positions are masked and excluded from the mean, so the three modes are numerically
+    equivalent.
     """
     encoded = tok(
-        list(texts),
-        padding="max_length" if pad_to_max else True,
-        truncation=True,
-        max_length=max_length,
-        return_tensors="pt",
+        list(texts), padding=True, truncation=True, max_length=max_length, return_tensors="pt"
     )
+    width = int(encoded["input_ids"].shape[1])
+    if pad_to_max:
+        target = max_length
+    elif bucket and bucket > 1:
+        target = min(max_length, max(bucket, ((width + bucket - 1) // bucket) * bucket))
+    else:
+        target = width
+    if target > width:
+        pad_id = tok.pad_token_id if tok.pad_token_id is not None else 0
+        encoded["input_ids"] = torch.nn.functional.pad(
+            encoded["input_ids"], (0, target - width), value=pad_id
+        )
+        encoded["attention_mask"] = torch.nn.functional.pad(
+            encoded["attention_mask"], (0, target - width), value=0
+        )
     encoded = {key: value.to(device) for key, value in encoded.items()}
     hidden = encoder(**encoded).last_hidden_state
     return mean_pool(hidden, encoded["attention_mask"])
@@ -463,8 +491,10 @@ def export_hf(agent: Any, encoder: Any, out: Path, metadata: dict[str, Any] | No
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    # Fixed-width padding unless the caller explicitly asks for dynamic padding (see the flag).
-    args.pad_to_max = not args.dynamic_padding
+    # Padding policy: bucketed by default (bounded MPS graph cache, little waste); `--pad-to-max`
+    # restores full-width padding, `--dynamic-padding` the unbucketed batch maximum.
+    if args.dynamic_padding:
+        args.pad_bucket = 0
     from heavylock import heavy_job_guard
 
     heavy_job_guard("laya_encoder_finetune.py")
@@ -571,10 +601,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 queries = [pairs[i][0] for i in indices]
                 documents = [pairs[i][1] for i in indices]
                 query_vectors = batch_vectors(
-                    torch, encoder, agent.tok, queries, args.query_len, device, args.pad_to_max
+                    torch, encoder, agent.tok, queries, args.query_len, device,
+                    args.pad_to_max, args.pad_bucket,
                 )
                 doc_vectors = batch_vectors(
-                    torch, encoder, agent.tok, documents, args.max_len, device, args.pad_to_max
+                    torch, encoder, agent.tok, documents, args.max_len, device,
+                    args.pad_to_max, args.pad_bucket,
                 )
                 block = (
                     false_negative_blocks(torch, queries, documents, positives, device)
