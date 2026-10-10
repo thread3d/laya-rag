@@ -434,7 +434,13 @@ def multihop_gaps(official: Mapping[str, Any], published_rows: Sequence[Sequence
 # ── figures ───────────────────────────────────────────────────────────────
 
 def chart_beir_matrix(outdir: Path, plt: Any) -> bool:
-    """Six systems across all 18 BEIR datasets; our unmeasured datasets are gaps, not zeros."""
+    """Six systems across all 18 BEIR datasets.
+
+    Every one of the 18 is measured here, so a dash in *our* row would be a bug, not a gap —
+    `make consistency-check` is the gate for that. A dash in a published system's row means that
+    system does not report that dataset; the five published systems between them cover 18, but
+    not each of them 18.
+    """
     rows = our_rows()
     datasets = list(BEIR_ORDER)
     names = ["this engine (best measured row)"] + [f"{s} (published)" for s in published.SYSTEMS]
@@ -467,7 +473,8 @@ def chart_beir_matrix(outdir: Path, plt: Any) -> bool:
     ax.set_xticklabels([LABEL[name] for name in datasets], rotation=45, ha="right", fontsize=8)
     ax.set_yticks(range(len(names)))
     ax.set_yticklabels(names, fontsize=8)
-    ax.set_title("BEIR nDCG@10 by system and dataset — dashes are datasets this engine has not run")
+    ax.set_title("BEIR nDCG@10 by system and dataset — this engine on all 18; "
+                 "a dash is a cell the published system does not report")
     ax.grid(False)
     fig.colorbar(image, ax=ax, shrink=0.85, label="nDCG@10")
     cmp._save(fig, outdir, "cmp_beir18_matrix.png", plt)

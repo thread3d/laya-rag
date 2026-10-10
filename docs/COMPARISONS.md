@@ -112,7 +112,9 @@ Two panels, two memberships, and they are not interchangeable:
 
 - **Left.** The paper's 18-dataset macro for its five systems — SPLADE **0.474**, Contriever
   **0.448**, BM25 **0.429**, uniCOIL **0.428**, TAS-B **0.424** — beside this engine's macro over
-  **all 18 datasets: 0.4665**. This is the first round in which the two bars are over the *same*
+  **all 18 datasets: 0.4760** (0.4665 before the title-weighted and adapted-dense pass, which moved
+  six cells; see [`findings-encoder-adaptation.md`](findings-encoder-adaptation.md)). This is the
+  first round in which the two bars are over the *same*
   membership, so the *different membership — not comparable* annotation is gone: the engine lands
   between Contriever and SPLADE, above BM25 and uniCOIL. (It read **0.4979 over 13** before the
   recovered corpora landed, 0.4737 over 16 and 0.4634 over 17, so widening the membership moved the

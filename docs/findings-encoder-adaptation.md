@@ -278,6 +278,61 @@ Two operational findings from the same runs. The 307M encoder is heavy enough th
 the `bge-small` comparison rows had to be kept in the charts deliberately: a full replacement
 would have *lowered* every headline deployable number.
 
+## Run E — the `english` checkpoint, measured and not shipped
+
+The clearest untried lever was Laya's other checkpoint: `english` is ModernBERT-large (395M) against
+the multilingual mmBERT-base (307M), and it can be trained by the same recipe. It cannot warm-start
+from Run D — different architecture and hidden width (1024 against 768) — so it trains from the base
+on the same 460k-pair mix, batch 64, one epoch, 7,187 steps.
+
+| | SciFact dense | NFCorpus dense | ArguAna dense | fused mean | s/step |
+| --- | --- | --- | --- | --- | --- |
+| Run D (multilingual, shipped) | 0.5314 | 0.2700 | **0.4748** | 0.4962 | **1.47** |
+| **Run E (english)** | **0.5523** | **0.2799** | 0.4546 | **0.4981** | 4.61 |
+
+It wins on SciFact (+0.0209) and NFCorpus (+0.0099) and loses on ArguAna (−0.0202); the fused
+three-dataset mean moves **+0.0019**, inside the 0.002 margin `eval/pick_model.py` will swap a shipped
+encoder on, so **Run D stays the default**. The other half of the result is the cost: ModernBERT-large
+runs at **4.61 s/step against 1.47** on MPS, so the run took 9.2 h rather than the 3.7 h a
+parameter-count extrapolation predicts. Bucketed padding (`--pad-bucket`, the new default) keeps the
+per-shape MPS graph cache bounded without paying for absent tokens, but recovered only ~3% here
+because these batches already sit near 128 tokens.
+
+## The BEIR-18 pass — six cells up, and the caption corrected
+
+The figure's engine row is a **best-per-dataset over everything measured here**, so improving it means
+improving individual cells. Two moves, both cheap relative to the multi-million-document members:
+
+**Title-weighted BM25** (`--title-boost 2`, the setting the canonical five-small report used — the
+tool keys the `bm25-title` row off the boost, not off the retriever name):
+
+| dataset | before | after |
+| --- | --- | --- |
+| NQ | 0.3118 | **0.3264** |
+| DBPedia-entity | 0.3053 | **0.3166** |
+| Climate-FEVER | 0.1610 | **0.1657** |
+| ROBUST04 / Signal-1M / Quora / Touché-2020 | — | no-op or worse |
+
+**The adapted dense channel, fused at weight 0.3**, on the members whose corpora this host can embed:
+
+| dataset | before | adapted dense | **fused** |
+| --- | --- | --- | --- |
+| TREC-COVID | 0.6188 | 0.5040 | **0.6871** |
+| ROBUST04 | 0.4077 | 0.3688 | **0.4405** |
+| TREC-NEWS | 0.3351 | 0.3353 | **0.3745** |
+
+Together the engine's **BEIR-18 best-per-dataset macro moves 0.4665 → 0.4760 (+0.0095)**. The
+unaffected cells are unchanged, and **every one of the 18 is measured**, so the matrix's caption is
+corrected: a dash is a cell a *published* system does not report, not a dataset of ours that has not
+been run.
+
+**Culled, with the reason.** `fever` (6,666 judged queries over 5.4M documents) and `hotpotqa` (7,405
+over 5.2M) cost roughly 8 h each for an uncertain gain; `bioasq` (14.9M) about 5 h for one cell that
+already beats the best published system; and `msmarco` is a training collection rather than one of the
+18, so it cannot move this row at all. Also culled after a failed run: `cqadupstack` is twelve
+sub-collections behind one name, so `tools/beir.py` refuses it and `tools/cqadupstack.py` has no
+title-boost flag.
+
 ## What the pre-registered bar says
 
 The Bet 3 falsification was: engine-level BEIR nDCG@10 on SciFact / NFCorpus / ArguAna with
@@ -305,15 +360,17 @@ competitive with a retrieval-trained 33M model, and it pays for the gain with th
 
 ## What this does not show
 
-- **The answerability/calibration rows were not re-run.** The served configuration keeps
-  `CHECKPOINT=multilingual` as the judge, so the gate's *scalar* input is unchanged, but the gate
-  also consumes pool-derived features (max passage coverage, coverage spread, pairwise redundancy)
-  that the encoder does move. Re-fitting the gate on a Run D pool is the outstanding measurement;
-  the reliability figure is therefore still the one the shipped judge produced, not a Run D one.
-- **One seed, one recipe family.** Four runs (A external; B and C adding in-domain pairs; D a
-  larger external mix at batch 64), one epoch each, and D uses ~460k of ~1M available gold pairs,
-  with no explicit hard negatives. The `english` (ModernBERT-large, 395M) checkpoint is untried and
-  is the most likely source of a further dense gain on English BEIR.
+- **The answerability/calibration rows were re-run, but the gate re-fit did not complete.** The
+  served configuration keeps `CHECKPOINT=multilingual` as the judge, so the gate's *scalar* input is
+  unchanged; its pool-derived features do move with the encoder, so a re-fit was attempted. The null
+  half ran in 908 s, but the positive half was still running after ~83 min (roughly 20× the null
+  half's per-query cost) and was stopped. `make answerability-features` and `make calibration-report`
+  were re-run against the existing `gate.json`, so the reliability row still describes the shipped
+  judge. Re-fitting the 13-feature gate on a Run D pool is the outstanding measurement.
+- **One seed, one recipe family.** Five runs (A external; B and C adding in-domain pairs; D a larger
+  external mix at batch 64; E the `english` checkpoint, not shipped), one epoch each, and D uses
+  ~460k of ~1M available gold pairs, with no explicit hard negatives. A GPU-scale run with real hard
+  negatives remains the untried version of the recipe.
 - **The judge collapse is measured, not fixed.** A multi-task run (retrieval + relevance decision
   on the shared encoder) is the untried route to making `EMBED_MODEL=""` competitive *and* safe.
 - **The per-corpus routing is measured, not implemented.** The engine has no router that picks
@@ -323,13 +380,18 @@ competitive with a retrieval-trained 33M model, and it pays for the gain with th
 
 ## Method notes
 
-- **Embedding caches are keyed by the model's directory name, not its contents.** Repackaging a
-  retrained encoder at the same `models/laya-retrieval` path silently reuses the previous model's
-  vectors. The first Run D refresh produced MultiHop and BRIGHT figures that were actually Run A's,
-  and a naive `find -newermt … -delete` removed the *new* caches rather than the old ones. Clear
-  `*laya-retrieval.mean.npy` **including nested `cache/` directories** before any refresh, and
-  treat a metric that is byte-identical across two different encoders as a cache hit until proven
-  otherwise — which is how the MuSiQue `fused` row was caught and explained.
+- **Embedding caches are now keyed by content, not only by name.** The cache filename comes from
+  a model's directory *basename*, so repackaging a retrained encoder at the same
+  `models/laya-retrieval` path kept the name and silently reused the previous model's vectors.
+  The first Run D refresh produced MultiHop and BRIGHT figures that were actually Run A's (a
+  second sweep then removed the *new* caches rather than the old ones, because the `find`
+  predicate was inverted). `tools/beir.py` now writes a `model_fingerprint` — a hash over the
+  directory's `(relative path, size, mtime)` — into the cache's `.meta.json` and refuses to reuse
+  a cache whose fingerprint differs; `LayaModel.weights_path()` exposes the directory to
+  fingerprint. Caches written before this are adopted once and stamped, so the existing corpus
+  caches were not thrown away. Four tests pin it, including the legacy-adoption path. The lesson
+  that survives the fix: a metric that is byte-identical across two different encoders is a cache
+  hit until proven otherwise — which is how the MuSiQue `fused` row was caught and explained.
 - **Fixed-width padding is required on MPS, not an optimisation.** The trainer's first large run
   died at ~step 150 with `MPS backend out of memory (allocated 19 GB, other allocations 35 GB)`.
   The 35 GB was torch's per-shape graph cache: dynamic padding gives every batch a different

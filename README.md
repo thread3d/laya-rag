@@ -837,7 +837,7 @@ make charts                  # tables + error bars + docs/charts/*.png, from tho
 make charts-compare          # the cross-system comparison figures alone, no reruns
 ```
 
-![BEIR nDCG@10 by system and dataset: this engine against five published systems, with our unmeasured datasets left as gaps](docs/charts/cmp_beir18_matrix.png)
+![BEIR nDCG@10 by system and dataset: this engine against five published systems. All 18 datasets are measured here, so a dash is a cell a published system does not report](docs/charts/cmp_beir18_matrix.png)
 
 Drawing the charts needs `matplotlib` (declared in the `eval` extra), and nothing else new:
 it was installed here without disturbing the pinned `torch`/`transformers`, which is worth
@@ -1594,9 +1594,14 @@ here the shipped scalar is at chance (AUC **0.5087**, ECE **0.3085**), and the c
 replacement is a measured in-domain gate, not a shipped default. **The pool bet's ceiling is not
 realized**: entity-probe expansion raises gold coverage and the oracle ceiling, but no ranker here has
 converted that into MAP@10, and coverage alone already falsified on MuSiQue. **All eighteen of BEIR's
-datasets are measured**, so unlike every previous round there *is* a BEIR-18 average: **0.4665** over
-the engine's best measured row per dataset, between the paper's Contriever (0.448) and SPLADE (0.474)
-— a best-per-dataset figure, not one global configuration.
+datasets are measured**, so unlike every previous round there *is* a BEIR-18 average: **0.4760** over
+the engine's best measured row per dataset (it was 0.4665 before the title-weighted and adapted-dense
+pass below), between the paper's Contriever (0.448) and SPLADE (0.474) — a best-per-dataset figure, not
+one global configuration. Six cells moved: **TREC-COVID 0.6188 → 0.6871** and **ROBUST04 0.4077 →
+0.4405** and **TREC-NEWS 0.3351 → 0.3745** from the adapted dense channel fused at weight 0.3;
+**NQ 0.3118 → 0.3264**, **DBPedia 0.3053 → 0.3166** and **Climate-FEVER 0.1610 → 0.1657** from
+title-weighted BM25. Every other cell is unchanged, and the title row was a no-op or worse on
+ROBUST04, Signal-1M, Quora and Touché-2020.
 **Stronger scorers did not pay off here**: besides the pointwise reranker and the failed fine-tune
 listed above, all three Phase 2 ordering heads lost to the baselines they targeted (topical late
 interaction, relational NLI stance, and a cross-encoder adapted on MuSiQue's own train pairs). And any
