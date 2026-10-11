@@ -43,6 +43,98 @@ def test_fingerprint_changes_with_any_setting():
     assert jobkit.config_fingerprint(dataset="nfcorpus", depth=100) != base
 
 
+# ── the index a run was measured against ──────────────────────────────────
+#
+# A settings fingerprint cannot see the index. These pin the identity that can: it changes when
+# the corpus file changes or an ingest knob changes, it is stable across re-runs, and a mismatch
+# is distinguishable from an index that predates the sidecar.
+
+def _corpus(tmp_path, body="doc"):
+    path = tmp_path / "corpus.jsonl"
+    path.write_text(body)
+    return path
+
+
+def test_index_identity_is_stable_across_reruns(tmp_path):
+    corpus = _corpus(tmp_path)
+    settings = {"chunk_chars": 1200}
+    first = jobkit.index_identity(settings, [corpus])
+    assert jobkit.index_identity(settings, [corpus]) == first
+
+
+def test_index_identity_changes_with_the_corpus(tmp_path):
+    corpus = _corpus(tmp_path)
+    settings = {"chunk_chars": 1200}
+    before = jobkit.index_identity(settings, [corpus])
+    corpus.write_text("a different corpus, longer than the first")
+    assert jobkit.index_identity(settings, [corpus]) != before
+
+
+def test_index_identity_changes_with_an_ingest_setting(tmp_path):
+    corpus = _corpus(tmp_path)
+    assert jobkit.index_identity({"chunk_chars": 1200}, [corpus]) != jobkit.index_identity(
+        {"chunk_chars": 1200, "chunk_overlap": 200}, [corpus]
+    )
+
+
+def test_file_digest_names_a_missing_file_rather_than_skipping_it(tmp_path):
+    present = _corpus(tmp_path)
+    assert jobkit.file_digest([present]) != jobkit.file_digest([present, tmp_path / "gone.jsonl"])
+
+
+def test_index_state_is_absent_match_or_mismatch(tmp_path):
+    index = tmp_path / "index"
+    assert jobkit.index_state(index, "abc") == "absent"
+    index.mkdir()
+    jobkit.write_index_identity(index, "abc")
+    assert jobkit.index_state(index, "abc") == "match"
+    assert jobkit.index_state(index, "def") == "mismatch"
+
+
+def test_an_index_without_a_sidecar_is_absent_not_a_mismatch(tmp_path):
+    """Every index built before this existed must be adopted once, not rebuilt."""
+    index = tmp_path / "index"
+    index.mkdir()
+    (index / "index.json").write_text("{}")
+    assert jobkit.index_state(index, "abc") == "absent"
+    assert jobkit.read_index_identity(index) is None
+
+
+def test_the_identity_sidecar_is_written_atomically(tmp_path):
+    index = tmp_path / "index"
+    jobkit.write_index_identity(index, "abc", dataset="scifact")
+    assert json.loads((index / jobkit.INDEX_IDENTITY).read_text())["dataset"] == "scifact"
+    assert not list(index.glob("*.tmp"))
+
+
+def test_an_engine_fingerprint_moves_with_the_index():
+    """The failure §4.2 names: the same settings over a rebuilt index is a different number."""
+    settings = dict(tool="engine_beir", dataset="scifact", limit=None)
+    before = jobkit.config_fingerprint(**settings, index="old")
+    after = jobkit.config_fingerprint(**settings, index="new")
+    assert before != after
+
+
+def test_a_legacy_checkpoint_is_rebound_once(tmp_path):
+    """Folding the index into the fingerprint must not discard hours of scored queries."""
+    run = jobkit.ResumableRun(str(tmp_path / "r.json"), fingerprint="old")
+    run.record("q1", {"ranking": ["d1"]})
+    assert jobkit.rebind_legacy_fingerprint(tmp_path / "r", legacy="old", current="new") is True
+    reopened = jobkit.ResumableRun(str(tmp_path / "r.json"), fingerprint="new")
+    assert reopened.values()["q1"] == {"ranking": ["d1"]}
+    # A second call is a no-op: the manifest no longer carries the legacy value.
+    assert jobkit.rebind_legacy_fingerprint(tmp_path / "r", legacy="old", current="new") is False
+
+
+def test_a_rebind_refuses_a_foreign_fingerprint(tmp_path):
+    jobkit.ResumableRun(str(tmp_path / "r.json"), fingerprint="someone-elses")
+    assert jobkit.rebind_legacy_fingerprint(tmp_path / "r", legacy="old", current="new") is False
+
+
+def test_a_rebind_of_a_missing_manifest_is_a_no_op(tmp_path):
+    assert jobkit.rebind_legacy_fingerprint(tmp_path / "absent", legacy="a", current="b") is False
+
+
 # ── sharding ─────────────────────────────────────────────────────────────
 
 def test_shard_items_partition_the_input_in_order():

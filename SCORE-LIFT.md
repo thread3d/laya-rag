@@ -733,8 +733,15 @@ convention rather than a defect, and items 4–5 are standing practice.**
    undecodable file rather than reporting. Fixed, and its coverage is now stated rather than
    implied: **590 reports scanned, 142 exclusions named** (oversized corpora above a 32 MiB cap,
    empty HuggingFace `.no_exist/` sentinels, list-shaped id caches), zero findings.
-2. **`jobkit` fingerprints do not cover the index they were measured against.** Use `--fresh`.
-   A cached result whose index has changed is a wrong number with a right timestamp.
+2. **`jobkit` fingerprints did not cover the index they were measured against — fixed.** An
+   engine runner reuses whatever index is on disk, so changing a chunking knob against an existing
+   index directory produced a *new* settings fingerprint over an *old* index: a wrong number with a
+   fresh timestamp. Each engine index now carries an `index-identity.json` recording the corpus
+   file and the ingest knobs that built it; that identity is folded into the run fingerprint, and
+   a run whose identity differs **rebuilds the index and refuses the stale per-query results**.
+   An index built before the sidecar existed is adopted once and stamped, and its checkpoint
+   manifest is rebound rather than discarded, so no measured work was thrown away. `--fresh` is
+   still the tool for a deliberate reset, but it is no longer the *only* guard.
 3. **The harness and the shipped engine disagree on BM25 parameters** — `tools/beir.py` runs
    `k1=0.9, b=0.4` (Anserini), the shipped engine `1.2/0.75`. The replica **overstates** the engine
    by 0.0144 on SciFact and **understates** it on MultiHop-RAG. State which is being quoted.

@@ -185,9 +185,17 @@ are what stops the next pass from re-trying them.
   while the same engine on a 400-query subset of the same queries read **0.3057**. The dense
   vectors were byte-identical; only `lexical.json` was missing. `has_index()` now requires the
   lexical artifact too, and a test pins that the channel really is absent when it is.
-- **A checkpoint's fingerprint does not cover the index it was measured against.** jobkit keys a
-  resumed run to its *settings*, so re-running after a failed attempt reuses per-query results that
-  may have been produced against a different index. When the index changes, the run needs `--fresh`.
+- **A checkpoint's fingerprint did not cover the index it was measured against — fixed.** jobkit
+  keys a resumed run to its *settings*, so re-running after a failed attempt reused per-query
+  results that might have been produced against a different index — and an engine runner reuses
+  whatever index is on disk (`if not engine.has_index(): index_paths(..., rebuild=True)`), so
+  changing a chunk size against an existing index directory produced a *new* fingerprint over an
+  *old* index: a wrong number with a fresh timestamp. Each engine index now carries an
+  `index-identity.json` naming the corpus file and the ingest knobs that built it; the identity is
+  folded into the run fingerprint, and a re-run whose identity differs **rebuilds and refuses the
+  stale results**. An index with no identity record (everything built before this) is adopted once
+  and stamped, and its manifest is rebound rather than discarded, so no valid measurement was
+  thrown away.
 - **A metric that averages over the qrels dilutes a subset.** `evaluate_rankings` scores every query
   in the qrels, so a `--limit 8` run against the full qrels read nDCG@10 **0.0045** — indistinguishable
   from a broken retriever. Limited runs must score against the queries they ranked.

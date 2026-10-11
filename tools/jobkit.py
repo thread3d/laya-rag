@@ -78,6 +78,106 @@ def config_fingerprint(**settings: Any) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+# ── the index a run was measured against ──────────────────────────────────
+#
+# A `config_fingerprint` covers the *settings* a run was started with. It does not cover the
+# index the run was measured against, and an engine-level run reuses whatever index is on disk:
+# `if not engine.has_index(): engine.index_paths(..., rebuild=True)`. So changing a chunking knob
+# against an existing index directory, or re-pointing a corpus, produces a *new* fingerprint over
+# an *old* index — a wrong number with a fresh timestamp, which is the failure this section
+# exists for.
+#
+# The identity below is `(the settings that shape ingest, the source files the corpus came from)`.
+# It is recorded in the index directory when the index is built, and a run rebuilds when the
+# recorded identity is not the current one. The same string is folded into the run fingerprint,
+# so a checkpoint measured against a different index cannot be resumed.
+
+#: Where an index records what it was built from.
+INDEX_IDENTITY = "index-identity.json"
+
+
+def file_digest(paths: Iterable[Path | str]) -> str:
+    """A digest of files by ``(name, size, mtime_ns)``, sorted; absent files are named as missing.
+
+    Deliberately stat-only. The corpora here reach 24 GB and the document mirror `write_corpus`
+    rewrites is 5.4M files, so hashing contents would cost more than the rebuild it protects
+    against. Size and mtime are enough to notice a corpus that was re-fetched, replaced or moved,
+    which is what the identity is for; it is not a tamper check.
+    """
+    entries: list[tuple[str, int, int]] = []
+    for path in sorted(Path(p) for p in paths):
+        try:
+            stat = path.stat()
+        except OSError:
+            entries.append((str(path), -1, -1))
+            continue
+        entries.append((str(path), stat.st_size, stat.st_mtime_ns))
+    return hashlib.sha256(
+        json.dumps(entries, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:16]
+
+
+def index_identity(settings: Mapping[str, Any], sources: Iterable[Path | str]) -> str:
+    """What an index *is*: the ingest settings plus the source files the corpus was read from."""
+    payload = {
+        "code_version": CODE_VERSION,
+        "sources": file_digest(sources),
+        **{str(k): v for k, v in settings.items()},
+    }
+    blob = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def read_index_identity(index_dir: Path | str) -> str | None:
+    """The identity recorded beside an index, or None when it was built before this existed."""
+    data = read_json(Path(index_dir) / INDEX_IDENTITY, default=None)
+    return str(data["identity"]) if isinstance(data, Mapping) and data.get("identity") else None
+
+
+def write_index_identity(index_dir: Path | str, identity: str, **details: Any) -> None:
+    write_json_atomic(
+        Path(index_dir) / INDEX_IDENTITY,
+        {"identity": identity, "code_version": CODE_VERSION, **details},
+    )
+
+
+def index_state(index_dir: Path | str, identity: str) -> str:
+    """``"absent"``, ``"match"`` or ``"mismatch"`` for the index at ``index_dir``.
+
+    ``"absent"`` means either no index or an index built before identities were recorded. Both
+    are adopted once rather than treated as a mismatch: the existing measurements predate the
+    sidecar, and rebuilding every one of them to add a field would be a large cost for no
+    correctness, since the identity is written on the next build either way.
+    """
+    if not Path(index_dir).exists():
+        return "absent"
+    recorded = read_index_identity(index_dir)
+    if recorded is None:
+        return "absent"
+    return "match" if recorded == identity else "mismatch"
+
+
+def rebind_legacy_fingerprint(stem: Path | str, *, legacy: str, current: str) -> bool:
+    """Point a checkpoint written before the index was fingerprinted at the current fingerprint.
+
+    Folding the index identity into a run's fingerprint invalidates every manifest already on
+    disk, and those hold hours of scored queries. A manifest still carrying exactly ``legacy`` —
+    the identity-free fingerprint of the same settings — is therefore migrated in place rather
+    than discarded, which is the same "adopt a legacy cache once" rule `beir.cached_embed` applies.
+    Only the manifest's ``fingerprint`` field moves: per-unit records are keyed by query id and
+    are not fingerprinted, so the measured values are untouched. A manifest under any other
+    fingerprint is left alone, so this cannot launder a genuinely different run.
+    """
+    manifest_path = Path(str(stem) + ".manifest.json")
+    manifest = read_json(manifest_path, default=None)
+    if not isinstance(manifest, Mapping) or manifest.get("fingerprint") != legacy:
+        return False
+    write_json_atomic(
+        manifest_path, {**manifest, "fingerprint": current, "adopted_from": legacy}
+    )
+    return True
+
+
 def write_json_atomic(path: Path | str, payload: Any) -> None:
     """Write JSON through a sibling temp file and `os.replace`, never in place.
 

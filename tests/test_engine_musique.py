@@ -84,10 +84,15 @@ def test_pair_map10_of_no_overlap_is_empty():
 
 def test_fingerprint_separates_configurations_and_ignores_the_shard():
     base = emq.parse_args([])
-    assert emq._fingerprint(base) != emq._fingerprint(emq.parse_args(["--embed-model", "m"]))
-    assert emq._fingerprint(base) != emq._fingerprint(emq.parse_args(["--split", "train"]))
-    assert emq._fingerprint(base) != emq._fingerprint(emq.parse_args(["--limit", "200"]))
-    assert emq._fingerprint(base) == emq._fingerprint(emq.parse_args(["--shard", "1/3"]))
+    assert emq._fingerprint(base, "i") != emq._fingerprint(emq.parse_args(["--embed-model", "m"]), "i")
+    assert emq._fingerprint(base, "i") != emq._fingerprint(emq.parse_args(["--split", "train"]), "i")
+    assert emq._fingerprint(base, "i") != emq._fingerprint(emq.parse_args(["--limit", "200"]), "i")
+    assert emq._fingerprint(base, "i") == emq._fingerprint(emq.parse_args(["--shard", "1/3"]), "i")
+
+
+def test_fingerprint_covers_the_index_it_was_measured_against():
+    base = emq.parse_args([])
+    assert emq._fingerprint(base, "index-a") != emq._fingerprint(base, "index-b")
 
 
 def test_load_task_keeps_the_full_corpus_when_queries_are_limited():

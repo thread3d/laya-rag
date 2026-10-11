@@ -42,18 +42,30 @@ def test_report_stem_is_dataset_and_tag():
 
 def test_fingerprint_covers_the_settings_that_change_a_number():
     base = eb.parse_args([])
-    fp = eb._fingerprint(base)
-    assert eb._fingerprint(eb.parse_args(["--dataset", "nfcorpus"])) != fp
-    assert eb._fingerprint(eb.parse_args(["--tag", "other"])) != fp
-    assert eb._fingerprint(eb.parse_args(["--sparse"])) != fp
-    assert eb._fingerprint(eb.parse_args(["--chunk-chars", "800"])) != fp
-    assert eb._fingerprint(eb.parse_args(["--context-prefix"])) != fp
-    assert eb._fingerprint(eb.parse_args(["--limit", "50"])) != fp
+    fp = eb._fingerprint(base, "i")
+    assert eb._fingerprint(eb.parse_args(["--dataset", "nfcorpus"]), "i") != fp
+    assert eb._fingerprint(eb.parse_args(["--tag", "other"]), "i") != fp
+    assert eb._fingerprint(eb.parse_args(["--sparse"]), "i") != fp
+    assert eb._fingerprint(eb.parse_args(["--chunk-chars", "800"]), "i") != fp
+    assert eb._fingerprint(eb.parse_args(["--context-prefix"]), "i") != fp
+    assert eb._fingerprint(eb.parse_args(["--limit", "50"]), "i") != fp
 
 
 def test_fingerprint_ignores_the_shard_and_the_out_dir():
-    assert eb._fingerprint(eb.parse_args([])) == \
-        eb._fingerprint(eb.parse_args(["--shard", "2/5", "--out", "/tmp/elsewhere"]))
+    assert eb._fingerprint(eb.parse_args([]), "i") == \
+        eb._fingerprint(eb.parse_args(["--shard", "2/5", "--out", "/tmp/elsewhere"]), "i")
+
+
+def test_fingerprint_covers_the_index_it_was_measured_against():
+    """§4.2: the same settings over a rebuilt index is a different number, so it must not resume."""
+    base = eb.parse_args([])
+    assert eb._fingerprint(base, "index-a") != eb._fingerprint(base, "index-b")
+
+
+def test_the_identity_free_fingerprint_is_the_legacy_one():
+    """`identity=None` must reproduce the pre-index fingerprint, or no checkpoint can be migrated."""
+    base = eb.parse_args([])
+    assert eb._fingerprint(base, None) != eb._fingerprint(base, "index-a")
 
 
 def test_build_report_recomputes_metrics_over_all_rankings():

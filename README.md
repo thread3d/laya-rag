@@ -806,7 +806,12 @@ up. To run two deliberately — e.g. one tiny read-only probe beside a real run 
 `LAYA_RAG_ALLOW_CONCURRENT=1`.
 
 **Every long job checkpoints, so a crash resumes rather than restarts.** Re-issue the same command
-after an interruption; the checkpoint is keyed to the run's settings and is refused if they changed.
+after an interruption; the checkpoint is keyed to the run's settings *and to the index it was
+measured against*, and is refused if either changed. The engine-level runners record an
+`index-identity.json` beside each index naming the corpus file and the ingest knobs that built it:
+re-running with a different chunk size rebuilds the index and refuses the old per-query results
+rather than resuming them, which is the one way a checkpoint could previously hand back a wrong
+number with a fresh timestamp.
 
 | job | checkpoint | resume |
 | --- | --- | --- |

@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 import evalkit, jobkit  # noqa: E402
 from engine_beir import ranking_from_passages, write_corpus  # noqa: E402
-from engine_multihop import configure_engine  # noqa: E402
+from engine_multihop import configure_engine, index_dir_for  # noqa: E402
 from multihop_rerank_experiment import metrics_from_matches  # noqa: E402
 from musique import load_split  # noqa: E402
 
@@ -106,7 +106,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def _fingerprint(args: argparse.Namespace) -> str:
+def _ingest_settings(args: argparse.Namespace) -> dict[str, Any]:
+    """The knobs that shape the index rather than the query, for the index's identity record."""
+    return {
+        "split": args.split,
+        "embed_model": args.embed_model or "engine-default",
+        "sparse": args.sparse,
+        "sparse_model": args.sparse_model if args.sparse else None,
+        "chunk_chars": args.chunk_chars,
+        "chunk_overlap": args.chunk_overlap,
+        "chunk_auto": not args.no_chunk_auto,
+        "context_prefix": args.context_prefix,
+    }
+
+
+def _fingerprint(args: argparse.Namespace, identity: str | None) -> str:
+    """The run's fingerprint. `identity=None` reproduces it as it was before the index was in it."""
     return jobkit.config_fingerprint(
         tool="engine_musique",
         split=args.split,
@@ -121,6 +136,9 @@ def _fingerprint(args: argparse.Namespace) -> str:
         sparse_model=args.sparse_model if args.sparse else None,
         rerank_model=args.rerank_model,
         limit=args.limit,
+        # What the numbers were measured *against*, not just how the run was configured. Absent
+        # for the legacy form, so a checkpoint written before this can be recognised and rebound.
+        **({"index": identity} if identity is not None else {}),
     )
 
 
@@ -174,7 +192,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.compare:
         return _compare(args)
     shard_index, shard_count = jobkit.parse_shard(args.shard)
-    fingerprint = _fingerprint(args)
+    # The identity of the index this run is measured against: the split file and the knobs that
+    # shape ingest. It goes into the run fingerprint, so a checkpoint cannot be resumed across a
+    # different index, and it decides whether the index on disk has to be rebuilt.
+    identity = jobkit.index_identity(_ingest_settings(args), [ROOT_BENCH / f"{args.split}.json"])
+    fingerprint = _fingerprint(args, identity)
+    index_dir = index_dir_for(args)
 
     if args.merge:
         try:
@@ -188,6 +211,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     stem = jobkit.shard_stem(args.out, shard_index, shard_count)
+    if not args.fresh and jobkit.index_state(index_dir, identity) == "absent" and \
+            Path(index_dir).exists() and \
+            jobkit.rebind_legacy_fingerprint(stem, legacy=_fingerprint(args, None),
+                                             current=fingerprint):
+        print(f"  {Path(str(stem)).name}: rebound from the pre-identity fingerprint — the index "
+              f"has no identity record, so it is adopted as measured", flush=True)
     if args.fresh:
         for suffix in (".jsonl", ".manifest.json"):
             Path(str(stem) + suffix).unlink(missing_ok=True)
@@ -199,7 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"[{args.split}] {len(corpus)} paragraphs, {len(queries)} queries "
           f"(corpus is always the full split)", flush=True)
 
-    index_dir = configure_engine(args)
+    configure_engine(args)
     from laya_rag.config import EngineConfig
     from laya_rag.engine import RagEngine
 
@@ -208,20 +237,31 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     config = EngineConfig()
     engine = RagEngine(config)
-    if not engine.has_index():
+    state = jobkit.index_state(index_dir, identity)
+    if state == "match":
+        print(f"reusing the index at {index_dir} — its identity matches", flush=True)
+    elif state == "absent" and engine.has_index():
+        # Built before identities were recorded. Adopted once rather than rebuilt: every existing
+        # engine index predates the sidecar, the same "adopt a legacy cache once" rule
+        # `beir.cached_embed` applies, and the identity is written from here on.
+        jobkit.write_index_identity(index_dir, identity, split=args.split)
+        print(f"reusing the index at {index_dir} — no identity was recorded; adopted", flush=True)
+    else:
+        detail = "the corpus or the ingest settings changed" if state == "mismatch" else "no index"
         started = time.perf_counter()
         report = engine.index_paths([docs_dir], rebuild=True)
+        jobkit.write_index_identity(index_dir, identity, split=args.split)
         print(f"indexed {report.documents} docs / {report.chunks} chunks in "
               f"{time.perf_counter() - started:.0f}s "
-              f"(derived chunk size {report.derived_chunk_chars or config.chunk_chars})", flush=True)
-    else:
-        print(f"reusing the index at {index_dir}", flush=True)
+              f"(derived chunk size {report.derived_chunk_chars or config.chunk_chars}; {detail})",
+              flush=True)
 
     if jobkit.META_KEY not in run:
         run.record(jobkit.META_KEY, {
             "_settings": {
                 **vars(args),
                 "index_dir": str(index_dir),
+                "index_identity": identity,
                 "dense_weight": config.resolved_dense_weight,
                 "chunk_chars_effective": config.chunk_chars,
                 "chunks": len(engine.list_chunks()),

@@ -105,7 +105,28 @@ def report_stem(args: argparse.Namespace) -> Path:
     return Path(args.out) / f"{args.dataset}-{args.tag}"
 
 
-def _fingerprint(args: argparse.Namespace) -> str:
+def index_dir(args: argparse.Namespace) -> Path:
+    return Path(args.out) / "index" / f"{args.dataset}-{args.tag}"
+
+
+def _ingest_settings(args: argparse.Namespace) -> dict[str, Any]:
+    """The knobs that shape the index rather than the query, for the index's identity record."""
+    return {
+        "embed_model": args.embed_model,
+        "sparse": args.sparse,
+        "sparse_model": args.sparse_model if args.sparse else None,
+        "chunk_chars": args.chunk_chars,
+        "chunk_overlap": args.chunk_overlap,
+        "chunk_auto": args.chunk_auto,
+        "chunk_auto_percentile": args.chunk_auto_percentile,
+        "min_chunk_chars": args.min_chunk_chars,
+        "chunk_merge_short": args.chunk_merge_short,
+        "context_prefix": args.context_prefix,
+    }
+
+
+def _fingerprint(args: argparse.Namespace, identity: str | None) -> str:
+    """The run's fingerprint. `identity=None` reproduces it as it was before the index was in it."""
     return jobkit.config_fingerprint(
         tool="engine_beir",
         dataset=args.dataset,
@@ -123,11 +144,14 @@ def _fingerprint(args: argparse.Namespace) -> str:
         retrieve_k=args.retrieve_k,
         top_k=args.top_k,
         limit=args.limit,
+        # What the numbers were measured *against*, not just how the run was configured. Absent
+        # for the legacy form, so a checkpoint written before this can be recognised and rebound.
+        **({"index": identity} if identity is not None else {}),
     )
 
 
 def _build_report(rows: dict, args: argparse.Namespace, qrels: Mapping[str, Any],
-                  corpus_size: int) -> dict:
+                  corpus_size: int, identity: str = "") -> dict:
     """Rebuild the report from merged rankings; the metrics need every query at once."""
     if jobkit.META_KEY not in rows:
         raise RuntimeError("no shard checkpoints found — run the shards before --merge")
@@ -136,7 +160,7 @@ def _build_report(rows: dict, args: argparse.Namespace, qrels: Mapping[str, Any]
     evaluation = evalkit.evaluate_rankings(rankings, qrels, k_values=(10,),
                                            ignore_identical_ids=True)
     return {
-        "_settings": vars(args),
+        "_settings": {**vars(args), "index_identity": identity},
         "documents": corpus_size,
         "queries": len(rankings),
         "summary": evaluation["summary"],
@@ -150,21 +174,25 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     heavy_job_guard("engine_beir.py")
     shard_index, shard_count = jobkit.parse_shard(args.shard)
-    fingerprint = _fingerprint(args)
     out = Path(args.out)
-    index_dir = out / "index" / f"{args.dataset}-{args.tag}"
+    index_path = index_dir(args)
     docs_dir = out / "docs" / args.dataset
 
     dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root), download=False)
     corpus = beir.load_corpus(dataset_dir, include_titles=True)
     queries = beir.load_queries(dataset_dir)
     qrels = beir.load_qrels(dataset_dir, split="test")
+    # The identity of the index this run is measured against: the corpus file and the knobs that
+    # shape ingest. It goes into the run fingerprint, so a checkpoint cannot be resumed across a
+    # different index, and it decides whether the index on disk has to be rebuilt.
+    identity = jobkit.index_identity(_ingest_settings(args), [dataset_dir / "corpus.jsonl"])
+    fingerprint = _fingerprint(args, identity)
 
     if args.merge:
         try:
             merged = jobkit.merge_shards(
                 report_stem(args), args.merge, fingerprint=fingerprint,
-                build=lambda rows: _build_report(rows, args, qrels, len(corpus)),
+                build=lambda rows: _build_report(rows, args, qrels, len(corpus), identity),
             )
         except (RuntimeError, jobkit.FingerprintMismatch) as exc:
             print(f"merge failed: {exc}", file=sys.stderr)
@@ -173,7 +201,7 @@ def main(argv: Sequence[str] | None = None) -> int:
               f"({merged['queries']} queries)")
         return 0
 
-    os.environ["LAYA_RAG_INDEX_DIR"] = str(index_dir)
+    os.environ["LAYA_RAG_INDEX_DIR"] = str(index_path)
     os.environ["LAYA_RAG_EMBED_MODEL"] = args.embed_model
     # Nothing may be filtered, so the returned order is the engine's retrieval order.
     os.environ["LAYA_RAG_RELEVANCE_THRESHOLD"] = "0.0"
@@ -234,23 +262,41 @@ def main(argv: Sequence[str] | None = None) -> int:
         qrels = beir.restrict_qrels(qrels, test_queries)
     doc_ids = write_corpus(corpus, docs_dir)
 
+    stem = jobkit.shard_stem(report_stem(args), shard_index, shard_count)
     config = EngineConfig()
     engine = RagEngine(config)
-    if not engine.has_index():
+    state = jobkit.index_state(index_path, identity)
+    # An index with no identity record predates the sidecar and is adopted as measured. Its
+    # checkpoint then has to be migrated too, or folding the index into the fingerprint throws
+    # away hours of scoring — and it must be migrated *before* the identity is written, so a
+    # retry after an unrelated failure still recognises the adoption.
+    adopting = state == "absent" and engine.has_index()
+    if not args.fresh and adopting and jobkit.rebind_legacy_fingerprint(
+            stem, legacy=_fingerprint(args, None), current=fingerprint):
+        print(f"  {Path(str(stem)).name}: rebound from the pre-identity fingerprint",
+              flush=True)
+    if state == "match":
+        print(f"reusing the index at {index_path} — its identity matches", flush=True)
+    elif adopting:
+        jobkit.write_index_identity(index_path, identity, dataset=args.dataset, tag=args.tag)
+        print(f"reusing the index at {index_path} — no identity was recorded; adopted", flush=True)
+    else:
+        detail = "the corpus or the ingest settings changed" if state == "mismatch" else "no index"
         started = time.perf_counter()
         report = engine.index_paths([docs_dir], rebuild=True)
+        jobkit.write_index_identity(index_path, identity, dataset=args.dataset, tag=args.tag)
         print(f"indexed {report.documents} docs / {report.chunks} chunks in "
-              f"{time.perf_counter() - started:.0f}s", flush=True)
+              f"{time.perf_counter() - started:.0f}s ({detail})", flush=True)
     print(f"sparse configured: {config.sparse_enabled}", flush=True)
 
-    stem = jobkit.shard_stem(report_stem(args), shard_index, shard_count)
     if args.fresh:
         for suffix in (".jsonl", ".manifest.json"):
             Path(str(stem) + suffix).unlink(missing_ok=True)
     run = jobkit.ResumableRun(str(stem) + ".json", fingerprint=fingerprint,
                               shard=(shard_index, shard_count))
     if jobkit.META_KEY not in run:
-        run.record(jobkit.META_KEY, {"_settings": vars(args), "sparse": config.sparse_enabled})
+        run.record(jobkit.META_KEY, {"_settings": {**vars(args), "index_identity": identity},
+                                     "sparse": config.sparse_enabled})
 
     mine = jobkit.shard_items(list(test_queries), shard_index, shard_count)
     todo = run.pending(mine)
@@ -270,7 +316,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if qid != jobkit.META_KEY}
     evaluation = evalkit.evaluate_rankings(rankings, qrels, k_values=(10,), ignore_identical_ids=True)
     payload = {
-        "_settings": vars(args),
+        "_settings": {**vars(args), "index_identity": identity},
         "documents": len(corpus),
         "queries": len(rankings),
         "sparse": config.sparse_enabled,

@@ -98,14 +98,27 @@ def test_summarize_rows_of_nothing_is_zero_not_a_crash():
 def test_fingerprint_separates_the_two_configurations():
     default = em.parse_args([])
     hybrid = em.parse_args(["--embed-model", "BAAI/bge-small-en-v1.5"])
-    assert em._fingerprint(default) != em._fingerprint(hybrid)
+    assert em._fingerprint(default, "i") != em._fingerprint(hybrid, "i")
 
 
 def test_fingerprint_changes_with_chunking_and_is_shard_independent():
     base = em.parse_args([])
-    assert em._fingerprint(base) != em._fingerprint(em.parse_args(["--no-chunk-auto"]))
-    assert em._fingerprint(base) != em._fingerprint(em.parse_args(["--context-prefix"]))
-    assert em._fingerprint(base) == em._fingerprint(em.parse_args(["--shard", "2/3"]))
+    assert em._fingerprint(base, "i") != em._fingerprint(em.parse_args(["--no-chunk-auto"]), "i")
+    assert em._fingerprint(base, "i") != em._fingerprint(em.parse_args(["--context-prefix"]), "i")
+    assert em._fingerprint(base, "i") == em._fingerprint(em.parse_args(["--shard", "2/3"]), "i")
+
+
+def test_fingerprint_covers_the_index_it_was_measured_against():
+    """§4.2: the same settings over a rebuilt index is a different number, so it must not resume."""
+    base = em.parse_args([])
+    assert em._fingerprint(base, "index-a") != em._fingerprint(base, "index-b")
+
+
+def test_the_identity_free_fingerprint_is_the_legacy_one():
+    """`identity=None` must reproduce the pre-index fingerprint, or no checkpoint can be migrated."""
+    base = em.parse_args([])
+    assert "index" not in em._fingerprint(base, "index-a")
+    assert em._fingerprint(base, None) != em._fingerprint(base, "index-a")
 
 
 def test_configure_engine_sets_the_shipped_default_when_no_model_is_given(monkeypatch):
