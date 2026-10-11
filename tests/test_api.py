@@ -127,6 +127,95 @@ def test_query_rejects_out_of_range_top_k(ctx):
     assert client.post("/v1/query", json={"query": "x", "top_k": 999}).status_code == 422
 
 
+# -- the extractive route: an answer that is the engine's alone --------------
+
+def _extract(client, query="How long does a refund take?", **body):
+    return client.post("/v1/extract", json={"query": query, **body})
+
+
+def test_extract_answers_with_verbatim_spans_of_the_returned_evidence(ctx):
+    """The guarantee: every emitted sentence exists, character for character, in a passage."""
+    client, _engine, corpus = ctx
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+
+    response = _extract(client)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["abstained"] is False
+    assert body["answer"]
+    assert body["sentences"]
+
+    texts = [passage["text"] for passage in body["passages"]]
+    for sentence in body["sentences"]:
+        assert any(sentence["text"] in text for text in texts), sentence["text"]
+        assert sentence["citation"] >= 1
+        # The same numbering `verify_citations` reads, so the citations are checkable.
+        assert f"[{sentence['citation']}]" in body["answer"]
+    assert body["sentences_considered"] >= len(body["sentences"])
+
+
+def test_extract_carries_the_evidence_its_citations_index_into(ctx):
+    """`/v1/verify` takes exactly these passages, so the row is self-contained."""
+    client, _engine, corpus = ctx
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+    body = _extract(client).json()
+
+    verified = client.post(
+        "/v1/verify",
+        json={
+            "answer": body["answer"],
+            "passages": [
+                {"text": passage["text"], "path": passage["path"]}
+                for passage in body["passages"]
+            ],
+            "query": body["query"],
+        },
+    )
+    assert verified.status_code == 200
+    assert verified.json()["clean"] is True
+
+
+def test_extract_abstains_rather_than_inventing_when_nothing_qualifies(ctx):
+    client, _engine, corpus = ctx
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+    body = _extract(client, query="What is the airspeed velocity of an unladen swallow?").json()
+    assert body["abstained"] is True
+    assert body["sentences"] == []
+    assert "does not contain" in body["answer"]
+
+
+def test_extract_before_indexing_is_a_conflict(ctx):
+    client, _engine, _corpus = ctx
+    response = _extract(client)
+    assert response.status_code == 409
+    assert "no index at" in response.json()["detail"]
+
+
+def test_extract_rejects_a_blank_query_and_a_bad_sentence_budget(ctx):
+    client, _engine, _corpus = ctx
+    assert _extract(client, query="").status_code == 422
+    assert _extract(client, max_sentences=0).status_code == 422
+    assert _extract(client, max_sentences=999).status_code == 422
+
+
+def test_extract_honours_max_sentences(ctx):
+    client, _engine, corpus = ctx
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+    one = _extract(client, max_sentences=1).json()
+    assert len(one["sentences"]) <= 1
+
+
+def test_extract_is_documented_as_the_generator_free_route(ctx):
+    """The OpenAPI document has to say what a caller is getting, not just that it exists."""
+    client, _engine, _corpus = ctx
+    schema = client.get("/openapi.json").json()
+    operation = schema["paths"]["/v1/extract"]["post"]
+    assert "generator" in operation["summary"].lower()
+    body = schema["components"]["schemas"]["ExtractResponse"]
+    assert "sentences" in body["properties"]
+    assert "passages" in body["properties"]
+
+
 def test_reset_clears_the_index(ctx):
     client, _engine, corpus = ctx
     client.post("/v1/index", json={"paths": [str(corpus)]})

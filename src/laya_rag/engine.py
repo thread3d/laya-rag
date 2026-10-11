@@ -1384,6 +1384,7 @@ class RagEngine:
         *,
         max_sentences: int = 5,
         min_score: float = 0.0,
+        include_evidence: bool = False,
         **query_kwargs: Any,
     ) -> dict[str, Any]:
         """Query, then emit only verbatim evidence sentences, each with its citation.
@@ -1392,6 +1393,13 @@ class RagEngine:
         state something the corpus does not contain; with nothing to emit it abstains. No
         generator, no API. The structured citations are checkable with
         :func:`laya_rag.verify.verify_citations`.
+
+        With ``include_evidence`` the payload is the full :meth:`query` result — passages,
+        timings, the answerability verdict — with the extractive answer added as ``answer``,
+        ``abstained``, ``sentences`` and ``sentences_considered``. That is what the API and MCP
+        surfaces return, because a caller cannot check the citations it was handed without the
+        evidence they index into. ``considered`` keeps the retrieval meaning it has everywhere
+        else; the count of *sentence* candidates is the separate field.
         """
         from .extractive import compose_extractive
 
@@ -1399,6 +1407,17 @@ class RagEngine:
         composed = compose_extractive(
             result.passages, query=query, max_sentences=max_sentences, min_score=min_score
         )
+        if include_evidence:
+            payload = result.as_dict()
+            payload.update(
+                {
+                    "answer": composed.answer,
+                    "abstained": composed.abstained,
+                    "sentences": [sentence.as_dict() for sentence in composed.sentences],
+                    "sentences_considered": composed.considered,
+                }
+            )
+            return payload
         return {
             "query": query,
             "answerable": result.answerable,

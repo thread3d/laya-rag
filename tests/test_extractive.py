@@ -17,6 +17,8 @@ from laya_rag import cli  # noqa: E402
 from laya_rag.engine import RagEngine  # noqa: E402
 from laya_rag.extractive import ABSTENTION, compose_extractive, split_sentences  # noqa: E402
 
+from laya_rag.evidence import group_passages_by_document  # noqa: E402
+
 from .support import StubModel, make_config  # noqa: E402
 
 
@@ -85,6 +87,37 @@ def test_min_score_drops_low_documents():
     passages = [_p("a.md", "Low.", 0.1), _p("b.md", "High.", 0.9)]
     composed = compose_extractive(passages, min_score=0.5)
     assert [s.text for s in composed.sentences] == ["High."]
+
+
+def test_the_answer_is_clean_to_the_project_s_own_citation_checker():
+    """The contract the finding claims: `verify_citations` runs over the result, no parsing.
+
+    A trailing marker would be orphaned by `split_claims`, which splits *after* the terminal
+    punctuation, so the sentence it supports would read as uncited and the last marker would
+    dangle. This is the acceptance test for the marker leading instead.
+    """
+    from laya_rag.verify import verify_citations
+
+    passages = [
+        _p("a.md", "Refunds take five days. Contact support after ten.", 0.9),
+        _p("b.md", "Shipping is free over fifty dollars.", 0.4),
+    ]
+    composed = compose_extractive(passages, max_sentences=3)
+    merged = [text for _path, text in group_passages_by_document(
+        (passage["path"], passage["text"]) for passage in passages
+    )]
+    report = verify_citations(composed.answer, merged)
+    assert report["counts"]["claims"] == len(composed.sentences)
+    assert report["counts"]["uncited"] == 0, report["claims"]
+    assert report["clean"] is True, report["claims"]
+
+
+def test_every_marker_leads_the_sentence_it_supports():
+    passages = [_p("a.md", "First fact. Second fact.", 0.9)]
+    composed = compose_extractive(passages, max_sentences=2)
+    assert composed.answer.startswith("[1] First fact.")
+    for sentence in composed.sentences:
+        assert f"[{sentence.citation}] {sentence.text}" in composed.answer
 
 
 # ── engine and CLI ───────────────────────────────────────────────────────

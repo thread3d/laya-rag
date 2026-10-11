@@ -62,6 +62,7 @@ def test_read_tools_are_registered(ctx):
         "read_document",
         "corpus_stats",
         "check_index_integrity",
+        "extract_answer",
         "verify_answer",
         "adjudicate_answer",
     ):
@@ -146,6 +147,58 @@ def test_verify_answer_reports_citations(ctx):
     )
     assert result.is_error is False
     assert result.structured_content["clean"] is True
+
+
+# -- the generator-free answer path ------------------------------------------
+
+def test_extract_answer_quotes_the_corpus_and_carries_its_evidence(ctx):
+    result = _call(_server(ctx), "extract_answer", {"query": "How long does a refund take?"})
+    assert result.is_error is False
+    body = result.structured_content
+    assert body["abstained"] is False
+    assert body["answerable"] is True
+
+    texts = [passage["text"] for passage in body["passages"]]
+    assert texts
+    for sentence in body["sentences"]:
+        assert any(sentence["text"] in text for text in texts), sentence["text"]
+        assert f"[{sentence['citation']}]" in body["answer"]
+        assert sentence["path"]
+
+
+def test_extract_answer_round_trips_through_verify_answer(ctx):
+    """The tool's citation contract has to hold against the tool that checks it."""
+    server = _server(ctx)
+    extracted = _call(server, "extract_answer", {"query": "How long does a refund take?"})
+    body = extracted.structured_content
+    verified = _call(
+        server,
+        "verify_answer",
+        {
+            "answer": body["answer"],
+            "passages": [
+                {"text": passage["text"], "path": passage["path"]}
+                for passage in body["passages"]
+            ],
+            "query": body["query"],
+        },
+    )
+    assert verified.is_error is False
+    assert verified.structured_content["counts"]["uncited"] == 0
+    assert verified.structured_content["clean"] is True
+
+
+def test_extract_answer_abstains_when_nothing_in_the_corpus_qualifies(ctx):
+    result = _call(_server(ctx), "extract_answer", {"query": "What is the airspeed of a swallow?"})
+    assert result.is_error is False
+    assert result.structured_content["abstained"] is True
+    assert result.structured_content["sentences"] == []
+
+
+def test_extract_answer_rejects_bad_budgets(ctx):
+    server = _server(ctx)
+    assert _call(server, "extract_answer", {"query": "x", "top_k": 0}).is_error is True
+    assert _call(server, "extract_answer", {"query": "x", "max_sentences": 99}).is_error is True
 
 
 # -- write tools -------------------------------------------------------------

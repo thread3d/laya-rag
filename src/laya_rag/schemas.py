@@ -261,6 +261,34 @@ class AdjudicateResponse(_Extensible):
     usage: dict[str, Any]
 
 
+class ExtractedSentence(BaseModel):
+    """One emitted sentence and the citation index it must satisfy."""
+
+    text: str = Field(..., description="The sentence, verbatim from the passage below")
+    citation: int = Field(..., description="The `[n]` this sentence carries in `answer`")
+    path: str | None = Field(None, description="Source document the span was copied from")
+    chunk_id: str | None = Field(None, description="Chunk the span was copied from")
+    score: float = Field(..., description="The document's relevance — not a per-sentence score")
+
+
+class ExtractResponse(QueryResponse):
+    """`/v1/query`'s evidence, plus an answer assembled only from verbatim spans of it.
+
+    Every sentence in ``sentences`` is a substring of one of ``passages``, so the answer
+    cannot state anything the corpus does not contain, and with nothing to emit it abstains.
+    No generator is involved, so an end-to-end score over this output is the engine's alone.
+    The evidence travels with the answer because ``[n]`` is only checkable against it —
+    ``/v1/verify`` takes exactly these passages.
+    """
+
+    answer: str
+    abstained: bool
+    sentences: list[ExtractedSentence]
+    sentences_considered: int = Field(
+        ..., description="Candidate sentences considered before the max_sentences cut"
+    )
+
+
 class ResetResponse(BaseModel):
     """The index was deleted."""
 

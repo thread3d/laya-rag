@@ -76,8 +76,10 @@ SERVER_INSTRUCTIONS = (
     "Retrieval over a local document corpus, powered by the Laya decision engine. "
     "`search_evidence` returns calibrated evidence, not an answer: it reports whether the "
     "corpus supports answering the question and returns the passages that do. If "
-    "`answerable` is false, do not answer from those passages. `compose_answer` and "
-    "`index_documents`/`reset_index` are optional and off unless enabled."
+    "`answerable` is false, do not answer from those passages. `extract_answer` answers by "
+    "quoting those passages verbatim, with no model involved, and abstains when nothing "
+    "qualifies. `compose_answer` and `index_documents`/`reset_index` are optional and off "
+    "unless enabled."
 )
 
 
@@ -160,6 +162,35 @@ class PassageInput(BaseModel):
     path: str | None = Field(None, description="Source path, cited in an answer")
 
 
+class ExtractedSentence(BaseModel):
+    """One sentence copied verbatim out of a retrieved passage."""
+
+    text: str = Field(..., description="The sentence, verbatim from `passages`")
+    citation: int = Field(..., description="The `[n]` this sentence carries in `answer`")
+    path: str | None = Field(None, description="Source document the span was copied from")
+    chunk_id: str | None = Field(None, description="Chunk the span was copied from")
+
+
+class ExtractedAnswer(BaseModel):
+    """An answer quoted from the corpus, with the evidence it was quoted from.
+
+    No model is involved: every sentence in `sentences` is a substring of one of `passages`,
+    so this text cannot contain anything the corpus does not, and `abstained` is true when
+    nothing qualified. `passages` travels with the answer so the citations can be checked —
+    feed both to `verify_answer`.
+    """
+
+    query: str
+    answer: str = Field(..., description="Verbatim sentences with [n] citations, or an abstention")
+    abstained: bool = Field(..., description="True when no passage yielded an emittable sentence")
+    answerable: bool = Field(..., description="Laya's verdict on whether the evidence answers it")
+    answerability: float | None = Field(None, description="Calibrated P(answerable)")
+    sentences: list[ExtractedSentence]
+    sentences_considered: int = Field(0, description="Candidates considered before the cut")
+    passages: list[EvidencePassage] = Field(default_factory=list)
+    note: str | None = None
+
+
 # -- backends ----------------------------------------------------------------
 
 class ToolFailure(RuntimeError):
@@ -237,6 +268,17 @@ class LocalBackend:
         from .verify import split_claims
 
         return self.engine().adjudicate_claims(split_claims(answer), tenant=tenant)
+
+    def extract(
+        self, query: str, top_k: int, max_sentences: int, tenant: str | None
+    ) -> dict[str, Any]:
+        return self.engine().query_extractive(
+            query,
+            max_sentences=max_sentences,
+            include_evidence=True,
+            top_k=top_k,
+            tenant=tenant,
+        )
 
     def compose(
         self, query: str, passages: Sequence[PassageInput], max_tokens: int | None
@@ -363,6 +405,20 @@ class HttpBackend:
 
     def adjudicate(self, answer: str, tenant: str | None) -> dict[str, Any]:
         return self._request("POST", "/v1/adjudicate", {"answer": answer, "tenant": tenant})
+
+    def extract(
+        self, query: str, top_k: int, max_sentences: int, tenant: str | None
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/v1/extract",
+            {
+                "query": query,
+                "top_k": top_k,
+                "max_sentences": max_sentences,
+                "tenant": tenant,
+            },
+        )
 
     def compose(
         self, query: str, passages: Sequence[PassageInput], max_tokens: int | None
@@ -619,6 +675,47 @@ def build_server(
         """
         report = _call("check_index_integrity", backend.integrity, near_duplicates)
         return _trim_integrity(report)
+
+    @server.tool(title="Answer by quoting the corpus", annotations=read_only)
+    def extract_answer(
+        query: str, top_k: int = 5, max_sentences: int = 5, tenant: str | None = None
+    ) -> ExtractedAnswer:
+        """Answer a question using only sentences copied verbatim out of the corpus.
+
+        No model is in this path: every returned sentence is an exact substring of one of
+        the returned `passages`, carrying its `[n]` and its source path, so the answer cannot
+        contain anything the corpus does not and the citations are checkable with
+        `verify_answer` — pass the same `passages` back. `abstained` is true when nothing in
+        the evidence qualified, which is a real answer: prefer it to answering from memory.
+
+        This answers by quoting, so it is less fluent than `compose_answer`. That is the
+        trade: attribution is structural here, not probabilistic.
+        """
+        if top_k < 1 or top_k > 50:
+            raise ToolError("extract_answer: top_k must be between 1 and 50")
+        if max_sentences < 1 or max_sentences > 20:
+            raise ToolError("extract_answer: max_sentences must be between 1 and 20")
+        body = _call("extract_answer", backend.extract, query, top_k, max_sentences, tenant)
+        return ExtractedAnswer(
+            query=str(body.get("query", query)),
+            answer=str(body.get("answer", "")),
+            abstained=bool(body.get("abstained")),
+            answerable=bool(body.get("answerable")),
+            answerability=body.get("answerability"),
+            sentences=[ExtractedSentence(**sentence) for sentence in body.get("sentences", [])],
+            sentences_considered=int(body.get("sentences_considered", 0) or 0),
+            passages=[
+                EvidencePassage(
+                    path=str(passage.get("path", "")),
+                    text=str(passage.get("text", "")),
+                    relevance=float(passage.get("relevance", 0.0) or 0.0),
+                    channels=list(passage.get("channels", []) or []),
+                    chunk_id=str(passage.get("chunk_id", "")),
+                )
+                for passage in body.get("passages", [])
+            ],
+            note=body.get("note"),
+        )
 
     @server.tool(title="Verify citations", annotations=read_only)
     def verify_answer(

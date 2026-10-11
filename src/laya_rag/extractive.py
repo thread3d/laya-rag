@@ -101,7 +101,9 @@ def compose_extractive(
     A candidate sentence is kept only if it appears **verbatim** in one of the passage texts —
     that is the structural guarantee, and it survives the document merge the same way
     :func:`build_messages` presents evidence. Documents are numbered in first-appearance order,
-    so ``[n]`` means the same thing here, in the prompt, and in `verify_citations`.
+    so ``[n]`` means the same thing here, in the prompt, and in `verify_citations`; the marker
+    is emitted *before* the sentence it supports, for the reason given where the answer is
+    assembled below.
     """
     if max_sentences < 1:
         raise ValueError("max_sentences must be positive")
@@ -158,7 +160,13 @@ def compose_extractive(
 
     if not kept:
         return ExtractiveAnswer(answer=ABSTENTION, abstained=True, considered=len(candidates))
-    answer = " ".join(f"{sentence.text} [{sentence.citation}]" for sentence in kept)
+    # The marker **leads** its sentence rather than trailing it. `verify_citations` splits an
+    # answer into claims *after* the terminal punctuation, so a trailing "[1]" is orphaned onto
+    # the next claim — the sentence it was meant to support reads as uncited and the final marker
+    # as a dangling citation. Emitting it first is what makes the structured citation contract
+    # checkable without parsing prose, and it matches how `build_messages` numbers the evidence
+    # the model is shown: "[1]" opens both the prompt's document block and the sentence quoting it.
+    answer = " ".join(f"[{sentence.citation}] {sentence.text}" for sentence in kept)
     return ExtractiveAnswer(
         answer=answer, abstained=False, sentences=kept, considered=len(candidates)
     )

@@ -52,6 +52,7 @@ Routes registered by `src/laya_rag/api.py`, all behind the optional static beare
 | `POST /v1/index` | yes | no | synchronous, CPU-bound, no lock |
 | `POST /v1/index/stream` | yes | no | NDJSON (`application/x-ndjson`) |
 | `POST /v1/query` | yes | no | the core evidence call |
+| `POST /v1/extract` | yes | no | answers by quoting the evidence; no model on the path |
 | `POST /v1/compose` | yes | no | NDJSON; the only generated text |
 | `POST /v1/verify` | yes | no | deterministic, model-free |
 | `POST /v1/adjudicate` | yes | no | corpus-wide claim support |

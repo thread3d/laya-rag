@@ -670,16 +670,28 @@ end-to-end ranking is a cost that only applies to the path it chose to measure.
 3. **A held-out own-domain set** (§7.2) scored the same way, where extractive prose is a plausible
    product rather than a compromise.
 
-**Why the current surfaces are the blocker, not the idea.** `query_extractive` is reachable from
-the engine and the CLI (`laya-rag extract`) and **nowhere else** — `grep -c extract` is **0** in
-both `api.py` and `mcp_server.py`. Exposing it as `POST /v1/extract` and an MCP `extract` tool is an
-hour of work and is what makes a reproducible, externally runnable row possible.
+**The surfaces are no longer the blocker.** `query_extractive` was reachable from the engine and
+the CLI (`laya-rag extract`) and **nowhere else** — `grep -c extract` was **0** in both `api.py` and
+`mcp_server.py`. It is now **`POST /v1/extract`** (the one route whose output is entirely the
+engine's, with the passages returned alongside the answer so `/v1/verify` runs over the result) and
+the MCP **`extract_answer`** tool. The engine method also takes `include_evidence`, and the API
+response is the `/v1/query` shape plus `answer`/`abstained`/`sentences`/`sentences_considered`.
 
-**Also worth fixing while there.** `findings-extractive-composer.md` names two open ends that bear
-directly on the score: sentence scoring is the *document's* relevance rather than a per-sentence
-scorer, and **contradiction gating is absent** — `adjudicate_claims` can mark a claim
-`contradicted` and the composer will still emit the span. Gating emission on adjudication is the
-difference between "verbatim" and "supported".
+**Building that surface found a bug in the citation format, and it was load-bearing.** The composer
+emitted the marker *trailing* its sentence (`"Refunds take five days. [1]"`). `verify_citations`
+splits an answer into claims **after** the terminal punctuation, so that `[1]` was orphaned onto the
+*next* claim: the sentence it supported read as uncited and the final marker dangled as a citation
+to nothing — **every extractive answer failed the project's own deterministic check**, which is the
+exact failure the composer was built to remove. The unit tests missed it because they only asserted
+that each sentence's number appeared somewhere in the answer, which the trailing form satisfies. The
+marker now leads (`"[1] Refunds take five days."`), matching how `build_messages` numbers the
+evidence, and the `/v1/extract` → `/v1/verify` round trip is a test.
+
+**Still open here.** `findings-extractive-composer.md` names two ends that bear directly on the
+score: sentence scoring is the *document's* relevance rather than a per-sentence scorer, and
+**contradiction gating is absent** — `adjudicate_claims` can mark a claim `contradicted` and the
+composer will still emit the span. Gating emission on adjudication is the difference between
+"verbatim" and "supported".
 
 **Expected.** Not a delta on an existing number: a **new number that did not exist**, on the axis
 (citation support, abstention, nugget recall without a judge) where the field has no leaderboard
@@ -827,7 +839,7 @@ answer-production paths:
 | path | surface | model? | attribution |
 | --- | --- | --- | --- |
 | `Composer` (`compose.py`) | `POST /v1/compose`, MCP `compose` — the API docstring calls it "the only route that returns generated text" | external LLM (Ollama, default `ornith-1.5:35b`); no weights ship | probabilistic |
-| `compose_extractive` (`extractive.py`) | `RagEngine.query_extractive` and `laya-rag extract` — **CLI only** | none | **structural**: every emitted sentence is a verbatim substring of a retrieved passage, with a path + chunk id |
+| `compose_extractive` (`extractive.py`) | `POST /v1/extract`, MCP `extract_answer`, `RagEngine.query_extractive` and `laya-rag extract` | none | **structural**: every emitted sentence is a verbatim substring of a retrieved passage, with a path + chunk id |
 
 So the honest statement is not "generator-free" but **generator-optional**, and the two paths have
 different attribution properties:

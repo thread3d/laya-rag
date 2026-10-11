@@ -62,6 +62,7 @@ from .schemas import (
     DeleteDocumentsRequest,
     DeleteDocumentsResponse,
     DocumentListResponse,
+    ExtractResponse,
     HealthResponse,
     IndexReportResponse,
     IntegrityResponse,
@@ -267,6 +268,35 @@ class VerifyRequest(BaseModel):
     @classmethod
     def _answer_has_content(cls, value: str) -> str:
         return _require_visible(value, "answer")
+
+
+class ExtractRequest(BaseModel):
+    """A request for an answer assembled only from verbatim spans of retrieved evidence.
+
+    The retrieval knobs are the same ones ``/v1/query`` takes, so an extractive answer is
+    built from exactly the evidence a query for the same text would return.
+    """
+
+    query: str = Field(..., min_length=1, description="The question to answer by quoting")
+    top_k: int | None = Field(None, ge=1, le=50, description="Passages to quote from")
+    retrieve_k: int | None = Field(None, ge=1, le=500, description="Dense candidates to consider")
+    relevance_threshold: float | None = Field(None, ge=0.0, le=1.0)
+    answerability_threshold: float | None = Field(None, ge=0.0, le=1.0)
+    max_passage_chars: int | None = Field(2000, ge=100, le=20000)
+    max_sentences: int = Field(5, ge=1, le=20, description="Longest answer, in sentences")
+    min_score: float = Field(
+        0.0, ge=0.0, le=1.0, description="Drop documents below this relevance before quoting"
+    )
+    tenant: str | None = Field(
+        None,
+        description="Caller identity for the trust manifest's per-tenant ACL. When the "
+                    "bearer token is bound to a tenant, this must match it or be omitted",
+    )
+
+    @field_validator("query")
+    @classmethod
+    def _query_has_content(cls, value: str) -> str:
+        return _require_visible(value, "query")
 
 
 class AdjudicateRequest(BaseModel):
@@ -890,6 +920,50 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         except ValueError as exc:
             raise APIProblem(400, "invalid_request", str(exc)) from exc
         return result.as_dict()
+
+    @app.post(
+        "/v1/extract",
+        tags=["retrieval"],
+        operation_id="create_extract",
+        response_model=ExtractResponse,
+        summary="Answer by quoting the evidence, with no generator in the path",
+        responses=_READ_ERRORS,
+    )
+    def extract(request: ExtractRequest, principal: Principal = Depends(read_access)) -> dict[str, Any]:
+        """Answer a question using only sentences copied verbatim out of the retrieved passages.
+
+        This is the one route whose output is *entirely* the engine's. ``/v1/compose`` writes
+        prose with an external model, so its answer is ``engine + <model>``; here every emitted
+        sentence is a substring of a passage in ``passages``, carries the ``[n]`` and the
+        ``path``/``chunk_id`` it came from, and is checkable with ``/v1/verify`` without
+        parsing prose. When nothing qualifies, ``abstained`` is true and ``answer`` says so.
+
+        The trade is stated rather than hidden: extractive prose is less fluent and less
+        complete than generated prose. What is guaranteed is attribution, not usefulness.
+        """
+        engine = get_engine()
+        try:
+            payload = engine.query_extractive(
+                request.query,
+                max_sentences=request.max_sentences,
+                min_score=request.min_score,
+                include_evidence=True,
+                top_k=request.top_k,
+                retrieve_k=request.retrieve_k,
+                relevance_threshold=request.relevance_threshold,
+                answerability_threshold=request.answerability_threshold,
+                max_passage_chars=request.max_passage_chars,
+                tenant=tenant_for(principal, request.tenant),
+            )
+        except BuildInProgressError as exc:
+            raise APIProblem(409, CODE_BUILD_IN_PROGRESS, str(exc)) from exc
+        except IndexNotBuiltError as exc:
+            raise APIProblem(409, "index_not_built", str(exc)) from exc
+        except ModelUnavailableError as exc:
+            raise APIProblem(503, CODE_MODEL_UNAVAILABLE, str(exc)) from exc
+        except ValueError as exc:
+            raise APIProblem(400, "invalid_request", str(exc)) from exc
+        return payload
 
     @app.post(
         "/v1/compose",

@@ -151,6 +151,7 @@ being re-indexed) already lives in `index`. Use `--json` for machine-readable ou
 | `DELETE /v1/documents` | `{ids: [...]}` or `{paths: [...]}` — remove specific documents without a rebuild; on the append-only on-disk backend this tombstones and compacts |
 | `POST /v1/index/stream` | the same body, but streams running counters (`progress` events, then one `done`); NDJSON, or SSE with `Accept: text/event-stream` |
 | `POST /v1/query` | `{query, top_k?, retrieve_k?, relevance_threshold?, answerability_threshold?, max_passage_chars?}` |
+| `POST /v1/extract` | `{query, top_k?, max_sentences?, min_score?, …}` — answers by quoting the evidence; every sentence is a verbatim span with its `[n]`, path and chunk id, and the passages travel with it, so the row is the engine's alone |
 | `POST /v1/compose` | `{query, passages: [...]}` — streams composed prose (NDJSON or SSE) |
 | `POST /v1/verify` | `{answer, passages: [...]}` — deterministic citation and quote checks |
 | `POST /v1/adjudicate` | `{answer, …}` — Laya decides whether the corpus supports each claim |
@@ -223,11 +224,12 @@ Claude Desktop / Cursor config (use absolute paths):
 ```
 
 Tools: `search_evidence` (the calibrated evidence call), `list_documents`,
-`read_document`, `corpus_stats`, `check_index_integrity`, `verify_answer`,
-`adjudicate_answer`, `compose_answer`, and — only with `LAYA_RAG_MCP_ALLOW_WRITES=1` —
-`index_documents` and `reset_index` (the latter requires `confirm="reset"`). The
-`search_evidence` description states the honesty rule plainly: when `answerable` is false,
-the passages do not support an answer and the agent should abstain. Resources
+`read_document`, `corpus_stats`, `check_index_integrity`, `extract_answer` (answers by
+quoting the retrieved passages verbatim, with no model in the path, and abstains when
+nothing qualifies), `verify_answer`, `adjudicate_answer`, `compose_answer`, and — only with
+`LAYA_RAG_MCP_ALLOW_WRITES=1` — `index_documents` and `reset_index` (the latter requires
+`confirm="reset"`). The `search_evidence` description states the honesty rule plainly: when
+`answerable` is false, the passages do not support an answer and the agent should abstain. Resources
 (`laya-rag://stats`, `laya-rag://documents`) and two prompts (`answer_from_corpus`,
 `audit_answer`) are also exposed. By default the server runs the engine in-process, like
 the CLI; `LAYA_RAG_MCP_BACKEND=http` proxies to a running service instead. The HTTP
