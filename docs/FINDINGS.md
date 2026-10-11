@@ -38,7 +38,7 @@ are what stops the next pass from re-trying them.
 | Fused coverage objective | Dropping the dense-gram redundancy term at λ=0.5: MAP@10 0.2835 → **0.2850**, Hits@4 0.7197 → 0.7326 | [findings-rerank-selection.md](findings-rerank-selection.md) |
 | Fusion constant | The engine fused at `k=60` while every documented MultiHop number used `k=5`; `FUSION_K` now defaults to 5 (MAP@10 +0.0040 [+0.0012, +0.0069], p=0.008; BEIR +0.004–0.009) | [findings-fusion-k.md](findings-fusion-k.md) |
 | Learned-sparse channel | SPLADE-style sparse now ships as a third engine channel: measured +0.03–0.14 over BM25 alone and +0.004–0.023 over two-channel fusion on BEIR (SciFact 0.741 → **0.745**, NFCorpus 0.367 → **0.372**, ArguAna 0.568 → **0.591**); opt-in via `SPARSE_MODEL` | [findings-sparse-channel.md](findings-sparse-channel.md) |
-| Engine-level BEIR | The engine itself scores SciFact nDCG@10 **0.7264** and **0.7443** with sparse (**+0.0179 [+0.0028, +0.0337]**, p=0.025) — the channel's gain transfers and is larger than the replica's, while the `tools/beir.py` replica **overstates the engine by 0.0144** | [findings-engine-parity.md](findings-engine-parity.md) |
+| Engine-level BEIR | The engine itself scores SciFact nDCG@10 **0.7264** and **0.7443** with sparse (**+0.0179 [+0.0028, +0.0337]**, p=0.025) — the channel's gain transfers and is larger than the replica's, while the `tools/beir.py` replica **overstates the engine by 0.0149** | [findings-engine-parity.md](findings-engine-parity.md) |
 | Engine-level MultiHop | The 256-token harness **understates** the engine, the opposite sign to BEIR: over the **full 2,255 queries** the engine is **+0.0499 MAP@10 [+0.0432, +0.0566]** with `bge-small` fused, and the **shipped default** (Laya encoder, dense weight 0, lexical only) is better still at **0.3128**, **+0.0618 [+0.0547, +0.0688]** over the harness. The dense channel is a measured **trade**: it costs **+0.0119 MAP@10** and **+0.0187 MRR@10** to leave off, and buys nothing significant in Hits@4/@10. The first full run read 0.2216 because it reused a **partial index** missing `lexical.json`, now a fixed engine bug | [findings-engine-multihop.md](findings-engine-multihop.md) |
 | Engine-level MuSiQue | **The MultiHop win does not travel, and the full set confirms it.** Over all **2,417** validation queries the engine is **−0.0091 MAP@10 [−0.0120, −0.0062]** against the harness's fused first stage and below *every* harness arm (`blend-0.75` −0.0390, `ce` −0.0271, `covquota` −0.0223); the 200-query subset read −0.0097. Pool depth is not the cause (+0.0019). Together with MultiHop — where leaving the dense channel off is worth **+0.0119** — the dense channel's contribution **reverses between corpora**, which is the argument for routing rather than one global configuration | [findings-engine-musique.md](findings-engine-musique.md) |
 | Cross-encoder + coverage at the engine | The auto coverage default is **safe on BEIR** — re-verified under the corpus-aware chunking default: 0.7417 with and without the CE (p=0.99) — and **4.3× faster** (167 s against 709 s), because the 322M decision model then only gates the kept passages | [findings-engine-cross-encoder.md](findings-engine-cross-encoder.md) |
@@ -154,7 +154,7 @@ are what stops the next pass from re-trying them.
   while the primary `query()` call site kept not passing it; a spy on `_fuse` from `query()`
   is what proves the wiring. The same miss hit the coverage-redundancy flag.
 - **A replica is not the system.** `tools/beir.py` reimplements the channels and scores whole
-  documents, overstating the real engine by **0.0144** on SciFact; `tools/engine_beir.py`
+  documents, overstating the real engine by **0.0149** on SciFact; `tools/engine_beir.py`
   runs the engine itself when a claim is about the engine.
 - **Improvements do not compose additively.** The sparse channel is worth **+0.0179** (p=0.025)
   under fixed chunking but only **+0.0048** (ns) once corpus-aware chunking is the default —
@@ -166,7 +166,7 @@ are what stops the next pass from re-trying them.
   corpus-aware chunking on the harness's own 400-query seed-17 subset: the engine is **+0.0535
   MAP@10 [+0.0387, +0.0680]** above the harness's hybrid first stage and level with its
   cross-encoder row (**+0.0071, ns**), so the replica *understates* the engine on MultiHop-RAG,
-  the opposite of the +0.0144 overstatement on BEIR. The full 2,255-query run is still owed; see
+  the opposite of the +0.0149 overstatement on BEIR. The full 2,255-query run is still owed; see
   [findings-engine-multihop.md](findings-engine-multihop.md).
 - **Verification.** `make test` is 746 offline tests and `make test-real` is 4 end-to-end tests
   against the real checkpoint (checkpoint load and embed, Laya relevance beating cosine on a

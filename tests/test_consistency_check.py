@@ -381,3 +381,33 @@ def test_the_deficit_arithmetic_names_the_members_it_sums():
     assert deficit["counted"] == 9
     assert deficit["total"] == pytest.approx(0.8054, abs=5e-5)
     assert deficit["macro"] == pytest.approx(0.0447, abs=5e-5)
+
+
+# ── the harness-vs-engine parity figure is computed, not typed ───────────
+
+def test_the_scifact_parity_is_read_from_both_reports():
+    """The delta is `replica - engine`, so it cannot disagree with either of them."""
+    parity = cc.scifact_harness_parity()
+    if parity is None:
+        pytest.skip("engine-beir or five-small-fixed report is not present")
+    assert parity["engine"] == pytest.approx(0.7264, abs=5e-5)
+    assert parity["replica"] == pytest.approx(0.7413, abs=5e-5)
+    assert parity["delta"] == pytest.approx(0.0149, abs=5e-5)
+
+
+def test_the_scifact_parity_skips_without_its_reports(tmp_path):
+    """A missing report is a skip, as everywhere else in this gate."""
+    missing = cc.beir_report_metric("no-such-report", "scifact", "nDCG@10")
+    assert missing() is None
+    assert cc.engine_beir_metric("no-such-report", "nDCG@10")() is None
+
+
+def test_the_replica_row_is_the_hybrid_biencoder_not_the_control():
+    """The control is the published Anserini configuration; quoting a fused row against it is not
+    like-for-like, so the parity must read `hybrid-biencoder`."""
+    authority = cc.beir_report_metric(
+        "five-small-fixed", "scifact", "nDCG@10", retriever="hybrid-biencoder"
+    )
+    if authority() is None:
+        pytest.skip("five-small-fixed report is not present")
+    assert authority() != cc.beir_report_metric("five-small-fixed", "scifact", "nDCG@10")()

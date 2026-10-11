@@ -720,8 +720,8 @@ benchmark run.
 ## 4. Prerequisites — measurement hygiene
 
 These are not score items, they are the conditions under which a score means anything. Each is
-already named in `measurement-audit.md`; **items 1 and 2 are now closed, item 3 is a statement
-convention rather than a defect, and items 4–5 are standing practice.**
+already named in `measurement-audit.md`; **items 1–3 are now closed — and closing each of them
+found a defect that the convention was hiding — while items 4–5 are standing practice.**
 
 1. **`--limit-queries` dilution — fixed, and the guard that proves it was itself broken.** Found
    in four tools (`arguana_stance`, `order_eval`, `beir.py`'s HotpotQA path, `ondisk.py`, then
@@ -742,9 +742,18 @@ convention rather than a defect, and items 4–5 are standing practice.**
    An index built before the sidecar existed is adopted once and stamped, and its checkpoint
    manifest is rebound rather than discarded, so no measured work was thrown away. `--fresh` is
    still the tool for a deliberate reset, but it is no longer the *only* guard.
-3. **The harness and the shipped engine disagree on BM25 parameters** — `tools/beir.py` runs
-   `k1=0.9, b=0.4` (Anserini), the shipped engine `1.2/0.75`. The replica **overstates** the engine
-   by 0.0144 on SciFact and **understates** it on MultiHop-RAG. State which is being quoted.
+3. **The harness and the shipped engine disagree on BM25 parameters — a convention, now
+   checked.** `tools/beir.py` runs `k1=0.9, b=0.4` (Anserini) for its `bm25` control, the shipped
+   engine `1.2/0.75`; at the engine level the two are indistinguishable on SciFact (p=0.45), so
+   `BM25_K1`/`BM25_B` exist to *reproduce a baseline exactly*, not because one is better. A
+   `bm25-engine` row is the engine's configuration reproduced in the harness and a `bm25` row is
+   the published baseline reproduced there; **neither is the engine itself**, and a fused row must
+   not be quoted against the control. Making that convention checkable found a real drift: the
+   replica's overstatement of the engine on SciFact was hand-typed as **0.7408 / +0.0144** across
+   four documents and reproduces from **no report on disk** — two independent reports read
+   **0.7413** for the same retriever, model and `rrf_k`, so the figure is **+0.0149**. Both
+   endpoints and the delta are now pinned quantities in `make consistency-check`, read from
+   `eval/engine-beir/scifact-base.json` and `eval/beir/five-small-fixed.json`.
 4. **Minimum detectable effect.** MAP@10 MDE is 0.0076–0.0112 on 2,255 queries; most BEIR ablations
    are below theirs. Publish the MDE next to the delta, and pre-register the family before looking.
 5. **Significance, always.** Every row in this programme should carry a paired-bootstrap interval
@@ -858,7 +867,7 @@ module class. Each of those is a "no", and the reason matters more than the labe
 about what it *buys*: a like-for-like number against pipelines those toolkits have already
 reproduced, under identical conditions, with the harness mismatch (`k1`/`b`, chunking, top-k)
 neutralised by construction. Given that this project's own audit finds its replica **overstates**
-the engine by 0.0144 on SciFact and **understates** it on MultiHop-RAG, an external harness is not
+the engine by 0.0149 on SciFact and **understates** it on MultiHop-RAG, an external harness is not
 a nicety — it is the only control on the harness itself. This deserves to be a scoped item, not a
 footnote.
 
@@ -1413,7 +1422,7 @@ which is why they survive §7.1's test.
 **Task shape for T1–T7.** Each is: (a) a loader in `tools/` following the existing
 `tools/twincorpus.py`/`musique.py` pattern; (b) a run through **the shipped engine defaults**, not a
 harness replica, since `findings-engine-parity.md` records the replica overstating the engine by
-0.0144 on SciFact; (c) per-query scores persisted so the paired bootstrap applies; (d) a report with
+0.0149 on SciFact; (c) per-query scores persisted so the paired bootstrap applies; (d) a report with
 an interval, not a point estimate. **Do T1 first** — it is the smallest and the only one whose
 scoring is unambiguous.
 
@@ -1554,22 +1563,27 @@ every other row used a model column. That is the argument for the tool, made by 
 **Everything else here quotes other documents.** The numbers are transcribed, and transcription
 drifts. Two things followed, and the first is now closed:
 
-1. **§1.1 and the §1.2 arithmetic are anchored to the gate — done.** `consistency_check.py` now
-   imports `tools/channel_coverage.py` and pins, as one `Quantity` per figure: the summed deficit
-   **0.8054**, the macro cost **0.0447**, the half-closed **+0.022** and the nine-tenths **+0.040**;
-   plus a `check_channel_coverage` pass that requires every §1.1 table row *and* the three summary
-   lines — including the lexical-only count — to appear verbatim, and every §1.2 cell to state the
-   computed "ours", published and gap values. `consistency-check` went from **20** checked sites to
-   **30**; a two-line edit to the deficit or to a member's channel now fails the gate rather than
+1. **§1.1, the §1.2 arithmetic and the harness parity are anchored to the gate — done.**
+   `consistency_check.py` imports `tools/channel_coverage.py` and pins, as one `Quantity` per
+   figure: the summed deficit **0.8054**, the macro cost **0.0447**, the half-closed **+0.022** and
+   the nine-tenths **+0.040**; plus a `check_channel_coverage` pass that requires every §1.1 table
+   row *and* the three summary lines — including the lexical-only count — to appear verbatim, and
+   every §1.2 cell to state the computed "ours", published and gap values. The SciFact
+   harness-parity pair is pinned the same way (§4.3): the engine's 0.7264 and the replica's 0.7413
+   from their two reports, and the **+0.0149** overstatement derived from them across eleven sites
+   in six documents. `consistency-check` went from **20** checked sites to **43**; a two-line edit
+   to the deficit, to a member's channel or to the parity figure now fails the gate rather than
    passing silently. Both halves were negative-tested (perturbing 0.8054 in §1.2 and `nq`'s channel
-   in §1.1 each produces exactly one failure). This is the "Tension 10" the audit named.
+   in §1.1 each produces exactly one failure; so does moving either parity endpoint). **The
+   parity pin immediately found one**: the figure had been hand-typed as 0.7408 / +0.0144 and
+   reproduces from no report on disk.
 2. **The rest of the document is still transcription, and registering it is a separate job.**
    `grep -c SCORE-LIFT tools/consistency_check.py tools/claim_check.py` is no longer **0 and 0** —
-   `consistency_check.py` matches — but the ~35 quantities *outside* §1 are still unanchored. The
-   order to do them in is unchanged: the TREC RAG 2025 retrieval-task figures (§P10a) next, since
-   those are the ones a reader is most likely to act on, then the P1/P4 bars quoted from
-   `RANKINGS.md` and `docs/findings-*`. A `claim-check` `Claim` still needs its pinned count
-   updated in three documents when one is added, which is why the §1 anchors went into the
+   `consistency_check.py` matches — but the ~30 quantities *outside* §1 and §4.3 are still
+   unanchored. The order to do them in is unchanged: the TREC RAG 2025 retrieval-task figures
+   (§P10a) next, since those are the ones a reader is most likely to act on, then the P1/P4 bars
+   quoted from `RANKINGS.md` and `docs/findings-*`. A `claim-check` `Claim` still needs its pinned
+   count updated in three documents when one is added, which is why these anchors went into the
    consistency registry (additive, no pinned count) rather than into `claim-check`.
 
 ### 10.4 What could invalidate this document, and how it would look

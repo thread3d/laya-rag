@@ -46,6 +46,8 @@ sys.path.insert(0, str(ROOT / "src"))
 import claim_check  # noqa: E402  (reuse the region/number helpers rather than re-implementing them)
 
 BEIR = ROOT / "eval" / "beir"
+#: The real-engine BEIR reports (`tools/engine_beir.py`), the control on the `tools/beir.py` replica.
+ENGINE_BEIR = ROOT / "eval" / "engine-beir"
 MH = ROOT / "eval" / "benchmarks" / "multihop-rag"
 RECALIBRATION = MH / "recalibration.json"
 COMPARE = ROOT / "tools" / "compare.py"
@@ -200,19 +202,66 @@ def recalibration_splits() -> float | None:
         return None
 
 
-def beir_report_metric(report: str, dataset: str, key: str) -> Callable[[], float | None]:
-    """A BEIR report's engine row, so an audit's prose is pinned to the report and not to a copy."""
+def beir_report_metric(
+    report: str, dataset: str, key: str, retriever: str = "bm25-engine"
+) -> Callable[[], float | None]:
+    """A BEIR report's row, so an audit's prose is pinned to the report and not to a copy."""
 
     def authority() -> float | None:
         data = _read_json(BEIR / f"{report}.json")
         if not data:
             return None
         try:
-            return float(data["datasets"][dataset]["retrievers"]["bm25-engine"][key])
+            return float(data["datasets"][dataset]["retrievers"][retriever][key])
         except (KeyError, TypeError, ValueError):
             return None
 
     return authority
+
+
+def engine_beir_metric(report: str, key: str) -> Callable[[], float | None]:
+    """An `eval/engine-beir/<report>.json` summary metric — the real `RagEngine`, not the replica."""
+
+    def authority() -> float | None:
+        data = _read_json(ENGINE_BEIR / f"{report}.json")
+        if not data:
+            return None
+        try:
+            return float(data["summary"][key])
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    return authority
+
+
+def scifact_harness_parity() -> Mapping[str, float] | None:
+    """How far the `tools/beir.py` replica sits from the engine it reimplements, on SciFact.
+
+    §4.3 of `SCORE-LIFT.md` asks every BEIR row to say which BM25 configuration it quotes. This
+    goes further and makes the *size of the harness mismatch* a computed quantity: the engine
+    reads `eval/engine-beir/scifest-base.json` (the real `RagEngine`, thresholds at zero, 300
+    test queries) and the replica reads the canonical five-dataset report's `hybrid-biencoder`
+    row, which is the two-channel configuration the parity finding compares against.
+
+    The figure was hand-typed as **0.7408 / +0.0144** and does **not** reproduce from any report on
+    disk; two independent reports (`five-small-fixed.json`, `rrf-5.json`) both read 0.7413 for the
+    same retriever, model and `rrf_k`, which makes the delta **+0.0149**. That is the drift this
+    entry exists to stop.
+    """
+    engine = _read_json(ENGINE_BEIR / "scifact-base.json")
+    replica = _read_json(BEIR / "five-small-fixed.json")
+    try:
+        engine_value = float(engine["summary"]["nDCG@10"])                       # type: ignore[index]
+        replica_value = float(
+            replica["datasets"]["scifact"]["retrievers"]["hybrid-biencoder"]["nDCG@10"]  # type: ignore[index]
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {
+        "engine": engine_value,
+        "replica": replica_value,
+        "delta": replica_value - engine_value,
+    }
 
 
 def channel_coverage_module() -> Any:
@@ -482,6 +531,51 @@ def registry() -> list[Quantity]:
             authority=deficit_authority(),
             key="nine_tenths",
             provenance="tools/channel_coverage.py deficit() — nine tenths of the macro cost",
+        ),
+        # ── the harness-vs-engine mismatch on SciFact ────────────────────
+        #
+        # §4.3 of `SCORE-LIFT.md` names this as a statement convention: the replica runs Anserini
+        # `k1=0.9, b=0.4` while the shipped engine runs `1.2/0.75`, and every BEIR row has to say
+        # which it quotes. The *size* of the mismatch is load-bearing — §7.2 argues from it that an
+        # external harness is the only control on this one — and it was hand-typed as 0.7408 /
+        # +0.0144, which reproduces from no report on disk. These three quantities make it computed.
+        Quantity(
+            name="engine SciFact nDCG@10",
+            sites=(Site("docs/findings-engine-parity.md", r"^\|\s*\*\*engine\*\*, dense \+ lexical", 0.7264, 4),),
+            authority=engine_beir_metric("scifact-base", "nDCG@10"),
+            provenance="eval/engine-beir/scifact-base.json summary.nDCG@10 (the real RagEngine)",
+        ),
+        Quantity(
+            name="replica SciFact hybrid-biencoder nDCG@10",
+            sites=(Site("docs/findings-engine-parity.md", r"^\|\s*`tools/beir\.py` replica, 2-channel", 0.7413, 4),),
+            authority=beir_report_metric(
+                "five-small-fixed", "scifact", "nDCG@10", retriever="hybrid-biencoder"
+            ),
+            provenance=(
+                "eval/beir/five-small-fixed.json datasets.scifact.retrievers.hybrid-biencoder.nDCG@10"
+            ),
+        ),
+        Quantity(
+            name="replica overstatement of the engine on SciFact",
+            sites=(
+                Site("docs/findings-engine-parity.md", r"The replica overstates the engine", 0.0149, 4),
+                Site("docs/FINDINGS.md", r"\| Engine-level BEIR \|", 0.0149, 4),
+                Site("docs/FINDINGS.md", r"overstating the real engine", 0.0149, 4),
+                Site("docs/FINDINGS.md", r"the opposite of the", 0.0149, 4),
+                Site("ROADMAP.md", r"already shown to overstate the engine", 0.0149, 4),
+                Site("ROADMAP.md", r"opposite sign to BEIR's", 0.0149, 4),
+                Site("SCORE-LIFT.md", r"so the figure is", 0.0149, 4),
+                Site("SCORE-LIFT.md", r"an external harness is not", 0.0149, 4),
+                Site("SCORE-LIFT.md", r"records the replica overstating the engine by", 0.0149, 4),
+                Site("docs/findings-engine-multihop.md", r"which overstated the engine by", 0.0149, 4),
+                Site("docs/findings-chunk-merge.md", r"Round 29's engine-level run", 0.0149, 4),
+            ),
+            authority=scifact_harness_parity,
+            key="delta",
+            provenance=(
+                "tools/beir.py replica (eval/beir/five-small-fixed.json hybrid-biencoder 0.7413) "
+                "minus the real engine (eval/engine-beir/scifact-base.json 0.7264)"
+            ),
         ),
     ]
 
