@@ -49,6 +49,21 @@ beats `60` on BEIR by +0.004–0.009, so the engine's RRF is probably closer to 
 table shows. And the convex `dense_weight`/`lexical_weight` are **not tuned** — a tuned convex
 combination is exactly what the audit asked for and is not what this run used.
 
+## Superseded, in part, by the tuned sweep
+
+Every "what this does not show" below has since been closed or narrowed — see
+[`docs/findings-fusion-tuning.md`](findings-fusion-tuning.md), which tunes the weights on a seeded
+half and reads them on the other half, against the **`k=5` the engine ships**, on six corpora:
+
+- ArguAna **+0.0266** [+0.0133, +0.0403], FiQA **+0.0296** [+0.0177, +0.0413] and Quora **+0.0215**
+  [+0.0186, +0.0245] over 10,000 queries are significant wins over RRF `k=5`;
+- SciFact (+0.0004) and SciDocs (+0.0056) are ties, and NFCorpus is a −0.0038 near-negatives;
+- a single **global** dense weight of 2.0 beats the shipped RRF by **+0.0127** on the held-out
+  halves.
+
+So the +0.0092 against `k=60` above was part `k` and part fusion rule. The table on this page
+stands as the record of the untuned comparison; the tuned numbers are the ones to quote.
+
 ## What this does not show
 
 - **One corpus.** SciFact only; no NFCorpus, no MultiHop. The audit's MultiHop `FUSION_K` arms are

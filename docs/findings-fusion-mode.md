@@ -26,13 +26,20 @@ making the comparison runnable.
 
 ## What this does not show
 
-- **The convex arm is measured on one corpus, in the replica.**
-  [`findings-fusion-ablation.md`](findings-fusion-ablation.md) runs it on SciFact against RRF and
-  CombSUM: convex is the best arm (0.7412) but its +0.0092 over RRF (k=60) is **not significant**
-  (p=0.139), while its +0.0263 over max-normalised CombSUM is. It is not measured on the engine's own
-  path or on MultiHop, and the weights are not tuned.
-- **The weights are not tuned.** `dense_weight`/`lexical_weight`/`sparse_weight` are reused as the
-  convex weights; a tuned convex combination is exactly the thing the ablation has to find.
+- **The convex arm is now measured on six corpora, and it wins.**
+  [`findings-fusion-tuning.md`](findings-fusion-tuning.md) tunes the dense weight on a seeded half
+  and reads it on the other half, against the `k=5` this engine ships: significant wins on ArguAna
+  (+0.0266), FiQA (+0.0296) and Quora (+0.0215, 10,000 queries), ties on SciFact and SciDocs, and a
+  −0.0038 near-negative on NFCorpus. A single **global** dense weight of 2.0 beats the shipped RRF
+  by **+0.0127** on the held-out halves. The earlier SciFact-only +0.0092 against `k=60`
+  ([`findings-fusion-ablation.md`](findings-fusion-ablation.md)) understated it: part of that gap
+  was the `k` and part the fusion rule.
+- **The weights are now tuned**, on a held-out half, over a grid of dense weights
+  `{0 … 3}` with the lexical weight fixed at 1.0. What that grid does not cover is a joint
+  two-channel search or a `max`-normalised convex arm.
+- **The engine's own path is still unmeasured.** These are the replica's whole-document rows; the
+  engine chunks corpus-aware and applies Laya's decisions. Shipping convex is one flag
+  (`FUSION_MODE=convex` plus a dense weight) and one `tools/engine_beir.py` run, not this table.
 - Normalisation is per query and per channel, so a channel with a single candidate contributes
   `1.0`; that is the documented choice, not a neutral one.
 

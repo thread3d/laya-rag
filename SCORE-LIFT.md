@@ -471,6 +471,20 @@ self-consistency under each candidate — is untried, needs no labels, and is th
 routing that can be applied to the eleven mixed cells (and to a real corpus) rather than to the
 five the router was fitted on.
 
+**Measured for (a), and it is a win where the earlier attempt was a tie.** `tools/fusion_tuning.py`
+(`make fusion-tuning`) tunes the dense weight on a seeded half of each corpus's queries and reads
+it on the other half, against **RRF at `k=5`** — the fusion the engine actually ships, where the
+earlier comparison used `k=60` and untuned weights. Six corpora (`docs/findings-fusion-tuning.md`):
+**three significant wins, no significant losses, three ties** — ArguAna **+0.0266**
+[+0.0133, +0.0403], FiQA **+0.0296** [+0.0177, +0.0413], Quora **+0.0215** [+0.0186, +0.0245] over
+10,000 queries; SciFact +0.0004, SciDocs +0.0056 and NFCorpus **−0.0038**, all intervals including
+zero. And the deployable version of the same runs: one **global** dense weight of 2.0, chosen on the
+pooled train halves, beats the shipped RRF by **+0.0127** on the held-out halves (0.5244 vs 0.5117),
+with every corpus's own optimum in 1.5–3.0 — the direction is not a per-corpus lottery. Touché-2020,
+where lexical wins by two to one and the convex rule is most at risk, is **not** measured: its run
+was stopped in the corpus build after ~50 minutes. The engine-level convex row is still unmeasured;
+shipping it is one flag and one `tools/engine_beir.py` run.
+
 **Expected.** (a) **+0.005 to +0.015** on the full-channel cells. (b) Larger in expectation on the
 eleven mixed cells: Quora wants dense only (−0.025 for fusion), Touché wants lexical only (−0.091
 for fusion), ArguAna wants dense, MultiHop-RAG wants the cross-encoder, BEIR wants it off. The

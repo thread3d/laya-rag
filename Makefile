@@ -84,7 +84,7 @@ TWO_WIKI_ARGS ?=
 GFI_ARGS ?=
 QUANT_ARGS ?= --cache eval/beir/cache/scidocs.bge-small-en-v1.5.cls.npy
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage lexical-selector context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -154,6 +154,7 @@ help:
 	@echo "charts       cross-system tables, error bars and the README charts"
 	@echo "charts-compare  published-system and open-source-field comparison figures"
 	@echo "lexical-selector  which BM25 configuration each BEIR member actually wants"
+	@echo "fusion-tuning  tuned convex fusion vs the shipped RRF, tuned on held-out halves"
 	@echo "claim-check  do the numbers quoted in prose resolve against the reports?"
 	@echo "consistency-check  do two documents disagree about the same quantity?"
 	@echo "channel-coverage  BEIR per-member channel map and the SCORE-LIFT deficit arithmetic"
@@ -254,6 +255,12 @@ beir-ablate:
 # Does an atomic lexical channel help BEIR fusion? (uses cached document embeddings)
 beir-atom-channel:
 	OMP_NUM_THREADS=16 $(PY) tools/beir_atom_channel.py $(BEIR_ATOM_ARGS)
+
+# Is a *tuned* convex combination better than the RRF the engine ships? Weights are chosen on
+# half the queries and scored on the other half, against RRF at k=5 rather than the k=60 the
+# earlier convex comparison used, and the channels are computed once so the sweep is cheap.
+fusion-tuning:
+	OMP_NUM_THREADS=8 $(PY) tools/fusion_tuning.py $(FUSION_TUNING_ARGS)
 
 # Which BM25 configuration does each BEIR member want? Reads the rows already measured, so it
 # costs no new runs, and answers SCORE-LIFT.md §P2's own falsifier: does a per-corpus lexical
