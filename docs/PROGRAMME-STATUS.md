@@ -63,9 +63,10 @@ Negatives are results here, and these are the ones worth keeping:
    8B golden sets — is now measured too: `bm25-engine` **0.5193** over **14,914,604 documents** and
    500 queries, against a published BM25 of **0.465** and the best published system's **0.504**
    (`tools/bioasq.py`, `docs/findings-bioasq.md`). Coverage is therefore **18 of 18** — the benchmark
-   is covered, and for the first time the engine's macro is over the complete BEIR-18: **0.4764**
-   after the title-weighted and adapted-dense pass (**0.4665** when coverage completed),
-   between the paper's Contriever (0.448) and SPLADE (0.474). **MS MARCO
+   is covered, and for the first time the engine's macro is over the complete BEIR-18: **0.4799**
+   after the title-weighted and adapted-dense pass (**0.4665** when coverage completed), above
+   SPLADE's **0.4740**, the strongest published system — as a best-per-dataset row, not one
+   configuration. **MS MARCO
    (8.8M) is measured as an *extra*, not as coverage**: it is the collection the BEIR encoders are
    trained on, not a test dataset, and the gate counts over an explicit membership set. The
    public BioASQ corpus mirror (`BeIR/bioasq-generated-queries`) was **not** used: it holds

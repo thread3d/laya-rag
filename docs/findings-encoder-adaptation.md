@@ -308,18 +308,24 @@ tool keys the `bm25-title` row off the boost, not off the retriever name):
 
 | dataset | before | after |
 | --- | --- | --- |
+| FEVER | 0.6323 | **0.6749** |
 | NQ | 0.3118 | **0.3264** |
 | DBPedia-entity | 0.3053 | **0.3166** |
-| Climate-FEVER | 0.1610 | **0.1657** |
+| HotpotQA | 0.6352 | **0.6563** |
 | CQADupStack | 0.2988 | **0.3046** |
+| Climate-FEVER | 0.1610 | **0.1657** |
 | ROBUST04 / Signal-1M / Quora / Touché-2020 | — | no-op or worse |
+
+FEVER and HotpotQA are the two the first pass culled on cost, and they are the two largest gains:
+one index build and one scoring pass each (~3 h per row on this host) against ~37 h for a dense
+pass over 5.4M documents. In both, `bm25-engine` reproduces its recorded value exactly (0.6323 and
+0.6352), which is what makes the new rows comparable rather than merely higher.
 
 CQADupStack needed a tooling fix first: `tools/beir.py` refuses it (twelve sub-collections behind one
 BEIR name) and `tools/cqadupstack.py`, the adapter that exists for exactly that reason, had no
 title-boost flag, so the member could not be given the row the others had. It now takes
 `--title-boost` and emits a `bm25-title` row through the same `beir.bm25_rankings` path, with the
-`bm25` and `bm25-engine` rows reproducing exactly (0.2988 and 0.2943), which is what makes the new
-row trustworthy rather than merely higher.
+`bm25` and `bm25-engine` rows reproducing exactly (0.2988 and 0.2943).
 
 **The adapted dense channel, fused at weight 0.3**, on the members whose corpora this host can embed:
 
@@ -329,17 +335,19 @@ row trustworthy rather than merely higher.
 | ROBUST04 | 0.4077 | 0.3688 | **0.4405** |
 | TREC-NEWS | 0.3351 | 0.3353 | **0.3745** |
 
-Together the engine's **BEIR-18 best-per-dataset macro moves 0.4665 → 0.4764 (+0.0099)**. The
-unaffected cells are unchanged. The matrix figure's caption was also wrong and is corrected: it said
-dashes marked datasets this engine had not run, but the grid is six systems across eighteen datasets
-and **none of the 108 cells is missing** — all five published systems report all 18, and so does the
-engine — so the figure draws no dashes and no longer claims to.
+Together the engine's **BEIR-18 best-per-dataset macro moves 0.4665 → 0.4799 (+0.0134)**, with nine of
+the eighteen cells carrying a gain. The unaffected cells are unchanged. The matrix figure's caption
+was also wrong and is corrected: it said dashes marked datasets this engine had not run, but the grid
+is six systems across eighteen datasets and **none of the 108 cells is missing** — all five published
+systems report all 18, and so does the engine — so the figure draws no dashes and no longer claims to.
 
-**Culled, with the reason.** `fever` (6,666 judged queries over 5.4M documents) and `hotpotqa` (7,405
-over 5.2M) cost roughly 8 h each for an uncertain gain; `bioasq` (14.9M) about 5 h for one cell that
-already beats the best published system; and `msmarco` is a training collection rather than one of the
-18, so it cannot move this row at all. CQADupStack was culled for the same reason on the first pass —
-its adapter had no title-boost flag — and is now closed rather than culled.
+**What is still not run, and why.** `bioasq` (14.9M documents) is the only one of the eighteen with no
+title row: ~5 h of index build for a cell already at 0.5193 against the best published system's 0.504.
+`msmarco` has no title row either, but it is the collection the BEIR encoders are trained on rather
+than one of the 18, so it cannot move this row at all. Those are now the only two gaps; FEVER,
+HotpotQA and CQADupStack were closed by the runs above. Dense rows on any multi-million-document member
+remain out of reach here — ~40 documents/s means ~37 h per corpus — so those cells carry a lexical
+best no matter what.
 
 ## What the pre-registered bar says
 

@@ -48,22 +48,26 @@ nothing attributes that to the retriever (`findings-bioasq.md`).
 
 | dataset | ours | best published | gap |
 | --- | --- | --- | --- |
-| NQ | 0.312 | SPLADE 0.544 | **−0.232** |
-| FEVER | 0.632 | uniCOIL 0.812 | **−0.180** |
-| DBPedia | 0.305 | SPLADE 0.442 | **−0.137** |
-| TREC-NEWS | 0.335 | Contriever 0.428 | −0.093 |
-| TREC-COVID | 0.619 | SPLADE 0.711 | −0.092 |
-| Climate-FEVER | 0.161 | TAS-B 0.237 | −0.076 |
-| Robust04 | 0.408 | Contriever 0.473 | −0.065 |
-| HotpotQA | 0.635 | SPLADE 0.686 | −0.051 |
-| CQADupStack | 0.299 | Contriever 0.345 | −0.046 |
+| NQ | 0.326 | SPLADE 0.544 | **−0.218** |
+| FEVER | 0.675 | uniCOIL 0.812 | **−0.137** |
+| DBPedia | 0.317 | SPLADE 0.442 | **−0.125** |
+| Climate-FEVER | 0.166 | TAS-B 0.237 | **−0.071** |
+| TREC-NEWS | 0.374 | Contriever 0.428 | −0.053 |
+| CQADupStack | 0.305 | Contriever 0.345 | −0.040 |
+| Robust04 | 0.441 | Contriever 0.473 | −0.032 |
+| HotpotQA | 0.656 | SPLADE 0.686 | −0.030 |
+| TREC-COVID | 0.687 | SPLADE 0.711 | −0.024 |
 
 The pattern in the losses is not size — DBPedia at 4.6M is our smallest loss among the big ones
 and NFCorpus at 3.6k is a win. It is that the three largest losses (NQ, FEVER, DBPedia) are
-**lexical-only runs**: those corpora were measured with the shipped BM25 path and no dense arm,
-because the multi-million-document embedding pass was not run. The comparison is therefore as much
-a statement about what we spent compute on as about the system, and every corpus added since
-(TREC-NEWS, Robust04, CQADupStack) is lexical-only too — all three land on the losing side.
+**lexical-only runs over multi-million-document corpora**: those were measured with the shipped BM25
+path plus the title-weighted row and no dense arm, because embedding 2.7–5.4M documents is ~37 h per
+corpus on this host. The comparison is therefore as much a statement about what we spent compute on
+as about the system — and the pass that closed these gaps shows it, because it moved the cells where
+compute was affordable: the adapted dense channel fused at weight 0.3 took TREC-COVID from −0.092 to
+−0.024, Robust04 from −0.065 to −0.032 and TREC-NEWS from −0.093 to −0.053, while the title-weighted
+row took FEVER from −0.180 to −0.137, DBPedia from −0.137 to −0.125 and HotpotQA from −0.051 to
+−0.030.
 
 One result is worth isolating because it is the strongest lexical evidence in the repository:
 **Robust04 reads 0.4077 against a published BM25 of 0.407** — the control reproduces an external
@@ -112,14 +116,15 @@ Two panels, two memberships, and they are not interchangeable:
 
 - **Left.** The paper's 18-dataset macro for its five systems — SPLADE **0.474**, Contriever
   **0.448**, BM25 **0.429**, uniCOIL **0.428**, TAS-B **0.424** — beside this engine's macro over
-  **all 18 datasets: 0.4764** (0.4665 before the title-weighted and adapted-dense pass, which moved
-  six cells; see [`findings-encoder-adaptation.md`](findings-encoder-adaptation.md)). This is the
+  **all 18 datasets: 0.4799** (0.4665 before the title-weighted and adapted-dense pass, which moved
+  nine cells; see [`findings-encoder-adaptation.md`](findings-encoder-adaptation.md)). This is the
   first round in which the two bars are over the *same*
-  membership, so the *different membership — not comparable* annotation is gone: the engine lands
-  between Contriever and SPLADE, above BM25 and uniCOIL. (It read **0.4979 over 13** before the
-  recovered corpora landed, 0.4737 over 16 and 0.4634 over 17, so widening the membership moved the
-  mean more than most method differences did — and the last step, BioASQ, raised it for the first
-  time, because it is a win.) One caveat survives the membership finally matching: ours is a
+  membership, so the *different membership — not comparable* annotation is gone: the engine is now
+  **above SPLADE, the strongest published system**, and above BM25, uniCOIL, TAS-B and Contriever. (It
+  read **0.4979 over 13** before the recovered corpora landed, 0.4737 over 16 and 0.4634 over 17, so
+  widening the membership moved the mean more than most method differences did — and the last step,
+  BioASQ, raised it for the first time, because it is a win.) One caveat survives the membership
+  finally matching, and it matters most now that the bars cross: ours is a
   **best-per-dataset** row — the best retriever for each corpus — while each published system is a
   single global configuration, so the comparison flatters the engine by construction. The right-hand
   panel is where like-for-like lives.
