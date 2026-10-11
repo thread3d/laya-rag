@@ -744,8 +744,33 @@ that each sentence's number appeared somewhere in the answer, which the trailing
 marker now leads (`"[1] Refunds take five days."`), matching how `build_messages` numbers the
 evidence, and the `/v1/extract` → `/v1/verify` round trip is a test.
 
-**Still open here.** `findings-extractive-composer.md` names two ends that bear directly on the
-score: sentence scoring is the *document's* relevance rather than a per-sentence scorer, and
+**Run 1 of the three, measured — the first end-to-end row whose every component is the engine's.**
+`tools/engine_extractive.py` (`make engine-extractive`) over 400 answerable MultiHop-RAG queries
+(seeded subset 17, the `engine-hybrid` index, thresholds zeroed so the retrieval half is comparable),
+in `docs/findings-extractive-row.md`:
+
+| metric | value |
+| --- | ---: |
+| Hits@10 / Hits@4 / MAP@10 / MRR@10 | 0.9075 / 0.7525 / 0.3057 / 0.5901 |
+| **citation clean** | **1.0000** (0 uncited sentences of 1,728) |
+| abstention | 0.0000 |
+| answer nugget recall | 0.1921 |
+
+**The retrieval half is identical to four decimals** to the retrieval-only 400-query row
+(`engine-hybrid-400.json`) — a cross-check that composing from a passage does not disturb the
+retrieval it composed from. **Attribution is 1.0 by construction and now by measurement**, which is
+the claim the composer's own finding had only asserted. **Completeness is the finding**: the answer
+carries **0.1921** of each gold fact's nuggets against the **0.7438** the retrieved pool carries — a
+five-sentence extract is not a written answer, and that gap is what attribution-by-construction
+costs. Getting to 1.0 took three defects, one of them a wrong fix recorded in the finding: the
+trailing citation marker, a quotation cut by a sentence boundary (16 of 400 answers, none of them a
+bad citation), and — the wrong fix — suppressing the boundary *inside* a quotation, which made the
+checker split there and left 24 of 1,637 sentences uncited. Both checks need one boundary rule.
+
+**Still open here.** Runs 2 (FRAMES) and 3 (an own-domain set) are unrun; the full 2,255-query
+MultiHop set is the same command without `--limit`; no interval is quoted (per-query values are
+persisted for one). And `findings-extractive-composer.md` names two ends that bear on the score:
+sentence scoring is the *document's* relevance rather than a per-sentence scorer, and
 **contradiction gating is absent** — `adjudicate_claims` can mark a claim `contradicted` and the
 composer will still emit the span. Gating emission on adjudication is the difference between
 "verbatim" and "supported".

@@ -112,6 +112,75 @@ def test_the_answer_is_clean_to_the_project_s_own_citation_checker():
     assert report["clean"] is True, report["claims"]
 
 
+def test_the_composed_answer_never_carries_half_of_a_quotation():
+    """A chunk is a slice, so it can cut a quotation; half of a pair is not emittable.
+
+    The checker pairs an opening mark with the next closing mark anywhere in the answer, so an
+    orphaned half pairs across the `[n]` markers and the answer fails the quoted-span check with
+    every citation in range. Measured on the MultiHop-RAG row: 16 of 400 answers, none of them a bad
+    citation, and none with an uncited claim.
+    """
+    text = '…and I am picking Connor Bedard over Auston Matthews,” Turk said. The pick was obvious.'
+    composed = compose_extractive([_p("a.md", text, 0.9)], max_sentences=5)
+    assert composed.sentences
+    for sentence in composed.sentences:
+        assert sentence.text.count('"') % 2 == 0, sentence.text
+        assert sentence.text.count("“") == sentence.text.count("”"), sentence.text
+
+
+def test_splitting_is_not_quote_aware_because_the_checker_splits_there_too():
+    """Suppressing the boundary inside a quotation makes the sentences after it uncited.
+
+    `verify_citations` splits the answer into claims at the boundary either way, so a run that spans
+    it is emitted with one `[n]` and checked as several claims — 24 uncited sentences of 1,637,
+    traded for the quote failures it was meant to fix. Both checks need the same boundary rule.
+    """
+    text = 'He said “stop. Now.” Then he left.'
+    assert split_sentences(text) == ["He said “stop.", "Now.”", "Then he left."]
+    # …and the two halves of the quotation are refused, so only the clean tail is emitted.
+    composed = compose_extractive([_p("a.md", text, 0.9)], max_sentences=5)
+    assert [s.text for s in composed.sentences] == ["Then he left."]
+
+
+def test_a_quoted_span_survives_the_round_trip_through_the_checker():
+    from laya_rag.verify import verify_citations
+
+    text = ('The prosecutor said “he was not what he appeared to be.” '
+            'What followed was a thirty minute story.')
+    composed = compose_extractive([_p("a.md", text, 0.9)], max_sentences=2)
+    report = verify_citations(composed.answer, [text])
+    assert report["counts"]["uncited"] == 0
+    assert report["counts"]["quotes_not_found"] == 0, report["quotes"]
+    assert report["clean"] is True, report["quotes"]
+
+
+def test_a_span_that_carries_half_a_quotation_is_not_emitted():
+    """A chunk is a slice, so it can cut a quotation; half of a pair is not emittable.
+
+    The checker pairs an opening mark with the next closing mark anywhere in the answer, so the
+    orphaned half pairs across the `[n]` markers and the answer fails the quoted-span check with
+    every citation in range — 16 of 400 answers on the MultiHop-RAG row, none of them a bad
+    citation.
+    """
+    from laya_rag.verify import verify_citations
+
+    text = ('…and I am picking Connor Bedard over Auston Matthews,” Turk said. '
+            'The pick was obvious.')
+    composed = compose_extractive([_p("a.md", text, 0.9)], max_sentences=5)
+    for sentence in composed.sentences:
+        assert sentence.text.count("“") == sentence.text.count("”"), sentence.text
+    report = verify_citations(composed.answer, [text])
+    assert report["counts"]["uncited"] == 0
+    assert report["counts"]["quotes_not_found"] == 0, report["quotes"]
+    assert report["clean"] is True
+
+
+def test_a_quotation_that_does_not_span_a_boundary_is_still_emitted():
+    passage = 'He said “stop now” and then he left. The room was quiet.'
+    composed = compose_extractive([_p("a.md", passage, 0.9)], max_sentences=5)
+    assert any("stop now" in sentence.text for sentence in composed.sentences)
+
+
 def test_every_marker_leads_the_sentence_it_supports():
     passages = [_p("a.md", "First fact. Second fact.", 0.9)]
     composed = compose_extractive(passages, max_sentences=2)

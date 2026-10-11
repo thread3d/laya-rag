@@ -84,7 +84,7 @@ TWO_WIKI_ARGS ?=
 GFI_ARGS ?=
 QUANT_ARGS ?= --cache eval/beir/cache/scidocs.bge-small-en-v1.5.cls.npy
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -138,6 +138,7 @@ help:
 	@echo "order-train  adapt a cross-encoder on MuSiQue's own relevance conventions (2.2)"
 	@echo "order-eval-zero-shot / order-eval-adapted / order-compare  the adapted-vs-zero-shot test"
 	@echo "endtoend     engine + local generator on MultiHop-RAG (labelled; ~36s/query)"
+	@echo "engine-extractive  the engine's end-to-end row with no generator, scored without a judge"
 	@echo "cost-report  latency, throughput, peak RSS and index bytes per query"
 	@echo "verify-precision  precision and recall of the advisory verifier checks (--check gates)"
 	@echo "citation-report  citation mechanics over the pilot's composed answers (engine-side)"
@@ -371,6 +372,15 @@ engine-beir:
 # `ENGINE_MULTIHOP_ARGS="--limit 25 --embed-model BAAI/bge-small-en-v1.5"` is the smoke.
 engine-multihop:
 	OMP_NUM_THREADS=16 $(PY) tools/engine_multihop.py $(ENGINE_MULTIHOP_ARGS)
+
+# The engine's extractive row, end to end: retrieval, the generator-free composer, the
+# deterministic citation check and a judge-free nugget count over the composed answers. Every
+# component is the engine's, so the row has no generator confound. `--zero-thresholds` matches the
+# retrieval rows; `--index-dir` reuses their index so the corpus is the same one.
+# `ENGINE_EXTRACTIVE_ARGS="--limit 25 --index-dir eval/benchmarks/multihop-rag/index/engine-hybrid \
+#   --embed-model BAAI/bge-small-en-v1.5 --zero-thresholds"` is the smoke.
+engine-extractive:
+	OMP_NUM_THREADS=16 $(PY) tools/engine_extractive.py $(ENGINE_EXTRACTIVE_ARGS)
 
 # Pair the engine report against a harness arm on the same subset. Requires both to have been
 # run with the same --limit/--sample-seed; the tool refuses rather than compare different queries.

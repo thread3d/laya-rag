@@ -26,8 +26,9 @@ from typing import Any, Mapping, Sequence
 
 from .evidence import group_passages_by_document
 
-#: A sentence run ending at terminal punctuation, or a whole line when there is none.
-_SENTENCE = re.compile(r"[^.!?\n]+[.!?]+|[^.!?\n]+$")
+#: A run ends at terminal punctuation followed by any closing quote or bracket, at a line break, or
+#: at the end of the text. The closing class is not cosmetic — see :func:`split_sentences`.
+_SENTENCE = re.compile(r"""[^.!?\n]+[.!?]+["'”’)\]]*|[^.!?\n]+$""")
 _WHITESPACE = re.compile(r"\s+")
 
 #: What the composer says when no passage yields an emittable sentence.
@@ -35,12 +36,47 @@ ABSTENTION = "The retrieved evidence does not contain a sentence that answers th
 
 
 def split_sentences(text: str) -> list[str]:
-    """Sentence runs, trimmed; a run with no terminal punctuation is still a sentence."""
-    return [match.group(0).strip() for match in _SENTENCE.finditer(text or "") if match.group(0).strip()]
+    """Sentence runs, trimmed; a run with no terminal punctuation is still a sentence.
+
+    A run ends at terminal punctuation (with any closing quote or bracket that follows it), at a
+    line break, or at the end of the text. **It is deliberately not quote-aware.** Suppressing the
+    boundary *inside* a quotation was tried and is wrong: `verify_citations` splits the answer into
+    claims at that boundary, so sentences after it would carry no citation and the answer would fail
+    the uncited check instead — 24 uncited sentences of 1,637 on the MultiHop-RAG row, traded for
+    the quote failures it was meant to fix. Both checks have to be satisfied by the *same* boundary
+    rule, and this is it: split where the checker splits, then refuse to emit a run that carries half
+    of a quoted pair (:func:`_quotes_balanced`), which is what a chunk boundary can produce.
+    """
+    return [
+        match.group(0).strip()
+        for match in _SENTENCE.finditer(text or "")
+        if match.group(0).strip()
+    ]
 
 
 def _normalise(text: str) -> str:
     return _WHITESPACE.sub(" ", text).strip().casefold()
+
+
+def _quotes_balanced(text: str) -> bool:
+    """Whether a span carries both marks of every quotation it contains.
+
+    `verify_citations` pairs an opening mark with the next closing one **anywhere in the answer**,
+    so a sentence holding one mark of a pair leaves the other to pair with a mark in a *later*
+    sentence — and the span between them contains the `[n]` markers this composer inserts, which no
+    passage contains. The answer then fails the quoted-span check with every citation in range.
+
+    A chunk boundary can do this to us: a chunk is a slice of a document, so it can begin or end
+    inside a quotation. Measured on the MultiHop-RAG extractive row: 16 of 400 answers failed the
+    deterministic check and **none** of them had an uncited claim or a citation out of range — every
+    failure was half a quotation. A span that cannot be quoted cannot be evidence, so it is dropped
+    like any other candidate.
+    """
+    return (
+        text.count('"') % 2 == 0
+        and text.count("“") == text.count("”")
+        and text.count("`") % 2 == 0
+    )
 
 
 def _score(passage: Mapping[str, Any]) -> float:
@@ -134,7 +170,7 @@ def compose_extractive(
                 ),
                 None,
             )
-            if source is None:
+            if source is None or not _quotes_balanced(sentence):
                 continue
             candidates.append(
                 ExtractedSentence(
