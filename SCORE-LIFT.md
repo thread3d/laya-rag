@@ -75,6 +75,22 @@ the highest-value item outside §1–§6.
 > is unchanged (**+0.022** half-closed, **+0.040** nine tenths) but the count is **nine** cells behind,
 > not ten, and the summed deficit is **0.8054**, not 0.809.
 
+> **Eighth revision note.** Wiring `make channel-coverage` into `make consistency-check` (the
+> seventh note's follow-up, done at last) turned the whole of §1.2 over and **falsified its `ours`
+> column on nine of eighteen cells**. That column had been transcribed from `README.md`'s prose,
+> and the title-weighted and adapted-dense passes landed *after* the transcription: FEVER 0.6323 →
+> **0.6749**, HotpotQA 0.6352 → **0.6563**, CQADupStack 0.2943 → **0.3046**, plus SciFact, NFCorpus,
+> SCIDOCS, ArguAna, FiQA and Signal-1M moving by a digit as their reports were refined. The column
+> is now computed through `tools/charts_compare.our_rows` — the repository's one implementation of
+> "best row" — so a hand-entered value cannot come back. **The consequences are not cosmetic:** the
+> macro is **0.4799**, not the 0.4760 this section stated, and the deficit arithmetic moves with it
+> — summed deficit **0.7314**, macro cost **0.0406**, half-closed **+0.020**, nine tenths **+0.037**
+> (the seventh note's 0.8054 / +0.022 / +0.040 are the same computation over the stale column and
+> are superseded). Signal-1M also becomes the one member whose *own best measured row* is the flat
+> control, so it reads **+0.068**, not +0.017. The §2 ranking is unaffected: the nine losing cells
+> are the same nine, and P1 is still the largest single gain available.
+
+
 ---
 
 ## The answer in one paragraph
@@ -82,8 +98,8 @@ the highest-value item outside §1–§6.
 The largest single score gain available to this system is not a modelling idea. **Eight of the
 eighteen BEIR cells this project counts as "covered" have never had a dense or learned-sparse row
 at all — only a lexical one** — and three more have only Laya's adapted encoder fused. The nine of
-those cells that sit behind the published matrix carry a summed deficit of **0.8054 nDCG@10**;
-closing half of it is **+0.022 on the BEIR-18 macro**, closing nine tenths is **+0.040** (0.476 →
+those cells that sit behind the published matrix carry a summed deficit of **0.7314 nDCG@10**;
+closing half of it is **+0.020 on the BEIR-18 macro**, closing nine tenths is **+0.037** (0.4799 →
 ~0.50–0.52). That is larger than every modelling result the programme has produced so far (fusion
 tuning +0.004, SPLADE +0.004–0.023, per-corpus routing +0.006, the three-model ensemble +0.043 on
 five datasets), and it is engineering the repo has already built the machinery for. Only after
@@ -142,59 +158,69 @@ those columns is not a like-for-like comparison, and the macro average inherits 
 
 ### 1.2 The macro, cell by cell
 
-`0.4760` is the project's best-per-dataset BEIR-18 macro. Against the **model columns** of
+`0.4799` is the project's best-per-dataset BEIR-18 macro (`tools/charts_compare.our_rows` reads it
+off the reports; `README.md` §"What cannot be claimed" states it). Against the **model columns** of
 `tools/published_beir18.py` (the parsed *Resources for Brewing BEIR* table — BM25 excluded by
 convention, because the paper's BM25 is a multi-field index and this repository's control is flat):
 
 | cell | ours | best published model column | gap | channel we have there |
 | --- | ---: | ---: | ---: | --- |
-| SciFact | 0.7670 | 0.699 | **+0.068** | full |
-| ArguAna | 0.6510 | 0.521 | **+0.130** | full |
-| SCIDOCS | 0.2250 | 0.165 | **+0.060** | full |
-| FiQA-2018 | 0.4440 | 0.351 | **+0.093** | full |
-| NFCorpus | 0.3870 | 0.345 | **+0.042** | full |
-| Quora | 0.8876 | 0.865 | +0.023 | dense |
-| webis-touche2020 | 0.4419 | 0.298 | **+0.144** | dense (lexical wins) |
-| BioASQ | 0.5193 | 0.504 | +0.015 | lexical |
-| Signal-1M | 0.3131 | 0.296 | +0.017 | **lexical only** |
-| TREC-COVID | 0.6871 | 0.711 | −0.024 | adapted dense |
-| Robust04 | 0.4405 | 0.473 | −0.033 | adapted dense |
-| CQADupStack | 0.2943 | 0.345 | −0.051 | **lexical only** |
-| HotpotQA | 0.6352 | 0.686 | −0.051 | **lexical only** |
-| TREC-NEWS | 0.3745 | 0.428 | −0.054 | adapted dense |
-| Climate-FEVER | 0.1657 | 0.237 | −0.071 | **lexical only** |
-| DBPedia-entity | 0.3166 | 0.442 | −0.125 | **lexical only** |
-| FEVER | 0.6323 | 0.812 | **−0.180** | **lexical only** |
-| NQ | 0.3264 | 0.544 | **−0.218** | **lexical only** |
-| **macro** | **0.476** | ~0.474 (SPLADE) | | |
+| Quora | 0.8876 | 0.865 | +0.023 | biencoder |
+| SciFact | 0.7667 | 0.699 | **+0.068** | hybrid-ensemble |
+| TREC-COVID | 0.6871 | 0.711 | −0.024 | hybrid-biencoder |
+| FEVER | 0.6749 | 0.812 | **−0.137** | bm25-title |
+| ArguAna | 0.6563 | 0.521 | **+0.135** | dense-ensemble |
+| HotpotQA | 0.6563 | 0.686 | −0.030 | bm25-title |
+| BioASQ | 0.5193 | 0.504 | +0.015 | bm25-engine |
+| FiQA-2018 | 0.4441 | 0.351 | **+0.093** | hybrid-ensemble |
+| webis-touche2020 | 0.4419 | 0.298 | **+0.144** | bm25-engine |
+| Robust04 | 0.4405 | 0.473 | −0.033 | hybrid-biencoder |
+| NFCorpus | 0.3867 | 0.345 | **+0.042** | hybrid-ensemble |
+| TREC-NEWS | 0.3745 | 0.428 | −0.054 | hybrid-biencoder |
+| Signal-1M | 0.3640 | 0.296 | **+0.068** | bm25 |
+| NQ | 0.3264 | 0.544 | **−0.218** | bm25-title |
+| DBPedia-entity | 0.3166 | 0.442 | **−0.125** | bm25-title |
+| CQADupStack | 0.3046 | 0.345 | −0.040 | bm25-title |
+| SCIDOCS | 0.2248 | 0.165 | **+0.060** | hybrid-ensemble |
+| Climate-FEVER | 0.1657 | 0.237 | **−0.071** | bm25-title |
 
-**Three cells here differ from the first draft of this table, and the tool is why.** `tools/channel_coverage.py`
-computes this table, and running it falsified three hand-entered values:
+The columns are the tool's: `ours` is the best measured row per member, `channel we have there` is
+that row's name, and the published column is the cell's best **model** system. A dash is not needed
+anywhere — every member has both a measured row and a published one.
 
-- **FEVER's published column is 0.812 (uniCOIL), not 0.796 (SPLADE)** — I had used SPLADE as the
-  ceiling on every cell instead of the actual maximum, which *understated the largest gap in the
-  table*: −0.164 → **−0.180**.
-- **Signal-1M is not behind.** 0.330 was its **BM25** column; the best *model* column is 0.296, so
-  the cell reads **+0.017**, not −0.017.
-- **Touché's gap is +0.144, not +0.075**, for the same reason: 0.367 was BM25, and the best model
-  column is 0.298.
+**What the tool falsified, in two rounds.** The first draft of this table was hand-built, and the
+tool killed three of its cells at once: FEVER's published column is **0.812 (uniCOIL)**, not 0.796
+(SPLADE) — I had used SPLADE as the ceiling everywhere, which *understated the largest gap in the
+table*; and Signal-1M and Touché were being compared against their **BM25** columns (0.330, 0.367)
+while every other row used a model column, so the best model system there is 0.296 and 0.298.
+
+The **second** round is the one worth dwelling on. The whole `ours` column used to be transcribed
+from `README.md`'s prose, and by the time `make channel-coverage` was wired into `make
+consistency-check` it disagreed with the reports on **nine of eighteen** cells: the title-weighted
+pass landed FEVER 0.6323 → **0.6749**, HotpotQA 0.6352 → **0.6563**, CQADupStack 0.2943 → **0.3046**
+*after* the column was copied, and four ensemble cells (SciFact, NFCorpus, SCIDOCS, ArguAna) had
+moved by a digit as their reports were refined. The column is now computed through
+`tools/charts_compare.our_rows` — the repository's single implementation of "best row" — so a
+hand-entered value cannot come back. **The macro is 0.4799, not the 0.4760 this section used to
+state**, and every number below moved with it.
 
 **On the two cells where BM25 beats every model column.** Touché (BM25 0.367) and Signal-1M
 (BM25 0.330) are the only members where the strongest published entry is a *lexical* system — which
 is the published field independently agreeing with §1.3's per-corpus finding rather than a defect in
-the table.
+the table. Signal-1M is also the one member whose *own best measured row* is the flat control
+(0.3640), so the computed column credits the control there and the cell reads **+0.068** rather than
+the −0.017 a naive reading of "ours 0.3131" gives.
 
-**The deficit arithmetic.** Summing the **nine** negative gaps — CQADupStack 0.0507, HotpotQA
-0.0508, Climate-FEVER 0.0713, DBPedia 0.1254, FEVER 0.1797, NQ 0.2176, TREC-COVID 0.0239, Robust04
-0.0325, TREC-NEWS 0.0535 — comes to **0.8054 nDCG@10**. Divided by 18, the gap costs the macro
-**0.0447**. Half of it is **+0.022**; nine tenths is **+0.040**. Everything in §2 is either an
-attack on that arithmetic or a separate contribution. (The tool prints these three figures; they
-were +0.022 / +0.040 in the first draft too, because the three corrected cells moved the numerator
-by 0.004 in one direction and the denominator's membership by one cell in the other.)
+**The deficit arithmetic.** Summing the **nine** negative gaps — FEVER 0.1371, NQ 0.2176, DBPedia
+0.1254, Climate-FEVER 0.0713, TREC-NEWS 0.0535, TREC-COVID 0.0239, CQADupStack 0.0404, HotpotQA 0.0297,
+Robust04 0.0325 — comes to **0.7314 nDCG@10**. Divided by 18, the gap costs the macro **0.0406**.
+Half of it is **+0.020**; nine tenths is **+0.037**. Everything in §2 is either an attack on that
+arithmetic or a separate contribution. (The tool prints these figures; the seventh revision note's
+0.8054 / +0.022 / +0.040 are the same arithmetic over the *stale* column and are superseded here.)
 
-**Eleven cells need channel work** — the ten above with a negative gap, plus BioASQ, where the
+**Ten cells need channel work** — the nine above with a negative gap, plus BioASQ, where the
 published dense models *fail* (Contriever 0.383 against BM25 0.465) and the right answer may
-therefore be "no dense channel here". Quora is the twelfth mixed cell: it has a dense row but has
+therefore be "no dense channel here". Quora is the eleventh mixed cell: it has a dense row but has
 never had an ensemble or sparse row.
 
 **Every cell where the system loses to the published matrix is a cell where its best row is
@@ -241,7 +267,7 @@ exhaustive search at 11.6 ms/query. The blocker that justified the lexical-only 
 exists in the same form.
 
 **Expected.** From the gap table, closing half the distance to the published best model on the
-eleven cells is **+0.022 macro**; closing most of it is **+0.041** (0.476 → ~0.50–0.52). The
+eleven cells is **+0.020 macro**; closing most of it is **+0.037** (0.4799 → ~0.50–0.52). The
 per-cell shape is not uniform — NQ, DBPedia and FEVER carry most of it, BioASQ is likely to be
 flat or negative (published dense models *fail* there: Contriever 0.383 against BM25 0.465, which
 is why SPLADE is the "most consistent" model in the Brewing BEIR analysis), and Signal-1M may
@@ -287,12 +313,29 @@ published BM25 column is a **multi-field** index while its control is a **flat**
 and a partial FEVER recovery if field weighting is the mechanism — **+0.002 to +0.010 macro**,
 plus a real shot at the FEVER anomaly.
 
-**Cost.** Hours for the selector (twelve `bm25` variants × eleven corpora is cheap; BM25 is the
-fast channel). BM25F is a few hundred lines in `lexical.py` plus re-indexing the affected corpora.
+**Measured for (a), and the first falsifier is refuted.** `tools/lexical_selector.py`
+(`make lexical-selector`) profiles the four configurations the harness already exposes against the
+rows already on disk, so the answer cost no new runs (`docs/findings-lexical-selector.md`):
+
+- **The picks differ per corpus** — `bm25-title` ×11, `bm25-engine` ×6, and the flat published
+  `bm25` control ×1. The selector has something to choose, so §P2(b) and the routing question are
+  live rather than closed.
+- **The oracle is +0.0109** on the lexical-only macro (0.4195 → 0.4303), at the top of the
+  +0.002–+0.010 band. Signal-1M alone contributes **+0.0509**; FEVER **+0.0426**, HotpotQA +0.0211,
+  TREC-COVID +0.0201, NQ +0.0146, DBPedia +0.0113.
+- It is an **oracle**: it selects on the same qrels it scores. A label-free rule reaching even half
+  of it is §P5(b)'s transductive selector, which is untried.
+- Signal-1M is the sharpest reading: not a missing channel but a **misconfigured** one — the member
+  has no dense row at all, and its only channel was tuned where its settings won.
+
+**Cost.** Hours for the selector profile (done, no embedding); the harness switch that would act on
+it is a small change to `tools/beir.py` and the engine's lexical config. BM25F is a few hundred lines
+in `lexical.py` plus re-indexing the affected corpora, and is untouched.
 
 **Falsifier.** The per-corpus selector picks the same settings on every corpus, or BM25F does not
-move FEVER. Either outcome is a finding: the first closes the routing question for the lexical
-channel, the second says the FEVER gap is a corpus/convention problem rather than a scoring one.
+move FEVER. The first is **refuted above** — the picks are 11/6/1 across the four configurations.
+The second is **untested**: `bm25-title` is a proxy for field weighting, not field weighting, and
+it recovers +0.0426 of FEVER's −0.137.
 
 ---
 
@@ -799,9 +842,9 @@ Note what is **not** on that list, and is in this one: a **listwise** ranker, a 
 
 ## 6. What this document does not claim
 
-- It does not claim the +0.040 figure. It is "closing nine tenths of the 0.8054 summed deficit"
+- It does not claim the +0.037 figure. It is "closing nine tenths of the 0.7314 summed deficit"
   across the ten cells that sit behind the published matrix, which assumes the local pipeline
-  reproduces published behaviour on corpora where it has never been run. The +0.022 half-gap figure
+  reproduces published behaviour on corpora where it has never been run. The +0.020 half-gap figure
   is the one to hold the programme to, and the per-cell rows are the result — not the macro.
 - It does not claim any external model's numbers will reproduce here. The loadability probe above
   is a *config-and-tokenizer* probe on this host's pinned stack; it says a model can be
@@ -1577,15 +1620,15 @@ drifts. Two things followed, and the first is now closed:
 
 1. **§1.1, the §1.2 arithmetic and the harness parity are anchored to the gate — done.**
    `consistency_check.py` imports `tools/channel_coverage.py` and pins, as one `Quantity` per
-   figure: the summed deficit **0.8054**, the macro cost **0.0447**, the half-closed **+0.022** and
-   the nine-tenths **+0.040**; plus a `check_channel_coverage` pass that requires every §1.1 table
+   figure: the summed deficit **0.7314**, the macro cost **0.0406**, the half-closed **+0.020** and
+   the nine-tenths **+0.037**; plus a `check_channel_coverage` pass that requires every §1.1 table
    row *and* the three summary lines — including the lexical-only count — to appear verbatim, and
    every §1.2 cell to state the computed "ours", published and gap values. The SciFact
    harness-parity pair is pinned the same way (§4.3): the engine's 0.7264 and the replica's 0.7413
    from their two reports, and the **+0.0149** overstatement derived from them across eleven sites
    in six documents. `consistency-check` went from **20** checked sites to **43**; a two-line edit
    to the deficit, to a member's channel or to the parity figure now fails the gate rather than
-   passing silently. Both halves were negative-tested (perturbing 0.8054 in §1.2 and `nq`'s channel
+   passing silently. Both halves were negative-tested (perturbing 0.7314 in §1.2 and `nq`'s channel
    in §1.1 each produces exactly one failure; so does moving either parity endpoint). **The
    parity pin immediately found one**: the figure had been hand-typed as 0.7408 / +0.0144 and
    reproduces from no report on disk.

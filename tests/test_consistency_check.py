@@ -378,9 +378,38 @@ def test_the_deficit_arithmetic_names_the_members_it_sums():
     """The four figures are one computation, so they cannot disagree with each other."""
     module = cc.channel_coverage_module()
     deficit = module.deficit()
+    if not deficit["cells"]:
+        pytest.skip("no eval/beir reports to compute the deficit from")
     assert deficit["counted"] == 9
-    assert deficit["total"] == pytest.approx(0.8054, abs=5e-5)
-    assert deficit["macro"] == pytest.approx(0.0447, abs=5e-5)
+    assert deficit["total"] == pytest.approx(0.7314, abs=5e-5)
+    assert deficit["macro"] == pytest.approx(0.0406, abs=5e-5)
+
+
+def test_the_ours_column_is_read_from_the_reports_not_typed():
+    """The column §1.2 used to hand-enter disagreed with the reports on nine of eighteen cells."""
+    module = cc.channel_coverage_module()
+    computed = module.our_best()
+    if not computed:
+        pytest.skip("no eval/beir reports")
+    import charts_compare
+
+    authoritative = charts_compare.our_rows()
+    for member, entry in computed.items():
+        assert entry["value"] == pytest.approx(authoritative[member]["best"][1], abs=1e-9)
+        assert entry["row"] == authoritative[member]["best"][0]
+
+
+def test_the_macro_is_the_mean_of_the_rows_the_table_shows():
+    """§1.2's opening number and its table have to be the same eighteen cells."""
+    module = cc.channel_coverage_module()
+    computed = module.our_best()
+    if len(computed) < 18:
+        pytest.skip("all eighteen members are not measured here")
+    import charts_compare
+
+    assert charts_compare.our_macro(charts_compare.our_rows())["mean"] == pytest.approx(
+        sum(entry["value"] for entry in computed.values()) / 18, abs=5e-5
+    )
 
 
 # ── the harness-vs-engine parity figure is computed, not typed ───────────

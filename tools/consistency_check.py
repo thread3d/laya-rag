@@ -281,9 +281,12 @@ def deficit_authority() -> Callable[[], Mapping[str, float] | None]:
 
     def authority() -> Mapping[str, float] | None:
         try:
-            return channel_coverage_module().deficit()
+            resolved = channel_coverage_module().deficit()
         except (KeyError, OSError):
             return None
+        # No reports means no computed "ours" column, so the arithmetic has no input: a skip,
+        # like every other authority whose report has not been generated.
+        return resolved if resolved.get("cells") else None
 
     return authority
 
@@ -495,9 +498,9 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR-18 summed deficit",
             sites=(
-                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.8054, 4),
-                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.8054, 4),
-                Site("SCORE-LIFT.md", r"closing nine tenths of the 0\.8054", 0.8054, 4),
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.7314, 4),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.7314, 4),
+                Site("SCORE-LIFT.md", r"It does not claim the \+0\.037", 0.7314, 4),
             ),
             authority=deficit_authority(),
             key="total",
@@ -505,7 +508,7 @@ def registry() -> list[Quantity]:
         ),
         Quantity(
             name="BEIR-18 deficit macro cost",
-            sites=(Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.0447, 4),),
+            sites=(Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.0406, 4),),
             authority=deficit_authority(),
             key="macro",
             provenance="tools/channel_coverage.py deficit() — the summed deficit over 18 members",
@@ -513,9 +516,9 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR-18 half-closed macro gain",
             sites=(
-                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.022, 3),
-                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.022, 3),
-                Site("SCORE-LIFT.md", r"hold the programme to", 0.022, 3),
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.020, 3),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.020, 3),
+                Site("SCORE-LIFT.md", r"hold the programme to", 0.020, 3),
             ),
             authority=deficit_authority(),
             key="half",
@@ -524,9 +527,9 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR-18 nine-tenths macro gain",
             sites=(
-                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.040, 3),
-                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.040, 3),
-                Site("SCORE-LIFT.md", r"It does not claim the \+0\.040", 0.040, 3),
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.037, 3),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.037, 3),
+                Site("SCORE-LIFT.md", r"It does not claim the \+0\.037", 0.037, 3),
             ),
             authority=deficit_authority(),
             key="nine_tenths",

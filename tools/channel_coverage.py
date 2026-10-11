@@ -17,9 +17,13 @@ prints:
 * the lexical-only set, which is the claim;
 * the deficit arithmetic (§1.2), from an explicit and cited "ours" column.
 
-The "ours" column is **hand-entered** and carries its source in :data:`OUR_BEST`; the published
-column is read from :mod:`published_beir18`, which was itself parsed from the paper's HTML. Only
-the *sum* is computed here, so the arithmetic is auditable even though one input is transcribed.
+Both columns are **read rather than typed**: "ours" is the best measured row per member, computed
+by :func:`our_best` from `eval/beir/*.json` through `tools/charts_compare.our_rows` (the
+repository's one implementation of "best row"), and the published column is read from
+:mod:`published_beir18`, which was parsed from the paper's HTML. An earlier version of this tool
+carried a hand-entered "ours" column; it disagreed with the computed one on **nine of eighteen**
+cells, because the title-weighted and adapted-dense passes landed after the column was copied out
+of `README.md`'s prose. That is why it is computed now.
 
 **This module is an authority, not just a script.** `consistency_check.py` imports
 :func:`channel_map` and :func:`deficit` and requires the §1.1 table rows and the §1.2 summary
@@ -77,30 +81,28 @@ DISPLAY: dict[str, str] = {
     "dbpedia-entity": "DBPedia-entity",
 }
 
-#: The engine's best measured row per BEIR member, nDCG@10.
-#: Source: `README.md` §"What cannot be claimed", the BEIR-18 paragraph, which states these are
-#: best-per-dataset and not one configuration. Six cells moved in the title-weighted and
-#: adapted-dense pass; those are the values below.
-OUR_BEST: dict[str, tuple[float, str]] = {
-    "scifact": (0.767, "ensemble + BM25"),
-    "nfcorpus": (0.387, "ensemble + BM25"),
-    "arguana": (0.651, "ensemble + BM25"),
-    "scidocs": (0.225, "ensemble + BM25"),
-    "fiqa": (0.444, "ensemble + BM25"),
-    "quora": (0.8876, "dense only"),
-    "webis-touche2020": (0.4419, "lexical (dense loses)"),
-    "bioasq": (0.5193, "lexical only"),
-    "trec-covid": (0.6871, "adapted dense + lexical"),
-    "robust04": (0.4405, "adapted dense + lexical"),
-    "trec-news": (0.3745, "adapted dense + lexical"),
-    "cqadupstack": (0.2943, "lexical only"),
-    "signal1m": (0.3131, "lexical only"),
-    "hotpotqa": (0.6352, "lexical only"),
-    "climate-fever": (0.1657, "lexical only"),
-    "dbpedia-entity": (0.3166, "lexical only"),
-    "fever": (0.6323, "lexical only"),
-    "nq": (0.3264, "lexical only"),
-}
+def our_best(directory: Path | None = None) -> dict[str, dict[str, Any]]:
+    """The engine's best measured row per BEIR member, **computed** from the reports on disk.
+
+    Delegates to `tools/charts_compare.our_rows`, which is the repository's single
+    implementation of "best row": it skips superseded reports, skips a named subset and a report
+    that scored fewer queries than the best report for the same dataset, merges the rest, and
+    takes the maximum retriever row. Two implementations would be two answers, and §1.2 used to
+    carry a third — a hand-entered column, transcribed from `README.md`'s prose, that disagreed
+    with this one on **nine of eighteen** cells.
+
+    Returns ``{member: {"value", "row"}}`` for the members with a report. An empty mapping means
+    `eval/beir` is absent and §1.2 has nothing to compute from.
+    """
+    import charts_compare  # noqa: PLC0415  (imports the chart module; only needed when reading eval/)
+
+    rows = charts_compare.our_rows(directory)
+    return {
+        name: {"value": float(row["best"][1]), "row": str(row["best"][0])}
+        for name, row in rows.items()
+        if name in BEIR_18 and row.get("best")
+    }
+
 
 #: Every member §1.2 measures against a published *model* column, i.e. the whole membership.
 #: The macro divides the summed deficit by this, not by the number of losing cells.
@@ -202,17 +204,19 @@ def channel_map(directory: Path | None = None) -> dict[str, Any]:
     }
 
 
-def deficit() -> dict[str, Any]:
+def deficit(directory: Path | None = None) -> dict[str, Any]:
     """§1.2, computed: the per-cell gap against the best published *model* column, and its sum.
 
     `BM25` is excluded by convention: the paper's BM25 is a multi-field index and this
     repository's control is flat, so the two are not the same system (`published_beir18`'s
-    docstring makes the same point). Both inputs are static — a transcribed "ours" column and the
-    parsed paper table — so this does not read `eval/` and cannot skip.
+    docstring makes the same point). ``ours`` is the computed best measured row per member, so
+    both inputs are read rather than typed and the arithmetic cannot drift from the reports. An
+    empty ``cells`` means `eval/beir` is absent.
     """
+    ours_by_member = our_best(directory)
     cells: list[dict[str, Any]] = []
-    for dataset in OUR_BEST:
-        ours, channel = OUR_BEST[dataset]
+    for dataset, entry in ours_by_member.items():
+        ours, channel = entry["value"], entry["row"]
         source = REVERSE.get(dataset)
         models = {
             k: v for k, v in published.NDCG10.get(source or "", {}).items() if k != "BM25"
@@ -338,7 +342,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("\n".join(coverage_table(coverage)))
 
     print("\n## §1.2 — the deficit arithmetic\n")
-    deficit_map = deficit()
+    deficit_map = deficit(BEIR_DIR)
     print("\n".join(deficit_table(deficit_map)))
     print()
     print("\n".join(arithmetic_lines(deficit_map)))
