@@ -215,6 +215,89 @@ def beir_report_metric(report: str, dataset: str, key: str) -> Callable[[], floa
     return authority
 
 
+def channel_coverage_module() -> Any:
+    """`tools/channel_coverage.py`, loaded lazily.
+
+    It imports this module for `BEIR_18`, so the dependency is a cycle: this module may only reach
+    for it at call time, by which point `BEIR_18` exists. Loading it here rather than duplicating
+    the classification keeps §1.1's richest-channel column a single computed fact.
+    """
+    import channel_coverage  # noqa: PLC0415  (deferred: channel_coverage imports this module)
+
+    return channel_coverage
+
+
+def deficit_authority() -> Callable[[], Mapping[str, float] | None]:
+    """The §1.2 arithmetic, computed by `channel_coverage.deficit()`."""
+
+    def authority() -> Mapping[str, float] | None:
+        try:
+            return channel_coverage_module().deficit()
+        except (KeyError, OSError):
+            return None
+
+    return authority
+
+
+def check_channel_coverage(root: Path) -> list[str]:
+    """Pin `SCORE-LIFT.md` §1 to the reports it is derived from.
+
+    §10.3 says this document is scanned by the gate but not anchored to it, and names the channel
+    map and the deficit arithmetic as the highest-value anchors. This is that anchoring:
+
+    * every row of §1.1 — including the summary lines that carry the lexical-only *count* — must
+      appear verbatim, so a member gaining a dense row fails the gate until the table is
+      regenerated from `make channel-coverage`;
+    * every §1.2 cell must state the "ours", published and gap values the tool computes, so a
+      re-parsed published table or a moved hand-entered row fails rather than drifting silently.
+
+    The document's own emphasis (bold on a cell) is not checked: the numbers are. An absent
+    document, or an absent `eval/beir`, is a skip, as everywhere else in this gate.
+    """
+    document = root / "SCORE-LIFT.md"
+    if not document.is_file():
+        return []
+    try:
+        module = channel_coverage_module()
+        coverage = module.channel_map(root / "eval" / "beir")
+    except (ImportError, OSError):
+        return []
+    if not coverage["rows"]:
+        return []
+
+    lines = document.read_text(encoding="utf-8").splitlines()
+    present = set(lines)
+    failures: list[str] = []
+    for line in module.coverage_table(coverage):
+        if line and line not in present:
+            failures.append(
+                f"SCORE-LIFT.md §1.1 does not carry the generated line {line!r} "
+                f"(run `make channel-coverage`, then paste the table)"
+            )
+    for cell in module.deficit().get("cells", []):
+        candidates = [line for line in lines if line.startswith(f"| {cell['display']} |")]
+        wanted = (
+            (f"{cell['ours']:.4f}", "ours"),
+            (f"{cell['best']:.3f}", "the best published model column"),
+            (module.gap_text(cell["gap"]), "the gap"),
+        )
+        if any(
+            all(claim_check._number_present(line, text) for text, _ in wanted)
+            for line in candidates
+        ):
+            continue
+        missing = [
+            f"{what} {text}"
+            for text, what in wanted
+            if not any(claim_check._number_present(line, text) for line in candidates)
+        ]
+        failures.append(
+            f"SCORE-LIFT.md §1.2 row {cell['display']!r} is not the computed one "
+            f"(missing {', '.join(missing) or 'the whole row'})"
+        )
+    return failures
+
+
 def _doc_path(doc: str, root: Path) -> Path:
     """Resolve a registered document. Audit documents live one level above the repository.
 
@@ -353,6 +436,52 @@ def registry() -> list[Quantity]:
             authority=lambda: ({"splits": s} if (s := recalibration_splits()) is not None else None),
             key="splits",
             provenance="eval/benchmarks/multihop-rag/recalibration.json transfer.splits",
+        ),
+        # ── SCORE-LIFT.md §1.2: the deficit arithmetic ───────────────────
+        #
+        # §10.3 records that this document was scanned but not anchored, and names these as the
+        # highest-value anchors: they are the numbers a reader is most likely to act on. Every
+        # one is computed by `tools/channel_coverage.py` from the published table and the
+        # hand-entered "ours" column, so a drift in either fails here rather than in prose.
+        Quantity(
+            name="BEIR-18 summed deficit",
+            sites=(
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.8054, 4),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.8054, 4),
+                Site("SCORE-LIFT.md", r"closing nine tenths of the 0\.8054", 0.8054, 4),
+            ),
+            authority=deficit_authority(),
+            key="total",
+            provenance="tools/channel_coverage.py deficit() — the summed negative gaps, §1.2",
+        ),
+        Quantity(
+            name="BEIR-18 deficit macro cost",
+            sites=(Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.0447, 4),),
+            authority=deficit_authority(),
+            key="macro",
+            provenance="tools/channel_coverage.py deficit() — the summed deficit over 18 members",
+        ),
+        Quantity(
+            name="BEIR-18 half-closed macro gain",
+            sites=(
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.022, 3),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.022, 3),
+                Site("SCORE-LIFT.md", r"hold the programme to", 0.022, 3),
+            ),
+            authority=deficit_authority(),
+            key="half",
+            provenance="tools/channel_coverage.py deficit() — half the macro cost of the deficit",
+        ),
+        Quantity(
+            name="BEIR-18 nine-tenths macro gain",
+            sites=(
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.040, 3),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.040, 3),
+                Site("SCORE-LIFT.md", r"It does not claim the \+0\.040", 0.040, 3),
+            ),
+            authority=deficit_authority(),
+            key="nine_tenths",
+            provenance="tools/channel_coverage.py deficit() — nine tenths of the macro cost",
         ),
     ]
 
@@ -603,6 +732,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     for note in notes:
         print(note)
     failures += check_references(root=root)
+    failures += check_channel_coverage(root)
     failures += check_audit_documents(
         root=root, coverage_count=coverage["count"] if coverage["count"] else None
     )

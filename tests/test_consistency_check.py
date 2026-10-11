@@ -318,3 +318,66 @@ def test_the_committed_documents_agree():
     if cc.measured_beir()["count"] == 0:
         pytest.skip("no eval/beir reports to check against")
     assert cc.main([]) == 0
+
+
+# ── SCORE-LIFT.md §1 is pinned to the reports it is derived from ─────────
+
+def _beir_report(directory: Path, stem: str, dataset: str, retrievers, documents: int) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{stem}.json").write_text(json.dumps({
+        "datasets": {dataset: {"documents": documents, "retrievers": {r: {} for r in retrievers}}},
+    }))
+
+
+def test_channel_coverage_pins_the_section_one_table(tmp_path):
+    """A member gaining a dense row must fail until the table is regenerated."""
+    beir = tmp_path / "eval" / "beir"
+    _beir_report(beir, "scifact", "scifact", ["bm25-engine"], 5_183)
+    (tmp_path / "SCORE-LIFT.md").write_text(
+        "# doc\n\n| scifact | 5,183 | bm25-engine | **lexical only** |\n"
+    )
+    failures = cc.check_channel_coverage(tmp_path)
+    assert any("§1.1 does not carry" in f for f in failures), failures
+
+
+def test_channel_coverage_passes_a_fully_generated_section(tmp_path):
+    beir = tmp_path / "eval" / "beir"
+    _beir_report(beir, "scifact", "scifact", ["bm25-engine"], 5_183)
+    module = cc.channel_coverage_module()
+    coverage = module.channel_map(beir)
+    lines = module.coverage_table(coverage) + module.deficit_table(module.deficit())
+    (tmp_path / "SCORE-LIFT.md").write_text("\n".join(lines) + "\n")
+    assert cc.check_channel_coverage(tmp_path) == []
+
+
+def test_channel_coverage_pins_a_deficit_cell(tmp_path):
+    """The §1.2 arithmetic is a computed quantity: a moved gap on any row fails."""
+    beir = tmp_path / "eval" / "beir"
+    _beir_report(beir, "scifact", "scifact", ["bm25-engine"], 5_183)
+    module = cc.channel_coverage_module()
+    lines = module.coverage_table(module.channel_map(beir))
+    # Every §1.2 row except SciFact's, which is replaced by one with a moved gap.
+    lines += [ln for ln in module.deficit_table(module.deficit()) if "| SciFact |" not in ln]
+    lines.append("| SciFact | 0.7670 | 0.699 | **+0.169** | full |")
+    (tmp_path / "SCORE-LIFT.md").write_text("\n".join(lines) + "\n")
+    failures = cc.check_channel_coverage(tmp_path)
+    assert any("§1.2 row 'SciFact'" in f and "gap" in f for f in failures), failures
+
+
+def test_channel_coverage_skips_when_no_reports_exist(tmp_path):
+    (tmp_path / "SCORE-LIFT.md").write_text("# doc\n")
+    assert cc.check_channel_coverage(tmp_path) == []
+
+
+def test_channel_coverage_skips_a_missing_document(tmp_path):
+    _beir_report(tmp_path / "eval" / "beir", "scifact", "scifact", ["bm25-engine"], 5_183)
+    assert cc.check_channel_coverage(tmp_path) == []
+
+
+def test_the_deficit_arithmetic_names_the_members_it_sums():
+    """The four figures are one computation, so they cannot disagree with each other."""
+    module = cc.channel_coverage_module()
+    deficit = module.deficit()
+    assert deficit["counted"] == 9
+    assert deficit["total"] == pytest.approx(0.8054, abs=5e-5)
+    assert deficit["macro"] == pytest.approx(0.0447, abs=5e-5)

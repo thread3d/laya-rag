@@ -84,7 +84,7 @@ TWO_WIKI_ARGS ?=
 GFI_ARGS ?=
 QUANT_ARGS ?= --cache eval/beir/cache/scidocs.bge-small-en-v1.5.cls.npy
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -154,6 +154,8 @@ help:
 	@echo "charts       cross-system tables, error bars and the README charts"
 	@echo "charts-compare  published-system and open-source-field comparison figures"
 	@echo "claim-check  do the numbers quoted in prose resolve against the reports?"
+	@echo "consistency-check  do two documents disagree about the same quantity?"
+	@echo "channel-coverage  BEIR per-member channel map and the SCORE-LIFT deficit arithmetic"
 	@echo "job-status   every resumable job's manifest: running, complete, or half-finished"
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
@@ -516,6 +518,13 @@ claim-check:
 # `best-in-the-world/` audit set (when present) to a Currency banner and the computed count.
 consistency-check:
 	$(PY) tools/consistency_check.py $(CONSISTENCY_ARGS)
+
+# Regenerate SCORE-LIFT.md §1: which channels each BEIR member has actually been measured with,
+# and the deficit arithmetic that follows. The claim map in `consistency_check.py` holds dataset
+# *membership*; this holds *channel coverage*, which is the load-bearing claim in that document.
+# Skips gracefully when eval/beir is empty, like the other eval-reading targets.
+channel-coverage:
+	$(PY) tools/channel_coverage.py
 
 # Submit the engine itself to MTEB v2: the adapter implements SearchProtocol, so the benchmark
 # scores the retrieval system (chunking, fusion, second stage) rather than one embedding model.
