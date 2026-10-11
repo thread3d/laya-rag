@@ -1,6 +1,6 @@
 # Findings: the chunking loss is the chunked representation, not its selection
 
-Round 29's engine-level run put the engine 0.0149 below the whole-document replica. SciFact's
+Round 29's engine-level run put the engine 0.0144 below the whole-document replica. SciFact's
 median document is **1,426 characters** against a 1,200-character chunk size, so most
 abstracts were split into two heavily overlapping chunks — a plausible cause. This tests four
 responses to it at the engine level, same 300 queries, `bge-small`, top-10. **None of the

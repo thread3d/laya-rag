@@ -67,7 +67,31 @@ corpus-aware chunking is a default that helps whether or not sparse is installed
 change the *claim*: "sparse is worth +0.0179" should be read as "worth up to +0.0179, on a
 fixed-chunking index".
 
+## The row silently disappeared for a week
+
+The row could not be produced at all between **2026-10-04** and the fix below, and no run said so.
+`77630bd` made the harness's corpus embedding resumable and passed `chunk=args.embed_chunk`
+through to `sparse.load_or_encode` at the same time — but that function has no `chunk` parameter,
+so every `--splade-model` run raised `TypeError`. The call site catches `Exception` deliberately
+("a missing model must not lose the run"), so the run **succeeded**, reported every other row, and
+recorded `results["splade"]["error"]` — a row that is missing is not a row that is zero, and a run
+whose whole purpose is that row reads as green in a log.
+
+Found by trying to reproduce a report, not by a test: no test exercised the sparse path end to end.
+The call site no longer passes the argument it cannot take, and a skipped row now prints to stderr
+as well as into the report. **What is not fixed:** `load_or_encode` is still all-or-nothing, so a
+sparse pass over a large corpus cannot resume — the gap `77630bd` was trying to close. That is
+recorded here rather than papered over by accepting a parameter and ignoring it.
+
+The engine-matched 3-channel row (`eval/beir/engine-parity.json`, no `--title-boost`, `rrf_k=5`)
+re-measures at **0.7427** for `hybrid-splade` against 0.7408 for `hybrid-biencoder`, i.e. **+0.0019**
+— the title-weighted reports' 0.7448 against 0.7413 is **+0.0035**. The channel's *presence* is what
+matters; the two configurations differ by 0.0021 on the fused row.
+
 ## Honest limits
+
+- **The sparse row is not covered by an end-to-end test.** Its absence was invisible for a week
+  (above), which is the evidence that the coverage is missing rather than merely thin.
 
 - The retrieval numbers above are the **harness's**, measured over whole documents with
   `bge-small`; the engine chunks, uses its own encoder and applies Laya's decisions, so its

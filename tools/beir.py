@@ -962,6 +962,88 @@ def multi_channel_fusion(
     return fused
 
 
+def channel_score_maps(
+    corpus: Mapping[str, str],
+    queries: Mapping[str, str],
+    embedder: Any,
+    vectors: np.ndarray,
+    top_k: int,
+    *,
+    k1: float = BEIR_K1,
+    b: float = BEIR_B,
+    stem: bool = True,
+    titles: Mapping[str, str] | None = None,
+    title_boost: int = 1,
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
+    """``(lexical, dense)`` raw per-query scores, keyed query id -> chunk id -> score.
+
+    Split out of :func:`score_fusion_rankings` so that a **weight sweep** costs one index build
+    rather than one per weight — building the BM25 index and the dense index again for every
+    candidate weight is what made a tuned comparison expensive rather than merely tedious. The
+    two callers share this one computation, so a tuned arm and the reported arm cannot measure
+    different retrievers.
+    """
+    lexical_corpus = corpus
+    if titles and title_boost > 1:
+        lexical_corpus = {
+            doc_id: (titles.get(doc_id, "") + " ") * title_boost + text
+            for doc_id, text in corpus.items()
+        }
+    lexical = BM25Index(k1=k1, b=b, drop_stopwords=True, stem=stem)
+    lexical.build(make_chunks(lexical_corpus))
+    dense = VectorIndex()
+    dense.add(make_chunks(corpus), vectors)
+    query_vectors = np.asarray(embedder.embed_queries(list(queries.values())), dtype=np.float32)
+
+    lexical_scores: dict[str, dict[str, float]] = {}
+    dense_scores: dict[str, dict[str, float]] = {}
+    for (query_id, text), query_vector in zip(queries.items(), query_vectors):
+        lexical_scores[query_id] = {
+            hit.chunk_id: float(hit.score) for hit in lexical.search(text, k=top_k)
+        }
+        dense_scores[query_id] = {
+            hit.chunk.chunk_id: float(hit.score) for hit in dense.search(query_vector, k=top_k)
+        }
+    return lexical_scores, dense_scores
+
+
+def fuse_score_maps(
+    lexical_scores: Mapping[str, Mapping[str, float]],
+    dense_scores: Mapping[str, Mapping[str, float]],
+    top_k: int,
+    dense_weight: float = 1.0,
+    lexical_weight: float = 1.0,
+    normalise: str = "max",
+) -> dict[str, list[str]]:
+    """Fuse precomputed per-channel scores; the ranking half of :func:`score_fusion_rankings`."""
+    if normalise not in {"max", "minmax"}:
+        raise ValueError(f"unknown normalisation {normalise!r}; expected 'max' or 'minmax'")
+
+    def scale(values: Sequence[float], value: float) -> float:
+        if not values:
+            return 0.0
+        if normalise == "minmax":
+            low, high = min(values), max(values)
+            return (value - low) / (high - low) if high > low else 1.0
+        top = max(values)
+        return value / top if top else 0.0
+
+    fused: dict[str, list[str]] = {}
+    for query_id, lexical in lexical_scores.items():
+        dense = dense_scores.get(query_id, {})
+        dense_values = list(dense.values())
+        lexical_values = list(lexical.values())
+        scores: dict[str, float] = {}
+        for doc_id, value in dense.items():
+            scores[doc_id] = scores.get(doc_id, 0.0) + dense_weight * scale(dense_values, value)
+        for doc_id, value in lexical.items():
+            scores[doc_id] = scores.get(doc_id, 0.0) + lexical_weight * scale(lexical_values, value)
+        fused[query_id] = [
+            doc_id for doc_id, _ in sorted(scores.items(), key=lambda item: -item[1])[:top_k]
+        ]
+    return fused
+
+
 def score_fusion_rankings(
     corpus: Mapping[str, str],
     queries: Mapping[str, str],
@@ -986,48 +1068,14 @@ def score_fusion_rankings(
     channels, same weights, different fusion — the comparison isolates the fusion method
     rather than the retrievers.
     """
-    lexical_corpus = corpus
-    if titles and title_boost > 1:
-        lexical_corpus = {
-            doc_id: (titles.get(doc_id, "") + " ") * title_boost + text
-            for doc_id, text in corpus.items()
-        }
-    lexical = BM25Index(k1=k1, b=b, drop_stopwords=True, stem=stem)
-    lexical.build(make_chunks(lexical_corpus))
-    dense = VectorIndex()
-    dense.add(make_chunks(corpus), vectors)
-    query_vectors = np.asarray(embedder.embed_queries(list(queries.values())), dtype=np.float32)
-
-    def scale(values: Sequence[float], value: float) -> float:
-        if not values:
-            return 0.0
-        if normalise == "minmax":
-            low, high = min(values), max(values)
-            return (value - low) / (high - low) if high > low else 1.0
-        top = max(values)
-        return value / top if top else 0.0
-
-    fused: dict[str, list[str]] = {}
-    for (query_id, text), query_vector in zip(queries.items(), query_vectors):
-        dense_hits = dense.search(query_vector, k=top_k)
-        lexical_hits = lexical.search(text, k=top_k)
-        dense_values = [hit.score for hit in dense_hits]
-        lexical_values = [hit.score for hit in lexical_hits]
-        scores: dict[str, float] = {}
-        for hit in dense_hits:
-            scores[hit.chunk.chunk_id] = (
-                scores.get(hit.chunk.chunk_id, 0.0)
-                + dense_weight * scale(dense_values, hit.score)
-            )
-        for hit in lexical_hits:
-            scores[hit.chunk_id] = (
-                scores.get(hit.chunk_id, 0.0)
-                + lexical_weight * scale(lexical_values, hit.score)
-            )
-        fused[query_id] = [
-            doc_id for doc_id, _ in sorted(scores.items(), key=lambda item: -item[1])[:top_k]
-        ]
-    return fused
+    lexical_scores, dense_scores = channel_score_maps(
+        corpus, queries, embedder, vectors, top_k,
+        k1=k1, b=b, stem=stem, titles=titles, title_boost=title_boost,
+    )
+    return fuse_score_maps(
+        lexical_scores, dense_scores, top_k,
+        dense_weight=dense_weight, lexical_weight=lexical_weight, normalise=normalise,
+    )
 
 
 def hybrid_rankings(
@@ -1477,12 +1525,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 encoder = sparse_mod.SpladeEncoder(args.splade_model, device=args.device)
                 short = args.splade_model.rsplit("/", 1)[-1]
+                # No `chunk=`: `load_or_encode` has no chunked cache, and passing one it does not
+                # accept raised `TypeError` on every `--splade-model` run from `77630bd` onward.
+                # The caller swallows it into `results['splade']['error']`, so the run *succeeded*
+                # with no sparse row at all — which is how the channel disappeared from the
+                # harness without anyone noticing. The sparse pass is still all-or-nothing; that
+                # gap is recorded in `docs/findings-sparse-channel.md`, not papered over here.
                 doc_vectors = sparse_mod.load_or_encode(
                     encoder,
                     [corpus[doc_id] for doc_id in corpus],
                     cache_dir / f"{name}.{short}.sparse",
                     use_cache=not args.no_cache,
-                    chunk=args.embed_chunk,
                 )
                 sparse_ranking, seconds = sparse_mod.sparse_rankings(
                     corpus, queries, encoder, args.top_k, doc_vectors=doc_vectors
@@ -1501,7 +1554,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "seconds": round(seconds, 1),
                     }
             except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
+                # Recorded *and* printed: a row that silently vanishes from a run is how the
+                # sparse channel disappeared for a week (`77630bd` passed an argument this
+                # function's callee did not accept). The report keeps the error; the log says it.
                 results["splade"] = {"error": f"{type(exc).__name__}: {exc}"}
+                print(f"  splade row skipped: {type(exc).__name__}: {exc}", file=sys.stderr,
+                      flush=True)
 
         if "crossencoder" in wanted:
             try:
@@ -1527,6 +1585,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 }
             except Exception as exc:  # noqa: BLE001 - a missing model must not lose the run
                 results["crossencoder"] = {"error": f"{type(exc).__name__}: {exc}"}
+                print(f"  crossencoder row skipped: {type(exc).__name__}: {exc}", file=sys.stderr,
+                      flush=True)
 
         ignore_identical = not args.keep_identical_ids
         per_query: dict[str, dict[str, float]] = {}

@@ -38,7 +38,7 @@ Three readings:
 
 1. **The replica understates the engine, significantly, on every metric.** +0.0535 MAP@10 over
    the harness's own first stage, all four intervals excluding zero. This is the *opposite* sign
-   to the BEIR replica, which overstated the engine by 0.0149 — so "a replica is not the system"
+   to the BEIR replica, which overstated the engine by 0.0144 — so "a replica is not the system"
    cuts both ways, and only engine-level measurement settles which way.
 2. **The engine's own chunking captures the whole cross-encoder gain on this subset.** Against
    the harness's reranked row it is statistically indistinguishable on MAP@10, Hits@4 and

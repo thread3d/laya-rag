@@ -418,10 +418,31 @@ def test_the_scifact_parity_is_read_from_both_reports():
     """The delta is `replica - engine`, so it cannot disagree with either of them."""
     parity = cc.scifact_harness_parity()
     if parity is None:
-        pytest.skip("engine-beir or five-small-fixed report is not present")
+        pytest.skip("engine-beir or engine-parity report is not present")
     assert parity["engine"] == pytest.approx(0.7264, abs=5e-5)
-    assert parity["replica"] == pytest.approx(0.7413, abs=5e-5)
-    assert parity["delta"] == pytest.approx(0.0149, abs=5e-5)
+    assert parity["replica"] == pytest.approx(0.7408, abs=5e-5)
+    assert parity["delta"] == pytest.approx(0.0144, abs=5e-5)
+
+
+def test_the_replica_row_is_the_engine_matched_configuration():
+    """A BEIR row is a retriever *plus its settings*.
+
+    `five-small-fixed.json` and the `rrf-*` sweep carry `--title-boost 2` and read 0.7413 for the
+    same retriever and `rrf_k=5`; the engine indexes each title inline once, so the parity must be
+    read from the un-boosted `engine-parity.json`. Reading the wrong one moved every document's
+    delta by 0.0005 and produced a "correction" that was itself the error.
+    """
+    matched = cc.beir_report_metric(
+        "engine-parity", "scifact", "nDCG@10", retriever="hybrid-biencoder"
+    )()
+    title_weighted = cc.beir_report_metric(
+        "five-small-fixed", "scifact", "nDCG@10", retriever="hybrid-biencoder"
+    )()
+    if matched is None or title_weighted is None:
+        pytest.skip("one of the two replica reports is not present")
+    assert matched == pytest.approx(0.7408, abs=5e-5)
+    assert title_weighted == pytest.approx(0.7413, abs=5e-5)
+    assert matched != title_weighted
 
 
 def test_the_scifact_parity_skips_without_its_reports(tmp_path):

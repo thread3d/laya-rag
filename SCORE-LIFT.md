@@ -803,12 +803,18 @@ found a defect that the convention was hiding — while items 4–5 are standing
    `BM25_K1`/`BM25_B` exist to *reproduce a baseline exactly*, not because one is better. A
    `bm25-engine` row is the engine's configuration reproduced in the harness and a `bm25` row is
    the published baseline reproduced there; **neither is the engine itself**, and a fused row must
-   not be quoted against the control. Making that convention checkable found a real drift: the
-   replica's overstatement of the engine on SciFact was hand-typed as **0.7408 / +0.0144** across
-   four documents and reproduces from **no report on disk** — two independent reports read
-   **0.7413** for the same retriever, model and `rrf_k`, so the figure is **+0.0149**. Both
-   endpoints and the delta are now pinned quantities in `make consistency-check`, read from
-   `eval/engine-beir/scifact-base.json` and `eval/beir/five-small-fixed.json`.
+   not be quoted against the control.
+
+   Making that convention checkable showed how much the *other* knobs matter to the number.
+   Trying to pin the replica's overstatement of the engine on SciFact (engine **0.7264**, replica
+   **0.7408**, **+0.0144**) I first concluded the replica value reproduced from no report — two
+   reports read **0.7413** for the same retriever and `rrf_k`. It does reproduce: the two differ by
+   **`--title-boost`**, which those reports carry and the parity run did not (`title_boost=1`
+   → 0.7408, `title_boost=2` → 0.7413, and likewise 0.7320 / 0.7310 at `rrf_k=60`). The
+   engine-matched comparison is the un-boosted one, because the engine indexes each document's
+   title inline once. Both endpoints and the delta are pinned in `make consistency-check` from
+   `eval/engine-beir/scifact-base.json` and **`eval/beir/engine-parity.json`** — a report produced
+   at the engine-matched configuration so the document quotes a row that can be regenerated.
 4. **Minimum detectable effect.** MAP@10 MDE is 0.0076–0.0112 on 2,255 queries; most BEIR ablations
    are below theirs. Publish the MDE next to the delta, and pre-register the family before looking.
 5. **Significance, always.** Every row in this programme should carry a paired-bootstrap interval
@@ -922,7 +928,7 @@ module class. Each of those is a "no", and the reason matters more than the labe
 about what it *buys*: a like-for-like number against pipelines those toolkits have already
 reproduced, under identical conditions, with the harness mismatch (`k1`/`b`, chunking, top-k)
 neutralised by construction. Given that this project's own audit finds its replica **overstates**
-the engine by 0.0149 on SciFact and **understates** it on MultiHop-RAG, an external harness is not
+the engine by 0.0144 on SciFact and **understates** it on MultiHop-RAG, an external harness is not
 a nicety — it is the only control on the harness itself. This deserves to be a scoped item, not a
 footnote.
 
@@ -1477,7 +1483,7 @@ which is why they survive §7.1's test.
 **Task shape for T1–T7.** Each is: (a) a loader in `tools/` following the existing
 `tools/twincorpus.py`/`musique.py` pattern; (b) a run through **the shipped engine defaults**, not a
 harness replica, since `findings-engine-parity.md` records the replica overstating the engine by
-0.0149 on SciFact; (c) per-query scores persisted so the paired bootstrap applies; (d) a report with
+0.0144 on SciFact; (c) per-query scores persisted so the paired bootstrap applies; (d) a report with
 an interval, not a point estimate. **Do T1 first** — it is the smallest and the only one whose
 scoring is unambiguous.
 
@@ -1624,8 +1630,8 @@ drifts. Two things followed, and the first is now closed:
    the nine-tenths **+0.037**; plus a `check_channel_coverage` pass that requires every §1.1 table
    row *and* the three summary lines — including the lexical-only count — to appear verbatim, and
    every §1.2 cell to state the computed "ours", published and gap values. The SciFact
-   harness-parity pair is pinned the same way (§4.3): the engine's 0.7264 and the replica's 0.7413
-   from their two reports, and the **+0.0149** overstatement derived from them across eleven sites
+   harness-parity pair is pinned the same way (§4.3): the engine's 0.7264 and the replica's 0.7408
+   from its two reports, and the **+0.0144** overstatement derived from them across eleven sites
    in six documents. `consistency-check` went from **20** checked sites to **43**; a two-line edit
    to the deficit, to a member's channel or to the parity figure now fails the gate rather than
    passing silently. Both halves were negative-tested (perturbing 0.7314 in §1.2 and `nq`'s channel

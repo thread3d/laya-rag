@@ -174,7 +174,7 @@ programme that `ceiling-decomp.md` now says is worth +0.0992.
 [`docs/FINDINGS.md`](docs/FINDINGS.md) names this itself: *"the engine's multi-hop retrieval under
 its own corpus-aware chunking is **not measured**. That is the largest known gap in the evidence."*
 The 256-character harness (`tools/multihop_official.py`) is a replica, and the BEIR replica was
-already shown to overstate the engine by **0.0149**.
+already shown to overstate the engine by **0.0144**.
 
 | # | item | file | change | falsify / signal | status |
 | --- | --- | --- | --- | --- | --- |
@@ -395,7 +395,7 @@ overrides deliberately. See `docs/findings-heavy-job-lock.md`.
   +0.0559 MRR@10 over the 256-token harness's hybrid first stage, all significant; against the
   harness's *reranked* row it is level on MAP@10/Hits@4/MRR@10 and better on Hits@10, so the
   reranker's +0.0464 was largely recovering what the harness chunking cost. The replica
-  **understates** the engine here — the opposite sign to BEIR's +0.0149 overstatement. The engine
+  **understates** the engine here — the opposite sign to BEIR's +0.0144 overstatement. The engine
   is still below the subset's coverage-plus-quota bar (0.3057 against 0.3280), so Phase 2's
   target survives the change. `tools/engine_vs_harness.py` makes the pairing reproducible and
   refuses a mismatched subset. Still owed: the full 2,255 and the shipped default path. Suite

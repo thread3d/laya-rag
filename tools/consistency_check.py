@@ -240,16 +240,18 @@ def scifact_harness_parity() -> Mapping[str, float] | None:
     §4.3 of `SCORE-LIFT.md` asks every BEIR row to say which BM25 configuration it quotes. This
     goes further and makes the *size of the harness mismatch* a computed quantity: the engine
     reads `eval/engine-beir/scifest-base.json` (the real `RagEngine`, thresholds at zero, 300
-    test queries) and the replica reads the canonical five-dataset report's `hybrid-biencoder`
-    row, which is the two-channel configuration the parity finding compares against.
+    test queries) and the replica reads `eval/beir/engine-parity.json`'s `hybrid-biencoder` row —
+    the two-channel configuration run *without* `--title-boost`, which is the engine's own.
 
-    The figure was hand-typed as **0.7408 / +0.0144** and does **not** reproduce from any report on
-    disk; two independent reports (`five-small-fixed.json`, `rrf-5.json`) both read 0.7413 for the
-    same retriever, model and `rrf_k`, which makes the delta **+0.0149**. That is the drift this
-    entry exists to stop.
+    The replica row is read from **`eval/beir/engine-parity.json`**, produced with no
+    `--title-boost` — the configuration the engine itself runs, since it indexes each document's
+    title inline once. `five-small-fixed.json` and the `rrf-*` sweep carry `--title-boost 2` and
+    read 0.7413 for the same retriever and `rrf_k`; that is a different configuration, not a
+    disagreement, and an earlier version of this entry mistook it for one and "corrected" the
+    delta to +0.0149. Both values reproduce exactly. A BEIR row is a retriever *plus its settings*.
     """
     engine = _read_json(ENGINE_BEIR / "scifact-base.json")
-    replica = _read_json(BEIR / "five-small-fixed.json")
+    replica = _read_json(BEIR / "engine-parity.json")
     try:
         engine_value = float(engine["summary"]["nDCG@10"])                       # type: ignore[index]
         replica_value = float(
@@ -550,28 +552,33 @@ def registry() -> list[Quantity]:
         ),
         Quantity(
             name="replica SciFact hybrid-biencoder nDCG@10",
-            sites=(Site("docs/findings-engine-parity.md", r"^\|\s*`tools/beir\.py` replica, 2-channel", 0.7413, 4),),
+            sites=(Site("docs/findings-engine-parity.md", r"^\|\s*`tools/beir\.py` replica, 2-channel, \*\*engine-matched", 0.7408, 4),),
+            # The **engine-matched** replica row: `eval/beir/engine-parity.json` is produced with
+            # no `--title-boost`, which is what the engine does (it indexes each title inline,
+            # once). `five-small-fixed.json` and the `rrf-*` sweep carry `--title-boost 2` and read
+            # 0.7413 — the same retriever at a different configuration, not a disagreement.
             authority=beir_report_metric(
-                "five-small-fixed", "scifact", "nDCG@10", retriever="hybrid-biencoder"
+                "engine-parity", "scifact", "nDCG@10", retriever="hybrid-biencoder"
             ),
             provenance=(
-                "eval/beir/five-small-fixed.json datasets.scifact.retrievers.hybrid-biencoder.nDCG@10"
+                "eval/beir/engine-parity.json datasets.scifact.retrievers.hybrid-biencoder.nDCG@10 "
+                "(title_boost=1, rrf_k=5 — the engine's configuration)"
             ),
         ),
         Quantity(
             name="replica overstatement of the engine on SciFact",
             sites=(
-                Site("docs/findings-engine-parity.md", r"The replica overstates the engine", 0.0149, 4),
-                Site("docs/FINDINGS.md", r"\| Engine-level BEIR \|", 0.0149, 4),
-                Site("docs/FINDINGS.md", r"overstating the real engine", 0.0149, 4),
-                Site("docs/FINDINGS.md", r"the opposite of the", 0.0149, 4),
-                Site("ROADMAP.md", r"already shown to overstate the engine", 0.0149, 4),
-                Site("ROADMAP.md", r"opposite sign to BEIR's", 0.0149, 4),
-                Site("SCORE-LIFT.md", r"so the figure is", 0.0149, 4),
-                Site("SCORE-LIFT.md", r"an external harness is not", 0.0149, 4),
-                Site("SCORE-LIFT.md", r"records the replica overstating the engine by", 0.0149, 4),
-                Site("docs/findings-engine-multihop.md", r"which overstated the engine by", 0.0149, 4),
-                Site("docs/findings-chunk-merge.md", r"Round 29's engine-level run", 0.0149, 4),
+                Site("docs/findings-engine-parity.md", r"engine-matched replica overstates the engine", 0.0144, 4),
+                Site("docs/FINDINGS.md", r"\| Engine-level BEIR \|", 0.0144, 4),
+                Site("docs/FINDINGS.md", r"overstating the real engine", 0.0144, 4),
+                Site("docs/FINDINGS.md", r"the opposite of the", 0.0144, 4),
+                Site("ROADMAP.md", r"already shown to overstate the engine", 0.0144, 4),
+                Site("ROADMAP.md", r"opposite sign to BEIR's", 0.0144, 4),
+                Site("SCORE-LIFT.md", r"Making that convention checkable showed", 0.0144, 4),
+                Site("SCORE-LIFT.md", r"an external harness is not", 0.0144, 4),
+                Site("SCORE-LIFT.md", r"records the replica overstating the engine by", 0.0144, 4),
+                Site("docs/findings-engine-multihop.md", r"which overstated the engine by", 0.0144, 4),
+                Site("docs/findings-chunk-merge.md", r"Round 29's engine-level run", 0.0144, 4),
             ),
             authority=scifact_harness_parity,
             key="delta",

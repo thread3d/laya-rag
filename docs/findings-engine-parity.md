@@ -14,49 +14,64 @@ make engine-beir ENGINE_BEIR_ARGS="--dataset scifact --tag sparse --sparse"
 
 ## Results (SciFact, 300 test queries, `bge-small`, top-10)
 
-| configuration | nDCG@10 | vs base |
-| --- | --- | --- |
-| **engine**, dense + lexical | 0.7264 | — |
-| **engine + learned sparse** | **0.7443** | **+0.0179 [+0.0028, +0.0337]**, p=0.025 |
-| `tools/beir.py` replica, 2-channel | 0.7413 | — |
-| `tools/beir.py` replica, 3-channel | 0.7448 | +0.0035 |
+| configuration | nDCG@10 | vs base | report |
+| --- | --- | --- | --- |
+| **engine**, dense + lexical | 0.7264 | — | `eval/engine-beir/scifact-base.json` |
+| **engine + learned sparse** | **0.7443** | **+0.0179 [+0.0028, +0.0337]**, p=0.025 | `eval/engine-beir/scifact-sparse.json` |
+| `tools/beir.py` replica, 2-channel, **engine-matched** | 0.7408 | — | `eval/beir/engine-parity.json` |
+| `tools/beir.py` replica, 3-channel, **engine-matched** | 0.7427 | +0.0019 | `eval/beir/engine-parity.json` |
+| `tools/beir.py` replica, 2-channel, **title-weighted** | 0.7413 | +0.0005 | `eval/beir/five-small-fixed.json` |
 
 **Which rows these are, stated exactly, because §4.3 of `SCORE-LIFT.md` requires it.** The engine
-row is `eval/engine-beir/scifact-base.json` — the real `RagEngine`, `BAAI/bge-small-en-v1.5`,
-thresholds at 0, `top_k=10`. The two replica rows are `hybrid-biencoder` and `hybrid-splade` in
-`eval/beir/five-small-fixed.json` and `eval/beir/splade-small-fixed.json`: the same model, the same
-`rrf_k=5`, scored over whole documents at depth 100. The engine's lexical channel runs the engine's
-own settings (stemming on, query stopwords dropped), which the harness reproduces as
-`bm25-engine`, **not** as its `bm25` control — the control is the published Anserini configuration,
-`k1=0.9, b=0.4`, and it is a different system from the shipped `1.2/0.75`; quoting a fused row
-against the control is not a like-for-like comparison.
+row is the real `RagEngine` at `BAAI/bge-small-en-v1.5`, thresholds at 0, `top_k=10`. The replica's
+2-channel row is `hybrid-biencoder` — the same model, `rrf_k=5`, whole documents at depth 100 — and
+the engine's lexical channel runs the engine's own settings (stemming on, query stopwords dropped),
+which the harness reproduces as `bm25-engine`, **not** as its `bm25` control: the control is the
+published Anserini configuration, `k1=0.9, b=0.4`, a different system from the shipped `1.2/0.75`.
+
+The two replica rows are the **same retriever at two configurations**, and the difference is worth
+naming because it is the one that is easy to miss:
+
+- `eval/beir/engine-parity.json` is produced with **no `--title-boost`**, which is what the engine
+  does: it indexes each document's title inline, once. That is the engine-matched comparator, and
+  it is the row the overstatement is computed from.
+- `eval/beir/five-small-fixed.json` and the `rrf-*` fusion sweep were run with **`--title-boost 2`**,
+  repeating each title twice for the lexical channel — an experiment about the lexical channel, not
+  a reproduction of the engine. Re-measured here at both settings:
+  `title_boost=1, rrf_k=5` → **0.7408**; `title_boost=2, rrf_k=5` → **0.7413**;
+  `title_boost=1, rrf_k=60` → **0.7320**; `title_boost=2, rrf_k=60` → **0.7310**. Every recorded
+  value reproduces to four decimals.
 
 Two things to take from this:
 
 1. **The sparse channel's gain transfers, and is larger through the engine** (+0.0179
-   significant on 300 queries, against +0.0035 for the replica). The channel is doing real
-   work on the path that actually serves requests, not only in the harness.
-2. **The replica overstates the engine by 0.0149** (0.7413 against 0.7264). The replica scores
-   whole documents; the engine chunks at 1200/400 and its top-10 *passages* collapse to fewer
-   distinct documents, because several chunks of the same file occupy the list. The project's
-   BEIR rows are therefore an upper bound on what the engine returns, and should be read that
-   way.
+   significant on 300 queries, against **+0.0019** for the engine-matched replica — +0.0035 in the
+   title-weighted one). The channel is doing real work on the path that actually serves requests,
+   not only in the harness.
+2. **The engine-matched replica overstates the engine by 0.0144** (0.7408 against 0.7264). The
+   replica scores whole documents; the engine chunks at 1200/400 and its top-10 *passages* collapse
+   to fewer distinct documents, because several chunks of the same file occupy the list. The
+   project's BEIR rows are therefore an upper bound on what the engine returns, and should be read
+   that way.
 
-**This pair is now a pinned quantity, and the pinning found a drift.** An earlier draft of this
-page reported the replica at **0.7408** and the overstatement at **+0.0144**. Neither reproduces:
-two independent reports, `five-small-fixed.json` and `rrf-5.json`, both read **0.7413** for the
-same retriever, model and `rrf_k`, so the delta is **+0.0149**. The figure had been hand-typed into
-this page, `docs/FINDINGS.md`, `ROADMAP.md` and `SCORE-LIFT.md`, and it is load-bearing — §7.2
-argues from it that an external harness is the only control on this one. `make consistency-check`
-now pins all three numbers to the two reports, so a re-run of either moves the documents or fails
-the gate rather than passing silently.
+**A correction to a correction, recorded because the first one was mine.** Wiring this pair into
+`make consistency-check` initially produced the claim that 0.7408 "reproduces from no report on
+disk" and that the overstatement is +0.0149 — inferred from two reports reading 0.7413, without
+noticing that they carry `--title-boost 2` and the parity run did not. Both numbers were right all
+along; only the *configuration* differed. The lesson is the section's own subject: a BEIR row is
+not a retriever, it is a retriever **plus its settings**, and comparing across an unstated knob is
+exactly the harness/replica confusion §4.3 exists to prevent. The pin therefore reads
+`eval/beir/engine-parity.json` — a report produced at the engine-matched configuration, so the
+quoted row is one a reader can regenerate with the command in that report — and the delta is
+computed from the two reports rather than typed.
 
-*Not swept here:* the same stale **0.7408** baseline appears in two ablation tables —
-`docs/findings-fusion-k.md` §Results and `docs/findings-coverage-scope.md` — where it is the
-reference arm of an RRF-`k` and a coverage-λ comparison. Those tables are not re-derived above
-because their *other* column does not come from the same report, so re-reading the baseline alone
-would change a delta without a matching treatment row. It is recorded here so the next pass at
-either document knows the baseline is stale.
+**Two files both claim to be "the RRF-`k` sweep", and they are different configurations.**
+`docs/findings-fusion-k.md` tabulates SciFact at **0.7408 (k=5) / 0.7320 (k=60)** — the un-boosted
+pair, consistent with this page — and `eval/beir/rrf-{3,5,7,10,30,60,100}.json` hold **0.7413
+(k=5) / 0.7310 (k=60)**, the `--title-boost 2` sweep. Both are right; neither report says which
+title boost it used in its *prose*, though both carry it in `settings`. A reader comparing the two
+without that column would see a 0.0005 disagreement that is not one. `docs/findings-fusion-k.md`
+is not re-derived here — its deltas are internally consistent within its own configuration.
 
 ## What the BM25 divergence means for every other row
 
