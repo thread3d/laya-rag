@@ -79,3 +79,50 @@ def test_check_mode_exits_one_on_a_finding(tmp_path):
         json.dumps({"_settings": {"limit_queries": 1}, "per_query": {"a": 1.0, "b": 2.0}})
     )
     assert la.main(["--root", str(tmp_path), "--check"]) == 1
+
+
+# ── coverage: an exclusion is named, never silent ────────────────────────
+
+def test_a_non_utf8_file_is_named_not_fatal(tmp_path):
+    """`eval/bioasq-src/allMeSH_2020.json` is a 24 GB latin-1 dump: it must not crash the audit."""
+    (tmp_path / "eval").mkdir()
+    (tmp_path / "eval" / "raw.json").write_bytes(b'{"a": "\xb1"}')
+    (tmp_path / "eval" / "clean.json").write_text(json.dumps({"per_query": {"a": 1.0}}))
+    result = la.audit_tree(tmp_path)
+    assert result["reports"] == 1
+    assert [e["reason"] for e in result["skipped"]] == ["UnicodeDecodeError"]
+
+
+def test_a_malformed_report_is_named(tmp_path):
+    (tmp_path / "eval").mkdir()
+    (tmp_path / "eval" / "broken.json").write_text("{not json")
+    result = la.audit_tree(tmp_path)
+    assert result["reports"] == 0
+    assert result["skipped"][0]["reason"].startswith("JSONDecodeError")
+
+
+def test_an_oversized_file_is_excluded_by_name(tmp_path):
+    (tmp_path / "eval").mkdir()
+    (tmp_path / "eval" / "corpus.json").write_text(json.dumps({"x": "y" * 100}))
+    result = la.audit_tree(tmp_path, max_bytes=10)
+    assert result["reports"] == 0
+    assert "MB > " in result["skipped"][0]["reason"]
+    assert "corpus.json" in result["skipped"][0]["path"]
+
+
+def test_an_empty_sentinel_file_is_summarised(tmp_path):
+    """The HuggingFace `.no_exist/` sentinels are empty; they are not reports and not surprises."""
+    (tmp_path / "eval").mkdir()
+    (tmp_path / "eval" / "added_tokens.json").write_bytes(b"")
+    result = la.audit_tree(tmp_path)
+    assert [e["reason"] for e in result["skipped"]] == ["empty file"]
+
+
+def test_the_markdown_states_coverage_and_names_holes(tmp_path):
+    (tmp_path / "eval").mkdir()
+    (tmp_path / "eval" / "broken.json").write_text("{not json")
+    (tmp_path / "eval" / "ok.json").write_text(json.dumps({"per_query": {"a": 1.0}}))
+    text = la.render_markdown(la.audit_tree(tmp_path))
+    assert "1 JSON reports scanned" in text
+    assert "1 JSON file(s) under" in text
+    assert "broken.json" in text

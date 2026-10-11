@@ -30,6 +30,13 @@ from typing import Any, Iterator, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 
+#: A file above this size is not a report. `eval/` is 166 GB and holds 27 GB of JSON: a 24 GB
+#: MeSH dump, 228 MB corpus splits, 166 MB posting caches, 33 MB tokenizer files. Every report a
+#: tool writes here is megabytes at most, even with per-query arrays for thousands of queries, so
+#: the cap costs no coverage — and the exclusions are *named* in the output rather than dropped,
+#: because an audit's coverage is itself a claim.
+DEFAULT_MAX_BYTES = 32 * 1024 * 1024
+
 #: Settings keys that record a capped query set.
 _LIMIT_KEYS = ("limit_queries", "limit")
 #: Held-out blocks and the fields that make each checkable; any one field satisfies it.
@@ -93,30 +100,79 @@ def iter_reports(root: Path) -> Iterator[Path]:
             yield path
 
 
-def audit_tree(root: Path = ROOT) -> dict[str, Any]:
+def _relative(path: Path, root: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def audit_tree(root: Path = ROOT, max_bytes: int = DEFAULT_MAX_BYTES) -> dict[str, Any]:
+    """Every JSON file under `eval/`, with the ones that are not reports **named** rather than lost.
+
+    `eval/` also holds downloaded source data and caches — `bioasq-src/allMeSH_2020.json` is a
+    latin-1 MeSH dump, and `beir/cache/` holds posting stores — so an audit that skipped them
+    silently would overstate its own coverage. They are counted and listed, so "N reports scanned"
+    is a statement about N *readable reports* and a reader can see what was left out. Only a
+    decodable JSON object is audited: every report this repository writes goes through
+    `json.dumps` to UTF-8, so a file that is neither cannot carry the dilution signature.
+    """
     reports = 0
+    skipped: list[dict[str, str]] = []
     findings: list[dict[str, Any]] = []
     for path in iter_reports(root):
         try:
-            report = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            size = path.stat().st_size
+        except OSError as exc:
+            skipped.append({"path": _relative(path, root), "reason": type(exc).__name__})
+            continue
+        if size > max_bytes:
+            skipped.append({
+                "path": _relative(path, root),
+                "reason": f"{size / 1e6:.1f} MB > {max_bytes / 1e6:.0f} MB cap",
+            })
+            continue
+        if size == 0:
+            # The HuggingFace cache's `.no_exist/` sentinels are empty files: a name reserved for
+            # a file that was *not* downloaded. They cannot be a report, so they are summarised
+            # rather than named one by one.
+            skipped.append({"path": _relative(path, root), "reason": "empty file"})
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            skipped.append({"path": _relative(path, root), "reason": type(exc).__name__})
+            continue
+        try:
+            report = json.loads(text)
+        except json.JSONDecodeError as exc:
+            skipped.append({"path": _relative(path, root), "reason": f"JSONDecodeError: {exc.msg}"})
             continue
         if not isinstance(report, Mapping):
+            skipped.append(
+                {"path": _relative(path, root), "reason": f"top level is {type(report).__name__}"}
+            )
             continue
         reports += 1
         findings.extend(audit_report(path, report))
     return {
         "reports": reports,
+        "max_bytes": max_bytes,
+        "skipped": skipped,
         "findings": findings,
         "ok": not findings,
     }
 
 
 def render_markdown(result: Mapping[str, Any]) -> str:
+    skipped = result.get("skipped") or []
+    cap = result.get("max_bytes") or DEFAULT_MAX_BYTES
     lines = [
         "# Leakage audit",
         "",
         f"- {result['reports']} JSON reports scanned under `eval/`",
+        f"- {len(skipped)} JSON file(s) under `eval/` not scanned: not a UTF-8 JSON object under "
+        f"{cap / 1e6:.0f} MB (source data, caches, tokenizer files — not reports)",
         "- checks: a limited run must not hold more per-query entries than its limit (the",
         "  dilution signature); a held-out block must carry a field that makes it checkable",
         "",
@@ -127,6 +183,35 @@ def render_markdown(result: Mapping[str, Any]) -> str:
         lines += ["| kind | report | detail |", "| --- | --- | --- |"]
         for finding in result["findings"]:
             lines.append(f"| {finding['kind']} | `{finding['path']}` | {finding['detail']} |")
+    if skipped:
+        # An exclusion that could *hide* a report — an undecodable or malformed file — is named
+        # individually. Bulk categories that cannot (a list-shaped id cache, an oversized corpus)
+        # are summarised by reason with examples, so the table stays readable without the coverage
+        # claim going unstated. The complete list is always in `--json`.
+        suspicious = [
+            entry for entry in skipped
+            if entry["reason"].startswith(("JSONDecodeError", "UnicodeDecodeError", "OSError"))
+        ]
+        grouped: dict[str, list[str]] = {}
+        for entry in skipped:
+            if entry in suspicious:
+                continue
+            grouped.setdefault(entry["reason"], []).append(entry["path"])
+        lines += [
+            "",
+            "**Not scanned** — an audit's coverage is a claim, so the exclusions are stated:",
+            "",
+            "| reason | files | examples |",
+            "| --- | ---: | --- |",
+        ]
+        for reason, paths in sorted(grouped.items(), key=lambda item: -len(item[1])):
+            examples = ", ".join(f"`{p}`" for p in paths[:3])
+            if len(paths) > 3:
+                examples += f", … (+{len(paths) - 3})"
+            lines.append(f"| {reason} | {len(paths)} | {examples} |")
+        if suspicious:
+            lines += ["", "Files that could not be read at all, named individually:", ""]
+            lines += [f"- `{entry['path']}` — {entry['reason']}" for entry in suspicious]
     lines.append("")
     return "\n".join(lines)
 

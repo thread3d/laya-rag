@@ -720,10 +720,19 @@ benchmark run.
 ## 4. Prerequisites — measurement hygiene
 
 These are not score items, they are the conditions under which a score means anything. Each is
-already named in `measurement-audit.md`; none is fixed.
+already named in `measurement-audit.md`; **items 1 and 2 are now closed, item 3 is a statement
+convention rather than a defect, and items 4–5 are standing practice.**
 
-1. **`--limit-queries` dilution.** Found in four tools. A diluted sample is not a subset; any row
-   produced through it must be marked, not quoted.
+1. **`--limit-queries` dilution — fixed, and the guard that proves it was itself broken.** Found
+   in four tools (`arguana_stance`, `order_eval`, `beir.py`'s HotpotQA path, `ondisk.py`, then
+   `engine_beir.py`); all five now pair a capped ranking set with `beir.restrict_qrels`, pinned by
+   `tests/test_qrels_dilution.py`. A diluted sample is not a subset; any row produced through it
+   must be marked, not quoted. **The audit that checks this had stopped working**: it raised an
+   uncaught `UnicodeDecodeError` on `eval/bioasq-src/allMeSH_2020.json` (a 24 GB latin-1 MeSH dump —
+   `UnicodeDecodeError` is not an `OSError`), so `make leakage-audit --check` died on the first
+   undecodable file rather than reporting. Fixed, and its coverage is now stated rather than
+   implied: **590 reports scanned, 142 exclusions named** (oversized corpora above a 32 MiB cap,
+   empty HuggingFace `.no_exist/` sentinels, list-shaped id caches), zero findings.
 2. **`jobkit` fingerprints do not cover the index they were measured against.** Use `--fresh`.
    A cached result whose index has changed is a wrong number with a right timestamp.
 3. **The harness and the shipped engine disagree on BM25 parameters** — `tools/beir.py` runs
