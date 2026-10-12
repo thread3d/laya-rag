@@ -472,6 +472,28 @@ Three things to get right, each of which otherwise wastes hours:
 
 Arm 2 (`Qwen3-Reranker-0.6B`, listwise) needs the yes/no-logit path and is real work; arm 1 is a
 flag and an afternoon.
+
+**Arm 1 has been run, and it produced a defect signal rather than a result.** MultiHop-RAG, the same
+200-query sample (`--sample-seed 0`), two rerankers:
+
+| `--rerank-model` | Hits@10 | Hits@4 | MAP@10 | MRR@10 | seconds |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `BAAI/bge-reranker-base` (184M, 2023) | 0.9200 | 0.7300 | **0.3189** | 0.6142 | 170.6 |
+| **`BAAI/bge-reranker-v2-m3`** (568M, 2024) | 0.9200 | 0.7300 | **0.3189** | 0.6142 | 318.4 |
+
+**Every metric is identical to four decimal places, and the runs are not the same run**: the recorded
+`_settings` differ in `rerank_model` (`bge-reranker-base` against `bge-reranker-v2-m3`) and the wall
+clock differs by 1.9× (170.6 s against 318.4 s), so the larger model *was* loaded and *did* compute.
+Identical hits, MAP and MRR across 200 queries while a different ranker scores every candidate means
+**the reranked order is not what the report is ordering by** — the cross-encoder's scores are being
+discarded somewhere between `rerank()` and the passages the metrics read.
+
+That is not a measurement of either reranker, and the honest state of P4 is that **its premise needs
+checking before its arms are worth running**: if the second stage cannot change the order, then the
+"pointwise cross-encoder over the fused top-100" rejection this section rests on was never tested
+either. The check is bounded and code-level — whether `RagEngine.query` returns the reranker's order
+(or a `blend < 1` nudge of the fused order), and what `tools/engine_multihop.py`'s summary reads.
+**Do not run arm 2 until that is answered.**
 | `mixedbread-ai/mxbai-rerank-large-v2` | **yes**, `Qwen2ForCausalLM` | no — same custom path | 1.5B |
 
 So the first experiment is literally
