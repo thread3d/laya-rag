@@ -275,6 +275,18 @@ The engine is also **~5× slower** on this task (263.9 s against 54.8 s), which 
 same table makes visible: fusion, chunking and the index build are not free even with no decision
 model in the path.
 
+**Extending to the five-dataset set is in flight, and its baselines are collected so they are not
+re-run.** `BAAI/bge-small-en-v1.5` under MTEB: SciFact 0.71271, NFCorpus 0.34339, **ArguAna
+0.60413** (MAP@10 0.52341), **SCIDOCS 0.20518** (MAP@10 0.12292) — the last two measured while the
+matching engine runs were still going, so the pairs are half-complete and nothing is claimed from
+them here. FiQA2018 is unstarted.
+
+**A scripting lesson, recorded because it cost a round.** The three-pair sweep was launched with
+`| grep -E "main_score|Error"`, which filtered out the adapter's own progress lines — so a run that
+was working looked exactly like the four-round stall this page is about, for the fourth time, and
+caused by me rather than by anything under test. **The instruments only help if the wrapper does not
+discard them.**
+
 **A second task says the same thing, which is what makes it a reading rather than one corpus's
 accident.** The same pair on NFCorpus:
 
