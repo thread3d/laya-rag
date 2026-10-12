@@ -2357,6 +2357,15 @@ the top of §1 was anchored too (it had been the most visible unguarded figure i
    in §1.1 each produces exactly one failure; so does moving either parity endpoint). **The
    parity pin immediately found one**: the figure had been hand-typed as 0.7408 / +0.0144 and
    reproduces from no report on disk.
+
+   **The gates were then adversarially tested rather than assumed, and one of them had a hole.**
+   Perturbing `claim-check`'s anchored figures fails it with the anchor named, so that gate is live.
+   Perturbing the **summary blockquote at the top of §1** did *not* fail `consistency-check` — the
+   gate was fine, that line simply was not one of its sites, and it is the first number a reader
+   meets. It is anchored now (**43 → 47 sites**) and the perturbation fails as it should. The lesson
+   generalises past this document: **a gate that catches a wrong number and misses the number looks
+   identical to a working gate until someone perturbs the right line**, which is why each of these
+   was perturbed rather than trusted.
 2. **The rest of the document is still transcription, and registering it is a separate job.**
    `grep -c SCORE-LIFT tools/consistency_check.py tools/claim_check.py` is no longer **0 and 0** —
    `consistency_check.py` matches — but the ~30 quantities *outside* §1 and §4.3 are still
