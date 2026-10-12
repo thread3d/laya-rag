@@ -277,9 +277,11 @@ class LayaRagSearch:
         if self.limit_queries:
             rows = rows[: self.limit_queries]
         started = time.perf_counter()
+        reported = False
         for position, (query_id, text) in enumerate(rows, start=1):
             if self.progress_every and position % self.progress_every == 0:
                 print(progress_line(position, len(rows), time.perf_counter() - started), flush=True)
+                reported = True
             allowed = set(top_ranked[query_id]) if top_ranked and query_id in top_ranked else None
             # `relevance_threshold=0.0` returns the ranking rather than the gate's kept set:
             # a retrieval benchmark scores order, and the gate is measured separately.
@@ -295,6 +297,14 @@ class LayaRagSearch:
                 if doc_id not in scores or score > scores[doc_id]:
                     scores[doc_id] = score
             results[query_id] = scores
+        elapsed = time.perf_counter() - started
+        # A *short* call reports too, when it was slow. `MTEB`'s evaluator carries a `qid`, so it
+        # may drive `search` once per query rather than once per query set — and a line every 25
+        # queries then never prints, which is exactly how a working run looked hung for three
+        # rounds of this investigation. A call that took real time says so whether it had 1 query
+        # or 1,000, and a fast one stays quiet so a per-query driver does not print a flood.
+        if self.progress_every and not reported and elapsed >= 2.0:
+            print(progress_line(len(rows), len(rows), elapsed), flush=True)
         return results
 
     def _doc_id(self, passage: Mapping[str, Any]) -> str | None:

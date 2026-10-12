@@ -95,6 +95,16 @@ then run through the CLI **with the index-progress instrument**, and the phase i
 So indexing is not the wall clock and the search phase is, with the stack dumps in model inference
 (`torch/nn/modules/linear.py forward`, repeatedly).
 
+**A second instrument, then, because the first was blind to how MTEB drives `search`.**
+`retrieval_evaluator.py` calls `search_model.index(...)` and then `search_model.search(...)` with
+**nothing in between** — so the silence had to be inside `search`. But `progress_line` fires every 25
+queries, and MTEB's evaluator carries a **`qid`**, which means it may drive `search` **once per
+query** rather than once per query set: a one-query call never reaches the 25th and prints nothing,
+which is precisely how a working run looked hung for three rounds of this. The adapter now also
+reports a **short call that took real time** (≥2 s), so a per-query driver produces one line per slow
+query instead of a flood for fast ones. That is the fix for the blindness; the run that would
+confirm the per-query reading has not been repeated.
+
 **The obvious explanation is measured false.** With `--first-stage-only` the only model work left per
 query is the query embedding, so that was the hypothesis — and the engine level refutes it: **20
 queries in 26 s with the same 322M adapted encoder** (1.3 s/query), first stage only. So ~31 s/query

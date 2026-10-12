@@ -749,6 +749,13 @@ minutes with no result** — the measured wall clock the "accept it as a long jo
 against, and why the silence mattered: an operator watching for an hour and a half could not tell it
 from a hang.
 
+**The search instrument was blind to how MTEB drives it.** `retrieval_evaluator.py` calls `index`
+then `search` with nothing in between, so the silence was inside `search` — but the progress line
+fires every 25 queries and MTEB's evaluator carries a **`qid`**, i.e. it may drive `search` **once
+per query**, in which case a one-query call never prints. The adapter now also reports a short call
+that took real time (≥2 s), which is how a working run came to look hung. Re-running with that is the
+next step.
+
 **Where it stands after the second-stage mode landed, with the phase named.** `--first-stage-only`
 takes the decision model out of the *search* phase — the engine-level measurement of that is 37 s for
 300 queries against ~10 minutes, in `docs/findings-second-stage.md`. Re-run end to end on SciFact

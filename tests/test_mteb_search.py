@@ -252,3 +252,30 @@ def test_indexing_reports_progress(capsys):
     assert "index: embedding" in out
     assert "index: done in" in out
     assert engine.progress is not None
+
+
+def test_a_short_slow_search_call_still_reports(capsys, monkeypatch):
+    """MTEB's evaluator carries a `qid`, so `search` may be driven once per query.
+
+    With a line every 25 queries and a one-query call, nothing is ever printed — which is how a
+    working run looked hung for three rounds of this adapter's investigation. A call that took real
+    time reports whether it had one query or a thousand; a fast one stays quiet.
+    """
+    engine = _SlowFakeEngine([])
+    adapter = m.LayaRagSearch(engine=engine)
+    adapter.search(_Dataset(id=["q1"], text=["a query"]), top_k=1)
+    assert "search: 1/1" in capsys.readouterr().out
+
+    fast = m.LayaRagSearch(engine=_FakeEngine([]))
+    fast.search(_Dataset(id=["q1"], text=["a query"]), top_k=1)
+    assert "search: 1/1" not in capsys.readouterr().out
+
+
+class _SlowFakeEngine(_FakeEngine):
+    """An engine whose single query takes longer than the reporting threshold."""
+
+    def query(self, text, top_k=None, retrieve_k=None, relevance_threshold=None):
+        import time
+
+        time.sleep(2.05)
+        return super().query(text, top_k, retrieve_k, relevance_threshold)
