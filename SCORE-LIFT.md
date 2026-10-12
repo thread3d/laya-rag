@@ -713,9 +713,15 @@ remaining **~0.11 is the interesting quantity**, and it is not "the reranker is 
 (*The Hits@10 entry for the old row is the fixed-path number, since the pre-fix rows have no valid
 Hits@10 to quote; the MAP and MRR columns are the recorded rows' own.)
 
-**Arm 2** (`Qwen3-Reranker-0.6B`, listwise) is still unstarted, so "is a listwise ranker better than a
-pointwise one?" — the question this section actually asks — remains open, and it is the obvious next
-run now that the pointwise ceiling is measured at 0.3702. The full-set re-take is the obvious
+**What is still missing is the matching base arm.** The 0.3384 above is a *subset* number, and the
+full protocol has so far been run only for `v2-m3` — so the pair that answers "is the newer reranker
+better?" is currently subset-against-subset, while the full-protocol number stands alone. The base
+arm at full protocol is **running now** (`eval/benchmarks/multihop-rag/engine-p4-base-full`), and the
+recorded pre-fix rows cannot substitute for it because they were the fused order.
+
+**Arm 2** (`Qwen3-Reranker-0.6B`, listwise) is still unstarted and needs the yes/no-logit path, so "is
+a listwise ranker better than a pointwise one?" — the question this section actually asks — remains
+open, with the pointwise ceiling now measured at **0.3702** full-protocol. The full-set re-take is the obvious
 next run, and it is the one that would replace the recorded 0.319 — **it is running now**
 (`--out eval/benchmarks/multihop-rag/engine-p4-full`, `--rerank-model BAAI/bge-reranker-v2-m3`, the
 full 2,255 queries, under the heavy lock). That is incompatible with the P4 runs having
