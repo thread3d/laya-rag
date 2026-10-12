@@ -514,11 +514,26 @@ the cross-encoder cannot change the order. The recorded `engine-hybrid` rows, an
 taken with `--rerank-model`, are measuring the coverage/recall order. That is a defect report on the
 measurement, not a result about rerankers, and it is the largest one this programme has produced.
 
-**The next probe is one function and one assertion**: run `_coverage_select_from` directly with a
-known `relevance` vector and check whether its output depends on `relevance`, with and without atom
-coverage data on the index. If it does not, the fix is in that function and every reranker row in the
-repository needs re-taking. **Do not run arm 2, and do not quote any reranker row, until that is
-settled.**
+**That probe has been run, and it refutes the mechanism above.** `_coverage_select_from`, called
+directly with a four-chunk pool and `use_redundancy=False`, returns
+
+```
+relevance all zero   ->  ['a', 'c', 'b', 'd']
+relevance flipped    ->  ['b', 'd', 'a', 'c']
+```
+
+so the function **does** depend on its relevance argument, and the coverage pass is not degenerate.
+The "consumed and discarded" paragraph above was wrong, and the surviving explanation for identical
+rankings is the opposite one: **the two runs' cross-encoders were the same object** — a 568M model
+that fails to load (or is silently replaced by a fallback) leaves the recorded `rerank_model`
+different, the ranking unchanged, and only the wall clock moved by the failed attempt (170.6 s →
+318.4 s).
+
+**The next probe is therefore the cross-encoder's identity, not the selection rule**: assert that
+`RagEngine`'s `self.cross_encoder` is the model `--rerank-model` named, and make a failed load loud
+instead of a fallback. Until then the safe statement is the narrow, well-supported one — **two
+different `--rerank-model` values produced identical rankings on MultiHop-RAG, and the reason is not
+yet established**. Arm 2 stays on hold, and no reranker row should be quoted.
 | `mixedbread-ai/mxbai-rerank-large-v2` | **yes**, `Qwen2ForCausalLM` | no — same custom path | 1.5B |
 
 So the first experiment is literally
