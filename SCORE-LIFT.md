@@ -2244,6 +2244,14 @@ programme at least a round.
 - **Never let a wrapper filter a long run's output.** A sweep launched as `... | grep main_score`
   discarded the progress lines, so a working run looked exactly like a hang — the failure mode this
   programme spent four rounds on, self-inflicted.
+- **A subset report belongs in `eval/beir/subsets/`, and two authorities will tell you if it does
+  not.** `tools/channel_coverage.py` and `tools/lexical_selector.py` both scan `eval/beir/*.json`
+  and both read a report as *the member's*. A one-sub-forum CQADupStack row therefore claimed the
+  member had a dense channel (§1.1's lexical-only count moved 8 → 7 on a twelfth of the corpus) and
+  made `bm25-engine` disagree with itself across two reports. Neither is a bug in the authorities —
+  they cannot tell a subset from the member, which is why the path has to say it. The existing
+  labelled exceptions (`smoke.json`, `trec-covid-bounded.json`, `fusion-tuning.json`) are at the top
+  level deliberately and are named so.
 - **Prefer one invocation to a shell loop.** `tools/beir.py` takes `--datasets`, `tools/mteb_search.py`
   takes a comma-separated `--task`; both take the lock once and print per-item results. The loop was
   the source of the process problem above.
