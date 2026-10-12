@@ -113,13 +113,21 @@ alongside `self.terms`). Build one per field — `fever.title.bm25`, `fever.body
 `--bm25f-b-title` / `--bm25f-b-body` and the field weights stay query-time parameters, so a weight
 sweep needs no rebuild. That is the same property that makes the in-memory sweep cheap.
 
-**The union-DF is the part that would otherwise be got wrong.** BM25F's IDF counts a term as present
-if it appears in **any** field, so the per-field `df` values cannot simply be used in place of one
-another — a title-only term must be rare (strong), and summing or averaging the field DFs would make
-it either common or arbitrary. The merged dictionary is `max(df_title, df_body)`-free and
-`Σ`-free: it is the **count of documents containing the term in at least one field**, which the two
-sorted term dictionaries can produce by a streaming merge. Both vocabularies are already in memory as
-`dict[str, int]`, so this is a dict merge of a few million entries on FEVER, not a new data structure.
+**The union-DF is the part that would otherwise be got wrong — and my first version of this section
+got it wrong.** I wrote that the union is "the count of documents containing the term in at least one
+field, which the two sorted term dictionaries can produce by a streaming merge". **They cannot.** The
+merge gives the *vocabulary*; the *counts* are not in it, and with `df_title` and `df_body` alone:
+
+* **`max` is a lower bound** — a term appearing in *different* documents in each field is
+  undercounted, which is the common case for a word that is not a title word;
+* **the sum is an upper bound** — a term appearing in the *same* document in both fields is
+  double-counted.
+
+The exact value needs `df_both`, which no per-field index keeps. So the union has to be accumulated
+**while building**, from each document's distinct terms across its fields — which is now implemented
+as `laya_rag.ondisk.union_document_frequency(documents)`, taking `document -> field -> tokens` and
+counting each document once per distinct term, with five tests including a direct statement of the
+trap so a future shortcut has to argue with them.
 
 **Scoring** is then the documented formula, per query term: look the term up in each field index,
 compute `w_f · tf_f / (1 − b_f + b_f · len_f / avg_len_f)`, sum the fields, saturate once with `k1`,

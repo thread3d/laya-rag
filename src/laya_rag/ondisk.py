@@ -66,6 +66,36 @@ _ANN = "ann.faiss"
 _MERGE_FAN_IN = 64
 
 
+def union_document_frequency(
+    documents: Iterable[Iterable[Iterable[str]]],
+) -> dict[str, int]:
+    """``term -> number of documents containing it in at least one field``.
+
+    BM25F's IDF counts a term as present if it appears in **any** field, and that count is **not**
+    recoverable from the per-field document frequencies an on-disk index already stores. With
+    ``df_title`` and ``df_body`` alone:
+
+    * ``max`` is a **lower bound** — a term appearing in *different* documents in each field is
+      undercounted, and that is the common case for a word that is not a title word;
+    * the ``sum`` is an **upper bound** — a term appearing in the *same* document in both fields is
+      double-counted.
+
+    The exact value needs ``df_both``, which no per-field index keeps. So it is accumulated **while
+    building**, from each document's distinct terms across its fields, which is what this does: it
+    takes the documents as ``document -> field -> tokens`` and counts each document once per distinct
+    term. Getting this wrong is silent — both bounds produce plausible IDFs and therefore plausible
+    rankings from the wrong formula.
+    """
+    union: dict[str, int] = {}
+    for fields in documents:
+        seen: set[str] = set()
+        for tokens in fields:
+            seen.update(tokens)
+        for term in seen:
+            union[term] = union.get(term, 0) + 1
+    return union
+
+
 def _merge_run_group(paths: Sequence[Path], target: Path) -> None:
     """Merge sorted ``(term, row, tf)`` runs into one, holding at most ``len(paths)`` open.
 
