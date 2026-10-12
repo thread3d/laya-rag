@@ -67,9 +67,47 @@ hung one.
 
 `tools/mteb_search.py` now prints a progress line every 25 queries with the rate and a remaining-time
 estimate, plus an explicit `--limit-queries` **smoke** cap that says in the log that a capped pass is
-a rate measurement and not a score. That is the whole of the observability fix; the 33-worker reading
-is not reproducible under `num_proc=1` and the earlier note's "failure is in the harness's process
-handling" is withdrawn.
+a rate measurement and not a score. The 33-worker reading is not reproducible under `num_proc=1` and
+the earlier note's "failure is in the harness's process handling" is withdrawn.
+
+**Two more instruments, because the same defect existed one stage earlier:**
+
+- **The index phase now reports progress.** `index_paths` takes a progress callback (the API's
+  streaming route uses it); the adapter passed nothing, so embedding 5,183 documents was as silent
+  as the search phase had been. It prints stage, documents, chunks and embedded counts, throttled to
+  once a second, and a `done in Ns` line.
+- **`--stack-dump-every N`** installs `faulthandler.dump_traceback_later`, the instrument that
+  produced this page's corrected diagnosis. "Slow" and "hung" no longer have to look identical for
+  want of a process inspector.
+
+### Where the first-stage-only run stands
+
+`--first-stage-only` removes the decision model from the **search** phase, and the engine-level
+measurement of that (37 s for 300 queries, against ~10 minutes) is in
+[`findings-second-stage.md`](findings-second-stage.md). An end-to-end `mteb.evaluate` on SciFact with
+it was then run through the CLI and **stopped after ~30 minutes with no result and no output past the
+tokenizer warning** — and because that run predates the index-progress fix, it cannot say which phase
+it was in. That is the honest state: **no MTEB score exists**, the search-side cost is measured and
+much smaller, and the next run carries the instruments that will name the phase rather than repeat
+the silence.
+
+### An unresolved observation, narrowed
+
+The run logs, once, at the start of indexing:
+
+```
+Token indices sequence length is longer than the specified maximum sequence length for this model
+(282984 > 8192). Running this sequence through the model will result in indexing errors
+```
+
+What has been **ruled out**: it is not a long document (MTEB's SciFact corpus has 5,183 rows whose
+longest `title + text` is **10,126 characters** and whose longest query is 204), and it is not the
+reranker — it appears in `--first-stage-only` mode, where no rerank runs. It is absent on a
+three-document corpus with the same checkpoint, so it scales with the corpus. The most likely reading
+is that Laya's tokenizer is handed a **batch** and reports the aggregate length, which would make it
+noise rather than mis-indexing — but "most likely" is not measured, and the wording ("indexing
+errors") is alarming enough that it should not be left as an assumption. Recorded here with the
+evidence so the next attempt starts from it.
 
 ### What the score actually needs, and why it is not done here
 

@@ -164,7 +164,10 @@ class LayaRagSearch:
         # on, the ranking MTEB sees is the first stage's own, which is what the benchmark is for;
         # the decision model is measured separately by the answerability and trust reports. A
         # submission must say which configuration produced it, and the run prints it.
-        if first_stage_only and config is not None:
+        #: Recorded rather than only applied: `load_laya_rag_search` builds the adapter with no
+        #: config, so the flag has to survive until an `EngineConfig` exists.
+        self.first_stage_only = bool(first_stage_only)
+        if self.first_stage_only and config is not None:
             config.second_stage = False
         self.config = config
         self._engine = engine
@@ -196,6 +199,13 @@ class LayaRagSearch:
 
     def _engine_for(self) -> Any:
         if self._engine is None:
+            if self.first_stage_only:
+                from laya_rag.config import EngineConfig
+
+                # The loader path reaches here with no config at all, so the flag is applied
+                # where a config is guaranteed to exist.
+                self.config = self.config or EngineConfig()
+                self.config.second_stage = False
             self._engine = self._engine_factory(self.config)
         return self._engine
 
@@ -224,7 +234,29 @@ class LayaRagSearch:
     ) -> None:
         directory = self._directory()
         self._doc_ids = write_corpus(corpus_rows(corpus), directory)
-        self._engine_for().index_paths([directory], rebuild=True)
+        started = time.perf_counter()
+        last = {"at": 0.0}
+
+        def progress(event: Mapping[str, Any]) -> None:
+            """Say what indexing is doing, at most once a second.
+
+            The search phase got this and the index phase did not, so a run that was embedding 5,183
+            documents looked exactly like one that had hung — the same defect, one stage earlier.
+            """
+            now = time.perf_counter()
+            if now - last["at"] < 1.0:
+                return
+            last["at"] = now
+            print(
+                f"  index: {event.get('stage', '?')} documents="
+                f"{event.get('documents', 0)}/{event.get('documents_total', 0)} "
+                f"chunks={event.get('chunks', 0)} embedded={event.get('embedded', 0)} "
+                f"({now - started:.0f}s)",
+                flush=True,
+            )
+
+        self._engine_for().index_paths([directory], rebuild=True, progress=progress)
+        print(f"  index: done in {time.perf_counter() - started:.0f}s", flush=True)
 
     def search(
         self,
@@ -331,6 +363,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--model-name", default=MODEL_NAME)
     ap.add_argument("--task", default="SciFact", help="an MTEB task name to evaluate")
     ap.add_argument("--cache", default=None, help="MTEB_CACHE directory (must be writable)")
+    ap.add_argument("--stack-dump-every", type=int, default=0, metavar="SECONDS",
+                    help="dump every thread's stack every N seconds, so a slow run is "
+                         "distinguishable from a hung one without a process inspector")
     ap.add_argument("--first-stage-only", action="store_true",
                     help="score the first stage's own order, with no decision model in the path "
                          "(the second stage costs 90+ minutes per SciFact task)")
@@ -348,6 +383,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     import os
 
     args = parse_args(argv)
+    if args.stack_dump_every:
+        import faulthandler
+
+        # The instrument that produced this adapter's corrected diagnosis: every N seconds the
+        # process prints the stack of every thread, so "slow" and "hung" stop looking identical.
+        faulthandler.dump_traceback_later(args.stack_dump_every, repeat=True)
     if args.cache:
         os.environ.setdefault("MTEB_CACHE", args.cache)
     try:
@@ -358,7 +399,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     meta = build_model_meta()
     model = meta.load_model()
     if args.first_stage_only:
-        model.config.second_stage = False
         print(
             "mteb_search: first-stage-only — the ranking is the engine's fusion, with no "
             "relevance decision in the path. Quote this configuration with the row.",

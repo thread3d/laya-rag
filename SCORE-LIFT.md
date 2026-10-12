@@ -734,7 +734,19 @@ estimate every 25 queries, and `--limit-queries` is an explicit **smoke** cap th
 that a subset is not a score. The instrumented run was stopped after **60 stack dumps over ~90
 minutes with no result** — the measured wall clock the "accept it as a long job" option is weighed
 against, and why the silence mattered: an operator watching for an hour and a half could not tell it
-from a hang. **No MTEB score exists and nothing is uploaded.**
+from a hang.
+
+**Where it stands after the second-stage mode landed.** `--first-stage-only` takes the decision
+model out of the *search* phase — the engine-level measurement of that is 37 s for 300 queries
+against ~10 minutes, in `docs/findings-second-stage.md` — but an end-to-end `mteb.evaluate` on
+SciFact with it was stopped after **~30 minutes with no output past the tokenizer warning**, and that
+run predates the index-progress fix, so it cannot say which phase it was in. The adapter now reports
+the **index** phase too (stage, documents, chunks, embedded, and a done line) and takes
+`--stack-dump-every N` for `faulthandler`, which is the instrument that corrected this section in
+the first place. One observation is recorded and not resolved: a **282,984-token** sequence, once, at
+the start of indexing — not a document (the longest `title + text` is 10,126 characters), not a
+query (204), and present in first-stage-only mode so not the reranker. **No MTEB score exists and
+nothing is uploaded.**
 
 **Cost.** (a) is a project, not a submission: corpus acquisition plus the scale work. (b) needs one
 of three things, in order of principle: an **engine first-stage-only mode** (the engine has none —

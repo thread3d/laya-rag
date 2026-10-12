@@ -51,8 +51,12 @@ class _FakeEngine:
         self.indexed: list = []
         self.queries: list = []
 
-    def index_paths(self, paths, rebuild=False):
+    def index_paths(self, paths, rebuild=False, progress=None):
         self.indexed = list(paths)
+        self.progress = progress
+        if progress is not None:
+            progress({"stage": "embedding", "documents": 1, "documents_total": 1,
+                      "chunks": 1, "embedded": 1})
         return SimpleNamespace(documents=1, chunks=1)
 
     def query(self, text, top_k=None, retrieve_k=None, relevance_threshold=None):
@@ -219,3 +223,32 @@ def test_the_progress_interval_and_the_smoke_cap_are_parameters():
     assert adapter.progress_every == 5
     assert adapter.limit_queries == 3
     assert m.LayaRagSearch(config=EngineConfig(), progress_every=0).progress_every == 0
+
+
+def test_first_stage_only_survives_a_configlessly_built_adapter():
+    """`load_laya_rag_search` builds the adapter with no config, so the flag has to be recorded.
+
+    It is applied where an `EngineConfig` is guaranteed to exist — when the engine is first
+    built — rather than at construction, which is what the first version of this got wrong.
+    """
+    adapter = m.LayaRagSearch(first_stage_only=True)
+    assert adapter.first_stage_only is True
+    assert adapter.config is None
+    from laya_rag.config import EngineConfig
+
+    config = EngineConfig()
+    assert config.second_stage is True          # the default is untouched
+    explicit = m.LayaRagSearch(config=config, first_stage_only=True)
+    assert explicit.config.second_stage is False
+
+
+def test_indexing_reports_progress(capsys):
+    """The search phase got a progress line and the index phase did not, so an embedding run of
+    5,183 documents looked exactly like one that had hung."""
+    engine = _FakeEngine([])
+    adapter = m.LayaRagSearch(engine=engine, progress_every=0)
+    adapter.index(_Dataset(id=["a"], text=["b"], title=["t"]))
+    out = capsys.readouterr().out
+    assert "index: embedding" in out
+    assert "index: done in" in out
+    assert engine.progress is not None
