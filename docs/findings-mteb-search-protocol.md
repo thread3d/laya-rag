@@ -285,20 +285,25 @@ are `nDCG@10` under MTEB, same harness, engine in `--first-stage-only` with `mod
 | NFCorpus | 0.34339 | 0.33318 | −0.010 | −3.0% | 201.1 s / 46.4 s (**4.3×**) | short titles and abstracts |
 | **SCIDOCS** | 0.20518 | **0.16251** | **−0.043** | **−21%** | 795.2 s / 213.0 s (**3.7×**) | paper titles and abstracts |
 | ArguAna | 0.60413 | **0.51630** | **−0.088** | −14.5% | 753.5 s / 102.2 s (**7.4×**) | ~190-word argumentative passages |
-| FiQA2018 | 0.40347 | *running* | — | — | — | community financial answers |
+| **FiQA2018** | 0.40347 | **0.26067** | **−0.143** | **−35%** | 1418.8 s / 434.8 s (**3.3×**) | community financial answers |
 
 **The "gap tracks document length" reading I drew from three tasks does not survive the fourth.**
 SCIDOCS's documents are *titles and abstracts* — short, like SciFact's and NFCorpus's — and its gap
 is **−0.043, four times theirs**. So document length is not the variable, or not the only one:
-SciFact and NFCorpus sit at 2.5–3.0% while SCIDOCS and ArguAna sit at 14–21%, and what distinguishes
-them is not length but **what the corpus rewards** — the first two have short, term-focused relevance
-(where this engine's lexical channel carries it), while SCIDOCS pairs queries with the papers they
-cite and ArguAna with arguments on the same topic, where a bag-of-words-ish lexical channel is least
-able to bridge the vocabulary. **That is a hypothesis, not a finding**, and it is stated as one
-because one more corpus could break it exactly as SCIDOCS broke the last one.
+**The five tasks now read: 2.5%, 3.0%, 14.5%, 21%, 35%.** SciFact and NFCorpus sit at 2.5–3.0%,
+while ArguAna, SCIDOCS and FiQA sit at 14–35%, and what distinguishes the groups is not length but
+**what the corpus rewards** — the first two have short, term-focused relevance where this engine's
+lexical channel carries it, while ArguAna pairs arguments on a topic, SCIDOCS pairs a query with the
+papers it cites, and FiQA asks opinion and fact questions whose answers rarely repeat the query's
+terms. **FiQA joins the large-gap group rather than breaking it**, which is one surviving prediction
+and not evidence: a hypothesis that has now absorbed five corpora without being refuted is still a
+hypothesis, and it was stated as one before FiQA's number existed — which is the only reason it
+counts for anything.
 
-**What survives all four tasks is the cost**, which is 3.7–7.4× the baseline on every one of them —
-the only claim in this table that no corpus has contradicted.
+**What survives all five tasks is the cost**, 3.3–7.4× on every one — the only claim in this table
+that no corpus has contradicted. Note that the cost ratio is *not* monotone in index size either
+(SCIDOCS 29,185 chunks is 3.7×; FiQA's 66,115 is 3.3×; ArguAna's 9,687 is 7.4×), so it is a fact
+about this configuration, not a proxy for corpus size.
 
 **What every task agrees on is the cost**: 3.7×, 4.3×, 4.8×, 7.4× — always several times the
 baseline, on corpora whose quality gaps range from 2.5% to 21%. So the engine is **neither
