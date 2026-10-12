@@ -131,7 +131,12 @@ trap so a future shortcut has to argue with them.
 
 **Scoring** is then the documented formula, per query term: look the term up in each field index,
 compute `w_f · tf_f / (1 − b_f + b_f · len_f / avg_len_f)`, sum the fields, saturate once with `k1`,
-and multiply by the union-DF IDF — where `avg_len_f` is each field index's own mean length.
+and multiply by the union-DF IDF — where `avg_len_f` is each field index's own mean length. That is
+now `laya_rag.lexical.bm25f_term_score`, a function rather than a method so the on-disk path can
+apply it to postings it never holds in memory, with six tests. Two of them pin the properties a
+refactor loses silently: the fields are summed **before** saturation (so a term in title *and* body
+saturates once, not twice), and each field is normalised by **its own** length and `b` (so a long body
+cannot dilute a short title — the proxy it replaced gets exactly that wrong).
 
 **Why this is worth writing down rather than rediscovering**: the in-memory class has all of the
 formula and none of the spill; the on-disk one has all of the spill and a single field. The

@@ -248,6 +248,48 @@ class BM25Index:
         return index
 
 
+def bm25f_term_score(
+    *,
+    term_frequencies: Mapping[str, float],
+    lengths: Mapping[str, float],
+    avg_lengths: Mapping[str, float],
+    weights: Mapping[str, float],
+    b_fields: Mapping[str, float],
+    k1: float,
+    idf: float,
+) -> float:
+    """One query term's BM25F contribution to one document.
+
+    The formula this repository documents on :class:`BM25FIndex`, as a function rather than a method
+    so the on-disk path can apply it to per-field postings it never holds in memory::
+
+        tf~(t, d)   = sum_f  w_f * tf_f(t, d) / (1 - b_f + b_f * len_f(d) / avg_len_f)
+        score(t, d) = idf(t) * tf~(t, d) * (k1 + 1) / (k1 + tf~(t, d))
+
+    Two properties are the whole point of BM25F and both are easy to lose by refactoring:
+
+    * the fields are summed **before** saturation, so a term present in title *and* body saturates
+      once rather than twice;
+    * each field is normalised by **its own** length and ``b``, so a long body cannot dilute a short
+      title — which is what makes this different from repeating a title (the proxy it replaced).
+
+    ``idf`` is the caller's, over the **union** document frequency; see
+    :func:`laya_rag.ondisk.union_document_frequency` for why that count is not derivable from the
+    per-field ones.
+    """
+    normalised = 0.0
+    for field, tf in term_frequencies.items():
+        if not tf:
+            continue
+        b_f = float(b_fields.get(field, 0.0))
+        average = float(avg_lengths.get(field, 0.0)) or 1.0
+        length = float(lengths.get(field, 0.0))
+        normalised += float(weights.get(field, 1.0)) * float(tf) / (1.0 - b_f + b_f * length / average)
+    if normalised <= 0.0:
+        return 0.0
+    return float(idf) * normalised * (k1 + 1.0) / (k1 + normalised)
+
+
 class BM25FIndex:
     """BM25F: BM25 over named fields, each with its own length normalisation and weight.
 
