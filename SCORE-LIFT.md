@@ -610,16 +610,16 @@ than the same 600 characters for every document) and `--passages-aggregate max|s
 historical behaviour and the one every refutation used, or CombSUM over a document's pieces). Nine
 tests pin the mechanisms, including that `max` still orders by each document's best piece.
 
-**The variant rows are owed, and the reason is a reporting gap rather than a result.** The
-`--passages p90` run **finished Robust04** and was part-way through TREC-NEWS when it was stopped to
-free the host, and because `tools/beir.py` writes the report **once, after every dataset in the
-run**, Robust04's completed rows were lost with it — the passage rows have no per-dataset
-checkpoint (only the engine row and the dense pass do). So there is no number to quote either way,
-and the honest statement is that the adaptive and sum variants are **implemented, tested and
-unmeasured**. The next attempt should either run one dataset per invocation or checkpoint the
-passage rows; the cost of the adaptive budget is higher (a 300-character floor against a
-600-character cut is roughly twice the passages, on top of the full-document index every run builds
-regardless) but this round did not measure it, and says so.
+**The variant rows are pending, and the shape of the wait is itself a weakness.** The
+`--passages p90` run **finished Robust04** and is still working through TREC-NEWS; when it completes
+it writes `eval/beir/passages-p90.json` with both corpora. The engine row was briefly reported as
+*lost* — the shell wrapper was killed and the Python process survived — which is the more useful
+finding: `tools/beir.py` writes the report **once, after every dataset in the run**, so a genuine
+kill loses every finished dataset with it. The passage rows have no per-dataset checkpoint, where
+the engine row (`--lexical-checkpoint`) and the dense pass (`--embed-chunk`) both do. Until the
+number lands the honest statement is **"fixed-size passage decomposition is refuted; adaptive
+decomposition is implemented, tested and pending"**, and the next attempt should either run one
+dataset per invocation or give the passage rows the same checkpoint contract.
 
 ---
 

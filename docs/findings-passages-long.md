@@ -58,14 +58,16 @@ half of §P7's falsifier is therefore the experiment that follows, and it is now
 Nine tests pin both mechanisms, including that `max` still orders by each document's best piece and
 that an unknown aggregation is rejected loudly.
 
-**The measurement is owed, and it was lost to a reporting gap rather than to a failure.** The
-`--passages p90` run **completed Robust04** and was working through TREC-NEWS when it was stopped to
-release the host — and `tools/beir.py` writes its report **once, after every dataset in the run**,
-so Robust04's finished rows went with it. The passage rows have no per-dataset checkpoint; the engine
-row (`--lexical-checkpoint`) and the dense pass (`--embed-chunk`) do, and that asymmetry is what cost
-the work. Two ways forward, both cheap: run **one dataset per invocation**, or give the passage rows
-the same checkpoint contract. Until one of them is done, the honest statement is **"fixed-size
-passage decomposition is refuted; adaptive decomposition is implemented, tested and unmeasured"**.
+**The measurement is pending, and the shape of the wait is itself a finding.** The `--passages p90`
+run **completed Robust04** and is still working through TREC-NEWS; it writes its report when the last
+dataset finishes. An earlier note here said Robust04's rows were lost by stopping the run — that was
+wrong in an instructive way: the shell wrapper was killed and the Python process survived, and *had*
+it been killed, `tools/beir.py`'s single write-at-the-end **would** have discarded every finished
+dataset. The passage rows have no per-dataset checkpoint, where the engine row
+(`--lexical-checkpoint`) and the dense pass (`--embed-chunk`) both do. So two things are true at
+once: the number is coming, and the reporting path is fragile enough that a sweep of this size
+should run **one dataset per invocation** or checkpoint its rows. Until it lands: **"fixed-size
+passage decomposition is refuted; adaptive decomposition is implemented, tested and pending"**.
 
 One cost note that *is* supported by the run's progress: the adaptive budget raises the piece count
 (a 300-character floor against a 600-character cut is roughly twice the passages) on top of the
