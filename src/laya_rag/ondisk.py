@@ -26,7 +26,7 @@ import json
 import math
 import os
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -53,6 +53,8 @@ _OFFSETS = "offsets.npy"
 _TERMS = "terms.json"
 _LENGTHS = "lengths.npy"
 _DF = "df.npy"
+#: The accumulated union document frequency, term -> count, for BM25F's IDF.
+_UNION_DF = "union-df.json"
 _BM25_META = "meta.json"
 _ANN = "ann.faiss"
 
@@ -64,6 +66,97 @@ _ANN = "ann.faiss"
 #: ~10,000 at ten million — so without a bound the build fails on the file-descriptor limit as a
 #: hard error. Collapsing in groups of this size first keeps the handle count flat.
 _MERGE_FAN_IN = 64
+
+
+class OnDiskBM25F:
+    """BM25F over **one on-disk BM25 index per field**, with the union document frequency.
+
+    The in-memory :class:`laya_rag.lexical.BM25FIndex` has the formula and no spill; :class:`OnDiskBM25`
+    has the spill and a single field. This composes them rather than inventing a third index format:
+    a field's postings, lengths, average length and document frequency are all things `OnDiskBM25`
+    already stores, so the only new state is the union document frequency — which cannot be derived
+    from the per-field ones and is therefore accumulated during the build by
+    :func:`union_document_frequency`.
+
+    Three constraints are structural rather than stylistic, and each produces a *wrong index* rather
+    than an error if ignored (see `docs/findings-bm25f.md`):
+
+    * ``documents`` is a **mapping, not an iterator** — the corpus is streamed once per field, so a
+      generator would be exhausted by the first field, and materialising it is gigabytes at FEVER's
+      scale for data the caller already holds;
+    * the union counts use the **build's** tokenisation (no query-side stopword removal), or they key
+      terms the postings do not have;
+    * each field gets its **own subdirectory**, because ``OnDiskBM25.build`` writes where it is
+      constructed and two fields in one directory would overwrite each other.
+
+    Query-time only, and deliberately: the per-field weights and ``b`` are parameters here, which is
+    what lets a weight sweep reuse one build. BM25F's own IDF is over the union; ``OnDiskBM25._idf``
+    must **not** be used for it.
+    """
+
+    def __init__(
+        self,
+        directory: Path,
+        *,
+        fields: Sequence[str] = ("title", "body"),
+        k1: float = K1,
+        b_fields: Mapping[str, float] | None = None,
+        weights: Mapping[str, float] | None = None,
+        drop_stopwords: bool = True,
+        stem: bool = False,
+    ) -> None:
+        if not fields:
+            raise ValueError("BM25F needs at least one field")
+        self.directory = Path(directory)
+        self.fields = tuple(str(name) for name in fields)
+        self.k1 = float(k1)
+        self.b_fields = {name: float((b_fields or {}).get(name, B)) for name in self.fields}
+        self.weights = {name: float((weights or {}).get(name, 1.0)) for name in self.fields}
+        self.drop_stopwords = bool(drop_stopwords)
+        self.stem = bool(stem)
+        self.union_df: dict[str, int] = {}
+        self._indexes: dict[str, OnDiskBM25] = {}
+
+    def field_directory(self, field: str) -> Path:
+        """Where that field's own index lives — a subdirectory, never the shared one."""
+        return self.directory / f"{field}.bm25"
+
+    @classmethod
+    def exists_on_disk(cls, directory: Path, fields: Sequence[str] = ("title", "body")) -> bool:
+        """Whether every field's index is present, which is what ``--fresh`` has to mean here."""
+        directory = Path(directory)
+        return all(
+            OnDiskBM25.exists_on_disk(directory / f"{name}.bm25") for name in fields
+        )
+
+    def build(self, documents: Mapping[str, Mapping[str, str]]) -> None:
+        """Index ``doc_id -> {field: text}``; a missing field is an empty one."""
+        for field in self.fields:
+            index = OnDiskBM25(
+                self.field_directory(field),
+                k1=self.k1,
+                b=self.b_fields[field],
+                drop_stopwords=self.drop_stopwords,
+                stem=self.stem,
+            )
+            index.build(
+                (doc_id, str((payload or {}).get(field, "")))
+                for doc_id, payload in documents.items()
+            )
+            self._indexes[field] = index
+        # The union uses the build's tokenisation on purpose: `OnDiskBM25.build` indexes every term
+        # and leaves stopword removal to the query, so a query-side tokeniser here would count terms
+        # the postings do not have.
+        self.union_df = union_document_frequency(
+            [
+                tokenize(str((payload or {}).get(field, "")), stem=self.stem)
+                for field in self.fields
+            ]
+            for payload in documents.values()
+        )
+        (self.directory / _UNION_DF).write_text(
+            json.dumps(self.union_df, separators=(",", ":")), encoding="utf-8"
+        )
 
 
 def union_document_frequency(

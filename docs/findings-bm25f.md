@@ -129,6 +129,15 @@ as `laya_rag.ondisk.union_document_frequency(documents)`, taking `document -> fi
 counting each document once per distinct term, with five tests including a direct statement of the
 trap so a future shortcut has to argue with them.
 
+**The build is implemented.** `laya_rag.ondisk.OnDiskBM25F` composes one `OnDiskBM25` per field under
+its own subdirectory, accumulates the union document frequency with the build's own tokenisation, and
+persists it beside the field indexes. Six tests cover the constraints rather than the formula: each
+field gets its own directory (a title-only term is present in one index and absent from the other,
+which is the evidence they are genuinely separate postings), the union counts each document once
+across fields, the union round-trips, the signature takes the caller's mapping, and an empty field
+list raises. **What remains is `search`** — the loop that walks the query terms through the field
+postings and calls `bm25f_term_score` with the union IDF.
+
 **Scoring** is then the documented formula, per query term: look the term up in each field index,
 compute `w_f · tf_f / (1 − b_f + b_f · len_f / avg_len_f)`, sum the fields, saturate once with `k1`,
 and multiply by the union-DF IDF — where `avg_len_f` is each field index's own mean length. That is
