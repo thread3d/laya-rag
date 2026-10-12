@@ -379,6 +379,25 @@ Seven members remain, and if their dense rows behave like this one's the arithme
 same way. §1.1's table is regenerated from the authority in this commit — *generated, not typed*, as
 the tool says — and the registry's pinned literals moved with it.
 
+**The second member is running, and it is a different size of job.** `nq` — **2,681,468 documents
+and 3,452 scored queries** — went up with `--retrievers biencoder,hybrid-biencoder`,
+`--lexical-backend ondisk` and `--embed-chunk 20000`, out to `eval/beir/nq-dense`. Scaling from
+CQADupStack (457k documents in ~3 hours) puts this at **15–18 hours of embedding**, plus an on-disk
+BM25 build over the same corpus before the queries can be scored. It will span many rounds, and its
+report lands only at the end.
+
+**One precondition was checked before committing fifteen hours to it, and it was worth checking.**
+`hybrid-biencoder` fuses against the engine's lexical channel, and for a 2.7M-document corpus an
+in-memory BM25 would keep a `Counter` per document; `bm25_rankings` takes `backend`/`index_dir`
+precisely so that does not happen, and the engine's lexical row is built with `**on_disk("engine")`.
+So `--lexical-backend ondisk` **does** feed the fused rows rather than only the row that names it —
+which is the difference between a 15-hour run and a 15-hour run that dies at hour fourteen.
+
+**Order from here is smallest-first among what remains**: nq 2.68M, signal1m 2.87M, dbpedia-entity
+4.64M, hotpotqa 5.23M, climate-fever and fever 5.42M each, bioasq 14.9M. And the number they are
+chasing is now concrete: the summed deficit stands at **0.7085**, and CQADupStack's cell shows what a
+dense row does to one.
+
 **A note on how this round went, because the pattern has now happened twice.** Both "one flag"
 tasks (P4 and P1) opened with a specification of mine that was wrong, and both were corrected within
 a minute of actually running something. The lesson is not that the specifications were wrong — it is
