@@ -2431,7 +2431,7 @@ its own findings.**
 | **P3 / P11** | unstarted | week-scale research bets |
 | **P8 / P9** | unstarted | a published-settings control on 5.4M documents; a fresh out-of-domain corpus |
 | **§P12 run 3 / T8+T11** | blocked on a build | the own-domain set is a separate tool, and run 3 depends on it |
-| **on-disk `BM25F`** | **implemented and parity-checked; FEVER's row waits on the lock** | the FEVER branch of P2's falsifier needed an index that does not fit in memory. `ondisk.OnDiskBM25F` composes one `OnDiskBM25` per field (fields are query-time weights, so a sweep needs no rebuild) and accumulates the union DF at build time — the count is **not** derivable from the per-field DFs. Eleven tests, including parity: one field with `b=0` reproduces `OnDiskBM25`'s scores exactly. The run that measures FEVER waits on the lock |
+| **on-disk `BM25F`** | **wired (`--bm25f --lexical-backend ondisk`); FEVER's row waits on the lock** | the FEVER branch of P2's falsifier needed an index that does not fit in memory. `ondisk.OnDiskBM25F` composes one `OnDiskBM25` per field (fields are query-time weights, so a sweep needs no rebuild) and accumulates the union DF at build time — the count is **not** derivable from the per-field DFs. Eleven tests, including parity: one field with `b=0` reproduces `OnDiskBM25`'s scores exactly. The run that measures FEVER waits on the lock |
 | **P6b**, Touché-2020 in the fusion sweep | unstarted | bounded; Touché's corpus build was stopped once already |
 | **the `reranker` rows' re-takes beyond SciFact** | partial | SciFact's three are done with a control; the MultiHop pair is done full-protocol; nothing else names a reranker |
 

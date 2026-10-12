@@ -1557,20 +1557,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             # is that the fields are normalised and weighted separately instead of concatenated.
             started = time.perf_counter()
             fields = load_fields(dataset_dir)
-            rankings["bm25f"] = bm25f_rankings(
-                fields, queries, args.top_k, k1=args.k1, b=args.b,
-                b_title=args.bm25f_b_title, b_body=args.bm25f_b_body,
-                title_weight=args.title_weight, drop_stopwords=True, stem=args.stem,
-            )
+            # The backend is the only thing that changes between the two: same arguments, same
+            # tokeniser, same weights — which is why the pair is parity-tested rather than assumed
+            # to agree. `ondisk` is what a corpus too large for `BM25FIndex` needs, and its index is
+            # keyed by dataset so the weight sweep below reuses the build.
+            bm25f_note = (f"BM25F: title weight {args.title_weight}, body weight 1.0, "
+                          f"b title={args.bm25f_b_title if args.bm25f_b_title is not None else args.b}, "
+                          f"body={args.bm25f_b_body if args.bm25f_b_body is not None else args.b}")
+            if args.lexical_backend == "ondisk":
+                rankings["bm25f"] = ondisk_bm25f_rankings(
+                    fields, queries, args.top_k,
+                    index_dir=cache_dir / f"{name}.bm25f",
+                    k1=args.k1, b=args.b,
+                    b_title=args.bm25f_b_title, b_body=args.bm25f_b_body,
+                    title_weight=args.title_weight, drop_stopwords=True, stem=args.stem,
+                    rebuild=args.no_cache,
+                )
+                bm25f_note += " (on-disk backend)"
+            else:
+                rankings["bm25f"] = bm25f_rankings(
+                    fields, queries, args.top_k, k1=args.k1, b=args.b,
+                    b_title=args.bm25f_b_title, b_body=args.bm25f_b_body,
+                    title_weight=args.title_weight, drop_stopwords=True, stem=args.stem,
+                )
             results["bm25f"] = {
                 "seconds": round(time.perf_counter() - started, 2),
-                "note": f"BM25F: title weight {args.title_weight}, body weight 1.0, "
-                        f"b title={args.bm25f_b_title if args.bm25f_b_title is not None else args.b}, "
-                        f"body={args.bm25f_b_body if args.bm25f_b_body is not None else args.b}",
+                "note": bm25f_note,
             }
             # Fuse the title-boosted channel: it measured better on both datasets, and
-            # everything downstream inherits it.
-            lexical = title_rankings
+            # everything downstream inherits it. Asking for `--bm25f` without `bm25-title` used to
+            # raise `UnboundLocalError` from here, which names neither the flag nor the fix.
+            try:
+                lexical = title_rankings
+            except NameError:
+                raise SystemExit(
+                    "--bm25f fuses the title-boosted channel, so it needs `bm25-title` in "
+                    "--retrievers (with --title-boost above 1)"
+                ) from None
 
         if args.prf > 0:
             prf_ranking = bm25_rankings_prf(

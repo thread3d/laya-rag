@@ -139,7 +139,19 @@ list raises. `search` walks the query terms through each field's postings, sums 
 document, and saturates once with the union IDF. Its five tests include the parity that matters:
 **with one field and `b = 0`, `OnDiskBM25F` reproduces `OnDiskBM25`'s scores exactly** on three
 queries — the same check the two older backends were validated with, and the reason the switch can be
-trusted rather than spot-checked. **And the row itself is wired, and checked against the in-memory one.** `tools/beir.py`'s
+trusted rather than spot-checked. **And the flag exists: `--bm25f --lexical-backend ondisk`,** which is the whole of what FEVER needs
+beyond the lock. Two integration tests run the CLI on a four-document corpus and check that the row is
+labelled `(on-disk backend)` when built that way, and that the two backends produce **the same row**
+through the CLI as well as through the adapter.
+
+Switching the backend also turned up a small pre-existing rough edge worth having fixed: `--bm25f`
+without `bm25-title` in `--retrievers` raised `UnboundLocalError` from the line that fuses the
+title-boosted channel, naming neither the flag nor the fix. It now exits with a sentence saying that
+`--bm25f` fuses that channel and needs it requested. That is not this task's subject, but it is on the
+path to it, and an error that does not say what to do costs more than the five lines it takes to say
+it.
+
+**The row itself is wired, and checked against the in-memory one.** `tools/beir.py`'s
 `ondisk_bm25f_rankings` takes the *same arguments* as `bm25f_rankings` — identical `k1`, per-field
 `b`, weights, tokeniser — so FEVER gets the same retriever rather than a similar one. Three tests:
 the two rows agree **exactly** (ranking for ranking) over four documents and four queries at the
