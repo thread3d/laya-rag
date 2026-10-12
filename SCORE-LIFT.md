@@ -253,6 +253,33 @@ is as publishable as a positive one. `[data]` marks items that need no modelling
 
 ### P1 — Run the channels that already exist on the eleven empty cells `[data]`
 
+**The first cell, specified from the configuration the five full-channel cells actually used.**
+`eval/beir/five-adapted.json` records it (`settings`): `biencoder_model` **`models/laya-retrieval`**,
+`dense_weight` **0.3**, `lexical_weight` 1.0, `top_k` 100, `bm25_k1` 0.9, `bm25_b` 0.4, `rrf_k` 60,
+`title_boost` 2, `include_titles` true. Reproducing those rows on a lexical-only member is therefore:
+
+```
+.venv/bin/python tools/beir.py --datasets cqadupstack \
+  --biencoder-model models/laya-retrieval --dense-weight 0.3 \
+  --retrievers biencoder,hybrid-biencoder \
+  --lexical-backend ondisk --embed-chunk 5000 \
+  --out eval/beir/p1-cqadupstack
+```
+
+Three things that are not optional at this scale, and each is a lesson this programme already paid for:
+
+- **`--lexical-backend ondisk`**, because the in-memory BM25 keeps a `Counter` per document and
+  CQADupStack alone is **457,000** documents (the eight members run 2.7M–14.9M);
+- **`--embed-chunk 5000`**, because the dense pass is hours of embedding and a kill otherwise
+  restarts it — the corpus embeddings checkpoint per document count, and this host kills runs;
+- **`--out` on its own stem**, because jobkit refuses a fingerprint change and `--fresh` over a
+  recorded row discards it.
+
+**CQADupStack first, largest last** (§10.1) — it is the smallest member at 457k documents and the
+cheapest place to discover a problem with the ingest at scale. Its corpus is already on disk
+(`eval/beir/cqadupstack`, 15 GB). A dense row here is the first of the eight cells that the §1.2
+deficit arithmetic is waiting on, and the only work in this document that moves the BEIR-18 macro.
+
 **What.** Extend the existing `tools/beir.py` rows (`biencoder`, `hybrid-biencoder`,
 `dense-ensemble`, `hybrid-ensemble`, and where affordable `splade`) to FEVER, NQ, DBPedia-entity,
 HotpotQA, Climate-FEVER, Signal-1M, CQADupStack, BioASQ, and to TREC-COVID / Robust04 / TREC-NEWS
