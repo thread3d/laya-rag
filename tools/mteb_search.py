@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import sys
 import tempfile
+import time
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Callable
@@ -71,6 +72,24 @@ def corpus_rows(corpus: Any) -> Iterator[tuple[str, str]]:
     for doc_id, text, title in zip(ids, texts, titles):
         body = str(text)
         yield str(doc_id), f"{title}\n\n{body}" if title else body
+
+
+def progress_line(done: int, total: int, elapsed: float) -> str:
+    """One line saying how far a search pass has got, and how long it has left.
+
+    MTEB shows a progress bar for its own *scoring* phase, not for this one, so the adapter's
+    silence made a working run indistinguishable from a hung one: `findings-mteb-search-protocol.md`
+    recorded "no result, no error, no progress output, for 30+ minutes" and read it as the harness
+    failing to fork cleanly. A rate and an estimate are what make that decidable from the log alone.
+    """
+    total = max(int(total), 0)
+    done = max(int(done), 0)
+    rate = (elapsed / done) if done else 0.0
+    remaining = rate * max(total - done, 0)
+    return (
+        f"  search: {done}/{total} queries in {elapsed:.0f}s "
+        f"({rate:.2f}s/query, about {remaining / 60:.0f} min left)"
+    )
 
 
 def query_rows(queries: Any) -> Iterator[tuple[str, str]]:
@@ -130,6 +149,8 @@ class LayaRagSearch:
         retrieve_k: int | None = None,
         model_meta: Any = None,
         device: str | None = None,
+        progress_every: int = 25,
+        limit_queries: int | None = None,
     ) -> None:
         if device is not None and config is not None:
             config.device = device
@@ -143,6 +164,11 @@ class LayaRagSearch:
         self._workdir = Path(workdir) if workdir is not None else None
         self._temp: tempfile.TemporaryDirectory | None = None
         self._doc_ids: list[str] = []
+        #: Print a progress line every N queries; 0 silences it. See :func:`progress_line`.
+        self.progress_every = max(int(progress_every or 0), 0)
+        #: A smoke cap on the queries scored, for measuring the rate before committing to a full
+        #: task. It is *not* a result: a capped pass is a subset and must never be quoted.
+        self.limit_queries = limit_queries
         # A plain attribute, not a read-only property: `ModelMeta.load_model` assigns this onto
         # the object it just constructed.
         self.mteb_model_meta = model_meta
@@ -207,7 +233,13 @@ class LayaRagSearch:
         engine = self._engine_for()
         retrieve_k = max(int(top_k), int(self.retrieve_k or 0))
         results: dict[str, dict[str, float]] = {}
-        for query_id, text in query_rows(queries):
+        rows = list(query_rows(queries))
+        if self.limit_queries:
+            rows = rows[: self.limit_queries]
+        started = time.perf_counter()
+        for position, (query_id, text) in enumerate(rows, start=1):
+            if self.progress_every and position % self.progress_every == 0:
+                print(progress_line(position, len(rows), time.perf_counter() - started), flush=True)
             allowed = set(top_ranked[query_id]) if top_ranked and query_id in top_ranked else None
             # `relevance_threshold=0.0` returns the ranking rather than the gate's kept set:
             # a retrieval benchmark scores order, and the gate is measured separately.
@@ -291,6 +323,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--model-name", default=MODEL_NAME)
     ap.add_argument("--task", default="SciFact", help="an MTEB task name to evaluate")
     ap.add_argument("--cache", default=None, help="MTEB_CACHE directory (must be writable)")
+    ap.add_argument("--progress-every", type=int, default=25,
+                    help="print a progress line every N queries; a working run and a hung one "
+                         "used to look identical in the log")
+    ap.add_argument("--limit-queries", type=int, default=None,
+                    help="score only the first N queries — a SMOKE, never a result")
     ap.add_argument("--num-proc", type=int, default=1,
                     help="dataloading processes; 1 keeps the engine single-process")
     return ap.parse_args(argv)
@@ -309,6 +346,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     meta = build_model_meta()
     model = meta.load_model()
+    if args.progress_every:
+        model.progress_every = args.progress_every
+    if args.limit_queries:
+        model.limit_queries = args.limit_queries
+        print(
+            f"mteb_search: SMOKE — scoring at most {args.limit_queries} queries. "
+            f"A capped pass is a subset: it is a rate measurement, not a score.",
+            flush=True,
+        )
     task = mteb.get_task(args.task)
     result = mteb.evaluate(model, task, num_proc=args.num_proc)
     print(result)

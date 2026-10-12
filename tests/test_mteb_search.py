@@ -192,3 +192,30 @@ def test_model_meta_loads_the_adapter_and_sets_the_metadata(tmp_path):
     assert isinstance(loaded, m.LayaRagSearch)
     # `load_model` assigns a copy, so identity is not the contract; equality is.
     assert loaded.mteb_model_meta == meta
+
+
+# ── progress, and the smoke cap that must never be read as a score ───────
+
+def test_progress_line_reports_a_rate_and_an_estimate():
+    line = m.progress_line(50, 200, 100.0)
+    assert "50/200" in line
+    assert "2.00s/query" in line
+    assert "5 min left" in line
+
+
+def test_progress_line_survives_having_done_nothing():
+    assert "0/10" in m.progress_line(0, 10, 0.0)
+
+
+def test_progress_line_of_a_finished_pass_has_no_time_left():
+    assert "0 min left" in m.progress_line(10, 10, 20.0)
+
+
+def test_the_progress_interval_and_the_smoke_cap_are_parameters():
+    """Both exist so a long search can be watched and a rate measured before committing to it."""
+    from laya_rag.config import EngineConfig
+
+    adapter = m.LayaRagSearch(config=EngineConfig(), progress_every=5, limit_queries=3)
+    assert adapter.progress_every == 5
+    assert adapter.limit_queries == 3
+    assert m.LayaRagSearch(config=EngineConfig(), progress_every=0).progress_every == 0

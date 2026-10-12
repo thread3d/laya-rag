@@ -33,20 +33,61 @@ Against **mteb 2.22.5**:
 The plumbing is the part that matters: an off-by-one between write order and passage path would
 corrupt every MTEB number without a metric flagging it, so it is tested directly.
 
-## The evaluation was attempted and did not complete here
+## The evaluation: it was not hung, it was slow, and the silence hid that
 
-A full `mteb.evaluate(model, task)` on SciFact was launched three ways — default, `num_proc=1`, and
-`num_proc=1` with `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` — and each time MTEB forked **~33
-worker processes** that then stalled: no result, no error, no progress output, for 30+ minutes
-while the host had free memory and the corpus files had been written. The failure is in the
-benchmark harness's process handling in this environment, not in the adapter: indexing completed
-(5,183 corpus files on disk) and the structural conformance holds. The engine-level MTEB run, and
-the upload, therefore remain the external step they were.
+The first reading of this was wrong and is corrected here. A full `mteb.evaluate(model, task)` on
+SciFact was launched three ways — default, `num_proc=1`, and `num_proc=1` with
+`OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` — and each was recorded as MTEB forking **~33 worker
+processes** that then stalled: "no result, no error, no progress output, for 30+ minutes", read as a
+failure in the benchmark harness's process handling.
+
+Re-run with `num_proc=1` and `faulthandler.dump_traceback_later(90, repeat=True)`, the process
+**is not deadlocked**: 20 consecutive dumps over 30 minutes, every one of them inside the engine's
+own work — `mteb/_evaluators/retrieval_evaluator.py` → `tools/mteb_search.py:search` →
+`laya_rag/engine.py:query` → `laya_rag/rerank.py:rerank` → `score_relevance` →
+`model.predict_many` → Laya's `ModernBERT` forward. The stack is a single Python thread computing;
+`_create_dataloaders` passes `num_workers=0` whenever `num_proc <= 1`, so no pool is involved at
+all.
+
+**The cost is structural, not incidental.** MTEB's `SearchProtocol` asks for a `top_k=100` ranking,
+and the adapter widens `retrieve_k` to at least `top_k`, so every query makes the engine run its
+**322M-parameter decision model on 100 candidates** before returning the order. SciFact has 300
+queries: at the measured rate that is a **multi-hour** task, and `findings-engine-parity.md` already
+records the same shape on BEIR ("the engine run costs ~10 minutes per configuration because Laya's
+decisions run on every candidate"). Nothing was broken; a working run simply looked identical to a
+hung one.
+
+### What was fixed
+
+`tools/mteb_search.py` now prints a progress line every 25 queries with the rate and a remaining-time
+estimate, plus an explicit `--limit-queries` **smoke** cap that says in the log that a capped pass is
+a rate measurement and not a score. That is the whole of the observability fix; the 33-worker reading
+is not reproducible under `num_proc=1` and the earlier note's "failure is in the harness's process
+handling" is withdrawn.
+
+### What the score actually needs, and why it is not done here
+
+The engine has **no first-stage-only mode**: `RerankResult()` is the empty case, and `order="recall"`
+still *computes* the relevance probabilities before keeping the retrieval order (it changes the
+ordering, not the work). So MTEB cannot score the retrieval system without the decision model in the
+path. Three ways forward, in order of principle:
+
+1. **A config flag that returns the first-stage order with no second stage** (`RERANK=off` or
+   equivalent), and the adapter documenting that a submission used it. This is what "MTEB scores
+   the retrieval system rather than one embedding model" should mean, and it is a change to
+   `EngineConfig`/`RagEngine.query`, not to the adapter.
+2. **Accept the wall clock** (~2–3 h per task at the measured rate) and run it as a long job.
+3. **Lower `retrieve_k`**, which changes what the benchmark measures — MTEB asks for a 100-deep
+   ranking, and a system that ranks 100 must score 100 — so this is the option to take last.
+
+No MTEB score exists, and there is still no upload. What exists is the adapter, its conformance
+tests, the diagnosis above, and a run that can be watched while it works.
 
 ## What this does not show
 
-- **No MTEB score exists** for the engine yet. The adapter is representable and verified; a number
-  is not claimed.
+- **No MTEB score exists** for the engine yet. The adapter is representable and verified and the
+  evaluation is reachable; a number is not claimed, and a `--limit-queries` pass is a subset that
+  must never be quoted as one.
 - **`top_ranked` filtering is best-effort.** For reranking tasks the adapter runs the query and
   filters to the supplied candidate ids; a candidate outside the engine's own pool is omitted
   rather than pair-scored, because the engine has no pair-scoring path. Retrieval tasks, which pass

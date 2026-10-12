@@ -682,20 +682,38 @@ has no model in the loop, so their attribution and nugget scores would be the en
 an attached LLM's — see P12. The R task remains the cleanest entry point because it needs no
 answer at all, but it is no longer the only one.
 
-**(b) MTEB v2 `SearchProtocol`.** The code blocker is gone — `tools/mteb_search.py` implements the
-protocol and `make mteb-eval` runs it, with structural conformance verified against mteb 2.22.5.
-The run "forked ~33 workers and stalled". Cap the worker count, get one task end to end, submit via
-`ResultCache.submit_results`. MTEB v2's `SearchProtocol` is the first interface that can score a
-search *system* rather than an embedding model.
+**(b) MTEB v2 `SearchProtocol` — the "stall" was throughput and silence, and the silence is fixed.**
+The code blocker is gone: `tools/mteb_search.py` implements the protocol with structural conformance
+verified against mteb 2.22.5 (18 tests). The recorded failure — "forked ~33 workers and stalled, no
+progress output for 30+ minutes" — **does not reproduce**. Re-run with `num_proc=1` under
+`faulthandler`, the process shows **20 consecutive stack dumps over 30 minutes, every one inside the
+engine's own scoring** (`mteb_search.py:search` → `engine.query` → `rerank` → `score_relevance` →
+Laya's ModernBERT forward), and `mteb`'s `_create_dataloaders` passes `num_workers=0` whenever
+`num_proc <= 1`, so no pool is involved.
 
-**Cost.** (a) is a project, not a submission: corpus acquisition plus the scale work. (b) is hours
-to fix the stall; the evaluation itself is external. Both should be scoped as *placements* with a
-named owner rather than as benchmark runs.
+The cost is structural rather than a defect: MTEB asks for a `top_k=100` ranking, the adapter widens
+`retrieve_k` to match, and the engine then runs its **322M-parameter decision model on 100 candidates
+per query** — a multi-hour task for SciFact's 300 queries, which is the same shape
+`findings-engine-parity.md` measured on BEIR. What *was* broken is observability: a working run was
+indistinguishable from a hung one. `tools/mteb_search.py` now prints a rate and a remaining-time
+estimate every 25 queries, and `--limit-queries` is an explicit **smoke** cap that says in the log
+that a subset is not a score. **No MTEB score exists and nothing is uploaded.**
+
+**Cost.** (a) is a project, not a submission: corpus acquisition plus the scale work. (b) needs one
+of three things, in order of principle: an **engine first-stage-only mode** (the engine has none —
+`order="recall"` still computes the relevance probabilities, so it changes the ordering and not the
+work), accepting the **wall clock** (~2–3 h per task at the measured rate) as a long job, or
+lowering `retrieve_k`, which changes what the benchmark measures and is therefore last. Then
+`ResultCache.submit_results`. Both should be scoped as *placements* with a named owner rather than as
+benchmark runs.
 
 **Falsifier.** For (a), the run itself is the result — even a mid-table row with a measured
 nDCG@30 is worth more than every internal claim in this repository, because it is the first number
-here that nobody in this project computed. For (b), if the harness cannot be made to run without
-forking, fall back to the public `Evaluation Request` issue template rather than silence.
+here that nobody in this project computed. For (b), the earlier form of this bar — "if the harness
+cannot be made to run without forking" — is **withdrawn**: the harness runs. The bar is now whether
+one task completes end to end within the wall clock an operator will actually wait for, and if it
+cannot, the honest fallback is the public `Evaluation Request` issue template **naming the measured
+per-query cost**, not silence.
 
 ---
 
