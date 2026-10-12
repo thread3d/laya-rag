@@ -321,6 +321,17 @@ The **cost** is now measured per forum: 568.9 s to embed 23k documents at ~40 do
 forums are ~2–3 hours of embedding and the eight members are where §10.1's "days" comes from — the
 `--embed-chunk` checkpointing and the per-forum embedding cache are what make that resumable.
 
+**A subset report has to live outside `eval/beir/`, and that cost two gate failures to learn.** The
+run above was written to `eval/beir/p1-cqadupstack-android.json`, and two authorities scan that
+directory's top level (`glob("*.json")`): the channel-coverage gate read the android dense row as
+evidence that **CQADupStack itself** now has a dense channel — changing §1.1's lexical-only count
+from 8 to 7 — and the lexical selector saw `cqadupstack`/`bm25-engine` disagree with itself, because
+one report held the 12-forum macro and the other a single forum's 0.3681. Both are the correct
+behaviour for a member row and the wrong reading for a **subset**. The report now lives in
+`eval/beir/subsets/`, both gates pass, and the convention is: **anything run with `--subforums`,
+`--limit`, `--limit-docs` or a seed goes to `eval/beir/subsets/`**, because a subset is evidence
+about a subset and the authorities cannot tell from the numbers alone.
+
 **A note on how this round went, because the pattern has now happened twice.** Both "one flag"
 tasks (P4 and P1) opened with a specification of mine that was wrong, and both were corrected within
 a minute of actually running something. The lesson is not that the specifications were wrong — it is
