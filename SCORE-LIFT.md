@@ -723,7 +723,11 @@ end-to-end ranking is a cost that only applies to the path it chose to measure.
    attribution by construction** and weaker fluency/completeness — which is the finding, not a
    defect.
 2. **FRAMES retrieval + extractive answers** — the adapter exists (`tools/frames_eval.py`,
-   gold coverage 0.9977 after redirect resolution) and the corpus is 0.5 MB.
+   gold coverage 0.9977 after redirect resolution). **The corpus is not 0.5 MB**: that is the
+   *questions* file (`eval/frames/test.tsv`, 476 KB); the corpus is `eval/frames/corpus.jsonl` at
+   **74 MB, 2,509 full Wikipedia articles**, and every question carries a gold `Answer`, so the
+   completeness half is scorable without a judge. Longer articles mean more chunks per document than
+   MultiHop-RAG's news corpus, so the index build dominates the run rather than the queries.
 3. **A held-out own-domain set** (§7.2) scored the same way, where extractive prose is a plausible
    product rather than a compromise.
 
@@ -744,25 +748,25 @@ that each sentence's number appeared somewhere in the answer, which the trailing
 marker now leads (`"[1] Refunds take five days."`), matching how `build_messages` numbers the
 evidence, and the `/v1/extract` → `/v1/verify` round trip is a test.
 
-**Run 1 of the three, measured — the first end-to-end row whose every component is the engine's.**
-`tools/engine_extractive.py` (`make engine-extractive`) over 400 answerable MultiHop-RAG queries
-(seeded subset 17, the `engine-hybrid` index, thresholds zeroed so the retrieval half is comparable),
-in `docs/findings-extractive-row.md`:
+**Run 1 of the three, measured on the full query set — the first end-to-end row whose every
+component is the engine's.** `tools/engine_extractive.py` (`make engine-extractive`) over **all
+2,255 answerable MultiHop-RAG queries** (the `engine-hybrid` index, thresholds zeroed so the
+retrieval half is comparable), in `docs/findings-extractive-row.md`:
 
-| metric | value |
-| --- | ---: |
-| Hits@10 / Hits@4 / MAP@10 / MRR@10 | 0.9075 / 0.7525 / 0.3057 / 0.5901 |
-| **citation clean** | **1.0000** (0 uncited sentences of 1,728) |
-| abstention | 0.0000 |
-| answer nugget recall | 0.1921 |
+| metric | full set | 400-query subset |
+| --- | ---: | ---: |
+| Hits@10 / Hits@4 / MAP@10 / MRR@10 | 0.9082 / 0.7632 / 0.3009 / 0.5983 | 0.9075 / 0.7525 / 0.3057 / 0.5901 |
+| **citation clean** | **1.0000** (0 uncited of 9,806) | **1.0000** (0 of 1,728) |
+| abstention | 0.0000 | 0.0000 |
+| answer nugget recall | 0.1906 | 0.1921 |
 
-**The retrieval half is identical to four decimals** to the retrieval-only 400-query row
-(`engine-hybrid-400.json`) — a cross-check that composing from a passage does not disturb the
-retrieval it composed from. **Attribution is 1.0 by construction and now by measurement**, which is
+**The retrieval half is identical to four decimals on all four metrics** to the retrieval-only row
+(`engine-hybrid.json`), and to `engine-hybrid-400.json` on the subset — a cross-check that composing
+an answer from a passage does not disturb the retrieval it composed from. **Attribution is 1.0 by construction and now by measurement**, which is
 the claim the composer's own finding had only asserted. **Completeness is the finding**: the answer
-carries **0.1921** of each gold fact's nuggets against the **0.7438** the retrieved pool carries — a
+carries **0.1906** of each gold fact's nuggets against the **0.7438** the retrieved pool carries — a
 five-sentence extract is not a written answer, and that gap is what attribution-by-construction
-costs. Getting to 1.0 took three defects, one of them a wrong fix recorded in the finding: the
+costs, with `--max-sentences` the obvious lever and unmeasured. Getting to 1.0 took three defects, one of them a wrong fix recorded in the finding: the
 trailing citation marker, a quotation cut by a sentence boundary (16 of 400 answers, none of them a
 bad citation), and — the wrong fix — suppressing the boundary *inside* a quotation, which made the
 checker split there and left 24 of 1,637 sentences uncited. Both checks need one boundary rule.

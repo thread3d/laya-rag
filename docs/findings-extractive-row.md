@@ -12,40 +12,42 @@ this is the measurement.
 answerable records, composes an answer from the passages it returned, and scores four things that
 are all the engine's. No model, no judge, no API is in the path.
 
-## The row (400 answerable MultiHop-RAG queries, seeded subset 17)
+## The row (2,255 answerable MultiHop-RAG queries — the full set)
 
 ```sh
-make engine-extractive ENGINE_EXTRACTIVE_ARGS="--limit 400 --sample-seed 17 \
+make engine-extractive ENGINE_EXTRACTIVE_ARGS="\
   --index-dir eval/benchmarks/multihop-rag/index/engine-hybrid \
   --embed-model BAAI/bge-small-en-v1.5 --zero-thresholds"
 ```
 
-| metric | value | what it is |
-| --- | ---: | --- |
-| Hits@10 | 0.9075 | the benchmark's own retrieval metric |
-| Hits@4 | 0.7525 | |
-| MAP@10 | 0.3057 | |
-| MRR@10 | 0.5901 | |
-| **citation clean** | **1.0000** | every claim of every emitted answer cites in-range evidence |
-| uncited sentences | **0 of 1,728** | |
-| abstention | 0.0000 | nothing in the retrieved evidence qualified for quoting |
-| answer nugget recall | 0.1921 | share of each gold fact's nuggets the **answer** contains |
+| metric | full set | 400-query subset (seed 17) | what it is |
+| --- | ---: | ---: | --- |
+| Hits@10 | 0.9082 | 0.9075 | the benchmark's own retrieval metric |
+| Hits@4 | 0.7632 | 0.7525 | |
+| MAP@10 | 0.3009 | 0.3057 | |
+| MRR@10 | 0.5983 | 0.5901 | |
+| **citation clean** | **1.0000** | **1.0000** | every claim of every emitted answer cites in-range evidence |
+| uncited sentences | **0 of 9,806** | 0 of 1,728 | |
+| abstention | 0.0000 | 0.0000 | nothing in the retrieved evidence qualified for quoting |
+| answer nugget recall | 0.1906 | 0.1921 | share of each gold fact's nuggets the **answer** contains |
 
-**The retrieval half is exactly the retrieval row.** `eval/benchmarks/multihop-rag/engine-hybrid-400.json`
-reports Hits@10 **0.9075**, Hits@4 **0.7525**, MAP@10 **0.3057**, MRR@10 **0.5901** on the same
-subset — identical to four decimals. The two runs were configured to be comparable
-(`--zero-thresholds`, the same `engine-hybrid` index, the same encoder), so this is a cross-check
-rather than a coincidence: composing an answer from the passages does not disturb the retrieval it
-composed from.
+**The retrieval half is exactly the retrieval row.** On the full set,
+`eval/benchmarks/multihop-rag/engine-hybrid.json` reports Hits@10 **0.9082**, Hits@4 **0.7632**,
+MAP@10 **0.3009**, MRR@10 **0.5983** — identical to four decimals on all four metrics; on the
+400-query subset the same holds against `engine-hybrid-400.json` (0.9075 / 0.7525 / 0.3057 /
+0.5901). The runs were configured to be comparable (`--zero-thresholds`, the same `engine-hybrid`
+index, the same encoder), so this is a cross-check rather than a coincidence: **composing an answer
+from the passages does not disturb the retrieval it composed from.** The subset reads 0.005 higher
+on MAP@10, which is sampling, not a difference in configuration.
 
 **Attribution is perfect, and that is a measurement rather than an assertion.** All 1,728 emitted
 sentences across 400 answers are cited in range. The claim "a citation score below 1.0 is a bug" was
 made in the finding for `extractive.py` before any end-to-end run existed; it is now the measured
 value, and it took two real bugs to get there (below).
 
-**Completeness is the finding.** The composed answer carries **0.1921** of each gold fact's
-programmatically-derived nuggets, against the **0.7438** claim-recall@10 the *retrieved pool*
-carries (`tools/nugget_recall.py`). A five-sentence extract of the top passages is not a written
+**Completeness is the finding.** The composed answer carries **0.1906** of each gold fact's
+programmatically-derived nuggets (0.1921 on the subset), against the **0.7438** claim-recall@10 the
+*retrieved pool* carries (`tools/nugget_recall.py`). A five-sentence extract of the top passages is not a written
 answer: three quarters of the gold content is in the evidence and about a fifth of it is in the
 answer. That gap is what an extractive-by-construction system costs, and it is now a number instead
 of the caveat "what is guaranteed is attribution, not usefulness".
@@ -89,9 +91,14 @@ passage, which trades content for prose.
 
 ## What this does not show
 
-- **One corpus and 400 of its 2,255 answerable queries.** MultiHop-RAG is multi-hop by construction,
-  which is the hard case for a five-sentence extract; a single-hop corpus would very likely read
-  higher. The full 2,255-query run is the same command without `--limit`, at ~2 s/query.
+- **One corpus.** MultiHop-RAG is multi-hop by construction, which is the hard case for a
+  five-sentence extract; a single-hop corpus would very likely read higher. FRAMES — 824 questions
+  whose gold answers are usually a few words, over 2,509 full Wikipedia articles — is the second
+  run, and `tools/frames_extractive.py` (`make frames-extractive`) is written and unit-tested for it
+  but **has not been run**.
+- **Five sentences is a fixed budget.** `--max-sentences` was left at its default; the answer
+  nugget recall at 10, 20 and unlimited sentences is unmeasured, and it is the obvious next lever on
+  the completeness number.
 - **Extractive prose is not fluent and is not complete.** 0.1921 nugget recall is the measurement of
   that, and any reader comparing this row to a generated one should compare attribution (where this
   wins by construction) against completeness (where it loses by construction).
@@ -100,9 +107,9 @@ passage, which trades content for prose.
   *addresses* the question, and it cannot see that a correctly quoted sentence is responsive.
 - **The engine-level `FUSION_MODE=convex` change from §P5(a) is not applied here.** This is the
   shipped RRF configuration.
-- **No interval.** The row is a mean over 400 queries with per-query values persisted
-  (`eval/benchmarks/multihop-rag/engine-extractive-400.json`, `per_query`), so a paired bootstrap
-  against any other arm on the same subset is one command away, and none is quoted here.
+- **No interval.** The row is a mean over 2,255 queries with per-query values persisted
+  (`eval/benchmarks/multihop-rag/engine-extractive.json`, `per_query`), so a paired bootstrap against
+  any other arm on the same queries is one command away, and none is quoted here.
 
 ## Verification
 

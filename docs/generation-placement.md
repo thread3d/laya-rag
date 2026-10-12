@@ -308,7 +308,7 @@ or a leaderboard submission; all need their data (network) and a thin repo-side 
 | **BRIGHT** | reasoning-intensive retrieval, 12 datasets | `tools/beir.py` metrics + engine hybrid recall | dataset loader / query format; some collections are large | `[network]` |
 | **LoTTE** | search/forum long-tail retrieval | same retrieval channels as BEIR | search/forum split loader; several collections large | `[network]` |
 | **LegalBench-RAG** | retrieval precision/recall over legal text | exactly the engine's shape; `RagEngine.query` + `tools/beir.py` metrics | corpus ingestion and gold-span scoring | `[network]` |
-| **FRAMES** | multi-hop factual QA over Wikipedia; exact-match answer accuracy | retrieval over the shipped Wikipedia links; 824 questions, ~0.5 MB | Wikipedia corpus build; **answer scoring needs a judge model** | `[network]`, `[model]` for the answer half |
+| **FRAMES** | multi-hop factual QA over Wikipedia; exact-match answer accuracy | retrieval over the shipped Wikipedia links; 824 questions (476 KB), **2,509 articles / 74 MB** in `eval/frames/corpus.jsonl` | Wikipedia corpus build; answer scoring as exact match needs a judge, but every question carries a gold `Answer`, so **extractive** answers can be scored judge-free | — |
 | **RGB** | noise robustness, negative rejection, information integration, counterfactual | the answerability gate addresses negative rejection directly; `tools/multihop_gate.py` is the closest existing rejection harness | English-subset loader and per-task scoring | `[network]` |
 
 Source verdicts: [`BENCHMARKS.md`](../BENCHMARKS.md) lines 191–192 (RGB, FRAMES) and
