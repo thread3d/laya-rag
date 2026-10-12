@@ -139,9 +139,18 @@ list raises. `search` walks the query terms through each field's postings, sums 
 document, and saturates once with the union IDF. Its five tests include the parity that matters:
 **with one field and `b = 0`, `OnDiskBM25F` reproduces `OnDiskBM25`'s scores exactly** on three
 queries — the same check the two older backends were validated with, and the reason the switch can be
-trusted rather than spot-checked. The IDT test is the other half: `_union_idf` is deliberately *not*
+trusted rather than spot-checked. **And the row itself is wired, and checked against the in-memory one.** `tools/beir.py`'s
+`ondisk_bm25f_rankings` takes the *same arguments* as `bm25f_rankings` — identical `k1`, per-field
+`b`, weights, tokeniser — so FEVER gets the same retriever rather than a similar one. Three tests:
+the two rows agree **exactly** (ranking for ranking) over four documents and four queries at the
+recorded settings; a built index is **reused** on the next call rather than rebuilt; and a different
+`title_weight` reuses the same index, which is the property the whole design exists for — a weight
+sweep is query-time.
+
+The IDF test is the other half: `_union_idf` is deliberately *not*
 `OnDiskBM25._idf`, and the test asserts they differ for a term whose field frequency is higher than
-its union frequency, which is the failure that would make a title-only term look common.
+its union frequency, which is the failure that would make a title-only term look common. (Typo in the previous revision of
+this page — "IDT" — left here as a note to myself that the finding had one pass too few.)
 
 **Scoring** is then the documented formula, per query term: look the term up in each field index,
 compute `w_f · tf_f / (1 − b_f + b_f · len_f / avg_len_f)`, sum the fields, saturate once with `k1`,

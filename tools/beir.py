@@ -345,6 +345,55 @@ def bm25f_rankings(
     }
 
 
+def ondisk_bm25f_rankings(
+    fields: Mapping[str, Mapping[str, str]],
+    queries: Mapping[str, str],
+    top_k: int,
+    *,
+    index_dir: Path,
+    k1: float = BEIR_K1,
+    b: float = BEIR_B,
+    b_title: float | None = None,
+    b_body: float | None = None,
+    title_weight: float = 5.0,
+    body_weight: float = 1.0,
+    drop_stopwords: bool = True,
+    stem: bool = True,
+    rebuild: bool = False,
+) -> dict[str, list[str]]:
+    """The same BM25F row as :func:`bm25f_rankings`, over the on-disk backend.
+
+    Identical arguments on purpose: the point of the pair is that a corpus too large for
+    :class:`BM25FIndex` gets the *same* retriever rather than a similar one, and the two are checked
+    against each other on a small corpus rather than assumed to agree. `fields` is a mapping, not an
+    iterator, because the on-disk build streams it once per field.
+    """
+    from laya_rag.ondisk import OnDiskBM25F
+
+    directory = Path(index_dir)
+    fields_list = ("title", "body")
+    b_fields = {"title": b if b_title is None else b_title, "body": b if b_body is None else b_body}
+    weights = {"title": title_weight, "body": body_weight}
+    if not rebuild and OnDiskBM25F.exists_on_disk(directory, fields_list):
+        index = OnDiskBM25F.open(
+            directory, fields=fields_list, k1=k1, b_fields=b_fields, weights=weights,
+            drop_stopwords=drop_stopwords, stem=stem,
+        )
+        print(f"  reusing the on-disk BM25F index at {directory}", flush=True)
+    else:
+        print(f"  building the on-disk BM25F index at {directory} ({len(fields)} documents)",
+              flush=True)
+        index = OnDiskBM25F(
+            directory, fields=fields_list, k1=k1, b_fields=b_fields, weights=weights,
+            drop_stopwords=drop_stopwords, stem=stem,
+        )
+        index.build(fields)
+    return {
+        query_id: [hit.chunk_id for hit in index.search(text, k=top_k)]
+        for query_id, text in queries.items()
+    }
+
+
 def restrict_qrels(qrels: Mapping[str, Mapping[str, float]],
                    queries: Mapping[str, str]) -> dict[str, Mapping[str, float]]:
     """Qrels limited to the queries actually ranked.
