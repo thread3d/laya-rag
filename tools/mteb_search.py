@@ -331,7 +331,7 @@ def load_laya_rag_search(name: str = MODEL_NAME, revision: str | None = None, **
     return LayaRagSearch(**accepted)
 
 
-def build_model_meta() -> Any:
+def build_model_meta(name: str = MODEL_NAME) -> Any:
     """Build the ``mteb.models.model_meta.ModelMeta`` for this engine.
 
     Requires MTEB (`pip install -e '.[mteb]'`). Kept separate from the adapter so the engine-side
@@ -347,7 +347,7 @@ def build_model_meta() -> Any:
     return ModelMeta(
         loader=load_laya_rag_search,
         loader_kwargs={},
-        name=MODEL_NAME,
+        name=name,
         revision=None,
         release_date=None,
         languages=list(MODEL_FACTS["languages"]),
@@ -370,12 +370,18 @@ def build_model_meta() -> Any:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="mteb_search.py")
-    ap.add_argument("--model-name", default=MODEL_NAME)
+    ap.add_argument("--model-name", default=MODEL_NAME,
+                    help="the MTEB model name this run is filed under; a run that scores a "
+                         "different encoder must change it (see --embed-model)")
     ap.add_argument("--task", default="SciFact", help="an MTEB task name to evaluate")
     ap.add_argument("--cache", default=None, help="MTEB_CACHE directory (must be writable)")
     ap.add_argument("--stack-dump-every", type=int, default=0, metavar="SECONDS",
                     help="dump every thread's stack every N seconds, so a slow run is "
                          "distinguishable from a hung one without a process inspector")
+    ap.add_argument("--embed-model", default=None,
+                    help="encoder for the engine's dense channel (sets LAYA_RAG_EMBED_MODEL); "
+                         "--model-name must be given with it, so a row cannot be filed under a "
+                         "name that does not describe the encoder that produced it")
     ap.add_argument("--first-stage-only", action="store_true",
                     help="score the first stage's own order, with no decision model in the path "
                          "(the second stage costs 90+ minutes per SciFact task)")
@@ -406,7 +412,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ImportError as exc:  # pragma: no cover
         print(f"mteb_search: MTEB is not installed ({exc}); pip install -e '.[mteb]'")
         return 2
-    meta = build_model_meta()
+    if args.embed_model and args.model_name == MODEL_NAME:
+        print(
+            "mteb_search: --embed-model needs --model-name — the default name says the encoder is "
+            "the multilingual decision checkpoint, and a run that scores a different one under it "
+            "would be filed under a description that is false.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.embed_model:
+        os.environ["LAYA_RAG_EMBED_MODEL"] = args.embed_model
+        print(f"mteb_search: encoder {args.embed_model}, filed as {args.model_name}", flush=True)
+    meta = build_model_meta(args.model_name)
     model = meta.load_model()
     if args.first_stage_only:
         # The flag has to reach the *adapter*, not just the banner. `load_model()` builds it with

@@ -241,9 +241,26 @@ reasons are stated rather than explained away:
   is not comparable to the repository's own SciFact rows (`bm25-engine` 0.6762, `hybrid-biencoder`
   0.7413) taken over BEIR's document convention.
 
-**Nothing is uploaded.** A submission is a separate act, and the honest next step is a run with the
-retrieval-trained encoder — one flag — rather than a row from a multilingual decision model's
-encoder presented as the system's.
+**The next step was one flag, and it changes the number by 0.32.** The same task, same
+configuration, with `--embed-model models/laya-retrieval` and filed under its own name
+(`laya-rag/engine-retrieval`, which `--embed-model` now *requires* so a run cannot be filed under a
+description that is false):
+
+| encoder | MTEB `main_score` | nDCG@10 | nDCG@100 | MAP@10 | MRR@10 | recall@10 | search rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `engine-multilingual` (decision checkpoint) | 0.37 | 0.36987 | 0.39378 | 0.31667 | — | — | 1.05 s/query |
+| **`engine-retrieval` (retrieval-trained)** | **0.69** | **0.69482** | 0.72163 | 0.64817 | 0.65887 | 0.82211 | **0.21 s/query** |
+
+**0.69482 nDCG@10 on MTEB's SciFact** — against the published BM25 the repository's own rows are
+anchored to (**0.665**) and a `bge-small` bi-encoder on the same convention (**0.72**). So the engine,
+scored as a *system* under an external protocol with its own retrieval-trained encoder and no
+decision model in the path, sits **above published BM25 and just below `bge-small`** — which is a
+much more interesting starting point than 0.37, and it is the same engine the repository's BEIR rows
+describe. The rate is also 5× better (0.21 s/query), because that encoder is much smaller than the
+322M decision checkpoint.
+
+**Nothing is uploaded.** These are local MTEB runs; a submission is a separate act, and it should name
+the encoder explicitly, which the CLI now enforces.
 
 ## What this does not show
 

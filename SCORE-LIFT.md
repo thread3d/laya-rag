@@ -763,7 +763,21 @@ regression test naming the bug), and it also explains the 282,984-token warning 
 **rerank prompt**, query plus candidate passages. The engine-level rows were never affected:
 `engine_beir.py` sets `LAYA_RAG_SECOND_STAGE=0` through the environment, which works.
 
-**The first score under an external protocol exists, and it is low.** `mteb.evaluate` on SciFact,
+**The first score under an external protocol exists — and with the retrieval-trained encoder it is
+above published BM25.** MTEB's SciFact, `--first-stage-only`, two encoders:
+
+| encoder (as filed) | `main_score` | nDCG@10 | MAP@10 | MRR@10 | search rate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `laya-rag/engine-multilingual` (decision checkpoint) | 0.37 | 0.36987 | 0.31667 | — | 1.05 s/query |
+| **`laya-rag/engine-retrieval`** (retrieval-trained) | **0.69** | **0.69482** | 0.64817 | 0.65887 | **0.21 s/query** |
+
+**0.69482 nDCG@10** against the published BM25 those rows are anchored to (**0.665**) and
+`bge-small` on the same convention (**0.72**): the engine, scored as a *system* under an external
+protocol with its own retrieval-trained encoder, sits **above published BM25 and just below
+`bge-small`**. `--embed-model` now *requires* `--model-name`, so a run cannot be filed under a name
+that does not describe the encoder. **Nothing is uploaded** — a submission is a separate act.
+
+**The earlier, weaker version of this:** `mteb.evaluate` on SciFact,
 `--first-stage-only`, completed locally: MTEB's `TaskResult` reports **`main_score=0.37`**, with
 **nDCG@10 0.36987** (nDCG@100 0.39378, MAP@10 0.31667) and MTEB's own `evaluation_time` **193.6 s**.
 This is the first number in this repository that nobody here computed, and read against SciFact's

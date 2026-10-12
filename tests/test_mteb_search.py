@@ -300,3 +300,16 @@ def test_the_cli_flag_reaches_the_adapter_not_just_the_banner(monkeypatch, capsy
     if adapter.first_stage_only:
         config.second_stage = False
     assert config.second_stage is False
+
+
+def test_the_model_name_is_a_parameter_so_provenance_can_be_honest():
+    """A run that scores a different encoder must not be filed under the multilingual name."""
+    import inspect
+
+    assert "name" in inspect.signature(m.build_model_meta).parameters
+    parsed = m.parse_args([])
+    assert parsed.model_name == m.MODEL_NAME
+    assert parsed.embed_model is None
+    assert m.parse_args(["--embed-model", "models/laya-retrieval",
+                         "--model-name", "laya-rag/engine-retrieval"]).model_name == \
+        "laya-rag/engine-retrieval"
