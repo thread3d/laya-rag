@@ -252,13 +252,18 @@ description that is false):
 | `engine-multilingual` (decision checkpoint) | 0.37 | 0.36987 | 0.39378 | 0.31667 | — | — | 1.05 s/query |
 | **`engine-retrieval` (retrieval-trained)** | **0.69** | **0.69482** | 0.72163 | 0.64817 | 0.65887 | 0.82211 | **0.21 s/query** |
 
-**0.69482 nDCG@10 on MTEB's SciFact** — against the published BM25 the repository's own rows are
-anchored to (**0.665**) and a `bge-small` bi-encoder on the same convention (**0.72**). So the engine,
-scored as a *system* under an external protocol with its own retrieval-trained encoder and no
-decision model in the path, sits **above published BM25 and just below `bge-small`** — which is a
-much more interesting starting point than 0.37, and it is the same engine the repository's BEIR rows
-describe. The rate is also 5× better (0.21 s/query), because that encoder is much smaller than the
-322M decision checkpoint.
+**0.69482 nDCG@10 on MTEB's SciFact.** It is tempting to read that against the published BM25
+(**0.665**) or a `bge-small` bi-encoder (**0.72**) that this repository's BEIR rows are anchored to,
+and **that comparison must not be made without a caveat**: those are BEIR-convention numbers — whole
+documents under BEIR's own corpus text — while this is **MTEB's SciFact**, whose corpus carries
+titles and whose evaluator is MTEB's, so the two differ by more than the retriever. The engine may
+be in that range or may not; **0.69482 stands on its own as a first under MTEB**, and the way to say
+anything about its level is to **run a baseline through MTEB as well** — `bge-small` or MTEB's
+published BM25 row — which is unrun and is the honest next step, not a comparison across protocols.
+
+What *is* like-for-like is the pair of rows above: the same task, the same configuration, the same
+harness, two encoders — and the retrieval-trained one is worth **+0.32**. The rate is also 5× better
+(0.21 s/query), because that encoder is far smaller than the 322M decision checkpoint.
 
 **Nothing is uploaded.** These are local MTEB runs; a submission is a separate act, and it should name
 the encoder explicitly, which the CLI now enforces.
