@@ -49,7 +49,7 @@ Two readings worth separating, because they point at different work:
   deeper pool buys little — but the pool is not the corpus.
 
 The headroom decomposes into four measured parts. The first three come from
-[`ceiling-decomp.md`](../../eval/benchmarks/multihop-rag/ceiling-decomp.md), which scores the
+[`ceiling-decomp.md`](../eval/benchmarks/multihop-rag/ceiling-decomp.md), which scores the
 cross-encoder's pool rather than the fused pool (0.6072 against this report's 0.6088 — close,
 but a different pool, so the parts are complementary and must not be added naively):
 

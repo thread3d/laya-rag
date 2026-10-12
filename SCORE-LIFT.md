@@ -2621,6 +2621,13 @@ trusting the flag, for the same reason every other claim in this record was: **a
 the same as a flag doing its job.** (The check that a flag is *read* exists;
 `tests/test_tools_flags_are_used.py`. That it *works* is only ever visible in the artefacts.)
 
+**And one link out of 195 pointed a directory above the repository root.** The sweep is now eleven
+classes; this one is as crisp as any and had exactly one instance: `docs/findings-multihop-diagnostics.md`
+cited `../../eval/benchmarks/multihop-rag/ceiling-decomp.md`, so the report was two levels away from
+where a reader would look and the link resolved nowhere. Fixed, and
+`tests/test_docs_links_exist.py` checks all 195 relative links, skipping `eval/` targets when `eval/` is
+absent — the same absent-artefact convention the leakage audit and `claim-check` use.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
