@@ -604,10 +604,22 @@ neither needs embeddings.
 
 **Falsifier — met.** Passage retrieval loses on Robust04 **and** TREC-NEWS, so the technique is
 closed for this engine at every document length, which is a cleaner statement than the caveat it
-replaces. The second clause stands: an adaptive passage budget (per-document p90 length rather than
-a fixed 600 characters) plus aggregation beyond max-pool is a *different* experiment, unrun, and it
-is the only form in which this idea is still open — a fixed 600-character cut is now refuted at
-three document lengths (230 words, 466, 635).
+replaces. The second clause stands and is now **implemented but not measured**: `tools/beir.py` takes
+`--passages p90` (each document's budget is the p90 of **its own** sentence lengths, clamped, rather
+than the same 600 characters for every document) and `--passages-aggregate max|sum` (max-pool, the
+historical behaviour and the one every refutation used, or CombSUM over a document's pieces). Nine
+tests pin the mechanisms, including that `max` still orders by each document's best piece.
+
+**The variant rows are owed, and the reason is a reporting gap rather than a result.** The
+`--passages p90` run **finished Robust04** and was part-way through TREC-NEWS when it was stopped to
+free the host, and because `tools/beir.py` writes the report **once, after every dataset in the
+run**, Robust04's completed rows were lost with it — the passage rows have no per-dataset
+checkpoint (only the engine row and the dense pass do). So there is no number to quote either way,
+and the honest statement is that the adaptive and sum variants are **implemented, tested and
+unmeasured**. The next attempt should either run one dataset per invocation or checkpoint the
+passage rows; the cost of the adaptive budget is higher (a 300-character floor against a
+600-character cut is roughly twice the passages, on top of the full-document index every run builds
+regardless) but this round did not measure it, and says so.
 
 ---
 

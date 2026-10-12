@@ -45,11 +45,32 @@ agree, with the loss scaling in the direction that refutes the mechanism.
 What the mechanism would have needed is not what was tested. A fixed 600-character cut ignores the
 document: it splits a 200-word news item into one piece and a 2,000-word article into four, so
 max-pooling over pieces is a different retriever per document rather than a uniform one. The second
-half of §P7's falsifier is the experiment still open — an **adaptive** budget (per-document p90
-length, or sentence boundaries) *plus* aggregation beyond max-pool (CombSUM over a document's pieces
-with length normalisation, which is what BM25F's field machinery now makes expressible). Until that
-runs, the honest statement is "fixed-size passage decomposition is refuted; adaptive decomposition
-is untried".
+half of §P7's falsifier is therefore the experiment that follows, and it is now **implemented**:
+
+- `--passages p90` — each document's budget is the **p90 of its own sentence lengths**, clamped to
+  `[max(200, ceiling/4), ceiling]`. A document whose sentences are 90% short gets short passages,
+  which is the point of sizing from the document rather than from a constant.
+- `--passages-aggregate max|sum` — how a document's pieces become one score. `max` keeps the best
+  piece, which is the historical behaviour and the one every refutation used; `sum` adds them
+  (CombSUM over passages) and therefore favours longer documents, which have more pieces. That bias
+  is what the knob exists to measure.
+
+Nine tests pin both mechanisms, including that `max` still orders by each document's best piece and
+that an unknown aggregation is rejected loudly.
+
+**The measurement is owed, and it was lost to a reporting gap rather than to a failure.** The
+`--passages p90` run **completed Robust04** and was working through TREC-NEWS when it was stopped to
+release the host — and `tools/beir.py` writes its report **once, after every dataset in the run**,
+so Robust04's finished rows went with it. The passage rows have no per-dataset checkpoint; the engine
+row (`--lexical-checkpoint`) and the dense pass (`--embed-chunk`) do, and that asymmetry is what cost
+the work. Two ways forward, both cheap: run **one dataset per invocation**, or give the passage rows
+the same checkpoint contract. Until one of them is done, the honest statement is **"fixed-size
+passage decomposition is refuted; adaptive decomposition is implemented, tested and unmeasured"**.
+
+One cost note that *is* supported by the run's progress: the adaptive budget raises the piece count
+(a 300-character floor against a 600-character cut is roughly twice the passages) on top of the
+full-document index every run builds regardless, so the sweep is slower — but this round did not
+measure by how much, and does not claim to.
 
 ## What this does not show
 

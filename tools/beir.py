@@ -268,6 +268,29 @@ def load_titles(dataset_dir: Path) -> dict[str, str]:
     return titles
 
 
+def _adaptive_passage_chars(text: str, *, ceiling: int) -> int:
+    """A document's own passage budget: the p90 of its sentence lengths, clamped to ``ceiling``.
+
+    A *fixed* cut gives a 200-word news item one piece and a 2,000-word article four, so it is a
+    different retriever per document rather than a uniform one. Deriving the size from the
+    document's own sentences keeps the pieces comparable across documents: the piece is roughly
+    "the document's own 90th-percentile sentence", which for a newswire item is one or two
+    sentences and for prose is a short paragraph.
+
+    The floor is a quarter of the ceiling (at least 200 characters): a single very short sentence is
+    not a retrievable unit, and without a floor a document of one-word sentences would be indexed
+    as fragments.
+    """
+    from laya_rag.extractive import split_sentences
+
+    lengths = sorted(len(sentence) for sentence in split_sentences(text) if sentence.strip())
+    if not lengths:
+        return ceiling
+    rank = int(round(0.9 * (len(lengths) - 1)))
+    floor = max(200, ceiling // 4)
+    return max(floor, min(ceiling, lengths[rank]))
+
+
 def load_fields(dataset_dir: Path) -> dict[str, dict[str, str]]:
     """``_id -> {"title": ..., "body": ...}``, the two fields BM25F normalises separately.
 
@@ -831,6 +854,8 @@ def passage_rankings(
     b: float = BEIR_B,
     drop_stopwords: bool = True,
     stem: bool = True,
+    adaptive: bool = False,
+    aggregate: str = "max",
 ) -> dict[str, list[str]]:
     """BM25 over passages, aggregated to documents by their best passage.
 
@@ -838,7 +863,21 @@ def passage_rankings(
     vector, which is why passage-level retrieval plus max-pooling is standard on
     long-document collections. Documents here are whole abstracts, so this measures
     whether splitting them helps even at this size.
+
+    Two knobs exist because a *fixed* cut is refuted at three document lengths
+    (`docs/findings-passages-long.md`), and these are the two ways it was wrong:
+
+    * ``adaptive`` sizes each document's passages from **its own** sentence lengths — the p90
+      sentence length, clamped — rather than cutting every document at the same 600 characters, so
+      a document of short sentences is not split into fragments and a long-sentence one is not
+      given pieces that are mostly its neighbours;
+    * ``aggregate`` is how a document's pieces become one score: ``max`` keeps the best piece (the
+      historical behaviour, and what the refutations used), ``sum`` adds them, which is CombSUM
+      over passages and is the standard alternative. ``sum`` favours longer documents — they have
+      more pieces — which is exactly the bias worth measuring rather than assuming.
     """
+    if aggregate not in {"max", "sum"}:
+        raise ValueError(f"unknown passage aggregation {aggregate!r}; expected 'max' or 'sum'")
     from laya_rag.chunking import chunk_text
 
     class _Passage:
@@ -851,8 +890,11 @@ def passage_rankings(
     passages: list[_Passage] = []
     document_of: dict[str, str] = {}
     for doc_id, text in corpus.items():
+        size = passage_chars
+        if adaptive:
+            size = _adaptive_passage_chars(text, ceiling=passage_chars)
         pieces = chunk_text(
-            text, chunk_chars=passage_chars, overlap_chars=overlap_chars, min_chunk_chars=1
+            text, chunk_chars=size, overlap_chars=overlap_chars, min_chunk_chars=1
         )
         for position, (piece, _start, _end) in enumerate(pieces):
             passage_id = f"{doc_id}#{position}"
@@ -861,18 +903,23 @@ def passage_rankings(
 
     index = BM25Index(k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
     index.build(passages)
-    depth = max(top_k * 5, 50)
+    # `sum` has to see every piece of a document to add them, so it reads deeper than `max`, which
+    # needs only each document's best piece.
+    depth = max(top_k * 20, 200) if aggregate == "sum" else max(top_k * 5, 50)
     rankings: dict[str, list[str]] = {}
     for query_id, text in queries.items():
-        best: list[str] = []
-        seen: set[str] = set()
-        # Hits are score-ordered, so a document's first appearance is its best passage.
+        scores: dict[str, float] = {}
+        order: list[str] = []
         for hit in index.search(text, k=depth):
             doc_id = document_of[hit.chunk_id]
-            if doc_id not in seen:
-                seen.add(doc_id)
-                best.append(doc_id)
-        rankings[query_id] = best[:top_k]
+            if doc_id not in scores:
+                order.append(doc_id)
+                scores[doc_id] = hit.score
+            elif aggregate == "sum":
+                scores[doc_id] += hit.score
+            # `max`: hits are score-ordered, so the first appearance is already the best piece.
+        ranked = sorted(order, key=lambda doc_id: -scores[doc_id])
+        rankings[query_id] = ranked[:top_k]
     return rankings
 
 
@@ -1228,7 +1275,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--title-boost", type=int, default=1,
                         help="repeat each title N times before the body in a bm25-title row")
     parser.add_argument("--passages", default="",
-                        help="comma list of passage sizes in characters for bm25-passages rows")
+                        help="comma list of passage sizes in characters for bm25-passages rows; "
+                             "`p90` sizes each document from its own sentence lengths instead")
+    parser.add_argument("--passages-aggregate", default="max", choices=("max", "sum"),
+                        help="how a document's passage scores become one: max (historical) or sum")
     parser.add_argument("--prf", type=int, default=0,
                         help="feedback documents for a bm25-prf row (0 = off)")
     parser.add_argument("--prf-terms", type=int, default=15, help="expansion terms for bm25-prf")
@@ -1465,14 +1515,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "note": f"{args.prf} feedback docs, {args.prf_terms} terms x{args.prf_weight}"
             }
 
-        for passage_size in [int(v) for v in str(args.passages).split(",") if v.strip()]:
+        for token in [v.strip() for v in str(args.passages).split(",") if v.strip()]:
+            adaptive = token.lower() == "p90"
+            passage_size = 1200 if adaptive else int(token)
             passage_ranking = passage_rankings(
                 corpus, queries, args.top_k, passage_chars=passage_size,
                 k1=args.k1, b=args.b, drop_stopwords=True, stem=args.stem,
+                adaptive=adaptive, aggregate=args.passages_aggregate,
             )
-            label = f"bm25-passages@{passage_size}"
+            label = f"bm25-passages@{'p90' if adaptive else passage_size}"
             rankings[label] = passage_ranking
-            results[label] = {"note": f"{passage_size}-char passages, max-pooled"}
+            results[label] = {
+                "note": ("per-document p90 sentence length" if adaptive
+                         else f"{passage_size}-char") + f" passages, {args.passages_aggregate}"
+            }
 
         dense: dict[str, list[str]] | None = None
         if "dense" in wanted or "hybrid" in wanted:
