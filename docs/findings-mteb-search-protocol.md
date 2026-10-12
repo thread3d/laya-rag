@@ -304,6 +304,12 @@ like the pathology this page spent four rounds chasing, so the runaway actively 
 diagnosis it was part of. The cleanup that works is `pkill -9 -f mteb_search.py`, and the lesson is
 that a background job's shell wrapper is not the job.
 
+**Fixed at the source.** `tools/mteb_search.py` now takes the one-heavy-job lock like
+`tools/beir.py` and `tools/fusion_tuning.py` do, so `make heavy-status` can see a benchmark run and
+a second one is refused instead of contending. The **baseline path is deliberately excluded** — it
+evaluates a stock MTEB model, builds no engine index, and holds nothing another job needs — and a
+three-case test pins that decision rather than the flag.
+
 **A scripting lesson, recorded because it cost a round.** The three-pair sweep was launched with
 `| grep -E "main_score|Error"`, which filtered out the adapter's own progress lines — so a run that
 was working looked exactly like the four-round stall this page is about, for the fourth time, and

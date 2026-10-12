@@ -368,6 +368,15 @@ def build_model_meta(name: str = MODEL_NAME) -> Any:
     )
 
 
+def _takes_heavy_lock(args: argparse.Namespace) -> bool:
+    """Whether this invocation must hold the one-heavy-job lock.
+
+    A baseline run evaluates a stock MTEB model: it builds no engine index and holds nothing
+    another job needs, so it is excluded. Every other invocation builds an index and is heavy.
+    """
+    return not getattr(args, "baseline_model", None)
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="mteb_search.py")
     ap.add_argument("--model-name", default=MODEL_NAME,
@@ -404,6 +413,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     import os
 
     args = parse_args(argv)
+    # A benchmark run is heavy — an index build plus hundreds of queries, and MTEB forks dozens of
+    # helper processes of its own — but this tool never took the lock, so `make heavy-status` could
+    # not see it and two runs would contend. That is exactly how this session accumulated 67 and
+    # then 101 `mteb_search.py` processes on a shared host, which made runs slow enough to look
+    # pathologically stalled. A baseline run is short and deliberately excluded: it is a stock model
+    # with no engine index to build, so it holds nothing another job needs.
+    if _takes_heavy_lock(args):
+        from heavylock import heavy_job_guard
+
+        heavy_job_guard("mteb_search.py")
     if args.stack_dump_every:
         import faulthandler
 

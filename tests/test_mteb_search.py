@@ -324,3 +324,16 @@ def test_the_baseline_flag_is_a_different_path_from_this_engine():
     assert m.parse_args([]).baseline_model is None
     assert m.parse_args(["--baseline-model", "BAAI/bge-small-en-v1.5"]).baseline_model == \
         "BAAI/bge-small-en-v1.5"
+
+
+def test_the_engine_path_takes_the_heavy_lock_but_a_baseline_does_not():
+    """A benchmark run is heavy and was invisible to `make heavy-status`; a baseline run is not.
+
+    The lock is what stops two runs contending, and an unnoticed contender is how this session
+    ended up with a hundred `mteb_search.py` processes on a shared host.
+    """
+    assert m._takes_heavy_lock(m.parse_args([])) is True
+    assert m._takes_heavy_lock(m.parse_args(["--first-stage-only"])) is True
+    assert m._takes_heavy_lock(
+        m.parse_args(["--baseline-model", "BAAI/bge-small-en-v1.5"])
+    ) is False
