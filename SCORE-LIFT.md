@@ -2306,6 +2306,13 @@ programme at least a round.
   check, which is the check working.) Four references in
   `docs/generation-placement.md` stay, listed as **proposed** rather than dead: that document calls them
   "planned hook" and its own Makefile sketch says "not yet in Makefile", so a reader is told the truth.
+- **The commands in this document are checked too, and the checks that do it taught me two scopings.**
+  `tests/test_docs_tool_flags_exist.py` fails when a documented invocation names a flag its tool does not
+  declare — **including every command in §10.6**, which is the point: a runbook nobody executes is prose.
+  Two scopings, both found by being wrong first: a **commented-out** command is not a reference (the
+  generation document writes its unimplemented hooks as `# ...` and says in the next sentence that they
+  are unimplemented), and a flag scan must accept **single quotes** — `tools/multihop_gate.py` declares
+  its flags that way, and a double-quote-only regex produced four false hits against it.
 - **A subset report belongs in `eval/beir/subsets/`, and two authorities will tell you if it does
   not.** `tools/channel_coverage.py` and `tools/lexical_selector.py` both scan `eval/beir/*.json`
   and both read a report as *the member's*. A one-sub-forum CQADupStack row therefore claimed the
