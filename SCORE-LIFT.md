@@ -2462,6 +2462,7 @@ their reasons written down, because *a checker that guesses intent is worse than
 | a documented tool flag that does not exist | **zero** | `tests/test_docs_tool_flags_exist.py` |
 | documented paths that do not resolve | **zero genuine** — the seventeen are pending reports, proposed tools, or a historical mention | **not automated**: a checker cannot tell a dead pointer from a sentence about one |
 | the documented configuration surface | **five knobs were missing** (`SECOND_STAGE` among them); now zero | **not automated**: a completeness check would have to decide which internal knobs deserve a row |
+| every test file is actually collected | **zero silently uncollected** — 140 test modules collected, and the three that are not are `__init__.py`, `support.py` and the `real_weights`-marked file | one command: the collected modules against `tests/*.py` |
 
 Two of the six automated checks produced false positives on their own first run — nineteen English
 "make up" hits, and four single-quoted flags read as undeclared. **Checking a checker is a different job
