@@ -303,6 +303,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _comparison_note(per_query: Mapping[str, Any], baseline: str) -> str:
+    """Why no significance table was produced, or ``""`` when one was.
+
+    The baseline has to be a row *of this report*: a run asked for only the dense rows carries no
+    ``bm25-engine``, so it cannot test against it even though the tool's default names it. Saying so
+    is the difference between a report that has no comparisons and one that looks like it failed to
+    compute them.
+    """
+    if baseline in per_query:
+        return ""
+    if not per_query:
+        return f"no rows were scored, so there is nothing to compare against {baseline}"
+    return (
+        f"no {baseline} row in this run, so no significance comparisons: the baseline has to be a "
+        f"row of the same report (rows here: {', '.join(sorted(per_query))})"
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     from heavylock import heavy_job_guard
@@ -367,6 +385,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     dataset = aggregate(per_forum)
     baseline = dataset["per_query_nDCG@10"].get(args.baseline)
+    note = _comparison_note(dataset["per_query_nDCG@10"], args.baseline)
+    if note:
+        # Silence here is how a report ends up claiming `comparisons_vs: bm25-engine` with an empty
+        # comparison table. A dense-only run has no baseline row, and that is a legitimate thing to
+        # run — it just cannot significance-test against a row it does not contain.
+        print(f"  {note}", flush=True)
     comparisons: dict[str, Any] = {}
     if baseline:
         for retriever, scores in dataset["per_query_nDCG@10"].items():

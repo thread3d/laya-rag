@@ -57,3 +57,16 @@ def test_a_dense_row_without_an_encoder_says_so():
     with pytest.raises(SystemExit, match="needs an encoder"):
         cq.rank_subforum(directory, ["biencoder"], top_k=10, k1=0.9, b=0.4, stem=True,
                          include_titles=True, ignore_identical_ids=True)
+
+
+def test_a_dense_only_run_says_why_it_has_no_comparisons():
+    """`comparisons_vs: bm25-engine` with an empty table is a report that looks broken.
+
+    A run asked for only the dense rows carries no baseline row, so it cannot significance-test
+    against one — legitimate, but it has to say so rather than leave an empty comparison block.
+    """
+    note = cq._comparison_note({"biencoder": 0.3, "hybrid-biencoder": 0.4}, "bm25-engine")
+    assert "no bm25-engine row" in note
+    assert "biencoder" in note                      # names what it does have
+    assert cq._comparison_note({"biencoder": 0.3, "bm25-engine": 0.2}, "bm25-engine") == ""
+    assert "nothing to compare" in cq._comparison_note({}, "bm25-engine")
