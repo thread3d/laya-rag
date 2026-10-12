@@ -2418,7 +2418,7 @@ its own findings.**
 | item | state | cost |
 | --- | --- | --- |
 | **P4 arm 2** — `Qwen3-Reranker-0.6B`, listwise | unstarted; needs the yes/no-logit path | a real code change, not a flag; it is the only open question in §P4 now that the pointwise ceiling is **0.3702** |
-| **P1** — the eight lexical-only cells | unstarted | **days** of embedding (2.7M–14.9M documents each); the only item that moves the BEIR-18 macro |
+| **P1** — the eight lexical-only cells | **1 of 8 measured, 1 running** | `cqadupstack` is in: `hybrid-biencoder` **0.3275** against the 0.3046 §1.2 was scoring, so the summed deficit fell **0.7314 → 0.7085** and the lexical-only count **8 → 7 of 18**. `nq` (2.68M documents) is embedding now, ~15 h, checkpointed every 20k; then signal1m 2.87M, dbpedia 4.64M, hotpotqa 5.23M, climate-fever and fever 5.42M, bioasq 14.9M — largest last. **The only item that moves the BEIR-18 macro, and it is moving** |
 | **P3 / P11** | unstarted | week-scale research bets |
 | **P8 / P9** | unstarted | a published-settings control on 5.4M documents; a fresh out-of-domain corpus |
 | **§P12 run 3 / T8+T11** | blocked on a build | the own-domain set is a separate tool, and run 3 depends on it |
