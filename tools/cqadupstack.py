@@ -303,6 +303,28 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _dense_cache_path(cache_root: Path, forum: str, encoder: Any) -> Path:
+    """Where this sub-forum's vectors live, in the same form every other dataset uses."""
+    stem = cache_root / f"{forum}.{encoder.name}"
+    _migrate_legacy_cache(stem)
+    return stem
+
+
+def _migrate_legacy_cache(stem: Path) -> None:
+    """Rename a doubled-suffix embedding cache to the single-suffix form.
+
+    `cached_embed` appends `.npy`, `.ids.json` and `.meta.json` to the path it is given. This tool
+    used to hand it a path that already ended in `.npy`, so its caches were written as
+    `forum.encoder.npy.npy` while every other dataset in `eval/beir/cache` is
+    `dataset.encoder.npy`. A cache directory with two naming schemes wastes an afternoon sooner or
+    later; renaming is cheaper than re-embedding, which is why this migrates rather than rebuilds.
+    """
+    for suffix in (".npy", ".ids.json", ".meta.json"):
+        legacy = Path(f"{stem}.npy{suffix}")
+        if legacy.is_file() and not Path(f"{stem}{suffix}").exists():
+            legacy.rename(Path(f"{stem}{suffix}"))
+
+
 def _comparison_note(per_query: Mapping[str, Any], baseline: str) -> str:
     """Why no significance table was produced, or ``""`` when one was.
 
@@ -372,7 +394,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ignore_identical_ids=not args.keep_identical_ids,
             title_boost=args.title_boost,
             encoder=encoder,
-            dense_cache=(cache_root / f"{name}.{encoder.name}.npy") if encoder is not None else None,
+            dense_cache=(_dense_cache_path(cache_root, name, encoder)) if encoder is not None else None,
             embed_chunk=args.embed_chunk,
             dense_weight=args.dense_weight,
             lexical_weight=args.lexical_weight,

@@ -8,6 +8,7 @@ run depends on.
 from __future__ import annotations
 
 import importlib.util
+import pathlib
 import sys
 from pathlib import Path
 
@@ -70,3 +71,38 @@ def test_a_dense_only_run_says_why_it_has_no_comparisons():
     assert "biencoder" in note                      # names what it does have
     assert cq._comparison_note({"biencoder": 0.3, "bm25-engine": 0.2}, "bm25-engine") == ""
     assert "nothing to compare" in cq._comparison_note({}, "bm25-engine")
+
+
+def test_a_doubled_suffix_cache_is_migrated_not_rebuilt(tmp_path):
+    """This tool used to hand `cached_embed` a path already ending in `.npy`.
+
+    That wrote `forum.encoder.npy.npy` where every other dataset caches as `dataset.encoder.npy`.
+    Renaming is cheaper than re-embedding, so the migration is what happens.
+    """
+    stem = tmp_path / "android.laya-retrieval.mean"
+    legacy = {
+        f"{stem}.npy.npy": b"vectors",
+        f"{stem}.npy.ids.json": b"[]",
+        f"{stem}.npy.meta.json": b"{}",
+    }
+    for name, payload in legacy.items():
+        pathlib.Path(name).write_bytes(payload)
+
+    cq._migrate_legacy_cache(stem)
+
+    for suffix in (".npy", ".ids.json", ".meta.json"):
+        assert pathlib.Path(f"{stem}{suffix}").is_file(), suffix
+        assert not pathlib.Path(f"{stem}.npy{suffix}").exists(), suffix
+    assert pathlib.Path(f"{stem}.npy").read_bytes() == b"vectors"
+
+
+def test_migration_never_clobbers_a_current_cache(tmp_path):
+    """A clean cache is left exactly as it is, even if a legacy file is also lying around."""
+    stem = tmp_path / "android.laya-retrieval.mean"
+    pathlib.Path(f"{stem}.npy").write_bytes(b"current")
+    pathlib.Path(f"{stem}.npy.npy").write_bytes(b"legacy")
+
+    cq._migrate_legacy_cache(stem)
+
+    assert pathlib.Path(f"{stem}.npy").read_bytes() == b"current"
+    assert pathlib.Path(f"{stem}.npy.npy").read_bytes() == b"legacy"      # left, not deleted
