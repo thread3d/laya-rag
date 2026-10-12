@@ -2466,6 +2466,11 @@ their reasons written down, because *a checker that guesses intent is worse than
 
 Two of the six automated checks produced false positives on their own first run — nineteen English
 "make up" hits, and four single-quoted flags read as undeclared. **Checking a checker is a different job
+
+The twelve instances behind this table, each with what it looked like, how it was caught and
+what catches it now — plus what the classes cost in commits, counted rather than remembered — are
+collected in **[findings-measurement-failures.md](docs/findings-measurement-failures.md)**. This
+table is the summary a maintainer needs; that page is the one to hand a new contributor.
 from running it**, and it is now the job this section exists to make routine.
 
 ### 10.4 What could invalidate this document, and how it would look
