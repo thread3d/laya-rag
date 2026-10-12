@@ -253,73 +253,30 @@ is as publishable as a positive one. `[data]` marks items that need no modelling
 
 ### P1 — Run the channels that already exist on the eleven empty cells `[data]`
 
-**The first cell, specified from the configuration the five full-channel cells actually used.**
-`eval/beir/five-adapted.json` records it (`settings`): `biencoder_model` **`models/laya-retrieval`**,
-`dense_weight` **0.3**, `lexical_weight` 1.0, `top_k` 100, `bm25_k1` 0.9, `bm25_b` 0.4, `rrf_k` 60,
-`title_boost` 2, `include_titles` true. Reproducing those rows on a lexical-only member is therefore:
+**The first cell needs a code change, and the run that discovered it took one minute.** My first
+specification was wrong twice, in the same way P4's was, and it is worth recording both because they
+are the same mistake:
 
-```
-.venv/bin/python tools/beir.py --datasets cqadupstack \
-  --biencoder-model models/laya-retrieval --dense-weight 0.3 \
-  --retrievers biencoder,hybrid-biencoder \
-  --lexical-backend ondisk --embed-chunk 5000 \
-  --out eval/beir/p1-cqadupstack
-```
+- **`tools/beir.py` refuses CQADupStack by design**: *"cqadupstack is twelve sub-collections behind
+  one BEIR name, not one corpus; this harness loads one corpus per dataset. Run
+  `tools/cqadupstack.py` instead."* The 457k documents are the aggregate of twelve forums, each
+  20–40k — so the per-forum embedding cost is **minutes, not hours**, and §10.1's "days" is the
+  aggregate across eight members.
+- **`tools/cqadupstack.py` is lexical-only.** It takes `--retrievers` but rejects anything outside
+  `LEXICAL_RETRIEVERS`, so it cannot produce the dense or hybrid row P1 needs. **That is the
+  blocker, and it is a code change**: the dense pass (the `--biencoder-model` / `--dense-weight`
+  path in `tools/beir.py`) has to be reachable from this tool, which already solves the
+  twelve-forum bookkeeping P1 depends on.
 
-Three things that are not optional at this scale, and each is a lesson this programme already paid for:
+**What the dense row must reproduce** is still recorded from the five full-channel cells
+(`eval/beir/five-adapted.json`): `biencoder_model` **`models/laya-retrieval`**, `dense_weight`
+**0.3**, `lexical_weight` 1.0, `top_k` 100, `bm25_k1` 0.9, `bm25_b` 0.4, `rrf_k` 60, `title_boost` 2,
+`include_titles` true. And at aggregate scale the two flags that are not optional are
+`--lexical-backend ondisk` (the memory index keeps a `Counter` per document) and a checkpointed
+dense pass — lessons this programme has already paid for twice.
 
-- **`--lexical-backend ondisk`**, because the in-memory BM25 keeps a `Counter` per document and
-  CQADupStack alone is **457,000** documents (the eight members run 2.7M–14.9M);
-- **`--embed-chunk 5000`**, because the dense pass is hours of embedding and a kill otherwise
-  restarts it — the corpus embeddings checkpoint per document count, and this host kills runs;
-- **`--out` on its own stem**, because jobkit refuses a fingerprint change and `--fresh` over a
-  recorded row discards it.
-
-**CQADupStack first, largest last** (§10.1) — it is the smallest member at 457k documents and the
-cheapest place to discover a problem with the ingest at scale. Its corpus is already on disk
-(`eval/beir/cqadupstack`, 15 GB). A dense row here is the first of the eight cells that the §1.2
-deficit arithmetic is waiting on, and the only work in this document that moves the BEIR-18 macro.
-
-**What.** Extend the existing `tools/beir.py` rows (`biencoder`, `hybrid-biencoder`,
-`dense-ensemble`, `hybrid-ensemble`, and where affordable `splade`) to FEVER, NQ, DBPedia-entity,
-HotpotQA, Climate-FEVER, Signal-1M, CQADupStack, BioASQ, and to TREC-COVID / Robust04 / TREC-NEWS
-and Quora. Nothing new is invented; the harness already supports every flag
-(`--biencoder-model`, `--ensemble-models`, `--splade-model`, `--dense-weight`, `--rrf-k`).
-
-**Why it is not already falsified.** It has never been run. `eval/beir/nq.json` has one row. The
-reason is stated honestly in `BENCHMARKS.md`: the largest corpora are past the ingestion work of
-Phase 4.1. But the ingestion work has since landed — `OnDiskBM25`, `StreamingVectorIndex`,
-token-capped build blocks, fixed-width padding, `ANN`/IVF-PQ — and the 1M-vector benchmark shows
-exhaustive search at 11.6 ms/query. The blocker that justified the lexical-only rows no longer
-exists in the same form.
-
-**Expected.** From the gap table, closing half the distance to the published best model on the
-eleven cells is **+0.020 macro**; closing most of it is **+0.037** (0.4799 → ~0.50–0.52). The
-per-cell shape is not uniform — NQ, DBPedia and FEVER carry most of it, BioASQ is likely to be
-flat or negative (published dense models *fail* there: Contriever 0.383 against BM25 0.465, which
-is why SPLADE is the "most consistent" model in the Brewing BEIR analysis), and Signal-1M may
-prefer the flat control. Reporting per-cell is therefore the point, not the macro.
-
-**Cost.** The dominant cost is dense embedding of ~39M documents. Sizing arithmetic on this host
-(28-core Xeon W-3275, 378 GB free, `bge-small` at 384 dims fp32): ~60 GB of vectors total for all
-eleven corpora at once — but they need not be held at once, which is exactly what
-`StreamingVectorIndex` is for. Expect **days**, dominated by BioASQ (14.9M), FEVER and
-Climate-FEVER (5.4M each), HotpotQA (5.2M) and DBPedia (4.6M). Run them as separate managed jobs
-behind `tools/heavylock.py`, largest-last so the small ones land first.
-
-**How it is measured.** `tools/beir.py --datasets <name> --retrievers bm25,bm25-engine,biencoder,
-hybrid-biencoder --biencoder-model BAAI/bge-small-en-v1.5`, then the ensemble rows on the ones
-where the dense row earns its place. Paired bootstrap against `bm25-engine` per corpus, with the
-per-query series persisted — the machinery is already in `tools/evalkit.py`.
-
-**Falsifier.** The dense row is not significantly better than `bm25-engine` on a majority of the
-eleven, *or* the hybrid is worse than its best single channel (which happens on Quora and Touché,
-and would mean the answer is per-corpus routing — see P5 — not a channel).
-
-**Pre-registered bar.** At least six of eleven cells beat their published BM25 anchor by more than
-the anchor tolerance, and the BEIR-18 macro moves **≥ +0.015**.
-
----
+**So P1's next concrete step is the extension, not a run** — and the good news is that the per-forum
+size makes it testable in minutes once the path exists.
 
 ### P2 — Fix the lexical channel per corpus, starting with the two cells the control leads `[data]`
 
