@@ -2296,6 +2296,14 @@ programme at least a round.
   `tools/mteb_search.py --first-stage-only` printed a banner and set nothing, and by the time it was
   found 18 recorded reports were their first stage's order wearing a reranker's name. **If you add a
   flag, read it; the check is one commit away from telling you that you did not.**
+- **A documented command that fails when run is a claim nobody checked, and the checks are now two.**
+  `docs/PROGRAMME-STATUS.md` told a reader to run `make charts && make charts-more`; `charts-more` did not
+  exist because `charts` already calls `tools/compare_more.py`. Fixed, and
+  `tests/test_docs_make_targets_exist.py` now fails on any **new** `make X` written inside code where `X`
+  is not a Makefile target — scoped to code because prose is full of "make up" and "make for", which
+  produced twenty-one false hits in a first pass that scanned everything. Four references in
+  `docs/generation-placement.md` stay, listed as **proposed** rather than dead: that document calls them
+  "planned hook" and its own Makefile sketch says "not yet in Makefile", so a reader is told the truth.
 - **A subset report belongs in `eval/beir/subsets/`, and two authorities will tell you if it does
   not.** `tools/channel_coverage.py` and `tools/lexical_selector.py` both scan `eval/beir/*.json`
   and both read a report as *the member's*. A one-sub-forum CQADupStack row therefore claimed the

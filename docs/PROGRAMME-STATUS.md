@@ -156,7 +156,7 @@ Each of these cost a round to learn, and each is recorded in `docs/FINDINGS.md`:
 make setup && make test          # 1251 tests, offline and deterministic
 make claim-check                 # 58 prose claims against their reports
 make consistency-check           # documents agree with each other, the audit set included
-make charts && make charts-more  # regenerate every figure in the README
+make charts                     # regenerate every figure in the README
 make job-status                  # any long job and how far it got
 make heavy-status                # is a heavyweight job running? run long jobs one at a time
 ```
