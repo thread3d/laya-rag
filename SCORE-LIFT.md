@@ -2430,6 +2430,15 @@ the top of §1 was anchored too (it had been the most visible unguarded figure i
    count updated in three documents when one is added, which is why these anchors went into the
    consistency registry (additive, no pinned count) rather than into `claim-check`.
 
+**A gate can be green because it passed or because it had nothing to do, and the difference has to be
+said.** `make audit-verify` exits 0 today with *"no log at eval/audit.jsonl (nothing to verify)"* — the
+log is written by running the engine with `LAYA_RAG_AUDIT_LOG=eval/audit.jsonl`
+(`docs/findings-audit-log.md`), no target produces it, and none exists on disk. So that gate is
+**vacuously green**, not satisfied. Everything else in the ledger below was checked against an artefact
+that exists: the diagnostics report for `claim-check`'s 65, 590 scanned reports for the leakage audit,
+the documents themselves for the rest. A reader told "all gates are green" deserves to know which of
+them merely had no work.
+
 **The verification ledger, so the next session does not re-do it.** Eight classes of claim in this
 repository have been checked, each by the method named. Six are automated; the two that are not have
 their reasons written down, because *a checker that guesses intent is worse than no checker*:
