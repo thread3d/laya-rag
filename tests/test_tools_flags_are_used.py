@@ -13,7 +13,10 @@ Five genuine instances exist today and are **named rather than exempted** — th
     tools/generator_free_iteration.py --samples
     tools/laya_finetune_probe.py     --seed
     tools/multihop_diagnostics.py    --bootstrap-samples
-    tools/multihop_hop2.py           --rrf-k
+
+(`tools/multihop_hop2.py --rrf-k` was the fifth; it was **removed** rather than listed, because that
+tool never fuses — it mines rare terms and issues extra BM25 probes, so the flag named a mechanism it
+does not use. Removal is the fix when there is nothing to wire.)
 """
 from __future__ import annotations
 
@@ -34,7 +37,6 @@ KNOWN_INERT = {
     ("generator_free_iteration.py", "--samples"),
     ("laya_finetune_probe.py", "--seed"),
     ("multihop_diagnostics.py", "--bootstrap-samples"),
-    ("multihop_hop2.py", "--rrf-k"),
 }
 
 

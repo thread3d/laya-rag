@@ -90,7 +90,6 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--expand-depth", type=int, default=100)
     ap.add_argument("--top-candidates", type=int, default=1)
     ap.add_argument("--max-terms", type=int, default=5)
-    ap.add_argument("--rrf-k", type=int, default=5)
     ap.add_argument("--samples", type=int, default=1000)
     ap.add_argument("--out", default=str(ROOT_BENCH / "hop2"))
     return ap.parse_args(argv)
