@@ -382,7 +382,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--model-name", default=MODEL_NAME,
                     help="the MTEB model name this run is filed under; a run that scores a "
                          "different encoder must change it (see --embed-model)")
-    ap.add_argument("--task", default="SciFact", help="an MTEB task name to evaluate")
+    ap.add_argument("--task", default="SciFact",
+                    help="an MTEB task name, or a comma-separated list, to evaluate in one process "
+                         "(one lock, results printed as each lands)")
     ap.add_argument("--cache", default=None, help="MTEB_CACHE directory (must be writable)")
     ap.add_argument("--stack-dump-every", type=int, default=0, metavar="SECONDS",
                     help="dump every thread's stack every N seconds, so a slow run is "
@@ -486,9 +488,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"A capped pass is a subset: it is a rate measurement, not a score.",
             flush=True,
         )
-    task = mteb.get_task(args.task)
-    result = mteb.evaluate(model, task, num_proc=args.num_proc)
-    print(result)
+    # Several tasks in one invocation, which is not a convenience: a sweep driven by a shell loop is
+    # a sweep whose process management is a shell loop's, and this session's worst operational
+    # problem was exactly that — wrappers killed while their children ran on, dozens of processes
+    # resident, and a shared host made slow enough to look pathologically stalled. One process, one
+    # lock, every task's result printed as it lands.
+    tasks = [name.strip() for name in args.task.split(",") if name.strip()]
+    if not tasks:
+        print("mteb_search: --task is empty", file=sys.stderr)
+        return 2
+    for name in tasks:
+        print(f"mteb_search: task {name}", flush=True)
+        result = mteb.evaluate(model, mteb.get_task(name), num_proc=args.num_proc)
+        print(result, flush=True)
     return 0
 
 

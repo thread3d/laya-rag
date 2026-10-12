@@ -337,3 +337,16 @@ def test_the_engine_path_takes_the_heavy_lock_but_a_baseline_does_not():
     assert m._takes_heavy_lock(
         m.parse_args(["--baseline-model", "BAAI/bge-small-en-v1.5"])
     ) is False
+
+
+def test_several_tasks_can_be_named_in_one_invocation():
+    """A shell loop is a sweep whose process management is a shell loop's.
+
+    That pattern is how this session accumulated dozens of resident processes on a shared host,
+    which made runs slow enough to look pathologically stalled. One process, one lock, results as
+    each task lands.
+    """
+    parsed = m.parse_args(["--task", "SciFact,NFCorpus,FiQA2018"])
+    names = [n.strip() for n in parsed.task.split(",") if n.strip()]
+    assert names == ["SciFact", "NFCorpus", "FiQA2018"]
+    assert [n.strip() for n in m.parse_args([]).task.split(",") if n.strip()] == ["SciFact"]
