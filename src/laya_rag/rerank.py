@@ -412,8 +412,16 @@ class LayaReranker:
                 )
             )
         elif order == "recall":
-            # Retrieval order, with Laya's probability breaking ties.
-            above.sort(key=lambda passage: (-passage.recall_score, -passage.relevance))
+            # **The caller's order, preserved.** `recall_score` travels with each hit, so sorting by
+            # it does not "keep the retrieval order" — it re-derives the order the caller *started*
+            # from, silently discarding any reordering the caller applied before handing the pool
+            # over. The coverage pass does exactly that (it permutes the whole pool by coverage, then
+            # asks for `recall` so its order is not "re-sorted by the score again"), so the sort here
+            # undid every coverage decision and made the configured cross-encoder's scores — which
+            # drove that permutation — irrelevant to the result. `hits` arrive in the order the
+            # caller means, so preserving it is what both this branch's own documentation and its
+            # caller expect.
+            pass
         else:
             # Laya's probability is the ranking key; the recall score only breaks ties.
             above.sort(key=lambda passage: (-passage.relevance, -passage.recall_score))

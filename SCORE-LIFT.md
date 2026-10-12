@@ -574,8 +574,29 @@ comment, so that the reranker "preserves that order rather than re-sorts by the 
 coverage call is made with `limit = len(pairs)`, i.e. **every candidate**, so the selection is a
 *permutation of the whole pool*; if `rerank(order="recall")` re-sorts by the first-stage score rather
 than preserving the order it was handed, every such permutation is undone and the output is the fused
-order for any reranker. That single question — does `order="recall"` preserve the input order or sort
-by `recall_score`? — is the whole defect, and it is the next thing to read. That is incompatible with the P4 runs having
+order for any reranker. **That question is answered, and the answer is a one-line defect that is now fixed.** `rerank`'s
+`order="recall"` branch read
+
+```python
+above.sort(key=lambda passage: (-passage.recall_score, -passage.relevance))
+```
+
+— i.e. it **sorted by the first-stage score**, which re-derives the order the caller *started* from
+and silently discards any reordering applied before the hand-off. The coverage pass permutes the whole
+pool (`limit = len(pairs)`) and then asks for `recall` precisely so its order survives, so this sort
+undid every coverage decision and made the cross-encoder's scores — which drove that permutation —
+irrelevant to the result. The branch's own documentation ("keeps the retrieval order") and its
+caller's comment ("the reranker must preserve that order rather than re-sort by the score again") both
+described the intended behaviour, and the implementation did the opposite.
+
+`order="recall"` now **preserves the order it is handed**, with three tests pinning it: a permuted
+pool survives, the result is *not* the `recall_score` order when the caller reordered, and
+`order="relevance"` still ranks by the decision. All 1,665 tests pass, which also says no existing
+test had encoded the buggy behaviour.
+
+**What this means for every recorded reranker row**: they were taken with a configured cross-encoder,
+a coverage λ of 0.7 auto, and this sort — so their order was the fused order and the reranker's
+contribution was zero. They need re-taking, and §P4's arms can now be run for real. That is incompatible with the P4 runs having
 produced numbers at all: a `query` that reached `score_pairs` would have raised. So the two arms'
 identical rankings most likely mean **the cross-encoder never scored anything in either arm** —
 the failure was absorbed somewhere between `score_pairs` and the report, and the wall-clock
