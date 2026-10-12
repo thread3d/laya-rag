@@ -713,11 +713,24 @@ remaining **~0.11 is the interesting quantity**, and it is not "the reranker is 
 (*The Hits@10 entry for the old row is the fixed-path number, since the pre-fix rows have no valid
 Hits@10 to quote; the MAP and MRR columns are the recorded rows' own.)
 
-**What is still missing is the matching base arm.** The 0.3384 above is a *subset* number, and the
-full protocol has so far been run only for `v2-m3` — so the pair that answers "is the newer reranker
-better?" is currently subset-against-subset, while the full-protocol number stands alone. The base
-arm at full protocol is **running now** (`eval/benchmarks/multihop-rag/engine-p4-base-full`), and the
-recorded pre-fix rows cannot substitute for it because they were the fused order.
+**The base arm has landed, so the pair is full-against-full and P4's first question is answered.**
+
+| MultiHop-RAG, full 2,255 queries, post-fix | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| recorded "best measured", pre-fix (the fused order) | — | 0.7632 | 0.3190 | 0.5983 |
+| `BAAI/bge-reranker-base` (184M, 2023) | 0.9055 | 0.7761 | **0.3294** | 0.6353 |
+| **`BAAI/bge-reranker-v2-m3`** (568M, 2024) | **0.9384** | **0.8417** | **0.3702** | **0.7026** |
+| **v2-m3 − base** | **+0.0329** | **+0.0656** | **+0.0408** | **+0.0673** |
+
+So on the full protocol the newer drop-in reranker is worth **+0.0408 MAP@10, +0.0656 Hits@4 and
++0.0673 MRR** over the older one — and even the *older* one beats the recorded 0.3190 by +0.0104,
+because until the ordering defect was fixed neither could do anything. Both remain short of the
+published **0.480**.
+
+**The subset's verdict on itself**: the 200-query base arm read 0.3384 against the full 0.3294
+(overstated by 0.009) and the subset v2-m3 read 0.3721 against 0.3702 (understated by 0.002). It got
+the direction and the ordering right and the magnitudes to within ~0.01 — which is what a seeded
+subset with `--sample-seed 0` is for, and it is worth recording that it was not exact.
 
 **Arm 2** (`Qwen3-Reranker-0.6B`, listwise) is still unstarted and needs the yes/no-logit path, so "is
 a listwise ranker better than a pointwise one?" — the question this section actually asks — remains
@@ -2261,6 +2274,7 @@ number exactly, 0.7091). What the re-takes then measured, in both directions:
 | | recorded | re-taken | Δ |
 | --- | ---: | ---: | ---: |
 | MultiHop-RAG MAP@10, `bge-reranker-v2-m3`, **full 2,255 queries** | 0.3190 | **0.3702** | **+0.0512** |
+| MultiHop-RAG MAP@10, `bge-reranker-base`, **full 2,255 queries** | 0.3190 | **0.3294** | **+0.0104** |
 | SciFact nDCG@10, `ms-marco-MiniLM`, λ auto (×2 configs) | 0.7274 / 0.7417 | 0.6762 / 0.6422 | −0.0512 / −0.0995 |
 
 So the same defect was hiding a **helpful** reranker on MultiHop (+0.0512 MAP@10, Hits@4 +0.0785,
