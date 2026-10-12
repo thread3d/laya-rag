@@ -1733,7 +1733,10 @@ have been recorded as already-present on the strength of a substring match.
 Three separately-numbered sequences now live here — **P1–P12** (score), **C1–C9** (§8 boundaries),
 **S1–S7** (§9 datasets) — and read on their own each is coherent but the reader cannot answer "what
 do I do on Monday". This section is the missing execution layer: one order, one register of the
-bars that decide whether each item worked, and an honest account of how to check this document.
+bars that decide whether each item worked, an honest account of how to check this document, and — in
+§10.5 — **a live record of what has actually been run and what it returned**, because a planning
+document that does not say which of its own items are done makes the reader reconstruct it from
+thirty findings pages.
 
 ### 10.1 One order, and the resource that serialises it
 
@@ -1833,7 +1836,44 @@ about a dead link rather than a licence.
 **The last three are environmental, and they are the ones most likely to waste a week**, because
 each presents as a modelling failure rather than an infrastructure one.
 
-### 10.5 The decision this document cannot make for you
+### 10.5 Where the programme stands — the record of what has been run
+
+This section is **live status**, not planning. Every row below is a measurement that exists, with the
+finding page that carries it; a reader picking this document up should be able to tell what is done
+from what is aspirational without reading thirty sections. The bars are in §10.2.
+
+**W0 — hygiene: closed, four for four, and each one found something.**
+
+| item | state | what running it returned |
+| --- | --- | --- |
+| `make channel-coverage` in the gate | done | §1.1 verbatim + the §1.2 arithmetic pinned; checked sites **20 → 43**. It immediately falsified §1.2's `ours` column on **nine of eighteen** cells — the macro is **0.4799**, not 0.4760, and the deficit **0.7314 / +0.020 / +0.037** |
+| `--limit-queries` dilution | closed | the five tools were already fixed; **the audit proving it had stopped running** (an uncaught `UnicodeDecodeError` on a 24 GB latin-1 dump). Fixed; **590 reports scanned, 142 exclusions named** |
+| `jobkit` fingerprints vs the index | done | each engine index records an `index-identity.json`; a changed chunk size rebuilds and refuses stale rows, with legacy manifests rebound rather than discarded |
+| harness/engine BM25 divergence | done | the quoted parity was **0.7408 / +0.0144**, not the 0.7413 / +0.0149 an over-hasty "correction" produced — the two differ by `--title-boost`. Pinned to `eval/beir/engine-parity.json` |
+
+**W1 — free wins: closed. Every item measured, two of them negatively.**
+
+| item | state | what running it returned |
+| --- | --- | --- |
+| **P2a** lexical selector | measured | picks are `bm25-title` ×11, `bm25-engine` ×6, `bm25` ×1 — so the first falsifier is **refuted**. Oracle **+0.0109** on the lexical-only macro (`findings-lexical-selector.md`) |
+| **P2b** BM25F | mechanism done, FEVER open | the proxy was not the problem: optimum weight is corpus-dependent (3, 3, 12, 12, flat) and ArguAna takes **+0.0132** over repetition; macro 0.3612 → 0.3651 → **0.3687**. FEVER blocked by the in-memory index (`findings-bm25f.md`) |
+| **P5a** tuned convex | measured | held-out, against the shipped `k=5`: **3 significant wins, no losses, 3 ties**; a global weight of 2.0 gives **+0.0127**. Engine-level first-stage-only: convex 0.7331 vs RRF 0.7269, **+0.0062** |
+| **P10b** MTEB | diagnosed, no score | not a fork/stall: throughput plus silence. **Index 5,981 chunks in 178 s**; the search phase is the wall clock, and the obvious explanation (the query embedding) is **refuted** at 1.3 s/query (`findings-mteb-search-protocol.md`) |
+| **P12** extractive end to end | runs 1–2 measured | 2,255 MultiHop queries: **citation clean 1.0000, 0 uncited of 9,806**, nugget recall **0.1906**. FRAMES: recall@10 0.9853, nugget recall **0.1922** — the same completeness in the opposite regime (`findings-extractive-row.md`) |
+| cross-cutting | done | `SECOND_STAGE=0` returns the first stage's own order with no decision model: ~10 min → **37 s** per configuration (`findings-second-stage.md`) |
+
+**W2 — started.** **P7 is closed, negatively**: passage BM25 loses on Robust04 (−0.0555) and
+TREC-NEWS (−0.0895), and the loss grows with document length, so a fixed cut is refuted at every
+length tested (`findings-passages-long.md`). Its second clause — an adaptive budget and aggregation
+beyond max-pool — is **implemented and tested**, with the sweep pending.
+
+**Not started, and why.** **P1** is days of embedding (the eight lexical-only members are 2.7M–14.9M
+documents each). **P3/P11** are week-scale research bets. **P8/P9** need a published-settings control
+on 5.4M documents and a fresh out-of-domain corpus respectively. **T8/T11** are a separate build, and
+§P12's run 3 depends on them. **P6b**, **P4** and Touché-2020 in the fusion sweep are bounded and
+unstarted.
+
+### 10.6 The decision this document cannot make for you
 
 §1–§6 and §8–§9 are **different kinds of work wearing the same document**. The first is *benchmark
 placement*: it raises numbers on corpora that already exist and is measurable within weeks. The
