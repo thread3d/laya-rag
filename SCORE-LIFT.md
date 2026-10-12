@@ -332,6 +332,23 @@ behaviour for a member row and the wrong reading for a **subset**. The report no
 `--limit`, `--limit-docs` or a seed goes to `eval/beir/subsets/`**, because a subset is evidence
 about a subset and the authorities cannot tell from the numbers alone.
 
+**The member run is in flight, and the caching is doing what it was built for.** The twelve-forum
+pass is running now (`--out eval/beir/cqadupstack-dense`, `--retrievers biencoder,hybrid-biencoder`,
+`--embed-chunk 5000`). Two things worth recording from its first minute:
+
+- **android re-ran from cache**: it printed `22998 documents, 699 scored queries` immediately and
+  moved to `english` without embedding anything, so the per-sub-forum vector cache means a re-run
+  costs queries rather than embeddings — and a kill costs at most the sub-forum in progress;
+- the run asks for **only the dense rows**, so `cqadupstack-dense.json` carries no second
+  `bm25-engine` for the lexical selector to disagree with, while the coverage gate will see the
+  member's dense channel when it lands. That is also why the gates stay green while it runs: the
+  report is written at the end, and §1.1 will need regenerating **then**, not now.
+
+Expect roughly three hours of embedding for the remaining ~434,000 documents at the measured ~40
+docs/s. The comparison will be against the recorded member rows in `eval/beir/cqadupstack.json`, and
+the android datum above says what to expect in sign: the fusion ahead of the lexical row, the dense
+channel alone behind it.
+
 **A note on how this round went, because the pattern has now happened twice.** Both "one flag"
 tasks (P4 and P1) opened with a specification of mine that was wrong, and both were corrected within
 a minute of actually running something. The lesson is not that the specifications were wrong — it is
