@@ -49,6 +49,12 @@ own work — `mteb/_evaluators/retrieval_evaluator.py` → `tools/mteb_search.py
 `_create_dataloaders` passes `num_workers=0` whenever `num_proc <= 1`, so no pool is involved at
 all.
 
+**Measured wall clock: 90+ minutes and no task.** The instrumented run was left going and stopped
+after **60 stack dumps over ~90 minutes without reaching a result** — every dump in the same frame
+chain above. That is the number the "accept the wall clock" option is weighed against, and it is
+also the strongest evidence for the observability point: an operator watching that run for an hour
+and a half had **no way to tell it apart from a hang**, because the adapter printed nothing.
+
 **The cost is structural, not incidental.** MTEB's `SearchProtocol` asks for a `top_k=100` ranking,
 and the adapter widens `retrieve_k` to at least `top_k`, so every query makes the engine run its
 **322M-parameter decision model on 100 candidates** before returning the order. SciFact has 300
