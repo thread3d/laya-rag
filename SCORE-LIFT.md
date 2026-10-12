@@ -604,11 +604,15 @@ neither needs embeddings.
 
 **Falsifier — met.** Passage retrieval loses on Robust04 **and** TREC-NEWS, so the technique is
 closed for this engine at every document length, which is a cleaner statement than the caveat it
-replaces. The second clause stands and is now **implemented but not measured**: `tools/beir.py` takes
+replaces. The second clause is **implemented, and half of it is measured**: `tools/beir.py` takes
 `--passages p90` (each document's budget is the p90 of **its own** sentence lengths, clamped, rather
 than the same 600 characters for every document) and `--passages-aggregate max|sum` (max-pool, the
 historical behaviour and the one every refutation used, or CombSUM over a document's pieces). Nine
-tests pin the mechanisms, including that `max` still orders by each document's best piece.
+tests pin the mechanisms, including that `max` still orders by each document's best piece. **The
+aggregation half is measured and negative** — CombSUM reads 0.2428 on Robust04 (−0.1094 against
+max-pool) and 0.2719 on TREC-NEWS (+0.0263), and in neither case reaches the whole-document row — and
+the **adaptive** half is not measurable at this scale (three attempts, no report; the cost is
+stated below).
 
 **Aggregation beyond max-pool is now measured, and it does not rescue the technique.** CombSUM over
 a document's 600-character pieces against max-pool on the same corpora: **Robust04 0.3522 → 0.2428
