@@ -1914,14 +1914,17 @@ from what is aspirational without reading thirty sections. The bars are in §10.
 | **P2a** lexical selector | measured | picks are `bm25-title` ×11, `bm25-engine` ×6, `bm25` ×1 — so the first falsifier is **refuted**. Oracle **+0.0109** on the lexical-only macro (`findings-lexical-selector.md`) |
 | **P2b** BM25F | mechanism done, FEVER open | the proxy was not the problem: optimum weight is corpus-dependent (3, 3, 12, 12, flat) and ArguAna takes **+0.0132** over repetition; macro 0.3612 → 0.3651 → **0.3687**. FEVER blocked by the in-memory index (`findings-bm25f.md`) |
 | **P5a** tuned convex | measured | held-out, against the shipped `k=5`: **3 significant wins, no losses, 3 ties**; a global weight of 2.0 gives **+0.0127**. Engine-level first-stage-only: convex 0.7331 vs RRF 0.7269, **+0.0062** |
-| **P10b** MTEB | diagnosed, no score | not a fork/stall: throughput plus silence. **Index 5,981 chunks in 178 s**; the search phase is the wall clock, and the obvious explanation (the query embedding) is **refuted** at 1.3 s/query (`findings-mteb-search-protocol.md`) |
+| **P10b** MTEB | **scored locally; nothing uploaded** | the block was our own flag — `--first-stage-only` printed a banner and set nothing, so every run still paid the 322M decision per candidate. Fixed and confirmed: index 183 s, search **0.21–1.05 s/query**, no rerank frames, no 282,984-token warning. MTEB SciFact `main_score` **0.37** (multilingual decision encoder) → **0.69** (`models/laya-retrieval`), i.e. nDCG@10 **0.69482** against published BM25 0.665 and `bge-small` 0.72 (`findings-mteb-search-protocol.md`) |
 | **P12** extractive end to end | runs 1–2 measured | 2,255 MultiHop queries: **citation clean 1.0000, 0 uncited of 9,806**, nugget recall **0.1906**. FRAMES: recall@10 0.9853, nugget recall **0.1922** — the same completeness in the opposite regime (`findings-extractive-row.md`) |
 | cross-cutting | done | `SECOND_STAGE=0` returns the first stage's own order with no decision model: ~10 min → **37 s** per configuration (`findings-second-stage.md`) |
 
-**W2 — started.** **P7 is closed, negatively**: passage BM25 loses on Robust04 (−0.0555) and
-TREC-NEWS (−0.0895), and the loss grows with document length, so a fixed cut is refuted at every
-length tested (`findings-passages-long.md`). Its second clause — an adaptive budget and aggregation
-beyond max-pool — is **implemented and tested**, with the sweep pending.
+**W2 — started, one clause closed and one measured.** **P7 is closed, negatively**: passage BM25
+loses on Robust04 (−0.0555) and TREC-NEWS (−0.0895), and the loss grows with document length, so a
+fixed cut is refuted at every length tested. Of its second clause, **aggregation is measured and also
+negative** — CombSUM over 600-character pieces reads 0.2428 for Robust04 (−0.1094 against max-pool)
+and 0.2719 for TREC-NEWS (+0.0263), and in neither case reaches the whole-document row (0.4077 /
+0.3351). The **adaptive budget** is implemented, tested and still unmeasured
+(`findings-passages-long.md`).
 
 **Not started, and why.** **P1** is days of embedding (the eight lexical-only members are 2.7M–14.9M
 documents each). **P3/P11** are week-scale research bets. **P8/P9** need a published-settings control
