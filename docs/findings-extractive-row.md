@@ -89,13 +89,62 @@ related to Palestine."`). It is verbatim and it is cited, so it is correct by th
 by any other reading. Fixing it means refusing runs that do not start at a word boundary in the
 passage, which trades content for prose.
 
+## Run 2 — the same row on FRAMES, where the gold answers are a few words
+
+```sh
+make frames-extractive FRAMES_EXTRACTIVE_ARGS="--embed-model BAAI/bge-small-en-v1.5 --zero-thresholds"
+```
+
+814 questions over 2,482 Wikipedia articles (50,743 chunks), the same engine and composer, gates
+zeroed so the abstention is the composer's:
+
+| metric | value | what it is |
+| --- | ---: | --- |
+| recall@1 / recall@5 / recall@10 / recall@20 | 0.8477 / 0.9742 / **0.9853** / 0.9853 | over the gold article set |
+| MRR@10 | 0.9032 | |
+| nDCG@10 | 0.7420 | |
+| **citation clean** | 0.9779 | 18 of 814 answers fail — **all 18 on the quoted-span check, none on a citation** |
+| uncited sentences | **0 of 3,751** | |
+| abstention | 0.0000 | |
+| answer nugget recall | 0.1922 | against the gold **answer** string itself |
+
+**Retrieval saturates here.** recall@10 is 0.9853 and recall@5 is 0.9742, so the gold articles are
+almost always in the top five — FRAMES is not a retrieval test for this engine, which is why the run's
+interest is entirely in the answer half. That matches `frames_eval`'s own retrieval row and its
+0.9977 gold coverage after redirect resolution.
+
+**The completeness number is the surprise.** FRAMES' gold answers are usually one or two words
+("2005", a name), so the naive expectation is that a five-sentence extract either contains the answer
+or does not — and it contains it **19.2%** of the time, almost exactly the MultiHop-RAG figure
+(19.1%). Two corpora in opposite regimes, the same number: what limits the answer is the
+**sentence budget**, not the corpus, and `--max-sentences` is the lever. That is a more useful
+reading than either row alone.
+
+**The 18 failures are corpus provenance, not the composer.** All 18 are on answers that quote
+**raw Wikipedia table markup** — `{| class="wikitable"`, `|-`, `! scope="row"`, `==Key==`. The
+decomposition is exact: **227 of 814 answers contain markup and 18 of those fail; the other 587 are
+all clean.** No answer has an uncited claim and none cites out of range. The deterministic quote
+checker pairs `"` marks and looks for the span in the evidence, and when the text between two marks
+is a table attribute separated by a `[n]` marker or a `!` cell boundary, the "quote" it extracts is
+markup rather than a statement. So the finding is about the corpus adapter: `eval/frames/corpus.jsonl`
+is raw wikitext, and an extractive composer over it emits table syntax as prose. **The fix belongs in
+corpus preparation — strip wiki markup before indexing — not in the composer, which is doing exactly
+what it promises with the text it was given.**
+
+**A configuration mistake worth recording, and it changed the number twice.** The first attempt at
+this row ran with the **shipped gates** active, so `abstention` read 0.163 — the gate refusing
+evidence, added to the composer finding nothing, which are two different measurements reported
+separately everywhere else in this repository. That run also read `citation clean 0.8372`, which was
+arithmetically just `1 − abstention`: the abstention sentence is one uncited claim to the checker.
+`--zero-thresholds` is now a flag on both extractive runners with a test asserting its default, so
+which configuration a row used cannot be invisible again.
+
 ## What this does not show
 
-- **One corpus.** MultiHop-RAG is multi-hop by construction, which is the hard case for a
-  five-sentence extract; a single-hop corpus would very likely read higher. FRAMES — 824 questions
-  whose gold answers are usually a few words, over 2,509 full Wikipedia articles — is the second
-  run, and `tools/frames_extractive.py` (`make frames-extractive`) is written and unit-tested for it
-  but **has not been run**.
+- **Two corpora, and neither is a natural extractive target.** MultiHop-RAG is multi-hop over news
+  sentences; FRAMES is single-hop over raw Wikipedia articles, 227 of whose answers quote wikitext.
+  A corpus whose documents are already prose *and* whose answers are sentences — the own-domain set
+  of §8/§9 — is unrun, and on the evidence here the sentence budget matters more than the corpus.
 - **Five sentences is a fixed budget.** `--max-sentences` was left at its default; the answer
   nugget recall at 10, 20 and unlimited sentences is unmeasured, and it is the obvious next lever on
   the completeness number.

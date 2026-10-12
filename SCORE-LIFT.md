@@ -771,9 +771,21 @@ trailing citation marker, a quotation cut by a sentence boundary (16 of 400 answ
 bad citation), and — the wrong fix — suppressing the boundary *inside* a quotation, which made the
 checker split there and left 24 of 1,637 sentences uncited. Both checks need one boundary rule.
 
-**Still open here.** Runs 2 (FRAMES) and 3 (an own-domain set) are unrun; the full 2,255-query
-MultiHop set is the same command without `--limit`; no interval is quoted (per-query values are
-persisted for one). And `findings-extractive-composer.md` names two ends that bear on the score:
+**Run 2 is measured too — FRAMES, 814 questions over 2,482 Wikipedia articles, gates zeroed.**
+Retrieval saturates (recall@10 **0.9853**, MRR@10 0.9032, nDCG@10 0.7420), so the run's interest is
+the answer half: **answer nugget recall 0.1922**, against MultiHop-RAG's 0.1906. Two corpora in
+opposite regimes — multi-hop news sentences against full Wikipedia articles whose gold answers are
+one or two words — and the **same number**, which says the limit is the five-sentence budget rather
+than the corpus, and makes `--max-sentences` the lever. Attribution is 0.9779 rather than 1.0 and the
+18 failures decompose exactly: **227 of 814 answers quote raw Wikipedia table markup and 18 of those
+fail; the other 587 are clean**, with 0 uncited sentences of 3,751 and no citation out of range. The
+deterministic quote checker is being handed table syntax; the fix is to strip wiki markup in corpus
+preparation, not to change the composer. A first attempt at this row ran with the shipped gates and
+read an abstention of 0.163 that was the *gate's* refusal, not the composer's — `--zero-thresholds`
+is now a flag with a test.
+
+**Still open here.** Run 3 (an own-domain set) is unrun; no interval is quoted (per-query values are
+persisted for both runs). And `findings-extractive-composer.md` names two ends that bear on the score:
 sentence scoring is the *document's* relevance rather than a per-sentence scorer, and
 **contradiction gating is absent** — `adjudicate_claims` can mark a claim `contradicted` and the
 composer will still emit the span. Gating emission on adjudication is the difference between

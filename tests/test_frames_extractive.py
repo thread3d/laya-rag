@@ -113,6 +113,18 @@ def test_summarize_of_nothing_is_empty_not_a_crash():
     assert fx.summarize([]) == {"queries": 0}
 
 
+def test_the_gate_configuration_is_explicit():
+    """The row's abstention number is the composer's only when the gates are zeroed.
+
+    `configure_engine` zeroes them for the retrieval rows; putting them back is the engine as
+    deployed. Either is defensible, and which one this run used has to be a flag rather than a
+    default nobody can see — the first attempt at this row ran with the shipped gates and read an
+    abstention of 0.163 that was the gate's refusal, not the composer's.
+    """
+    assert fx.parse_args([]).zero_thresholds is False
+    assert fx.parse_args(["--zero-thresholds"]).zero_thresholds is True
+
+
 def test_render_states_the_bug_contract_and_the_gold_answer_metric():
     text = fx.render({"summary": {
         "queries": 1, "answered": 1, "abstention_rate": 0.0, "citation_clean_rate": 1.0,

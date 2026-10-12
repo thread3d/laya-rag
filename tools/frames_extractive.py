@@ -63,6 +63,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--max-sentences", type=int, default=5)
     ap.add_argument("--min-score", type=float, default=0.0)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--zero-thresholds", action="store_true",
+                    help="zero the relevance and answerability gates, so the row is comparable "
+                         "to the retrieval-only run and to the MultiHop-RAG extractive row")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--shard", default="0/1")
     ap.add_argument("--fresh", action="store_true")
@@ -231,8 +234,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_engine(args)
     if args.index_dir:
         os.environ["LAYA_RAG_INDEX_DIR"] = str(Path(args.index_dir))
-    for key in ("LAYA_RAG_RELEVANCE_THRESHOLD", "LAYA_RAG_ANSWERABILITY_THRESHOLD"):
-        os.environ.pop(key, None)
+    if not args.zero_thresholds:
+        # `configure_engine` zeroes both gates because the *retrieval* rows want the retrieval
+        # order; putting them back is what makes this the engine as deployed. The distinction
+        # matters for the abstention number, which is otherwise the gate's refusal added to the
+        # composer's — two different things that this row reports separately elsewhere.
+        for key in ("LAYA_RAG_RELEVANCE_THRESHOLD", "LAYA_RAG_ANSWERABILITY_THRESHOLD"):
+            os.environ.pop(key, None)
 
     from laya_rag.config import EngineConfig
     from laya_rag.engine import RagEngine
