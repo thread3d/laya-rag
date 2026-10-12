@@ -64,10 +64,14 @@ dataset finishes. An earlier note here said Robust04's rows were lost by stoppin
 wrong in an instructive way: the shell wrapper was killed and the Python process survived, and *had*
 it been killed, `tools/beir.py`'s single write-at-the-end **would** have discarded every finished
 dataset. The passage rows have no per-dataset checkpoint, where the engine row
-(`--lexical-checkpoint`) and the dense pass (`--embed-chunk`) both do. So two things are true at
-once: the number is coming, and the reporting path is fragile enough that a sweep of this size
-should run **one dataset per invocation** or checkpoint its rows. Until it lands: **"fixed-size
-passage decomposition is refuted; adaptive decomposition is implemented, tested and pending"**.
+(`--lexical-checkpoint`) and the dense pass (`--embed-chunk`) both do. So two things are true at once: the number is
+coming, and the reporting path was fragile enough that a sweep of this size could lose finished
+work. **That is fixed**: `tools/beir.py` now writes the report after **every** dataset, printing
+which dataset landed and how many are in, so a kill costs at most the dataset in flight. The
+markdown and console table are still rendered once at the end — the JSON is the artefact that has to
+survive. Two tests pin it, one of them by making a later dataset fail and asserting the earlier
+one's rows are on disk. Until the number lands: **"fixed-size passage decomposition is refuted;
+adaptive decomposition is implemented, tested and pending"**.
 
 One cost note that *is* supported by the run's progress: the adaptive budget raises the piece count
 (a 300-character floor against a 600-character cut is roughly twice the passages) on top of the

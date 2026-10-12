@@ -1781,6 +1781,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             "comparisons": comparisons,
         }
 
+        # Write after **every** dataset, not only after the last one. A run over six large
+        # corpora is hours long, and this used to keep everything in memory until the end: an
+        # adaptive-budget run that finished Robust04 and was stopped during TREC-NEWS would have
+        # discarded the finished rows with the kill. The markdown and the console table are still
+        # rendered once at the end — the JSON is the artefact that has to survive.
+        out = Path(args.out)
+        evalkit.write_json(out.with_suffix(".json"), report)
+        print(f"  [{name}] written: {out.with_suffix('.json')} "
+              f"({len(report['datasets'])} dataset(s) so far)", flush=True)
+
     out = Path(args.out)
     evalkit.write_json(out.with_suffix(".json"), report)
     evalkit.write_text(out.with_suffix(".md"), render_markdown(report))

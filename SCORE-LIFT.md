@@ -618,8 +618,9 @@ finding: `tools/beir.py` writes the report **once, after every dataset in the ru
 kill loses every finished dataset with it. The passage rows have no per-dataset checkpoint, where
 the engine row (`--lexical-checkpoint`) and the dense pass (`--embed-chunk`) both do. Until the
 number lands the honest statement is **"fixed-size passage decomposition is refuted; adaptive
-decomposition is implemented, tested and pending"**, and the next attempt should either run one
-dataset per invocation or give the passage rows the same checkpoint contract.
+decomposition is implemented, tested and pending"**. The gap that nearly cost the work is closed:
+`tools/beir.py` writes its report after **every** dataset now, printing which one landed, so a kill
+costs at most the dataset in flight — two tests pin it, one by failing a later dataset on purpose.
 
 ---
 
