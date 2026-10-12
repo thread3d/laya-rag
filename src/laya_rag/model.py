@@ -496,6 +496,167 @@ class CrossEncoderModel:
         }
 
 
+#: The instruction Qwen3-Reranker's card uses when a caller supplies none. It is the model's own
+#: default, kept verbatim because the prompt *is* the interface for a generative reranker.
+QWEN3_RERANK_INSTRUCTION = (
+    "Given a web search query, retrieve relevant passages that answer the query"
+)
+
+
+def qwen3_rerank_prompt(query: str, document: str, *, instruction: str = "") -> str:
+    """The chat-template prompt a Qwen3 reranker is scored on.
+
+    A generative reranker has no classification head and no ``[CLS]``: it is asked a question and its
+    answer's *probability* is the score. That makes the prompt part of the model, not a formatting
+    detail — a different template is a different retriever — so it lives here, spelled out, rather
+    than inside the batching loop.
+    """
+    instruct = instruction or QWEN3_RERANK_INSTRUCTION
+    return (
+        "<|im_start|>system\n"
+        "Judge whether the Document meets the requirements based on the Query and the Instruct "
+        'provided. Note that the answer can only be "yes" or "no".<|im_end|>\n'
+        "<|im_start|>user\n"
+        f"<Instruct>: {instruct}\n"
+        f"<Query>: {query}\n"
+        f"<Document>: {document}<|im_end|>\n"
+        "<|im_start|>assistant\n"
+    )
+
+
+def yes_no_probability(yes_logit: float, no_logit: float) -> float:
+    """``P("yes")`` from the two logits, so the score keeps the meaning of a 0..1 relevance cut.
+
+    Softmax over *just* those two, not over the vocabulary: the model's other tokens are not answers
+    to the question and letting them contribute would make the number depend on the corpus.
+    """
+    import math
+
+    gap = float(yes_logit) - float(no_logit)
+    # Numerically stable logistic on the difference — softmax(yes, no)[0].
+    if gap >= 0:
+        return 1.0 / (1.0 + math.exp(-gap))
+    exponential = math.exp(gap)
+    return exponential / (1.0 + exponential)
+
+
+def is_generative_reranker(model_id: str) -> bool:
+    """Whether an id names a model that is asked a question rather than asked to classify.
+
+    Kept as a named predicate so the engine's choice is inspectable: the two kinds need different
+    classes, different prompts and different scoring, and a caller who points ``RERANK_MODEL`` at one
+    while the engine loads the other would be measuring the wrong thing silently.
+    """
+    return "qwen3-reranker" in (model_id or "").lower()
+
+
+def build_reranker(config: EngineConfig) -> Any | None:
+    """The second stage for ``config``: no reranker, a cross-encoder, or a generative one.
+
+    Kept next to :func:`build_embedder` for the same reason — the choice is a property of the
+    configuration, and an engine that picked the class itself could point ``RERANK_MODEL`` at a
+    generative model and silently load a classification head that does not exist.
+    """
+    model_id = (config.rerank_model or "").strip()
+    if not model_id:
+        return None
+    if is_generative_reranker(model_id):
+        return GenerativeRerankerModel(config)
+    return CrossEncoderModel(config)
+
+
+class GenerativeRerankerModel:
+    """A listwise-capable reranker scored by the probability of the answer "yes".
+
+    §P4's open question is whether a *listwise* ranker beats a pointwise cross-encoder, and the
+    repository's recorded rejection was specifically "a pointwise MS MARCO cross-encoder over the
+    fused top-100". Qwen3-Reranker-0.6B is Apache-2.0 and needs no classification head; what it needs
+    is this path, because ``AutoModelForSequenceClassification`` does not load it.
+
+    ``score_pairs`` returns ``P("yes")`` per pair, so ``RELEVANCE_THRESHOLD`` keeps its meaning and
+    the two kinds of reranker can be compared at the same cut.
+    """
+
+    def __init__(self, config: EngineConfig | None = None) -> None:
+        self.config = config or EngineConfig()
+        self.model_id = self.config.rerank_model
+        self._tokenizer: Any | None = None
+        self._encoder: Any | None = None
+        self._torch: Any | None = None
+        self._device = self.config.device
+        self._yes_id: int | None = None
+        self._no_id: int | None = None
+        self._lock = threading.RLock()
+
+    def ensure_loaded(self) -> "GenerativeRerankerModel":
+        with self._lock:
+            if self._encoder is not None:
+                return self
+            try:
+                import torch
+            except ImportError as exc:  # pragma: no cover - environment dependent
+                raise ModelUnavailableError("torch is not installed; a reranker needs it.") from exc
+            try:
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+            except ImportError as exc:  # pragma: no cover - environment dependent
+                raise ModelUnavailableError(
+                    "transformers is not installed; a generative reranker needs it."
+                ) from exc
+
+            device = self.config.device
+            if device in ("auto", ""):
+                device = "mps" if torch.backends.mps.is_available() else "cpu"
+            torch.set_num_threads(self.config.torch_threads)
+            try:
+                self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+                self._encoder = (
+                    AutoModelForCausalLM.from_pretrained(self.model_id).to(device).eval()
+                )
+                self._yes_id = int(self._tokenizer.convert_tokens_to_ids("yes"))
+                self._no_id = int(self._tokenizer.convert_tokens_to_ids("no"))
+            except Exception as exc:  # noqa: BLE001 - surfaced with the model name
+                raise ModelUnavailableError(
+                    f"failed to load generative rerank model {self.model_id!r} on device "
+                    f"{device!r}: {exc}"
+                ) from exc
+            self._torch = torch
+            self._device = device
+            return self
+
+    def score_pairs(self, pairs: Sequence[tuple[str, str]]) -> list[float]:
+        """``P("yes")`` for each ``(query, passage)`` pair."""
+        rows = list(pairs)
+        if not rows:
+            return []
+        self.ensure_loaded()
+        torch = self._torch
+        assert torch is not None
+        instruction = getattr(self.config, "rerank_instruction", "") or ""
+        out: list[float] = []
+        for query, passage in rows:
+            text = qwen3_rerank_prompt(query, passage, instruction=instruction)
+            encoded = self._tokenizer(
+                text, return_tensors="pt", truncation=True,
+                max_length=self.config.embed_max_length,
+            ).to(self._device)
+            with torch.no_grad():
+                logits = self._encoder(**encoded, return_dict=True).logits[0, -1]
+            out.append(
+                yes_no_probability(
+                    float(logits[self._yes_id]), float(logits[self._no_id])
+                )
+            )
+        return out
+
+    def info(self) -> dict[str, Any]:
+        return {
+            "reranker": self.model_id,
+            "kind": "generative-reranker",
+            "device": self._device,
+            "loaded": self._encoder is not None,
+        }
+
+
 class HashingEmbedder:
     """A dependency-free stand-in embedder for tests.
 

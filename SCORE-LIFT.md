@@ -853,9 +853,18 @@ published **0.480**.
 the direction and the ordering right and the magnitudes to within ~0.01 — which is what a seeded
 subset with `--sample-seed 0` is for, and it is worth recording that it was not exact.
 
-**Arm 2** (`Qwen3-Reranker-0.6B`, listwise) is still unstarted and needs the yes/no-logit path, so "is
-a listwise ranker better than a pointwise one?" — the question this section actually asks — remains
-open, with the pointwise ceiling now measured at **0.3702** full-protocol. The full-set re-take is the obvious
+**Arm 2's path exists now, so the question is one run away rather than one project.** The blocker
+was never the model — `Qwen/Qwen3-Reranker-0.6B` is Apache-2.0 and loads here — but the *scoring*: a
+generative reranker has no classification head, so `AutoModelForSequenceClassification` does not load
+it and the engine had no way to score one. That path is now in `src/laya_rag/model.py`:
+`qwen3_rerank_prompt` (the card's chat template, spelled out because the prompt *is* the interface),
+`yes_no_probability` (softmax over **just** the yes/no logits, so `RELEVANCE_THRESHOLD` keeps its
+meaning and the two kinds of reranker are comparable at the same cut), and `build_reranker`, which
+picks the class the configuration names — next to `build_embedder`, because an engine that chose for
+itself could point `RERANK_MODEL` at a generative model and silently load a head that does not exist.
+Six tests cover the prompt, the probability (including the extremes a 0.6B model emits) and the
+choice; **the run itself waits for the heavy lock**, and its question is whether a listwise ranker
+beats the pointwise ceiling now measured at **0.3702** full-protocol. The full-set re-take is the obvious
 next run, and it is the one that would replace the recorded 0.319 — **it is running now**
 (`--out eval/benchmarks/multihop-rag/engine-p4-full`, `--rerank-model BAAI/bge-reranker-v2-m3`, the
 full 2,255 queries, under the heavy lock). That is incompatible with the P4 runs having

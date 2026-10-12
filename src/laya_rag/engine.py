@@ -44,7 +44,7 @@ from .lexical import (
     convex_combination,
     reciprocal_rank_fusion,
 )
-from .model import BiEncoderModel, CrossEncoderModel, LayaModel
+from .model import BiEncoderModel, LayaModel, build_reranker
 from .rerank import ANSWERABILITY_QUESTION, LayaReranker, ScoredPassage
 from .trust import TrustManifest, filter_candidates
 
@@ -423,11 +423,7 @@ class RagEngine:
         self.reranker = LayaReranker(self.model)
         # Optional retrieval-trained cross-encoder for ordering and filtering. Laya keeps
         # the answerability gate either way, and `adjudicate_claims` is unchanged.
-        self.cross_encoder = (
-            CrossEncoderModel(self.config)
-            if (self.config.rerank_model or "").strip()
-            else None
-        )
+        self.cross_encoder = build_reranker(self.config)
         # Optional generative step. It never runs on its own: the caller has to ask
         # for it, and everything it produces is unverified prose.
         self.composer = Composer(self.config)
