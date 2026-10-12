@@ -715,7 +715,10 @@ per query** — a multi-hour task for SciFact's 300 queries, which is the same s
 `findings-engine-parity.md` measured on BEIR. What *was* broken is observability: a working run was
 indistinguishable from a hung one. `tools/mteb_search.py` now prints a rate and a remaining-time
 estimate every 25 queries, and `--limit-queries` is an explicit **smoke** cap that says in the log
-that a subset is not a score. **No MTEB score exists and nothing is uploaded.**
+that a subset is not a score. The instrumented run was stopped after **60 stack dumps over ~90
+minutes with no result** — the measured wall clock the "accept it as a long job" option is weighed
+against, and why the silence mattered: an operator watching for an hour and a half could not tell it
+from a hang. **No MTEB score exists and nothing is uploaded.**
 
 **Cost.** (a) is a project, not a submission: corpus acquisition plus the scale work. (b) needs one
 of three things, in order of principle: an **engine first-stage-only mode** (the engine has none —
