@@ -45,7 +45,7 @@ from .lexical import (
     reciprocal_rank_fusion,
 )
 from .model import BiEncoderModel, CrossEncoderModel, LayaModel
-from .rerank import ANSWERABILITY_QUESTION, LayaReranker
+from .rerank import ANSWERABILITY_QUESTION, LayaReranker, ScoredPassage
 from .trust import TrustManifest, filter_candidates
 
 
@@ -1317,6 +1317,58 @@ class RagEngine:
             # `blend < 1` reorders by a first-stage/CE mix and would discard the coverage
             # order entirely, so it is forced to a pure replacement here.
             blend = 1.0
+        if not self.config.second_stage:
+            # First stage only: `candidates` is already the fused, deduplicated, trust- and
+            # ACL-screened order, so the top of it *is* the retrieval ranking. `answerable` is
+            # reported True and `answerability_measured` False because nothing decided it — a
+            # verdict here would be a number no model produced.
+            passages = list(candidates)[: (top_k or self.config.rerank_k)]
+            return QueryResult(
+                query=query,
+                answerable=True,
+                answerability=None,
+                answerability_measured=False,
+                passages=[
+                    ScoredPassage(
+                        text=hit.chunk.text,
+                        path=hit.chunk.path,
+                        chunk_id=hit.chunk.chunk_id,
+                        # Both score fields carry the **first-stage** score. `relevance` is
+                        # documented as Laya's calibrated probability, and in this mode nothing
+                        # calibrated it — but it is the field a caller orders by, so leaving it at
+                        # zero would hand back an arbitrary order. `pool["second_stage"] = False`
+                        # marks the difference, and no consumer should threshold it.
+                        recall_score=hit.score,
+                        relevance=hit.score,
+                        index=hit.chunk.index,
+                        start_char=hit.chunk.start_char,
+                        end_char=hit.chunk.end_char,
+                        channels=hit.channels,
+                    ).as_dict(max_chars=max_passage_chars)
+                    for hit in passages
+                ],
+                considered=len(candidates),
+                kept=len(passages),
+                dropped_below_threshold=0,
+                trust_filtered=trust_filtered,
+                acl_filtered=acl_filtered,
+                retrieval_seconds=retrieval_seconds,
+                rerank_seconds=0.0,
+                total_seconds=time.perf_counter() - started,
+                usage={},
+                checkpoint=self.config.checkpoint,
+                note=None if lexical is not None or not len(index) else degraded,
+                pool={
+                    "requested": candidate_k,
+                    "searched": recall_k,
+                    "deepened": recall_k > candidate_k,
+                    "dense": len(dense_hits),
+                    "lexical": len(lexical_hits),
+                    "sparse": len(sparse_hits),
+                    "candidates": len(candidates),
+                    "second_stage": False,
+                },
+            )
         nli = self.answerability_nli
         # `RELEVANCE_THRESHOLD` is calibrated for Laya's probabilities. When a
         # cross-encoder supplies the scores they are a different model's sigmoid, and the

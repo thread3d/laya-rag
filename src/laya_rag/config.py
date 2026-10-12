@@ -199,6 +199,14 @@ class EngineConfig:
     # index but the returned evidence does not contain. It is off by default so existing
     # indexes and their rankings are unchanged; turning it on requires a re-index.
     context_prefix: bool = field(default_factory=lambda: _env_bool("CONTEXT_PREFIX", False))
+    # Whether the second stage runs at all. On (the default) the engine applies Laya's calibrated
+    # relevance decision to every candidate before ordering and gating — the behaviour every
+    # measurement in this repository was taken with. Off returns the **first stage's own order**
+    # with no decision model in the path, which is what a *retrieval* benchmark is supposed to
+    # score (`tools/mteb_search.py`, `tools/engine_beir.py`), and the only way to measure the
+    # engine's fusion rule without a 322M-parameter forward per candidate. With it off the
+    # answerability verdict is reported as **not measured** rather than guessed.
+    second_stage: bool = field(default_factory=lambda: _env_bool("SECOND_STAGE", True))
 
     @property
     def resolved_chunk_overlap(self) -> int:

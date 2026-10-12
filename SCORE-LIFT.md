@@ -509,8 +509,24 @@ zero. And the deployable version of the same runs: one **global** dense weight o
 pooled train halves, beats the shipped RRF by **+0.0127** on the held-out halves (0.5244 vs 0.5117),
 with every corpus's own optimum in 1.5–3.0 — the direction is not a per-corpus lottery. Touché-2020,
 where lexical wins by two to one and the convex rule is most at risk, is **not** measured: its run
-was stopped in the corpus build after ~50 minutes. The engine-level convex row is still unmeasured;
-shipping it is one flag and one `tools/engine_beir.py` run.
+was stopped in the corpus build after ~50 minutes. **The engine-level row is now measured**:
+`SECOND_STAGE=0` (a new opt-in mode, `docs/findings-second-stage.md`) returns the first stage's own
+order with no decision model in the path and cut the run from ~10 minutes to **37 seconds** per
+configuration. SciFact, 300 queries, depth 10:
+
+| arm | nDCG@10 |
+| --- | ---: |
+| RRF `k=5` (shipped) | 0.7269 |
+| convex, dense weight 1.0 | 0.7280 |
+| **convex, dense weight 2.0** | **0.7331** |
+| full engine with the second stage, RRF (recorded) | 0.7264 |
+
+**+0.0062 for the convex rule over the shipped RRF at the engine level**, where the harness's own
+SciFact comparison had convex *worse* (0.7362 against 0.7408) at the same weight. The sign differs
+because the replica scores whole documents while the engine collapses its top-10 passages to distinct
+documents — a reason to measure rather than infer, and the reason this row was the one asked for. The
+second stage itself is worth **+0.0005 here** (0.7269 → 0.7264), consistent with the recorded finding
+that Laya's decision is a better filter than a ranker.
 
 **Expected.** (a) **+0.005 to +0.015** on the full-channel cells. (b) Larger in expectation on the
 eleven mixed cells: Quora wants dense only (−0.025 for fusion), Touché wants lexical only (−0.091

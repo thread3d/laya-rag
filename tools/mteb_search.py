@@ -151,6 +151,7 @@ class LayaRagSearch:
         device: str | None = None,
         progress_every: int = 25,
         limit_queries: int | None = None,
+        first_stage_only: bool = False,
     ) -> None:
         if device is not None and config is not None:
             config.device = device
@@ -158,6 +159,13 @@ class LayaRagSearch:
             from laya_rag.config import EngineConfig
 
             config = EngineConfig(device=device)
+        # MTEB scores the retrieval *system*, and the engine's second stage is a 322M-parameter
+        # decision on every candidate — 90+ minutes for one SciFact task when it runs. With this
+        # on, the ranking MTEB sees is the first stage's own, which is what the benchmark is for;
+        # the decision model is measured separately by the answerability and trust reports. A
+        # submission must say which configuration produced it, and the run prints it.
+        if first_stage_only and config is not None:
+            config.second_stage = False
         self.config = config
         self._engine = engine
         self._engine_factory = engine_factory or _default_engine_factory
@@ -323,6 +331,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--model-name", default=MODEL_NAME)
     ap.add_argument("--task", default="SciFact", help="an MTEB task name to evaluate")
     ap.add_argument("--cache", default=None, help="MTEB_CACHE directory (must be writable)")
+    ap.add_argument("--first-stage-only", action="store_true",
+                    help="score the first stage's own order, with no decision model in the path "
+                         "(the second stage costs 90+ minutes per SciFact task)")
     ap.add_argument("--progress-every", type=int, default=25,
                     help="print a progress line every N queries; a working run and a hung one "
                          "used to look identical in the log")
@@ -346,6 +357,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     meta = build_model_meta()
     model = meta.load_model()
+    if args.first_stage_only:
+        model.config.second_stage = False
+        print(
+            "mteb_search: first-stage-only — the ranking is the engine's fusion, with no "
+            "relevance decision in the path. Quote this configuration with the row.",
+            flush=True,
+        )
     if args.progress_every:
         model.progress_every = args.progress_every
     if args.limit_queries:

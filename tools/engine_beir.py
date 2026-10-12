@@ -93,6 +93,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                     help="quantile used by --chunk-auto (default 0.9)")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None, help="cap the number of test queries")
+    ap.add_argument("--index-dir", default=None,
+                    help="read an existing engine index instead of deriving one from --out/--tag")
+    ap.add_argument("--fusion-mode", default="rrf", choices=("rrf", "convex"),
+                    help="the first stage's fusion rule; `convex` is the engine-level arm of P5a")
+    ap.add_argument("--dense-weight", type=float, default=None,
+                    help="override DENSE_WEIGHT, which is also the convex dense weight")
+    ap.add_argument("--no-second-stage", action="store_true",
+                    help="return the first stage's own order with no decision model in the path")
     ap.add_argument("--out", default=str(ROOT / "eval" / "engine-beir"))
     ap.add_argument("--shard", default="0/1", help="run one contiguous slice, 'i/n'")
     ap.add_argument("--fresh", action="store_true", help="discard any existing checkpoint")
@@ -107,6 +115,15 @@ def report_stem(args: argparse.Namespace) -> Path:
 
 def index_dir(args: argparse.Namespace) -> Path:
     return Path(args.out) / "index" / f"{args.dataset}-{args.tag}"
+
+
+def resolve_index_dir(args: argparse.Namespace) -> Path:
+    """The index this run reads: `--index-dir` when given, otherwise the derived one.
+
+    One accessor for both the engine's `LAYA_RAG_INDEX_DIR` and the identity sidecar, so a borrowed
+    index is checked and stamped where it actually lives rather than where a derived name points.
+    """
+    return Path(args.index_dir) if args.index_dir else index_dir(args)
 
 
 def _ingest_settings(args: argparse.Namespace) -> dict[str, Any]:
@@ -144,6 +161,9 @@ def _fingerprint(args: argparse.Namespace, identity: str | None) -> str:
         retrieve_k=args.retrieve_k,
         top_k=args.top_k,
         limit=args.limit,
+        fusion_mode=args.fusion_mode,
+        dense_weight=args.dense_weight,
+        second_stage=not args.no_second_stage,
         # What the numbers were measured *against*, not just how the run was configured. Absent
         # for the legacy form, so a checkpoint written before this can be recognised and rebound.
         **({"index": identity} if identity is not None else {}),
@@ -175,7 +195,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     heavy_job_guard("engine_beir.py")
     shard_index, shard_count = jobkit.parse_shard(args.shard)
     out = Path(args.out)
-    index_path = index_dir(args)
+    index_path = resolve_index_dir(args)
     docs_dir = out / "docs" / args.dataset
 
     dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root), download=False)
@@ -202,6 +222,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     os.environ["LAYA_RAG_INDEX_DIR"] = str(index_path)
+    # Query-time knobs. They shape the fingerprint (below) but not the index, so they are not part
+    # of its identity: the same index can be scored under RRF and convex without a rebuild.
+    os.environ["LAYA_RAG_FUSION_MODE"] = args.fusion_mode
+    os.environ["LAYA_RAG_SECOND_STAGE"] = "0" if args.no_second_stage else "1"
+    if args.dense_weight is not None:
+        os.environ["LAYA_RAG_DENSE_WEIGHT"] = str(args.dense_weight)
+    else:
+        os.environ.pop("LAYA_RAG_DENSE_WEIGHT", None)
     os.environ["LAYA_RAG_EMBED_MODEL"] = args.embed_model
     # Nothing may be filtered, so the returned order is the engine's retrieval order.
     os.environ["LAYA_RAG_RELEVANCE_THRESHOLD"] = "0.0"
