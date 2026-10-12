@@ -647,10 +647,31 @@ honest summary is: *a modern 568M reranker recovers ~0.05 of the 0.16 that separ
 the published number, on a 200-query subset.* That also makes the remaining ~0.11 the interesting
 quantity — it is not "the reranker is old", which is now measured rather than assumed.
 
-Two caveats that travel with the number: it is a **200-query seeded subset**, not the 2,255-query
-full protocol, so it is a rate-and-direction measurement rather than the record; and **arm 2**
-(`Qwen3-Reranker-0.6B`, listwise) is unstarted, so "is a listwise ranker better than a pointwise
-one?" — the question this section actually asks — is still open. The full-set re-take is the obvious
+**The full protocol confirms it, and the subset was accurate.** Same configuration, all 2,255
+queries:
+
+| | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| recorded best before the fix | 0.9200* | 0.7632 | **0.3190** | 0.5983 |
+| subset, 200 queries | 0.9350 | 0.8200 | 0.3721 | 0.7023 |
+| **full protocol, 2,255 queries** | **0.9384** | **0.8417** | **0.3702** | **0.7026** |
+
+**MAP@10 0.3190 → 0.3702 (+0.0512), Hits@4 0.7632 → 0.8417 (+0.0785), MRR@10 0.5983 → 0.7026
+(+0.1043)** — on the system's worst published comparison, from a drop-in reranker and a one-line
+ordering fix. The subset's 0.3721 was within **0.002** of the full protocol, which is the sampling
+discipline doing its job rather than luck.
+
+**It still does not reach the published 0.480**, so the honest summary is now a full-protocol one: a
+modern 568M pointwise reranker plus the ordering fix recovers **~0.05 of the ~0.16** that separates
+this engine from the published number, while improving Hits@4 and MRR far more than MAP. The
+remaining **~0.11 is the interesting quantity**, and it is not "the reranker is old".
+
+(*The Hits@10 entry for the old row is the fixed-path number, since the pre-fix rows have no valid
+Hits@10 to quote; the MAP and MRR columns are the recorded rows' own.)
+
+**Arm 2** (`Qwen3-Reranker-0.6B`, listwise) is still unstarted, so "is a listwise ranker better than a
+pointwise one?" — the question this section actually asks — remains open, and it is the obvious next
+run now that the pointwise ceiling is measured at 0.3702. The full-set re-take is the obvious
 next run, and it is the one that would replace the recorded 0.319 — **it is running now**
 (`--out eval/benchmarks/multihop-rag/engine-p4-full`, `--rerank-model BAAI/bge-reranker-v2-m3`, the
 full 2,255 queries, under the heavy lock). That is incompatible with the P4 runs having
@@ -2182,8 +2203,10 @@ is not refuted — it does not fit this host's budget, which is a stated reason 
 **Not started, and why.** **P1** is days of embedding (the eight lexical-only members are 2.7M–14.9M
 documents each). **P3/P11** are week-scale research bets. **P8/P9** need a published-settings control
 on 5.4M documents and a fresh out-of-domain corpus respectively. **T8/T11** are a separate build, and
-§P12's run 3 depends on them. **P4** is now measured on a subset — `bge-reranker-v2-m3` at **MAP@10 0.3721** against the recorded
-0.319 and a published 0.480 — with the full-set re-take and the listwise arm still to run.
+§P12's run 3 depends on them. **P4 is measured on the full protocol**: with the ordering defect fixed, `bge-reranker-v2-m3` reads
+**MAP@10 0.3702, Hits@4 0.8417, MRR@10 0.7026** over all 2,255 queries, against the recorded 0.3190 /
+0.7632 / 0.5983 — **+0.0512 / +0.0785 / +0.1043** on the system's worst published comparison, and
+still short of the published 0.480. The listwise arm is unstarted.
 **P6b** and Touché-2020 in the fusion sweep are bounded and unstarted.
 
 ### 10.6 The decision this document cannot make for you
