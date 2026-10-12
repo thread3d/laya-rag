@@ -4,6 +4,11 @@
 > affect the result — every number here is its first stage's order. See §P4 of
 > [SCORE-LIFT.md](../SCORE-LIFT.md#p4--a-modern-and-where-possible-listwise-second-stage-on-multihop-rag)
 > and `tests/test_rerank_order.py`. These rows need re-taking.
+>
+> **The SciFact re-take resolves this page's subject in the same direction**: with the
+> order no longer overwritten, `scifact-chauto-ce` reads nDCG@10 **0.6422** against the
+> recorded 0.7417 — the cross-encoder *hurts* when it is actually allowed to reorder, so
+> the qualitative conclusion stands even though the mechanism behind the old rows did not.
 
 # Findings: coverage selection over the cross-encoder pool beats a CE re-sort
 

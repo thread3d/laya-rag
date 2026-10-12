@@ -608,9 +608,29 @@ eval/engine-beir/                3 reports: scifact-chauto-ce.json (nDCG@10 0.74
 
 **The SciFact three matter most**, because the repository quotes them: `docs/findings-reranker-fairness.md`,
 `docs/findings-rerank-selection.md` and the README all reference this family, and
-`scifact-chauto-ce`'s **0.7417 is competitive with the quoted `hybrid-biencoder` 0.7413** — so the
-"best SciFact row" claim is now in question in the direction of *understating* the engine (the CE was
-never given a chance to help). Everything else recorded in this document — the fusion rows, the
+`scifact-chauto-ce`'s **0.7417 is competitive with the quoted `hybrid-biencoder` 0.7413**, which is why
+it was the first re-take worth doing.
+
+**The re-take is in, and it refutes the direction I guessed.** Same flags, same model, the fix in
+place, new tag:
+
+| scifact, `cross-encoder/ms-marco-MiniLM-L-6-v2`, `--chunk-auto` | nDCG@10 |
+| --- | ---: |
+| recorded (pre-fix — the fused order, CE discarded) | **0.7417** |
+| **re-taken (post-fix — the CE's coverage order actually applied)** | **0.6422** |
+
+So the cross-encoder is **not** being denied an improvement — given the chance, it makes SciFact
+**0.0995 worse**. Three things follow:
+
+- the recorded 0.7417 was the *fused* order, and it **stands as the engine's SciFact number**; the
+  invalidation does not understate the engine here, which is what I speculated last round and is now
+  withdrawn;
+- it corroborates the repository's own older note in `rerank`'s docstring — that reordering BM25's
+  candidates by a pointwise cross-encoder *lowered* nDCG@10 on BEIR — by measuring it directly and
+  finding the same sign and a larger size;
+- and it is the second case in this programme where fixing a defect that made a reranker inert shows
+  the reranker was **harmful**, not merely unused (MultiHop is the first, where v2-m3 helps). Both
+  directions exist, and neither was knowable while the order could not change. Everything else recorded in this document — the fusion rows, the
 extractive rows, the MTEB scores — configured no reranker and is untouched.
 
 **What this means for every recorded reranker row**: they were taken with a configured cross-encoder,
