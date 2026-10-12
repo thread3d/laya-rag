@@ -2592,8 +2592,9 @@ Two traps: **the on-disk lexical backend is required** above ~1M documents (the 
 `eval/beir/subsets/` instead — see §10.1.
 
 **What "healthy" looks like, checked mid-flight on `nq`** so a later reader can tell normal from
-broken without re-deriving it: the log's last line is a `N/2681468 (Xs)` counter — **~60 documents per
-second**, so a million documents is about 4.5 hours — the process appears in `make heavy-status`, the
+broken without re-deriving it: the log's last line is a `N/2681468 (Xs)` counter — measured at **65.7 documents per
+second** (340,000 documents in 5,176 s), so a million documents is about 4.2 hours and the member's
+2.68M is **~11 hours**, which is what the counters show: a quarter of the way in, ten hours to go — the process appears in `make heavy-status`, the
 embedding cache grows to **34 GB** for the whole member, and the volume has **357 GB free**. Zero
 matches for `error`, `Traceback` or `no space` in the log. Disk is the failure that would waste a
 night silently, which is why it is the first thing to look at on a multi-hour job, not the last.
