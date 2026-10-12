@@ -529,11 +529,29 @@ that fails to load (or is silently replaced by a fallback) leaves the recorded `
 different, the ranking unchanged, and only the wall clock moved by the failed attempt (170.6 s →
 318.4 s).
 
-**The next probe is therefore the cross-encoder's identity, not the selection rule**: assert that
-`RagEngine`'s `self.cross_encoder` is the model `--rerank-model` named, and make a failed load loud
-instead of a fallback. Until then the safe statement is the narrow, well-supported one — **two
-different `--rerank-model` values produced identical rankings on MultiHop-RAG, and the reason is not
-yet established**. Arm 2 stays on hold, and no reranker row should be quoted.
+**That probe is answered too, and it moves the question from the code to the environment.** The
+cross-encoder's *identity* is right — `CrossEncoderModel` is constructed with the requested model and
+records it (`{'reranker': 'BAAI/bge-reranker-base', 'kind': 'cross-encoder', 'loaded': False}`) — but
+it is **lazily loaded, and on this host it cannot load at all**:
+
+```
+laya_rag.model.ModelUnavailableError: failed to load rerank model 'BAAI/bge-reranker-base'
+on device 'mps': PermissionError at ~/.cache/huggingface/hub/models--BAAI--bge-reranker-base
+when downloading BAAI/bge-reranker-base. Check cache directory permissions.
+```
+
+`~/.cache/huggingface` is not writable here, so **no reranker can be downloaded**, and
+`ensure_loaded` raises rather than falling back. That is incompatible with the P4 runs having
+produced numbers at all: a `query` that reached `score_pairs` would have raised. So the two arms'
+identical rankings most likely mean **the cross-encoder never scored anything in either arm** —
+the failure was absorbed somewhere between `score_pairs` and the report, and the wall-clock
+difference (170.6 s → 318.4 s) is the cost of the failed *attempt*, not of inference.
+
+**Every sentence in this section that treats a reranker as measured is therefore suspended**, not
+just arm 1's. Two things must happen before any reranker row is quoted: make a failed load **loud**
+(no silent path from `ModelUnavailableError` to a reported number), and take the measurements where
+the model can actually load — `HF_HOME` pointed at a writable directory, as this repository already
+does for MTEB (`HF_HOME=$PWD/eval/mteb-hf`). Arm 2 stays on hold.
 | `mixedbread-ai/mxbai-rerank-large-v2` | **yes**, `Qwen2ForCausalLM` | no — same custom path | 1.5B |
 
 So the first experiment is literally
