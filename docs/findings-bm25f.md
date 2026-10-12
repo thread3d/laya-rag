@@ -169,3 +169,31 @@ terms; sort. Nothing new is stored beyond the field indexes and the union dictio
 used for BM25F — it is the *per-field* document frequency, and BM25F's IDF is over the union, which is
 the whole point of the accumulator above. And a term absent from one field must still contribute that
 field's zero, not be skipped, or the field weighting changes meaning between queries.
+
+### Three constraints on the last piece, each of which breaks it quietly
+
+Writing the class out on paper before typing it turned up three things that are not visible from the
+formula, and each one produces a *wrong index* rather than an error. They belong here because they
+are the difference between a transcription and a second design pass.
+
+**1. The input must be re-iterable, not an iterator.** The build streams the corpus once **per
+field** — `OnDiskBM25.build` takes an iterable and consumes it — so a generator would be exhausted by
+the first field and the rest would index nothing. The tempting fix, materialising the documents as a
+list, is worse than the bug at this scale: FEVER's 5.4M documents as `(doc_id, {field: text})` pairs
+is gigabytes of Python objects for data the caller already holds. The signature has to be a
+`Mapping[str, Mapping[str, str]]` — the corpus the caller has — and the per-field generators iterate
+it, not a copy of it.
+
+**2. The union DF must use the build's tokenisation, which is *not* the query's.** `OnDiskBM25.build`
+indexes everything and leaves stopword removal to `drop_stopwords` on the *query* side; the union
+counts are keyed by the same term ids the postings use. Computing them with a query-side tokeniser —
+dropping stopwords, or using a different `stem` setting — yields counts for terms the postings do not
+have, and missing counts for terms they do, which shows up as a plausible IDF over the wrong
+vocabulary rather than as an error.
+
+**3. One subdirectory per field, because `build` writes where it is constructed.** `OnDiskBM25(d)`
+writes `d/meta.json`, `d/offsets.npy`, `d/postings.bin` and so on. Constructing the field indexes in
+one shared directory makes the second overwrite the first — a silent single-field index wearing a
+two-field design. So the layout is `<bm25f-dir>/<field>.bm25/`, and `exists_on_disk` for the composite
+is the conjunction over its fields, which is also what makes `--fresh` mean the same thing here as
+everywhere else in this harness.
