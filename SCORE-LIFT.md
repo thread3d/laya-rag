@@ -552,7 +552,30 @@ So the defect claim above is withdrawn in favour of the weaker, supported one: *
 produced identical rankings, and the load failure I observed is one candidate explanation among
 several rather than the established cause** — the same failure mode this section has now hit three
 times, which is why the corrected pair is being re-taken with a private `HF_HOME` before anything
-else is said about rerankers. That is incompatible with the P4 runs having
+else is said about rerankers.
+
+**The corrected pair is in, and the observation survives the fix.** With `HF_HOME` pointed at a
+private writable cache — so both models genuinely load, which the wall clocks corroborate — the two
+arms are **still identical**, and the per-query rankings are identical for **200 of 200**:
+
+| `--rerank-model` | Hits@10 | Hits@4 | MAP@10 | MRR@10 | seconds |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `BAAI/bge-reranker-base` | 0.9200 | 0.7300 | **0.3189** | 0.6142 | 170.8 |
+| `BAAI/bge-reranker-v2-m3` | 0.9200 | 0.7300 | **0.3189** | 0.6142 | 317.4 |
+
+So the load failure was **not** the cause, and the defect claim stands on three independent checks
+now: the two models load, `_coverage_select_from` demonstrably depends on its relevance argument, and
+the returned order does not move. **The configured cross-encoder does not affect the MultiHop-RAG
+result.**
+
+**The locus is one call.** After the coverage pass, the engine sets `order = "recall"` and
+`blend = 1.0` and calls `rerank(..., scores=cross_scores, order="recall")` — deliberately, per the
+comment, so that the reranker "preserves that order rather than re-sorts by the score again". But the
+coverage call is made with `limit = len(pairs)`, i.e. **every candidate**, so the selection is a
+*permutation of the whole pool*; if `rerank(order="recall")` re-sorts by the first-stage score rather
+than preserving the order it was handed, every such permutation is undone and the output is the fused
+order for any reranker. That single question — does `order="recall"` preserve the input order or sort
+by `recall_score`? — is the whole defect, and it is the next thing to read. That is incompatible with the P4 runs having
 produced numbers at all: a `query` that reached `score_pairs` would have raised. So the two arms'
 identical rankings most likely mean **the cross-encoder never scored anything in either arm** —
 the failure was absorbed somewhere between `score_pairs` and the report, and the wall-clock
