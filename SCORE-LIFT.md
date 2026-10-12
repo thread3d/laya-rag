@@ -2282,6 +2282,14 @@ programme at least a round.
 - **Never let a wrapper filter a long run's output.** A sweep launched as `... | grep main_score`
   discarded the progress lines, so a working run looked exactly like a hang — the failure mode this
   programme spent four rounds on, self-inflicted.
+- **A flag that is parsed and never read is a knob that silently does nothing, and there are five of
+  them in `tools/` today.** `tests/test_tools_flags_are_used.py` fails on any *new* one and names the
+  existing five (`generation_eval.py --list`, `generator_free_iteration.py --samples`,
+  `laya_finetune_probe.py --seed`, `multihop_diagnostics.py --bootstrap-samples`,
+  `multihop_hop2.py --rrf-k`) rather than exempting them. This is the class that cost four rounds here:
+  `tools/mteb_search.py --first-stage-only` printed a banner and set nothing, and by the time it was
+  found 18 recorded reports were their first stage's order wearing a reranker's name. **If you add a
+  flag, read it; the check is one commit away from telling you that you did not.**
 - **A subset report belongs in `eval/beir/subsets/`, and two authorities will tell you if it does
   not.** `tools/channel_coverage.py` and `tools/lexical_selector.py` both scan `eval/beir/*.json`
   and both read a report as *the member's*. A one-sub-forum CQADupStack row therefore claimed the
