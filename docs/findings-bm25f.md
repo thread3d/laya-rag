@@ -100,3 +100,34 @@ unknown fields rejected loudly; the empty index; `settings()` carrying the confi
 fields and weights reducing to BM25 over the concatenation; and differing weights **not** reducing
 to it (the equal-scores property above). Ten more on the harness row and the sweep's arithmetic are
 covered by the existing `tools/beir.py` tests. `make test`: **1,631 passed, 5 deselected**.
+
+## The on-disk BM25F, specified — because the capability gap is the only thing left in this task
+
+`OnDiskBM25` already exists for exactly this reason (its class docstring says BioASQ is unreachable
+in memory), so the question is not *whether* BM25F can go on disk but **how to compose it from what is
+already there**. It composes cleanly, and the non-obvious part is the IDF.
+
+**One on-disk index per field.** `OnDiskBM25(directory, k1, b, drop_stopwords, stem)` already stores
+what BM25F needs per field: term frequencies, per-document lengths, and `df` (`self._df`, in memory
+alongside `self.terms`). Build one per field — `fever.title.bm25`, `fever.body.bm25` — and let
+`--bm25f-b-title` / `--bm25f-b-body` and the field weights stay query-time parameters, so a weight
+sweep needs no rebuild. That is the same property that makes the in-memory sweep cheap.
+
+**The union-DF is the part that would otherwise be got wrong.** BM25F's IDF counts a term as present
+if it appears in **any** field, so the per-field `df` values cannot simply be used in place of one
+another — a title-only term must be rare (strong), and summing or averaging the field DFs would make
+it either common or arbitrary. The merged dictionary is `max(df_title, df_body)`-free and
+`Σ`-free: it is the **count of documents containing the term in at least one field**, which the two
+sorted term dictionaries can produce by a streaming merge. Both vocabularies are already in memory as
+`dict[str, int]`, so this is a dict merge of a few million entries on FEVER, not a new data structure.
+
+**Scoring** is then the documented formula, per query term: look the term up in each field index,
+compute `w_f · tf_f / (1 − b_f + b_f · len_f / avg_len_f)`, sum the fields, saturate once with `k1`,
+and multiply by the union-DF IDF — where `avg_len_f` is each field index's own mean length.
+
+**Why this is worth writing down rather than rediscovering**: the in-memory class has all of the
+formula and none of the spill; the on-disk one has all of the spill and a single field. The
+composition is a few dozen lines plus a merged `df`, and the two failure modes — per-field IDF, and
+rebuilding per weight — are both silent (they produce plausible numbers from the wrong formula). The
+validation is already in place: the two backends were built to produce *identical rankings*, so
+`BM25FIndex` and this can be compared on a small corpus the way `BM25Index` and `OnDiskBM25` were.

@@ -2431,7 +2431,7 @@ its own findings.**
 | **P3 / P11** | unstarted | week-scale research bets |
 | **P8 / P9** | unstarted | a published-settings control on 5.4M documents; a fresh out-of-domain corpus |
 | **§P12 run 3 / T8+T11** | blocked on a build | the own-domain set is a separate tool, and run 3 depends on it |
-| **on-disk `BM25F`** | unstarted | the FEVER branch of P2's falsifier needs an index that does not fit in memory |
+| **on-disk `BM25F`** | **specified, unstarted** | the FEVER branch of P2's falsifier needs an index that does not fit in memory. The design is recorded in `findings-bm25f.md`: one `OnDiskBM25` per field (fields become query-time weights, so a sweep needs no rebuild) plus a **union-DF merge**, which is the part that is silent when wrong — BM25F's IDF counts a term present in *any* field, so per-field DFs cannot be substituted for one another |
 | **P6b**, Touché-2020 in the fusion sweep | unstarted | bounded; Touché's corpus build was stopped once already |
 | **the `reranker` rows' re-takes beyond SciFact** | partial | SciFact's three are done with a control; the MultiHop pair is done full-protocol; nothing else names a reranker |
 
