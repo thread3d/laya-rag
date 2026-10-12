@@ -144,3 +144,28 @@ composition is a few dozen lines plus a merged `df`, and the two failure modes �
 rebuilding per weight — are both silent (they produce plausible numbers from the wrong formula). The
 validation is already in place: the two backends were built to produce *identical rankings*, so
 `BM25FIndex` and this can be compared on a small corpus the way `BM25Index` and `OnDiskBM25` were.
+
+### What the last piece can lean on, read off the class rather than guessed
+
+`OnDiskBM25` already exposes the whole of what BM25F needs per field, which is why the composition is
+small rather than a second index format:
+
+| what BM25F needs, per field | where it already is |
+| --- | --- |
+| `tf_f(t, d)` | `index._postings[index.offsets[term_id] : index.offsets[term_id + 1]]`, `(row, tf)` pairs |
+| `len_f(d)` | `index.lengths[row]`, an mmap'd array |
+| `avg_len_f` | `index.avg_len` (a scalar in the metadata) |
+| `df_f(t)` | `index._df[term_id]`, an in-memory array |
+| `term -> id` | `index.terms`, an in-memory dict |
+| stopping/stemming | `index.drop_stopwords` / `index.stem`, both in the metadata |
+
+So the build is `for field in fields: OnDiskBM25(dir / f"{field}.bm25").build(((doc_id, fields[field])
+for doc_id, fields in documents))` plus one pass of the union accumulator, and the scorer is: for each
+query term, look it up in each field's `terms`; slice that field's postings; accumulate
+`tf_f` and `len_f` per row; call `bm25f_term_score` once per (term, row) with the union IDF; sum over
+terms; sort. Nothing new is stored beyond the field indexes and the union dictionary.
+
+**Two things to check when it is written, because both are silent.** `OnDiskBM25._idf` must not be
+used for BM25F — it is the *per-field* document frequency, and BM25F's IDF is over the union, which is
+the whole point of the accumulator above. And a term absent from one field must still contribute that
+field's zero, not be skipped, or the field weighting changes meaning between queries.
