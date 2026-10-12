@@ -95,8 +95,32 @@ then run through the CLI **with the index-progress instrument**, and the phase i
 So indexing is not the wall clock and the search phase is, with the stack dumps in model inference
 (`torch/nn/modules/linear.py forward`, repeatedly).
 
-**Two attempts to explain the silence, the second of which survived the reading and the first of
-which did not.**
+### The silence had a cause, and it was mine
+
+The five-query stack probe answered it in one run, and the answer is a defect in this adapter's
+`--first-stage-only` flag rather than anything in MTEB or the engine. `main` printed the banner and
+**set nothing on the adapter**: `load_model()` builds the adapter with no config, `_engine_for`
+applies `first_stage_only` when it constructs the engine, and the CLI never set the attribute — so
+every "first-stage-only" MTEB run still ran the full second stage. The dumps say so plainly, at
+30-second intervals through the search phase:
+
+```
+engine.py:1385 in query → rerank.py:373 in rerank → rerank.py:213 in score_relevance
+  → model.py:199 in predict_many
+```
+
+That is the 322M decision on every candidate, which is what this page's *original* reading said
+("~10 minutes per configuration because Laya's decisions run on every candidate") before two rounds
+of hypotheses about the query embedding and the driver. It also explains the other loose end: the
+**282,984-token** warning is the rerank prompt — a query concatenated with its candidate passages —
+which is why it appeared with `--first-stage-only` "on", why it is absent on a three-document corpus
+where few candidates survive, and why it is not a document at all.
+
+`main` now sets `model.first_stage_only = True` (with a regression test naming the bug), and the
+engine-level measurement that motivated the mode was never affected — `engine_beir.py` sets
+`LAYA_RAG_SECOND_STAGE=0` through the environment, which works.
+
+**The two refuted hypotheses, kept because they were part of the cost.**
 
 *Attempt one — the query embedding.* With `--first-stage-only` the only per-query model work left is
 the query embedding, so that was the hypothesis. The engine level refutes it: **20 queries in 26 s

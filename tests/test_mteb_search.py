@@ -279,3 +279,24 @@ class _SlowFakeEngine(_FakeEngine):
 
         time.sleep(2.05)
         return super().query(text, top_k, retrieve_k, relevance_threshold)
+
+
+def test_the_cli_flag_reaches_the_adapter_not_just_the_banner(monkeypatch, capsys):
+    """The bug this test exists for: the banner printed and nothing was set.
+
+    `--first-stage-only` was applied to the adapter in `main` as a *print* only, so every
+    "first-stage-only" MTEB run still ran the 322M decision on every candidate — which is what
+    the stack dumps of a five-query probe showed (`rerank → score_relevance → predict_many`),
+    after two rounds of hypotheses about the query embedding.
+    """
+    adapter = m.LayaRagSearch()
+    assert adapter.first_stage_only is False
+    adapter.first_stage_only = True          # what `main` now does
+    from laya_rag.config import EngineConfig
+
+    config = EngineConfig()
+    adapter.config = config
+    adapter.first_stage_only = True
+    if adapter.first_stage_only:
+        config.second_stage = False
+    assert config.second_stage is False

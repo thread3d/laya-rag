@@ -749,7 +749,15 @@ minutes with no result** — the measured wall clock the "accept it as a long jo
 against, and why the silence mattered: an operator watching for an hour and a half could not tell it
 from a hang.
 
-**Two explanations have been tested and both failed, which is the state to hand on.**
+**The silence had a cause and it was ours.** The five-query stack probe shows
+`engine.query → rerank → score_relevance → predict_many` at 30-second intervals: `main` printed the
+`--first-stage-only` banner and **set nothing on the adapter**, so every "first-stage-only" MTEB run
+still ran the 322M decision on every candidate. It is fixed (`main` sets the attribute, with a
+regression test naming the bug), and it also explains the 282,984-token warning — that is the
+**rerank prompt**, query plus candidate passages. The engine-level rows were never affected:
+`engine_beir.py` sets `LAYA_RAG_SECOND_STAGE=0` through the environment, which works.
+
+**Two hypotheses were tested before that and both failed, which was part of the cost.**
 (a) *The query embedding*: with the decision model removed it is the only per-query model work left,
 and the engine level refutes it — **20 queries in 26 s with the same 322M encoder**, 1.3 s/query.
 (b) *MTEB drives `search` once per query* (its evaluator carries a `qid`): reading

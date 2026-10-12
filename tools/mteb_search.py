@@ -409,6 +409,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     meta = build_model_meta()
     model = meta.load_model()
     if args.first_stage_only:
+        # The flag has to reach the *adapter*, not just the banner. `load_model()` builds it with
+        # no config, so `_engine_for` applies `first_stage_only` when it constructs the engine —
+        # and the first version of this printed the banner and set nothing, which meant every
+        # "first-stage-only" MTEB run still paid the 322M decision on every candidate. It was
+        # found by dumping stacks during a five-query probe: `engine.query → rerank →
+        # score_relevance → predict_many`, i.e. the second stage, exactly as the round-5 reading
+        # had said before two rounds of hypotheses about the query embedding.
+        model.first_stage_only = True
         print(
             "mteb_search: first-stage-only — the ranking is the engine's fusion, with no "
             "relevance decision in the path. Quote this configuration with the row.",
