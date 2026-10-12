@@ -741,9 +741,11 @@ takes the decision model out of the *search* phase — the engine-level measurem
 300 queries against ~10 minutes, in `docs/findings-second-stage.md`. Re-run end to end on SciFact
 with the index instrument, the phases separate cleanly: **index 5,981 chunks in 178 s**, and then
 **fewer than 25 of ~300 queries in 13+ minutes** — ≥31 s/query, a multi-hour task. So indexing is not
-the wall clock; the search phase is, the stack dumps put it in model inference, and with the decision
-model removed the only per-query model work left is the **query embedding**. That is the next thing
-to instrument, not the harness. The adapter now reports
+the wall clock; the search phase is, and the stack dumps put it in model inference. **The obvious explanation is
+measured false**: with the decision model removed the only per-query model work left is the query
+embedding, and the engine level answers 20 queries in **26 s with the same 322M adapted encoder** —
+1.3 s/query, not 31. So the next step is what `mteb.evaluate` does *between* the index call and the
+first `search` call, not the engine. The adapter now reports
 the **index** phase too (stage, documents, chunks, embedded, and a done line) and takes
 `--stack-dump-every N` for `faulthandler`, which is the instrument that corrected this section in
 the first place. One observation is recorded and not resolved: a **282,984-token** sequence, once, at

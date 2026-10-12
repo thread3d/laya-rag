@@ -92,12 +92,19 @@ then run through the CLI **with the index-progress instrument**, and the phase i
 | index (read + chunk + embed) | **5,981 chunks in 178 s** |
 | search | **fewer than 25 of ~300 queries scored in 13+ minutes** — ≥31 s/query, so the task is a **multi-hour** run |
 
-So indexing is not the wall clock, the search phase is, and the stack dumps put it in model
-inference (`torch/nn/modules/linear.py forward`, repeatedly). With `--first-stage-only` the only
-model work left per query is the **query embedding** — which is where tens of seconds per query has
-to be coming from, and which is the next thing to instrument rather than the harness. **No MTEB
-score exists and nothing is uploaded.** The run was stopped rather than left to occupy a shared host
-for hours.
+So indexing is not the wall clock and the search phase is, with the stack dumps in model inference
+(`torch/nn/modules/linear.py forward`, repeatedly).
+
+**The obvious explanation is measured false.** With `--first-stage-only` the only model work left per
+query is the query embedding, so that was the hypothesis — and the engine level refutes it: **20
+queries in 26 s with the same 322M adapted encoder** (1.3 s/query), first stage only. So ~31 s/query
+is not what a query costs here, and the MTEB search phase's silence is **not** explained by the query
+embedding. The next step is what `mteb.evaluate` does *between* the index call and the first `search`
+call — the dumps exist to answer exactly that, and the earlier reading of them (`search` on the
+stack) was taken from a run whose phase was never actually established.
+
+**No MTEB score exists and nothing is uploaded.** The run was stopped rather than left to occupy a
+shared host for hours.
 
 ### An unresolved observation, narrowed
 
