@@ -2568,7 +2568,18 @@ that way, with the two rows that do read 0.47 named so the next reader does not 
 row's *conclusion* (`auto` keeps recall order unless a scorer is supplied) may still be right; its
 *evidence* is a number that means something else.
 
-**The re-takes beyond SciFact.****The re-takes beyond SciFact.** The other twelve reports that configured a reranker and a coverage λ
+**Which README rows the defect touches, and which it does not, because over-suspending has a cost.**
+Three rounds of flags risked the opposite of the problem they fixed — a reader who finds every reranking
+row marked "suspended" stops trusting the sound ones. So the scope is stated rather than implied:
+
+| README row | affected? | why |
+| --- | --- | --- |
+| `RERANK_COVERAGE_LAMBDA`, `RERANK_COVERAGE_MIN_DOCS` | **yes** | both are differences *in ordering*, and the ordering was re-sorted by the first-stage score afterwards |
+| `RERANK_THRESHOLD` (+0.0801 MAP@10) | **no** | a threshold **filters** — `above` is built from the cross-encoder's scores *before* anything is ordered, and the defect only re-sorted after that point |
+| `RERANK_ORDER`'s second figure | **not a reranking number at all** | the 0.470 is a dense retriever's 0.4711, as the search above shows |
+| everything else (BM25F, selector, fusion, extractive, MTEB) | **no** | no cross-encoder was configured, so the branch never ran |
+
+**The re-takes beyond SciFact.** The other twelve reports that configured a reranker and a coverage λ
 above zero (`eval/benchmarks/multihop-rag/rerank-*.json`) are the evidence §P4's premise rested on, and
 they were taken before the ordering fix. Re-taking the full-protocol ones is the way to find out whether
 "a pointwise cross-encoder loses" was ever measured.
