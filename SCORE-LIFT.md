@@ -611,8 +611,28 @@ what a cross-encoder does — better at the top of the ranking, slightly worse a
 first time a reranker has moved a number in this repository, and it is a 0.02–0.04 move from a line
 that sorted when it should have preserved.
 
-The `v2-m3` arm is running, and **its comparison is P4's actual question** — which the section above
-can now finally ask. That is incompatible with the P4 runs having
+**And the comparison is P4's answer.** Same 200-query sample, one protocol, the fix in place:
+
+| `--rerank-model` | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| `BAAI/bge-reranker-base` (184M, 2023 — the recorded baseline) | 0.8950 | 0.7700 | 0.3384 | 0.6362 |
+| **`BAAI/bge-reranker-v2-m3`** (568M, 2024) | **0.9350** | **0.8200** | **0.3721** | **0.7023** |
+| *recorded "best measured" before the fix* | 0.9200 | 0.7300 | 0.3189 | 0.6142 |
+
+**`bge-reranker-v2-m3` wins on every metric** — MAP@10 **+0.0337** over the same-sample base and
+**+0.0532** over the recorded best — and it is a drop-in with zero code change, which is what this
+section predicted when it listed it. Hits@4 **+0.0500**, MRR@10 **+0.0661**.
+
+**It does not close the gap.** The published bar is **0.480** MAP@10 and this reads **0.3721**, so the
+honest summary is: *a modern 568M reranker recovers ~0.05 of the 0.16 that separates this engine from
+the published number, on a 200-query subset.* That also makes the remaining ~0.11 the interesting
+quantity — it is not "the reranker is old", which is now measured rather than assumed.
+
+Two caveats that travel with the number: it is a **200-query seeded subset**, not the 2,255-query
+full protocol, so it is a rate-and-direction measurement rather than the record; and **arm 2**
+(`Qwen3-Reranker-0.6B`, listwise) is unstarted, so "is a listwise ranker better than a pointwise
+one?" — the question this section actually asks — is still open. The full-set re-take is the obvious
+next run, and it is the one that would replace the recorded 0.319. That is incompatible with the P4 runs having
 produced numbers at all: a `query` that reached `score_pairs` would have raised. So the two arms'
 identical rankings most likely mean **the cross-encoder never scored anything in either arm** —
 the failure was absorbed somewhere between `score_pairs` and the report, and the wall-clock
@@ -2136,8 +2156,9 @@ is not refuted — it does not fit this host's budget, which is a stated reason 
 **Not started, and why.** **P1** is days of embedding (the eight lexical-only members are 2.7M–14.9M
 documents each). **P3/P11** are week-scale research bets. **P8/P9** need a published-settings control
 on 5.4M documents and a fresh out-of-domain corpus respectively. **T8/T11** are a separate build, and
-§P12's run 3 depends on them. **P6b**, **P4** and Touché-2020 in the fusion sweep are bounded and
-unstarted.
+§P12's run 3 depends on them. **P4** is now measured on a subset — `bge-reranker-v2-m3` at **MAP@10 0.3721** against the recorded
+0.319 and a published 0.480 — with the full-set re-take and the listwise arm still to run.
+**P6b** and Touché-2020 in the fusion sweep are bounded and unstarted.
 
 ### 10.6 The decision this document cannot make for you
 
