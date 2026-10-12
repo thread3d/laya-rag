@@ -2053,6 +2053,11 @@ programme at least a round.
   the source of the process problem above.
 - **A long run's report must survive a kill.** `tools/beir.py` writes its JSON **after every
   dataset** for this reason. Anything that only writes at the end should be distrusted at this scale.
+- **Where a tool offers sharding, use it for anything over an hour.** `tools/engine_multihop.py` has
+  `--shard i/n` and `--merge N` precisely because a 2,255-query cross-encoder pass reports *"2255 of
+  2255 queries to score (0 checkpointed)"* — a kill costs the whole pass, and on this host runs are
+  killed routinely (five times this session, for lock contention and for being wrong about what they
+  measured).
 - **Contention masquerades as pathology.** Slow is not stuck. Before diagnosing a run, check what
   else is resident — several rounds here were spent on a "stall" that was a contended host.
 - **State what a number is not.** Claims of *absence* ("no score exists") and of *level* (an MTEB
