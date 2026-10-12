@@ -596,7 +596,23 @@ test had encoded the buggy behaviour.
 
 **What this means for every recorded reranker row**: they were taken with a configured cross-encoder,
 a coverage λ of 0.7 auto, and this sort — so their order was the fused order and the reranker's
-contribution was zero. They need re-taking, and §P4's arms can now be run for real. That is incompatible with the P4 runs having
+contribution was zero. They need re-taking, and §P4's arms can now be run for real.
+
+**And the re-take confirms the fix immediately.** The same 200-query sample, same
+`--rerank-model BAAI/bge-reranker-base`, before and after the one line:
+
+| | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| before the fix (fused order) | 0.9200 | 0.7300 | 0.3189 | 0.6142 |
+| **after the fix** | 0.8950 | **0.7700** | **0.3384** | **0.6362** |
+
+**MAP@10 +0.0195 and Hits@4 +0.0400**, at the cost of Hits@10 (−0.0250): a cross-encoder is doing
+what a cross-encoder does — better at the top of the ranking, slightly worse at breadth. That is the
+first time a reranker has moved a number in this repository, and it is a 0.02–0.04 move from a line
+that sorted when it should have preserved.
+
+The `v2-m3` arm is running, and **its comparison is P4's actual question** — which the section above
+can now finally ask. That is incompatible with the P4 runs having
 produced numbers at all: a `query` that reached `score_pairs` would have raised. So the two arms'
 identical rankings most likely mean **the cross-encoder never scored anything in either arm** —
 the failure was absorbed somewhere between `score_pairs` and the report, and the wall-clock
