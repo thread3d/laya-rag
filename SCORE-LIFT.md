@@ -2250,6 +2250,25 @@ passage count on a 528,155-document corpus on top of the whole-document index ev
 is not refuted — it does not fit this host's budget, which is a stated reason rather than a result
 (`findings-passages-long.md`).
 
+**P4 is measured, and it produced a defect as well as a result.** The task was one flag — a modern
+drop-in reranker — and it opened with two different rerankers producing **byte-identical** rankings.
+The cause was one line: `rerank(order="recall")` **sorted by `recall_score`**, which re-derived the
+pre-permutation order and discarded every coverage decision, so a configured cross-encoder could not
+affect the result and **18 recorded reports were their first stage's order wearing a reranker's
+name**. Fixed to preserve the order it is handed (3 tests; a λ=0 control reproduces its recorded
+number exactly, 0.7091). What the re-takes then measured, in both directions:
+
+| | recorded | re-taken | Δ |
+| --- | ---: | ---: | ---: |
+| MultiHop-RAG MAP@10, `bge-reranker-v2-m3`, **full 2,255 queries** | 0.3190 | **0.3702** | **+0.0512** |
+| SciFact nDCG@10, `ms-marco-MiniLM`, λ auto (×2 configs) | 0.7274 / 0.7417 | 0.6762 / 0.6422 | −0.0512 / −0.0995 |
+
+So the same defect was hiding a **helpful** reranker on MultiHop (+0.0512 MAP@10, Hits@4 +0.0785,
+MRR@10 +0.1043, against a published 0.480 that remains ~0.11 away) and a **harmful** one on SciFact
+(where the engine's real number is the fused 0.7417, not any CE ordering). Neither direction was
+knowable while the order could not change. The base arm at full protocol and the listwise arm are
+the two runs still outstanding.
+
 **Not started, and why.** **P1** is days of embedding (the eight lexical-only members are 2.7M–14.9M
 documents each). **P3/P11** are week-scale research bets. **P8/P9** need a published-settings control
 on 5.4M documents and a fresh out-of-domain corpus respectively. **T8/T11** are a separate build, and
