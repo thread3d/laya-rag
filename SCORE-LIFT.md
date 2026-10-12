@@ -749,12 +749,16 @@ minutes with no result** — the measured wall clock the "accept it as a long jo
 against, and why the silence mattered: an operator watching for an hour and a half could not tell it
 from a hang.
 
-**The search instrument was blind to how MTEB drives it.** `retrieval_evaluator.py` calls `index`
-then `search` with nothing in between, so the silence was inside `search` — but the progress line
-fires every 25 queries and MTEB's evaluator carries a **`qid`**, i.e. it may drive `search` **once
-per query**, in which case a one-query call never prints. The adapter now also reports a short call
-that took real time (≥2 s), which is how a working run came to look hung. Re-running with that is the
-next step.
+**Two explanations have been tested and both failed, which is the state to hand on.**
+(a) *The query embedding*: with the decision model removed it is the only per-query model work left,
+and the engine level refutes it — **20 queries in 26 s with the same 322M encoder**, 1.3 s/query.
+(b) *MTEB drives `search` once per query* (its evaluator carries a `qid`): reading
+`abstasks/retrieval.py` refutes it — one evaluator per subset, whole query collection, **one**
+`search` call. So `search` is called once over ~300 queries, fewer than 25 of which scored in 13+
+minutes, while the engine answers at 1.3 s each; the remaining differences (`retrieve_k = 100`, the
+adapter's own loop) do not look like a 20× factor. **The next step needs no guess**:
+`--limit-queries 5 --stack-dump-every 30` against the 178-second index names the frame in 30-second
+intervals.
 
 **Where it stands after the second-stage mode landed, with the phase named.** `--first-stage-only`
 takes the decision model out of the *search* phase — the engine-level measurement of that is 37 s for

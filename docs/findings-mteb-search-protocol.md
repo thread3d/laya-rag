@@ -95,15 +95,31 @@ then run through the CLI **with the index-progress instrument**, and the phase i
 So indexing is not the wall clock and the search phase is, with the stack dumps in model inference
 (`torch/nn/modules/linear.py forward`, repeatedly).
 
-**A second instrument, then, because the first was blind to how MTEB drives `search`.**
-`retrieval_evaluator.py` calls `search_model.index(...)` and then `search_model.search(...)` with
-**nothing in between** — so the silence had to be inside `search`. But `progress_line` fires every 25
-queries, and MTEB's evaluator carries a **`qid`**, which means it may drive `search` **once per
-query** rather than once per query set: a one-query call never reaches the 25th and prints nothing,
-which is precisely how a working run looked hung for three rounds of this. The adapter now also
-reports a **short call that took real time** (≥2 s), so a per-query driver produces one line per slow
-query instead of a flood for fast ones. That is the fix for the blindness; the run that would
-confirm the per-query reading has not been repeated.
+**Two attempts to explain the silence, the second of which survived the reading and the first of
+which did not.**
+
+*Attempt one — the query embedding.* With `--first-stage-only` the only per-query model work left is
+the query embedding, so that was the hypothesis. The engine level refutes it: **20 queries in 26 s
+with the same 322M adapted encoder**, 1.3 s/query, first stage only.
+
+*Attempt two — MTEB drives `search` once per query.* `RetrievalEvaluator` carries a **`qid`**, which
+made this look likely, and it would explain everything: a one-query call never reaches the 25th and
+prints nothing. **Reading the driver refutes it.** `mteb/abstasks/retrieval.py:_evaluate_subset`
+builds **one** `RetrievalEvaluator` per subset, passing the whole `queries` collection, and calls it
+**once** — so `search` is called once with every query, `qid` is not used to split the call, and the
+progress line at 25 *should* have fired within a minute of indexing finishing. The adapter still
+gained the short-call report, because the instrument should not depend on that reading being right —
+but it is not the explanation.
+
+**What that leaves.** `search` is called once over ~300 queries, fewer than 25 of which were scored in
+13+ minutes, and the engine answers the same corpus's queries at 1.3 s each. The remaining
+differences between the two runs are small and enumerable: the adapter asks for `retrieve_k = 100`
+(MTEB's `top_k` is 100, and it widens the pool to match) where the engine-level timing run used the
+default, and the adapter's own loop does the path→id mapping per passage. Neither looks like a 20×
+factor, which is the honest state of this: **the two measurements disagree and nothing yet explains
+by how much.** The next run is cheap and does not need a guess — `--limit-queries 5
+--stack-dump-every 30`, against the 178-second index, dumps the stack of every thread at 30-second
+intervals while five queries are scored, which is enough to name the frame.
 
 **The obvious explanation is measured false.** With `--first-stage-only` the only model work left per
 query is the query embedding, so that was the hypothesis — and the engine level refutes it: **20
