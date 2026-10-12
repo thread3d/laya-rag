@@ -2439,6 +2439,15 @@ that exists: the diagnostics report for `claim-check`'s 65, 590 scanned reports 
 the documents themselves for the rest. A reader told "all gates are green" deserves to know which of
 them merely had no work.
 
+**And "vacuous" is not "suspect" — that verifier is tested, including the case that matters.**
+`tests/test_audit.py` builds a log through `AuditLog`, verifies it (exit 0), then **overwrites it with a
+tampered record and asserts exit 1**; separately it tests that editing, removing and reordering records
+each break the chain, and that a missing log is skipped rather than failed. So `audit-verify` is *idle on
+this checkout*, not broken — which is a different thing from the leakage audit, whose rule was not
+running at all when it was finally looked at. The distinction is worth the sentence: the first kind
+means "run the engine with `LAYA_RAG_AUDIT_LOG` and this gate has work to do", the second meant "this
+safety net has had a hole for months".
+
 **The verification ledger, so the next session does not re-do it.** Eight classes of claim in this
 repository have been checked, each by the method named. Six are automated; the two that are not have
 their reasons written down, because *a checker that guesses intent is worse than no checker*:
