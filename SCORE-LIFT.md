@@ -863,8 +863,28 @@ meaning and the two kinds of reranker are comparable at the same cut), and `buil
 picks the class the configuration names — next to `build_embedder`, because an engine that chose for
 itself could point `RERANK_MODEL` at a generative model and silently load a head that does not exist.
 Six tests cover the prompt, the probability (including the extremes a 0.6B model emits) and the
-choice; **the run itself waits for the heavy lock**, and its question is whether a listwise ranker
-beats the pointwise ceiling now measured at **0.3702** full-protocol. The full-set re-take is the obvious
+choice.
+
+**The path is validated with the real weights, and the validation turned up the trap the run would
+have hit.** `Qwen/Qwen3-Reranker-0.6B` is now fetched into the writable `eval/hf-rerank` (the shared
+`~/.cache/huggingface` is not writable here — the lesson the SciFact re-take already paid for), and
+scoring three pairs gives the right *ordering* and a scale that would quietly break the engine:
+
+| pair | `P("yes")` |
+| --- | ---: |
+| "Refunds are processed within five business days." (relevant) | **0.0505** |
+| "Returns require a receipt within thirty days." (partly) | 0.0023 |
+| "Shipping is free on orders over fifty dollars." (irrelevant) | 0.0000 |
+
+The ordering is correct and the level is **two orders of magnitude below a cross-encoder's**. The
+engine's `RELEVANCE_THRESHOLD` defaults to **0.3**, so a run at the default would find *nothing*
+above the threshold and return an empty result set for every query — a reranker that looks like it
+destroyed retrieval. It has not: the model answers a different question in a different scale, and the
+threshold has to be set for it (or the score calibrated). That belongs in the run's configuration, not
+in a post-mortem, which is why it is written here before the run exists.
+
+**The run itself waits for the heavy lock**, and its question is whether a listwise ranker beats the
+pointwise ceiling now measured at **0.3702** full-protocol. The full-set re-take is the obvious
 next run, and it is the one that would replace the recorded 0.319 — **it is running now**
 (`--out eval/benchmarks/multihop-rag/engine-p4-full`, `--rerank-model BAAI/bge-reranker-v2-m3`, the
 full 2,255 queries, under the heavy lock). That is incompatible with the P4 runs having
