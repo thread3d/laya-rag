@@ -819,8 +819,7 @@ the **index** phase too (stage, documents, chunks, embedded, and a done line) an
 `--stack-dump-every N` for `faulthandler`, which is the instrument that corrected this section in
 the first place. One observation is recorded and not resolved: a **282,984-token** sequence, once, at
 the start of indexing — not a document (the longest `title + text` is 10,126 characters), not a
-query (204), and present in first-stage-only mode so not the reranker. **No MTEB score exists and
-nothing is uploaded.**
+query (204), and present in first-stage-only mode so not the reranker. **Two local MTEB scores now exist** — 0.37 and 0.69, below — and **nothing is uploaded**.
 
 **Cost.** (a) is a project, not a submission: corpus acquisition plus the scale work. (b) needs one
 of three things, in order of principle: an **engine first-stage-only mode** (the engine has none —

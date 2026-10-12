@@ -170,8 +170,9 @@ embedding. The next step is what `mteb.evaluate` does *between* the index call a
 call — the dumps exist to answer exactly that, and the earlier reading of them (`search` on the
 stack) was taken from a run whose phase was never actually established.
 
-**No MTEB score exists and nothing is uploaded.** The run was stopped rather than left to occupy a
-shared host for hours.
+That run was stopped rather than left to occupy a shared host for hours — and the flag it was
+testing turned out not to work, so it was measuring the second stage it meant to remove. The scores
+below come from the runs that followed.
 
 ### An unresolved observation, narrowed
 
@@ -210,8 +211,8 @@ path. Three ways forward, in order of principle:
 3. **Lower `retrieve_k`**, which changes what the benchmark measures — MTEB asks for a 100-deep
    ranking, and a system that ranks 100 must score 100 — so this is the option to take last.
 
-No MTEB score exists, and there is still no upload. What exists is the adapter, its conformance
-tests, the diagnosis above, and a run that can be watched while it works.
+**Two local MTEB scores now exist** (below) and **nothing is uploaded**. What else exists is the
+adapter, its conformance tests, the diagnosis above, and a run that can be watched while it works.
 
 ## The first score under an external protocol
 
@@ -264,9 +265,9 @@ the encoder explicitly, which the CLI now enforces.
 
 ## What this does not show
 
-- **No MTEB score exists** for the engine yet. The adapter is representable and verified and the
-  evaluation is reachable; a number is not claimed, and a `--limit-queries` pass is a subset that
-  must never be quoted as one.
+- **One task, two encoders, no upload.** SciFact is the only MTEB task run; the other retrieval
+  tasks, the leaderboard submission and the multilingual ones are not. A `--limit-queries` pass is a
+  subset and must never be quoted as a score.
 - **`top_ranked` filtering is best-effort.** For reranking tasks the adapter runs the query and
   filters to the supplied candidate ids; a candidate outside the engine's own pool is omitted
   rather than pair-scored, because the engine has no pair-scoring path. Retrieval tasks, which pass
