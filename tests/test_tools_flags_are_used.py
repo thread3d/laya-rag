@@ -11,12 +11,11 @@ Five genuine instances exist today and are **named rather than exempted** — th
 
     tools/generation_eval.py         --list
     tools/generator_free_iteration.py --samples
-    tools/laya_finetune_probe.py     --seed
-    tools/multihop_diagnostics.py    --bootstrap-samples
 
-(`tools/multihop_hop2.py --rrf-k` was the fifth; it was **removed** rather than listed, because that
-tool never fuses — it mines rare terms and issues extra BM25 probes, so the flag named a mechanism it
-does not use. Removal is the fix when there is nothing to wire.)
+Three of the original five are no longer here, each by the route that fitted it: `multihop_hop2.py
+--rrf-k` and `laya_finetune_probe.py --seed` **named mechanisms their tools do not have** (no fusion, no
+randomness) and were removed; `multihop_diagnostics.py --bootstrap-samples` **could act** and is now
+wired into `_mean_ci`, whose own default matches the flag's so nothing changes unless it is set.
 """
 from __future__ import annotations
 
@@ -35,8 +34,6 @@ sys.path.insert(0, str(ROOT))
 KNOWN_INERT = {
     ("generation_eval.py", "--list"),
     ("generator_free_iteration.py", "--samples"),
-    ("laya_finetune_probe.py", "--seed"),
-    ("multihop_diagnostics.py", "--bootstrap-samples"),
 }
 
 

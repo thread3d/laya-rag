@@ -49,7 +49,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--query-len", type=int, default=192)
     ap.add_argument("--doc-len", type=int, default=256)
     ap.add_argument("--steps", type=int, default=3, help="warm steps to average")
-    ap.add_argument("--seed", type=int, default=17)
     ap.add_argument("--skip-roundtrip", action="store_true")
     ap.add_argument("--out", default=None, help="optional JSON output path")
     return ap.parse_args(argv)

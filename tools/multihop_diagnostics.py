@@ -205,8 +205,16 @@ def hop_grounding_gap(matches, overlap) -> float:
 
 # ── report helpers ───────────────────────────────────────────────────────
 
-def _mean_ci(values: list[float], samples: int = 10_000, seed: int = 20210617):
+#: Set from `--bootstrap-samples` in `main`. It is a module value rather than a parameter because
+#: `_mean_ci` is called from a summary helper with no access to the parsed arguments — and the flag's
+#: default equals this one on purpose, so wiring it changes nothing unless a caller sets it.
+_BOOTSTRAP_SAMPLES = 10_000
+
+
+def _mean_ci(values: list[float], samples: int | None = None, seed: int = 20210617):
     """Query-level bootstrap mean interval (pairs with the repo's existing machinery)."""
+    if samples is None:
+        samples = _BOOTSTRAP_SAMPLES
     import numpy as np
 
     if not values:
@@ -353,6 +361,8 @@ def _build_report(rows: dict) -> dict:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    global _BOOTSTRAP_SAMPLES
+    _BOOTSTRAP_SAMPLES = args.bootstrap_samples
     from heavylock import heavy_job_guard
 
     heavy_job_guard("multihop_diagnostics.py")

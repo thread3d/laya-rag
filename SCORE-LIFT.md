@@ -2282,13 +2282,14 @@ programme at least a round.
 - **Never let a wrapper filter a long run's output.** A sweep launched as `... | grep main_score`
   discarded the progress lines, so a working run looked exactly like a hang — the failure mode this
   programme spent four rounds on, self-inflicted.
-- **A flag that is parsed and never read is a knob that silently does nothing, and four of them
-  remain in `tools/` today.** `tests/test_tools_flags_are_used.py` fails on any *new* one and names the
-  existing four (`generation_eval.py --list`, `generator_free_iteration.py --samples`,
-  `laya_finetune_probe.py --seed`, `multihop_diagnostics.py --bootstrap-samples`) rather than exempting
-  them. **The fifth was removed rather than listed**: `multihop_hop2.py --rrf-k` named a fusion the tool
-  does not perform — it mines rare terms and issues extra BM25 probes — so there was nothing to wire.
-  *When a flag cannot act, deleting it is the fix; when it can, wiring it is.* This is the class that cost four rounds here:
+- **A flag that is parsed and never read is a knob that silently does nothing, and two remain in
+  `tools/` today.** `tests/test_tools_flags_are_used.py` fails on any *new* one and names the existing
+  two (`generation_eval.py --list`, `generator_free_iteration.py --samples`) rather than exempting them.
+  Three of the original five are already resolved, each by the route that fitted it:
+  `multihop_hop2.py --rrf-k` and `laya_finetune_probe.py --seed` named mechanisms their tools do not
+  have (no fusion; no randomness) and were **removed**, while `multihop_diagnostics.py
+  --bootstrap-samples` **could act** and is now wired into `_mean_ci`. *When a flag cannot act, deleting
+  it is the fix; when it can, wiring it is.* This is the class that cost four rounds here:
   `tools/mteb_search.py --first-stage-only` printed a banner and set nothing, and by the time it was
   found 18 recorded reports were their first stage's order wearing a reranker's name. **If you add a
   flag, read it; the check is one commit away from telling you that you did not.**
