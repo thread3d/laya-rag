@@ -281,6 +281,15 @@ re-run.** `BAAI/bge-small-en-v1.5` under MTEB: SciFact 0.71271, NFCorpus 0.34339
 matching engine runs were still going, so the pairs are half-complete and nothing is claimed from
 them here. FiQA2018 is unstarted.
 
+**And an operational one that explains several of those stalls: killed *wrappers* leave their
+children.** Repeatedly launching a run and killing the shell job (`job_kill`) left the Python process
+alive every time — the same way a `beir.py` run survived its wrapper earlier in this programme — and
+MTEB contributes helpers of its own, so by the end **67 `mteb_search.py` processes were resident** on
+a shared host. That is not only a hygiene problem: contended runs are slower, which *looks* exactly
+like the pathology this page spent four rounds chasing, so the runaway actively obscured the
+diagnosis it was part of. The cleanup that works is `pkill -9 -f mteb_search.py`, and the lesson is
+that a background job's shell wrapper is not the job.
+
 **A scripting lesson, recorded because it cost a round.** The three-pair sweep was launched with
 `| grep -E "main_score|Error"`, which filtered out the adapter's own progress lines — so a run that
 was working looked exactly like the four-round stall this page is about, for the fourth time, and
