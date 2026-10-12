@@ -877,7 +877,7 @@ scoring three pairs gives the right *ordering* and a scale that would quietly br
 | "Shipping is free on orders over fifty dollars." (irrelevant) | 0.0000 |
 
 The ordering is correct and the level is **two orders of magnitude below a cross-encoder's**. The
-engine's `RELEVANCE_THRESHOLD` defaults to **0.3**, so a run at the default would find *nothing*
+engine's `RELEVANCE_THRESHOLD` defaults to **0.5** (`_env_float("RELEVANCE_THRESHOLD", 0.5)`), so a run at the default would find *nothing*
 above the threshold and return an empty result set for every query — a reranker that looks like it
 destroyed retrieval. It has not: the model answers a different question in a different scale, and the
 threshold has to be set for it (or the score calibrated). That belongs in the run's configuration, not
