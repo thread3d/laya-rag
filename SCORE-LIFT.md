@@ -136,12 +136,12 @@ of its hand-entered cells — see the note under §1.2.)
 | nfcorpus | 3,633 | 16 rows | full |
 | nq | 2,681,468 | bm25-engine, bm25-title | **lexical only** |
 | quora | 522,931 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
-| robust04 | 528,155 | biencoder, bm25, bm25-engine, bm25-title, hybrid-biencoder | adapted dense |
+| robust04 | 528,155 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | scidocs | 25,657 | 9 rows | full |
 | scifact | 5,183 | 17 rows | full |
 | signal1m | 2,866,316 | bm25, bm25-engine, bm25-title | **lexical only** |
 | trec-covid | 171,332 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
-| trec-news | 594,977 | biencoder, bm25, bm25-engine, bm25-title, hybrid-biencoder | adapted dense |
+| trec-news | 594,977 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | webis-touche2020 | 382,545 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 
 **lexical-only members (8 of 18):** bioasq, climate-fever, cqadupstack, dbpedia-entity, fever, hotpotqa, nq, signal1m
@@ -564,16 +564,34 @@ decomposition as a real, fixable failure mode.
 (SciFact, NFCorpus, TREC-COVID — the last of which is *shorter* than NFCorpus, so it never tested
 the hypothesis either).
 
-**Expected.** **+0.01 to +0.04** on two cells → up to **+0.004 macro**. Worth doing mainly because
-it converts a standing "untested" caveat into a result.
+**Measured, and the falsifier is met — passages lose on both, so the technique is closed at every
+document length.** `tools/beir.py --datasets robust04,trec-news --retrievers bm25-engine --passages
+600` (one index build each, 528k and 595k documents), nDCG@10:
 
-**Cost.** Days; both corpora are under 600k documents.
+| corpus | `bm25-engine` (whole documents) | `bm25-passages@600` | delta |
+| --- | ---: | ---: | ---: |
+| Robust04 | **0.4077** | 0.3522 | **−0.0555** |
+| TREC-NEWS | **0.3351** | 0.2456 | **−0.0895** |
 
-**Falsifier.** Passage retrieval loses on Robust04 and TREC-NEWS as well — then the technique is
-closed for this engine at every document length, which is a cleaner statement than the current
-caveat. Second falsifier: an adaptive passage budget (per-document p90 length rather than a fixed
-600 characters) plus aggregation beyond max-pool may be required, and that is a different
-experiment from the one already run.
+Every supporting metric agrees in sign and roughly in size (Robust04 MRR 0.6886 → 0.5908, MAP@100
+0.1986 → 0.1741, Recall@100 0.3821 → 0.3614; TREC-NEWS 0.7599 → 0.6323, 0.2214 → 0.1594, 0.4461 →
+0.3737). The expected direction was wrong, and the *size* of the loss grows with document length —
+which is the opposite of the hypothesis that long documents are where decomposition helps. The
+standing "untested, not disproven" caveat is now a result: **the engine's BM25 is better
+max-pooled over whole documents than over 600-character pieces at 466 and 635 words per document**,
+which closes the technique for this engine at every length it has been tested.
+
+**Expected (withdrawn).** +0.01 to +0.04 on two cells → up to +0.004 macro.
+
+**Cost.** ~35 minutes of lexical indexing, measured — both corpora are under 600k documents and
+neither needs embeddings.
+
+**Falsifier — met.** Passage retrieval loses on Robust04 **and** TREC-NEWS, so the technique is
+closed for this engine at every document length, which is a cleaner statement than the caveat it
+replaces. The second clause stands: an adaptive passage budget (per-document p90 length rather than
+a fixed 600 characters) plus aggregation beyond max-pool is a *different* experiment, unrun, and it
+is the only form in which this idea is still open — a fixed 600-character cut is now refuted at
+three document lengths (230 words, 466, 635).
 
 ---
 
