@@ -36,7 +36,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 import hashlib
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 import numpy as np
 
@@ -745,8 +745,28 @@ def _open_or_build_ondisk(
     print(f"  building the on-disk lexical index at {directory} ({len(corpus)} documents)",
           flush=True)
     index = OnDiskBM25(directory, k1=k1, b=b, drop_stopwords=drop_stopwords, stem=stem)
-    index.build(((doc_id, text) for doc_id, text in corpus.items()))
+    index.build(_with_progress(((doc_id, text) for doc_id, text in corpus.items()), len(corpus)))
     return index
+
+
+def _with_progress(documents: Iterable[tuple[str, str]], total: int,
+                   every: int = 250_000) -> Iterator[tuple[str, str]]:
+    """Count documents on their way into the on-disk build, so a long silent phase reports.
+
+    `OnDiskBM25.build` prints nothing between "building the on-disk lexical index" and the first
+    query, and at BioASQ's 14.9M documents that is the longest single wait in the harness. The first
+    2.7M-document run here sat silent long enough to look hung, which is the same failure this
+    adapter's MTEB side already paid four rounds for: **a phase that reports nothing is
+    indistinguishable from a phase that is stuck.** Wrapping the stream is enough — the build does
+    not need to know.
+    """
+    seen = 0
+    for document in documents:
+        yield document
+        seen += 1
+        if every and seen % every == 0:
+            share = f"{100 * seen / total:.0f}%" if total else "?"
+            print(f"    on-disk index: {seen}/{total} documents ({share})", flush=True)
 
 
 def bm25_rankings(
