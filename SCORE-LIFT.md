@@ -2283,14 +2283,24 @@ MRR@10 +0.1043, against a published 0.480 that remains ~0.11 away) and a **harmf
 knowable while the order could not change. The base arm at full protocol and the listwise arm are
 the two runs still outstanding.
 
-**Not started, and why.** **P1** is days of embedding (the eight lexical-only members are 2.7M–14.9M
-documents each). **P3/P11** are week-scale research bets. **P8/P9** need a published-settings control
-on 5.4M documents and a fresh out-of-domain corpus respectively. **T8/T11** are a separate build, and
-§P12's run 3 depends on them. **P4 is measured on the full protocol**: with the ordering defect fixed, `bge-reranker-v2-m3` reads
+**Not started, and why — the honest remainder, so a reader does not have to diff this page against
+its own findings.**
+
+| item | state | cost |
+| --- | --- | --- |
+| **P4 arm 2** — `Qwen3-Reranker-0.6B`, listwise | unstarted; needs the yes/no-logit path | a real code change, not a flag; it is the only open question in §P4 now that the pointwise ceiling is **0.3702** |
+| **P1** — the eight lexical-only cells | unstarted | **days** of embedding (2.7M–14.9M documents each); the only item that moves the BEIR-18 macro |
+| **P3 / P11** | unstarted | week-scale research bets |
+| **P8 / P9** | unstarted | a published-settings control on 5.4M documents; a fresh out-of-domain corpus |
+| **§P12 run 3 / T8+T11** | blocked on a build | the own-domain set is a separate tool, and run 3 depends on it |
+| **on-disk `BM25F`** | unstarted | the FEVER branch of P2's falsifier needs an index that does not fit in memory |
+| **P6b**, Touché-2020 in the fusion sweep | unstarted | bounded; Touché's corpus build was stopped once already |
+| **the `reranker` rows' re-takes beyond SciFact** | partial | SciFact's three are done with a control; the MultiHop pair is done full-protocol; nothing else names a reranker |
+
+**P4 is measured on the full protocol**: with the ordering defect fixed, `bge-reranker-v2-m3` reads
 **MAP@10 0.3702, Hits@4 0.8417, MRR@10 0.7026** over all 2,255 queries, against the recorded 0.3190 /
 0.7632 / 0.5983 — **+0.0512 / +0.0785 / +0.1043** on the system's worst published comparison, and
-still short of the published 0.480. The listwise arm is unstarted.
-**P6b** and Touché-2020 in the fusion sweep are bounded and unstarted.
+still short of the published 0.480.
 
 ### 10.6 The decision this document cannot make for you
 
