@@ -632,7 +632,9 @@ Two caveats that travel with the number: it is a **200-query seeded subset**, no
 full protocol, so it is a rate-and-direction measurement rather than the record; and **arm 2**
 (`Qwen3-Reranker-0.6B`, listwise) is unstarted, so "is a listwise ranker better than a pointwise
 one?" — the question this section actually asks — is still open. The full-set re-take is the obvious
-next run, and it is the one that would replace the recorded 0.319. That is incompatible with the P4 runs having
+next run, and it is the one that would replace the recorded 0.319 — **it is running now**
+(`--out eval/benchmarks/multihop-rag/engine-p4-full`, `--rerank-model BAAI/bge-reranker-v2-m3`, the
+full 2,255 queries, under the heavy lock). That is incompatible with the P4 runs having
 produced numbers at all: a `query` that reached `score_pairs` would have raised. So the two arms'
 identical rankings most likely mean **the cross-encoder never scored anything in either arm** —
 the failure was absorbed somewhere between `score_pairs` and the report, and the wall-clock
