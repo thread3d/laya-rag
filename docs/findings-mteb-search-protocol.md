@@ -281,6 +281,20 @@ re-run.** `BAAI/bge-small-en-v1.5` under MTEB: SciFact 0.71271, NFCorpus 0.34339
 matching engine runs were still going, so the pairs are half-complete and nothing is claimed from
 them here. FiQA2018 is unstarted.
 
+**The original "~33 workers" observation was real, and withdrawing it was over-confident.** This
+page's first version recorded MTEB forking ~33 worker processes and stalling, and round 5 withdrew
+that reading ("`_create_dataloaders` passes `num_workers=0` for `num_proc <= 1`, so no pool is
+involved") on the strength of a stack dump that showed computing. **Counting again mid-run gives
+101 `mteb_search.py` processes** — one launch, dozens of helpers — so the forking is a real,
+reproducible property of running MTEB on this host, whatever `num_proc` says about *DataLoader*
+workers, and it is why a run's indexing phase took 411 s here against 183 s when the host was quiet.
+
+What was wrong was only the *inference*: the helpers do not deadlock, the run was computing, and the
+90-minute wall clock had two contributors — MTEB's own helper processes contending, and the engine's
+inert `--first-stage-only` flag paying a 322M decision per candidate. Both are now known, and
+neither is the harness "failing". **The lesson is narrower than "the harness is fine": it forked what
+it said it forked; it just was not stuck.**
+
 **And an operational one that explains several of those stalls: killed *wrappers* leave their
 children.** Repeatedly launching a run and killing the shell job (`job_kill`) left the Python process
 alive every time — the same way a `beir.py` run survived its wrapper earlier in this programme — and
