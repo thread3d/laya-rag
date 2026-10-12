@@ -349,6 +349,17 @@ docs/s. The comparison will be against the recorded member rows in `eval/beir/cq
 the android datum above says what to expect in sign: the fusion ahead of the lexical row, the dense
 channel alone behind it.
 
+**The resumability claim is verified, and it has one wart worth recording.** The per-sub-forum
+caches are on disk — `eval/beir/cache/android.laya-retrieval.mean.npy.{npy,ids.json,meta.json}`,
+written at 16:31 by this run — so a kill really does cost only the sub-forum in progress, which is
+what the android re-run demonstrated. The wart: because `cqadupstack.py` passes
+`cache_root / f"{name}.{encoder.name}.npy"` and `cached_embed` appends its own suffix, the file ends
+up **`.npy.npy`**, where the older BEIR datasets cache as a single `.npy`. It is cosmetic and it is
+*not* being fixed while this run is live: changing the path would orphan the android and english
+vectors and cost ~20 minutes of re-embedding to correct a filename. Recorded so the next cold cache
+aligns the two, since a cache directory with two naming schemes is the kind of thing that wastes an
+afternoon later.
+
 **A note on how this round went, because the pattern has now happened twice.** Both "one flag"
 tasks (P4 and P1) opened with a specification of mine that was wrong, and both were corrected within
 a minute of actually running something. The lesson is not that the specifications were wrong — it is
