@@ -380,9 +380,17 @@ def test_the_deficit_arithmetic_names_the_members_it_sums():
     deficit = module.deficit()
     if not deficit["cells"]:
         pytest.skip("no eval/beir reports to compute the deficit from")
-    assert deficit["counted"] == 9
-    assert deficit["total"] == pytest.approx(0.7314, abs=5e-5)
-    assert deficit["macro"] == pytest.approx(0.0406, abs=5e-5)
+    # Derived, not typed. These four figures are one computation, and the literals that used to be
+    # here (0.7314 / 0.0406) had to be edited whenever a member was measured — which P1 does, eight
+    # times. The invariant is what the test is for: the parts have to agree with the whole.
+    assert deficit["counted"] == len([c for c in deficit["cells"] if c["gap"] < 0])
+    # `total` is the magnitude of the deficit; the cells carry signed gaps.
+    assert deficit["total"] == pytest.approx(
+        sum(abs(c["gap"]) for c in deficit["cells"] if c["gap"] < 0), abs=5e-5
+    )
+    assert deficit["macro"] == pytest.approx(deficit["total"] / 18, abs=5e-5)
+    assert deficit["half"] == pytest.approx(deficit["macro"] / 2, abs=5e-4)
+    assert deficit["nine_tenths"] == pytest.approx(deficit["macro"] * 0.9, abs=5e-4)
 
 
 def test_the_ours_column_is_read_from_the_reports_not_typed():

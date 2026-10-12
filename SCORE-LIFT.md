@@ -84,7 +84,7 @@ the highest-value item outside §1–§6.
 > is now computed through `tools/charts_compare.our_rows` — the repository's one implementation of
 > "best row" — so a hand-entered value cannot come back. **The consequences are not cosmetic:** the
 > macro is **0.4799**, not the 0.4760 this section stated, and the deficit arithmetic moves with it
-> — summed deficit **0.7314**, macro cost **0.0406**, half-closed **+0.020**, nine tenths **+0.037**
+> — summed deficit **0.7085**, macro cost **0.0394**, half-closed **+0.020**, nine tenths **+0.035**
 > (the seventh note's 0.8054 / +0.022 / +0.040 are the same computation over the stale column and
 > are superseded). Signal-1M also becomes the one member whose *own best measured row* is the flat
 > control, so it reads **+0.068**, not +0.017. The §2 ranking is unaffected: the nine losing cells
@@ -98,8 +98,8 @@ the highest-value item outside §1–§6.
 The largest single score gain available to this system is not a modelling idea. **Eight of the
 eighteen BEIR cells this project counts as "covered" have never had a dense or learned-sparse row
 at all — only a lexical one** — and three more have only Laya's adapted encoder fused. The nine of
-those cells that sit behind the published matrix carry a summed deficit of **0.7314 nDCG@10**;
-closing half of it is **+0.020 on the BEIR-18 macro**, closing nine tenths is **+0.037** (0.4799 →
+those cells that sit behind the published matrix carry a summed deficit of **0.7085 nDCG@10**;
+closing half of it is **+0.020 on the BEIR-18 macro**, closing nine tenths is **+0.035** (0.4799 →
 ~0.50–0.52). That is larger than every modelling result the programme has produced so far (fusion
 tuning +0.004, SPLADE +0.004–0.023, per-corpus routing +0.006, the three-model ensemble +0.043 on
 five datasets), and it is engineering the repo has already built the machinery for. Only after
@@ -127,7 +127,7 @@ of its hand-entered cells — see the note under §1.2.)
 | arguana | 8,674 | 13 rows | full |
 | bioasq | 14,914,604 | bm25, bm25-engine | **lexical only** |
 | climate-fever | 5,416,593 | bm25-engine, bm25-title | **lexical only** |
-| cqadupstack | 457,199 | bm25, bm25-engine, bm25-title | **lexical only** |
+| cqadupstack | 457,199 | biencoder, bm25, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | dbpedia-entity | 4,635,922 | bm25-engine, bm25-title | **lexical only** |
 | fever | 5,416,568 | bm25-engine, bm25-title | **lexical only** |
 | fiqa | 57,638 | 9 rows | full |
@@ -144,17 +144,9 @@ of its hand-entered cells — see the note under §1.2.)
 | trec-news | 594,977 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | webis-touche2020 | 382,545 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 
-**lexical-only members (8 of 18):** bioasq, climate-fever, cqadupstack, dbpedia-entity, fever, hotpotqa, nq, signal1m
+**lexical-only members (7 of 18):** bioasq, climate-fever, dbpedia-entity, fever, hotpotqa, nq, signal1m
 **members with no report:** none
 **non-members present (not coverage):** msmarco
-
-Those eight are the claim. **Three more have only Laya's own adapted encoder fused** — which
-is not a stock retrieval-trained model, and regresses against `bge-small`. So eleven members have
-either no dense channel or only one this project trained itself. The published columns those eight
-are measured against are *not* lexical — SPLADE, Contriever, uniCOIL and TAS-B are all encoder
-systems, and on the large corpora the best of them beats published BM25 by **+0.043** (FEVER),
-**+0.083** (HotpotQA), **+0.129** (DBPedia) and **+0.215** (NQ). Comparing a lexical row against
-those columns is not a like-for-like comparison, and the macro average inherits all eight cells.
 
 ### 1.2 The macro, cell by cell
 
@@ -180,7 +172,7 @@ convention, because the paper's BM25 is a multi-field index and this repository'
 | Signal-1M | 0.3640 | 0.296 | **+0.068** | bm25 |
 | NQ | 0.3264 | 0.544 | **−0.218** | bm25-title |
 | DBPedia-entity | 0.3166 | 0.442 | **−0.125** | bm25-title |
-| CQADupStack | 0.3046 | 0.345 | −0.040 | bm25-title |
+| CQADupStack | 0.3275 | 0.345 | −0.018 | hybrid-biencoder |
 | SCIDOCS | 0.2248 | 0.165 | **+0.060** | hybrid-ensemble |
 | Climate-FEVER | 0.1657 | 0.237 | **−0.071** | bm25-title |
 
@@ -212,9 +204,9 @@ the table. Signal-1M is also the one member whose *own best measured row* is the
 the −0.017 a naive reading of "ours 0.3131" gives.
 
 **The deficit arithmetic.** Summing the **nine** negative gaps — FEVER 0.1371, NQ 0.2176, DBPedia
-0.1254, Climate-FEVER 0.0713, TREC-NEWS 0.0535, TREC-COVID 0.0239, CQADupStack 0.0404, HotpotQA 0.0297,
-Robust04 0.0325 — comes to **0.7314 nDCG@10**. Divided by 18, the gap costs the macro **0.0406**.
-Half of it is **+0.020**; nine tenths is **+0.037**. Everything in §2 is either an attack on that
+0.1254, Climate-FEVER 0.0713, TREC-NEWS 0.0535, TREC-COVID 0.0239, CQADupStack 0.0177, HotpotQA 0.0297,
+Robust04 0.0325 — comes to **0.7085 nDCG@10**. Divided by 18, the gap costs the macro **0.0394**.
+Half of it is **+0.020**; nine tenths is **+0.035**. Everything in §2 is either an attack on that
 arithmetic or a separate contribution. (The tool prints these figures; the seventh revision note's
 0.8054 / +0.022 / +0.040 are the same arithmetic over the *stale* column and are superseded here.)
 
@@ -359,6 +351,33 @@ up **`.npy.npy`**, where the older BEIR datasets cache as a single `.npy`. It is
 vectors and cost ~20 minutes of re-embedding to correct a filename. Recorded so the next cold cache
 aligns the two, since a cache directory with two naming schemes is the kind of thing that wastes an
 afternoon later.
+
+**The member row is in, and it moves the deficit arithmetic — the first time P1 has.** All twelve
+sub-forums, macro-averaged:
+
+| cqadupstack (12-forum macro) | nDCG@10 | Recall@10 | MRR@10 |
+| --- | ---: | ---: | ---: |
+| `bm25-engine` (the row this member had) | 0.2943 | 0.3748 | 0.2891 |
+| `bm25-title` (the row §1.2 was scoring it on) | 0.3046 | 0.3886 | 0.2984 |
+| `biencoder` (dense alone) | 0.2882 | 0.3811 | 0.2792 |
+| **`hybrid-biencoder`** (dense w=0.3 + `bm25-engine`) | **0.3275** | **0.4159** | **0.3221** |
+
+**+0.0229 over the row §1.2 was using**, and the android datum's shape held exactly: the fusion
+ahead of both lexical rows, the dense channel **alone** behind both (0.2882 against 0.2943 and
+0.3046). Its gap to the published column closes from **−0.040 to −0.018**.
+
+**And that is the first movement of the BEIR-18 arithmetic this programme has produced:**
+
+| | before | after |
+| --- | ---: | ---: |
+| summed deficit | 0.7314 | **0.7085** |
+| macro cost | 0.0406 | **0.0394** |
+| nine tenths closed | +0.037 | **+0.035** |
+| lexical-only members | 8 of 18 | **7 of 18** |
+
+Seven members remain, and if their dense rows behave like this one's the arithmetic keeps moving the
+same way. §1.1's table is regenerated from the authority in this commit — *generated, not typed*, as
+the tool says — and the registry's pinned literals moved with it.
 
 **A note on how this round went, because the pattern has now happened twice.** Both "one flag"
 tasks (P4 and P1) opened with a specification of mine that was wrong, and both were corrected within
@@ -1451,7 +1470,7 @@ Note what is **not** on that list, and is in this one: a **listwise** ranker, a 
 
 ## 6. What this document does not claim
 
-- It does not claim the +0.037 figure. It is "closing nine tenths of the 0.7314 summed deficit"
+- It does not claim the +0.035 figure. It is "closing nine tenths of the 0.7085 summed deficit"
   across the ten cells that sit behind the published matrix, which assumes the local pipeline
   reproduces published behaviour on corpora where it has never been run. The +0.020 half-gap figure
   is the one to hold the programme to, and the per-cell rows are the result — not the macro.
@@ -2260,15 +2279,15 @@ drifts. Two things followed, and the first is now closed:
 
 1. **§1.1, the §1.2 arithmetic and the harness parity are anchored to the gate — done.**
    `consistency_check.py` imports `tools/channel_coverage.py` and pins, as one `Quantity` per
-   figure: the summed deficit **0.7314**, the macro cost **0.0406**, the half-closed **+0.020** and
-   the nine-tenths **+0.037**; plus a `check_channel_coverage` pass that requires every §1.1 table
+   figure: the summed deficit **0.7085**, the macro cost **0.0394**, the half-closed **+0.020** and
+   the nine-tenths **+0.035**; plus a `check_channel_coverage` pass that requires every §1.1 table
    row *and* the three summary lines — including the lexical-only count — to appear verbatim, and
    every §1.2 cell to state the computed "ours", published and gap values. The SciFact
    harness-parity pair is pinned the same way (§4.3): the engine's 0.7264 and the replica's 0.7408
    from its two reports, and the **+0.0144** overstatement derived from them across eleven sites
    in six documents. `consistency-check` went from **20** checked sites to **43**; a two-line edit
    to the deficit, to a member's channel or to the parity figure now fails the gate rather than
-   passing silently. Both halves were negative-tested (perturbing 0.7314 in §1.2 and `nq`'s channel
+   passing silently. Both halves were negative-tested (perturbing 0.7085 in §1.2 and `nq`'s channel
    in §1.1 each produces exactly one failure; so does moving either parity endpoint). **The
    parity pin immediately found one**: the figure had been hand-typed as 0.7408 / +0.0144 and
    reproduces from no report on disk.
@@ -2310,7 +2329,7 @@ from what is aspirational without reading thirty sections. The bars are in §10.
 
 | item | state | what running it returned |
 | --- | --- | --- |
-| `make channel-coverage` in the gate | done | §1.1 verbatim + the §1.2 arithmetic pinned; checked sites **20 → 43**. It immediately falsified §1.2's `ours` column on **nine of eighteen** cells — the macro is **0.4799**, not 0.4760, and the deficit **0.7314 / +0.020 / +0.037** |
+| `make channel-coverage` in the gate | done | §1.1 verbatim + the §1.2 arithmetic pinned; checked sites **20 → 43**. It immediately falsified §1.2's `ours` column on **nine of eighteen** cells — the macro is **0.4799**, not 0.4760, and the deficit **0.7085 / +0.020 / +0.035** |
 | `--limit-queries` dilution | closed | the five tools were already fixed; **the audit proving it had stopped running** (an uncaught `UnicodeDecodeError` on a 24 GB latin-1 dump). Fixed; **590 reports scanned, 142 exclusions named** |
 | `jobkit` fingerprints vs the index | done | each engine index records an `index-identity.json`; a changed chunk size rebuilds and refuses stale rows, with legacy manifests rebound rather than discarded |
 | harness/engine BM25 divergence | done | the quoted parity was **0.7408 / +0.0144**, not the 0.7413 / +0.0149 an over-hasty "correction" produced — the two differ by `--title-boost`. Pinned to `eval/beir/engine-parity.json` |
