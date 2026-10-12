@@ -62,6 +62,12 @@ PUBLISHED_BM25_CQADUPSTACK: float = published.NDCG10["CQADupStack"]["BM25"]
 #: the whole corpus — so the second stage is deliberately absent rather than quietly unsupported.
 LEXICAL_RETRIEVERS: tuple[str, ...] = ("bm25", "bm25-engine", "bm25-title")
 
+#: The dense rows this tool could not produce until P1 needed one. `tools/beir.py` refuses
+#: CQADupStack by name (twelve sub-collections behind one BEIR name, not one corpus) and this tool
+#: solved that bookkeeping without the dense path; the two names below need an embedding pass over
+#: each sub-forum, which is why the encoder is built once and the vectors are cached per sub-forum.
+DENSE_RETRIEVERS: tuple[str, ...] = ("biencoder", "hybrid-biencoder")
+
 
 def ensure_subforums(data_root: Path, *, download: bool = True) -> Path:
     """The extracted ``cqadupstack/`` tree, fetching and unzipping the one archive if needed.
@@ -106,6 +112,11 @@ def rank_subforum(
     include_titles: bool,
     ignore_identical_ids: bool,
     title_boost: int = 1,
+    encoder: Any | None = None,
+    dense_cache: Path | None = None,
+    embed_chunk: int = 0,
+    dense_weight: float = 0.3,
+    lexical_weight: float = 1.0,
 ) -> dict[str, Any]:
     """Run each retriever over one sub-forum and score it exactly as `beir.py` scores a dataset."""
     corpus = beir.load_corpus(directory, include_titles=include_titles)
@@ -117,6 +128,22 @@ def rank_subforum(
     # `beir.py` emits. It is keyed off the boost rather than off the retriever name there, and the
     # same convention is kept here so one `--title-boost` means one thing across both harnesses.
     titles = beir.load_titles(directory) if title_boost > 1 else None
+
+    # The dense pass runs once per sub-forum and is shared by both dense rows, because it is the
+    # only expensive part: the corpus embedding. Cached per sub-forum and per encoder name, so a
+    # re-run costs the queries and not the embedding.
+    bi: dict[str, list[str]] | None = None
+    lexical: dict[str, list[str]] | None = None
+    dense_seconds = 0.0
+    if any(retriever in DENSE_RETRIEVERS for retriever in retrievers):
+        if encoder is None or dense_cache is None:
+            raise SystemExit("a dense retriever needs an encoder and a cache path")
+        dense_started = time.perf_counter()
+        vectors = beir.cached_embed(
+            encoder, corpus, dense_cache, use_cache=True, chunk=embed_chunk
+        )
+        bi = beir.dense_rankings(corpus, queries, encoder, vectors, top_k)
+        dense_seconds = round(time.perf_counter() - dense_started, 2)
 
     results: dict[str, Any] = {}
     per_query: dict[str, dict[str, float]] = {}
@@ -131,6 +158,20 @@ def rank_subforum(
                 corpus, queries, top_k, k1=k1, b=b, drop_stopwords=True, stem=stem,
                 titles=titles, title_boost=title_boost,
             )
+        elif retriever == "biencoder":
+            ranking = bi or {}
+        elif retriever == "hybrid-biencoder":
+            if lexical is None:
+                # `hybrid-biencoder` fuses against `bm25-engine`, the baseline the other rows are
+                # significance-tested against, so the fusion's lexical half is the same retriever
+                # across the member.
+                lexical = beir.bm25_rankings(
+                    corpus, queries, top_k, k1=k1, b=b, drop_stopwords=True, stem=stem
+                )
+            ranking = beir.hybrid_rankings(
+                bi or {}, lexical, top_k,
+                dense_weight=dense_weight, lexical_weight=lexical_weight,
+            )
         else:  # bm25-engine
             ranking = beir.bm25_rankings(
                 corpus, queries, top_k, k1=k1, b=b, drop_stopwords=True, stem=stem
@@ -141,6 +182,15 @@ def rank_subforum(
         results[retriever] = dict(evaluation["summary"])
         results[retriever]["seconds"] = round(time.perf_counter() - started, 2)
         results[retriever]["scored_queries"] = evaluation["queries"]
+        if retriever == "biencoder":
+            # The row's cost is the shared dense pass, not this loop iteration.
+            results[retriever]["seconds"] = dense_seconds
+            results[retriever]["model"] = encoder.name if encoder is not None else ""
+        elif retriever == "hybrid-biencoder":
+            results[retriever]["note"] = (
+                f"RRF of biencoder (w={dense_weight}) + bm25-engine (w={lexical_weight}); "
+                f"dense pass {dense_seconds}s"
+            )
         per_query[retriever] = evalkit.per_query_metric(evaluation["per_query"], "nDCG@10")
     return {
         "documents": len(corpus),
@@ -236,6 +286,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", default=str(ROOT / "eval" / "beir" / "cqadupstack"))
     parser.add_argument("--no-download", action="store_true")
     parser.add_argument("--subforums", default="", help="a comma-separated subset (smoke runs only)")
+    parser.add_argument("--biencoder-model", default="models/laya-retrieval",
+                        help="bi-encoder for the dense rows; models/laya-retrieval is what the five "
+                             "full-channel cells used")
+    parser.add_argument("--biencoder-pooling", default="auto")
+    parser.add_argument("--dense-weight", type=float, default=0.3,
+                        help="bi-encoder RRF weight in hybrid-biencoder; 0.3 is the recorded setting")
+    parser.add_argument("--lexical-weight", type=float, default=1.0)
+    parser.add_argument("--embed-chunk", type=int, default=0,
+                        help="checkpoint the corpus embedding every N documents, so a kill costs a "
+                             "block rather than a whole sub-forum")
+    parser.add_argument("--cache-dir", default=None,
+                        help="where the per-sub-forum embeddings live (default: <data-root>/cache)")
+    parser.add_argument("--device", default=None)
+    parser.add_argument("--query-instruction", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -245,12 +309,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     heavy_job_guard("cqadupstack.py")
     wanted = [name.strip() for name in args.retrievers.split(",") if name.strip()]
-    unsupported = [name for name in wanted if name not in LEXICAL_RETRIEVERS]
+    supported = LEXICAL_RETRIEVERS + DENSE_RETRIEVERS
+    unsupported = [name for name in wanted if name not in supported]
     if unsupported:
         raise SystemExit(
-            f"cqadupstack.py runs lexical rows only ({', '.join(LEXICAL_RETRIEVERS)}); "
-            f"got {unsupported}. A dense or fused row needs its own embedding pass over all "
-            f"twelve sub-forums — see the module docstring."
+            f"cqadupstack.py runs {', '.join(supported)}; got {unsupported}."
         )
     stem = args.stem
     _STEM[0] = stem
@@ -266,6 +329,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     data_root = Path(args.data_root)
     root = ensure_subforums(data_root, download=not args.no_download)
 
+    # One encoder for the whole member: the model is per-dataset in `beir.py`, but a sub-forum is
+    # not a dataset anyone overrides, and building twelve of them would load the weights twelve
+    # times.
+    encoder = None
+    cache_root = None
+    if any(name in DENSE_RETRIEVERS for name in wanted):
+        encoder = beir.BiEncoder(
+            args.biencoder_model, device=args.device,
+            query_instruction=args.query_instruction, pooling=args.biencoder_pooling,
+        )
+        cache_root = Path(args.cache_dir) if args.cache_dir else data_root / "cache"
+        cache_root.mkdir(parents=True, exist_ok=True)
+        print(f"  dense rows: encoder {encoder.name}, dense weight {args.dense_weight}",
+              flush=True)
+
     per_forum: dict[str, Any] = {}
     for name in forums:
         directory = root / name
@@ -275,6 +353,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             include_titles=not args.no_titles,
             ignore_identical_ids=not args.keep_identical_ids,
             title_boost=args.title_boost,
+            encoder=encoder,
+            dense_cache=(cache_root / f"{name}.{encoder.name}.npy") if encoder is not None else None,
+            embed_chunk=args.embed_chunk,
+            dense_weight=args.dense_weight,
+            lexical_weight=args.lexical_weight,
         )
         per_forum[name] = detail
         engine = detail["retrievers"].get("bm25-engine", {})
