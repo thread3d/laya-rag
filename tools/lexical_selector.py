@@ -88,9 +88,16 @@ def collect(directory: Path) -> dict[str, dict[str, dict[str, Any]]]:
             for name, row in rows.items():
                 if not isinstance(row, Mapping) or "nDCG@10" not in row:
                     continue
-                # `bm25-passages@600` carries its passage budget in the row name; the budget is
-                # part of the configuration, so the family is what is compared here.
-                config = str(name).split("@", 1)[0]
+                # Passage rows are excluded: `bm25-passages@600` carries its budget (and, since
+                # the aggregation work, its aggregation mode) in the row name, and different
+                # budgets are *different retrievers* rather than one configuration measured
+                # twice. Collapsing them made two legitimately different rows look like drift —
+                # `passages-long.json` and `passages-sum.json` read 0.3522 and 0.2428 for
+                # Robust04's 600-character row. Passage size is its own axis
+                # (`docs/findings-passages-long.md`), so it is not this tool's question.
+                if str(name).startswith("bm25-passages"):
+                    continue
+                config = str(name)
                 if config not in CONFIGS:
                     continue
                 values.setdefault(member, {}).setdefault(config, []).append(

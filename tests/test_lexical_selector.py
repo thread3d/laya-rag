@@ -102,3 +102,16 @@ def test_the_selector_is_not_degenerate_on_the_committed_reports():
     result = ls.profile(collected)
     assert len(result["picks"]) > 1, result["picks"]
     assert result["gain"] > 0
+
+
+def test_passage_rows_are_not_folded_into_a_lexical_family(tmp_path):
+    """`bm25-passages@600` and `bm25-passages@p90` are different retrievers, not one setting.
+
+    Folding them made `passages-long.json` (0.3522) and `passages-sum.json` (0.2428) look like
+    one configuration disagreeing with itself on Robust04. Passage size and aggregation are
+    their own axis and belong to `findings-passages-long.md`.
+    """
+    _report(tmp_path, "a", {"bm25-passages@600": _row(0.3522)})
+    _report(tmp_path, "b", {"bm25-passages@p90": _row(0.2428)})
+    collected = ls.collect(tmp_path)
+    assert "bm25-passages" not in collected.get("scifact", {})

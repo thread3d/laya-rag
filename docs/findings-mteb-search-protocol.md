@@ -120,10 +120,22 @@ where few candidates survive, and why it is not a document at all.
 engine-level measurement that motivated the mode was never affected — `engine_beir.py` sets
 `LAYA_RAG_SECOND_STAGE=0` through the environment, which works.
 
-**Confirmed in the same probe, before it even reached search**: with the flag applied, the run's
-index phase shows **no `rerank.py` frame in any dump and no 282,984-token warning at all**. The
-warning was the rerank prompt, exactly as the stack said, and it is gone the moment the second stage
-is actually off.
+**Confirmed, and the corrected cost model.** With the flag applied the same five-query probe reads:
+
+| phase | before the fix | after |
+| --- | --- | --- |
+| index (5,981 chunks) | 178–184 s | **183 s** |
+| search | ≥31 s/query (the second stage on 100 candidates) | **1.05 s/query** |
+| `rerank.py` frames in the stack dumps | every dump | **none** |
+| 282,984-token warnings | one per run | **none** |
+
+So an MTEB `SciFact` task is **~8.5 minutes**, not the multi-hour figure this page carried for four
+rounds: a 183-second index plus ~5.3 minutes for 300 queries at the measured rate (plus MTEB's own
+scoring, which is arithmetic over 5,183 × 300). The 1.05 s/query agrees with the engine-level
+measurement (1.3 s/query with the same encoder), which is the cross-check that says the two
+configurations are now the same configuration. **Nothing about the harness was ever the problem**:
+it forks nothing under `num_proc=1`, it does nothing between `index` and `search`, and it was
+faithfully driving an adapter whose flag did not work.
 
 **The two refuted hypotheses, kept because they were part of the cost.**
 
@@ -200,6 +212,38 @@ path. Three ways forward, in order of principle:
 
 No MTEB score exists, and there is still no upload. What exists is the adapter, its conformance
 tests, the diagnosis above, and a run that can be watched while it works.
+
+## The first score under an external protocol
+
+With the flag fixed, a full `mteb.evaluate(model, task)` on SciFact completed locally. **MTEB's own
+`TaskResult` reports `main_score=0.37`**, and its cached result file carries the breakdown:
+
+| metric | value |
+| --- | ---: |
+| **nDCG@10** | **0.36987** |
+| nDCG@1 / @100 / @1000 | 0.2 / 0.39378 / 0.42096 |
+| MAP@10 / @100 | 0.31667 / 0.32255 |
+| evaluation time (MTEB's own figure) | 193.6 s |
+
+**This is the first number in this repository that nobody in this project computed**, and it is low.
+Read against the corpora this repository normally quotes, SciFact's published BM25 is 0.665 and a
+`bge-small` bi-encoder reads 0.72 — so **0.37 is not a placement, it is a starting point**, and the
+reasons are stated rather than explained away:
+
+- **`--first-stage-only`.** This is the retrieval system's fusion order with the decision model
+  removed. It is the right configuration for a *retrieval* benchmark and it is not the engine as
+  deployed.
+- **The encoder is `laya-rag/engine-multilingual`**, the decision model's multilingual encoder,
+  which has never been retrieval-trained. It is scored here because that is the model the adapter
+  registers — not because it is the best encoder this project has (`models/laya-retrieval` is, and
+  it is a different submission).
+- **MTEB's SciFact corpus is whole documents with titles**, under the engine's own chunking, so this
+  is not comparable to the repository's own SciFact rows (`bm25-engine` 0.6762, `hybrid-biencoder`
+  0.7413) taken over BEIR's document convention.
+
+**Nothing is uploaded.** A submission is a separate act, and the honest next step is a run with the
+retrieval-trained encoder — one flag — rather than a row from a multilingual decision model's
+encoder presented as the system's.
 
 ## What this does not show
 

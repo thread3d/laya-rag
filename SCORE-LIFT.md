@@ -610,7 +610,13 @@ than the same 600 characters for every document) and `--passages-aggregate max|s
 historical behaviour and the one every refutation used, or CombSUM over a document's pieces). Nine
 tests pin the mechanisms, including that `max` still orders by each document's best piece.
 
-**The variant rows are pending, and the shape of the wait is itself a weakness.** The
+**Aggregation beyond max-pool is now measured, and it does not rescue the technique.** CombSUM over
+a document's 600-character pieces against max-pool on the same corpora: **Robust04 0.3522 → 0.2428
+(−0.1094)**, **TREC-NEWS 0.2456 → 0.2719 (+0.0263)** — and in neither case does it reach the
+whole-document row (0.4077 / 0.3351). The bias the knob exposes is real and corpus-dependent, and
+the verdict is negative. The **adaptive** budget remains unmeasured.
+
+**The adaptive rows are pending, and the shape of the wait is itself a weakness.** The
 `--passages p90` run **finished Robust04** and is still working through TREC-NEWS; when it completes
 it writes `eval/beir/passages-p90.json` with both corpora. The engine row was briefly reported as
 *lost* — the shell wrapper was killed and the Python process survived — which is the more useful
@@ -756,6 +762,23 @@ still ran the 322M decision on every candidate. It is fixed (`main` sets the att
 regression test naming the bug), and it also explains the 282,984-token warning — that is the
 **rerank prompt**, query plus candidate passages. The engine-level rows were never affected:
 `engine_beir.py` sets `LAYA_RAG_SECOND_STAGE=0` through the environment, which works.
+
+**The first score under an external protocol exists, and it is low.** `mteb.evaluate` on SciFact,
+`--first-stage-only`, completed locally: MTEB's `TaskResult` reports **`main_score=0.37`**, with
+**nDCG@10 0.36987** (nDCG@100 0.39378, MAP@10 0.31667) and MTEB's own `evaluation_time` **193.6 s**.
+This is the first number in this repository that nobody here computed, and read against SciFact's
+published BM25 (0.665) or a `bge-small` bi-encoder (0.72) **it is a starting point, not a
+placement** — the configuration removes the decision model, and the registered encoder is the
+multilingual *decision* model's, which was never retrieval-trained. **Nothing is uploaded.** The
+honest next step is the same run with `models/laya-retrieval`, which is one flag, not a defence of
+0.37.
+
+**The corrected cost model: an MTEB `SciFact` task is ~8.5 minutes, not hours.** With the flag
+applied, the same five-query probe reads index **183 s** and search **1.05 s/query** — against ≥31
+s/query before, with no `rerank.py` frame and no 282,984-token warning in either dump. The rate
+agrees with the engine-level 1.3 s/query, which is the cross-check that the two configurations are
+now the same one. So the harness was never the problem: it forks nothing under `num_proc=1`, does
+nothing between `index` and `search`, and was faithfully driving an adapter whose flag did nothing.
 
 **Two hypotheses were tested before that and both failed, which was part of the cost.**
 (a) *The query embedding*: with the decision model removed it is the only per-query model work left,

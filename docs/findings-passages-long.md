@@ -78,6 +78,26 @@ One cost note that *is* supported by the run's progress: the adaptive budget rai
 full-document index every run builds regardless, so the sweep is slower — but this round did not
 measure by how much, and does not claim to.
 
+## Aggregation beyond max-pool: measured, and it does not rescue the technique
+
+The second clause's other half. `--passages-aggregate sum` (CombSUM over a document's 600-character
+pieces) against the max-pool row on the same corpora:
+
+| corpus | whole documents | max-pool | **sum** | sum − max |
+| --- | ---: | ---: | ---: | ---: |
+| Robust04 | **0.4077** | 0.3522 | **0.2428** | **−0.1094** |
+| TREC-NEWS | **0.3351** | 0.2456 | **0.2719** | **+0.0263** |
+
+So aggregation is not neutral — it helps TREC-NEWS by 0.026 and *destroys* Robust04 by 0.109 — and
+in **neither** case does it reach the whole-document row. The mechanism is what the sum knob was
+built to expose: adding a document's piece scores rewards length (more pieces, more sum), and
+Robust04's documents are the ones where that bias does the most damage. **CombSUM over passages does
+not rescue passage retrieval here**, which closes the aggregation half of §P7's second clause.
+
+The **adaptive** budget remains unmeasured — a `--passages p90` run reached TREC-NEWS and was
+stopped, and this round's attempt at it never got the heavy lock. What is now measured is the other
+half, and its verdict is negative.
+
 ## What this does not show
 
 - **Lexical only.** The dense and fused channels are not tested with passages here. The dense
