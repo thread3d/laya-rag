@@ -2350,7 +2350,8 @@ drifts. Two things followed, and the first is now closed:
    every §1.2 cell to state the computed "ours", published and gap values. The SciFact
    harness-parity pair is pinned the same way (§4.3): the engine's 0.7264 and the replica's 0.7408
    from its two reports, and the **+0.0144** overstatement derived from them across eleven sites
-   in six documents. `consistency-check` went from **20** checked sites to **43**; a two-line edit
+   in six documents. `consistency-check` went from **20** checked sites to **43**, and to **47** once the summary line at
+the top of §1 was anchored too (it had been the most visible unguarded figure in the document); a two-line edit
    to the deficit, to a member's channel or to the parity figure now fails the gate rather than
    passing silently. Both halves were negative-tested (perturbing 0.7085 in §1.2 and `nq`'s channel
    in §1.1 each produces exactly one failure; so does moving either parity endpoint). **The
@@ -2394,7 +2395,7 @@ from what is aspirational without reading thirty sections. The bars are in §10.
 
 | item | state | what running it returned |
 | --- | --- | --- |
-| `make channel-coverage` in the gate | done | §1.1 verbatim + the §1.2 arithmetic pinned; checked sites **20 → 43**. It immediately falsified §1.2's `ours` column on **nine of eighteen** cells — the macro is **0.4799**, not 0.4760, and the deficit **0.7085 / +0.020 / +0.035** |
+| `make channel-coverage` in the gate | done | §1.1 verbatim + the §1.2 arithmetic pinned; checked sites **20 → 43 → 47**. It immediately falsified §1.2's `ours` column on **nine of eighteen** cells — the macro is **0.4799**, not 0.4760, and the deficit **0.7085 / +0.020 / +0.035** |
 | `--limit-queries` dilution | closed | the five tools were already fixed; **the audit proving it had stopped running** (an uncaught `UnicodeDecodeError` on a 24 GB latin-1 dump). Fixed; **590 reports scanned, 142 exclusions named** |
 | `jobkit` fingerprints vs the index | done | each engine index records an `index-identity.json`; a changed chunk size rebuilds and refuses stale rows, with legacy manifests rebound rather than discarded |
 | harness/engine BM25 divergence | done | the quoted parity was **0.7408 / +0.0144**, not the 0.7413 / +0.0149 an over-hasty "correction" produced — the two differ by `--title-boost`. Pinned to `eval/beir/engine-parity.json` |
