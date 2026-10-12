@@ -736,11 +736,14 @@ minutes with no result** — the measured wall clock the "accept it as a long jo
 against, and why the silence mattered: an operator watching for an hour and a half could not tell it
 from a hang.
 
-**Where it stands after the second-stage mode landed.** `--first-stage-only` takes the decision
-model out of the *search* phase — the engine-level measurement of that is 37 s for 300 queries
-against ~10 minutes, in `docs/findings-second-stage.md` — but an end-to-end `mteb.evaluate` on
-SciFact with it was stopped after **~30 minutes with no output past the tokenizer warning**, and that
-run predates the index-progress fix, so it cannot say which phase it was in. The adapter now reports
+**Where it stands after the second-stage mode landed, with the phase named.** `--first-stage-only`
+takes the decision model out of the *search* phase — the engine-level measurement of that is 37 s for
+300 queries against ~10 minutes, in `docs/findings-second-stage.md`. Re-run end to end on SciFact
+with the index instrument, the phases separate cleanly: **index 5,981 chunks in 178 s**, and then
+**fewer than 25 of ~300 queries in 13+ minutes** — ≥31 s/query, a multi-hour task. So indexing is not
+the wall clock; the search phase is, the stack dumps put it in model inference, and with the decision
+model removed the only per-query model work left is the **query embedding**. That is the next thing
+to instrument, not the harness. The adapter now reports
 the **index** phase too (stage, documents, chunks, embedded, and a done line) and takes
 `--stack-dump-every N` for `faulthandler`, which is the instrument that corrected this section in
 the first place. One observation is recorded and not resolved: a **282,984-token** sequence, once, at

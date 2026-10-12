@@ -80,16 +80,24 @@ the earlier note's "failure is in the harness's process handling" is withdrawn.
   produced this page's corrected diagnosis. "Slow" and "hung" no longer have to look identical for
   want of a process inspector.
 
-### Where the first-stage-only run stands
+### Where the first-stage-only run stands: the phase is now named
 
 `--first-stage-only` removes the decision model from the **search** phase, and the engine-level
-measurement of that (37 s for 300 queries, against ~10 minutes) is in
-[`findings-second-stage.md`](findings-second-stage.md). An end-to-end `mteb.evaluate` on SciFact with
-it was then run through the CLI and **stopped after ~30 minutes with no result and no output past the
-tokenizer warning** — and because that run predates the index-progress fix, it cannot say which phase
-it was in. That is the honest state: **no MTEB score exists**, the search-side cost is measured and
-much smaller, and the next run carries the instruments that will name the phase rather than repeat
-the silence.
+measurement of that (37 s for 300 queries with `bge-small`, against ~10 minutes) is in
+[`findings-second-stage.md`](findings-second-stage.md). An end-to-end `mteb.evaluate` on SciFact was
+then run through the CLI **with the index-progress instrument**, and the phase is no longer a guess:
+
+| phase | measured |
+| --- | --- |
+| index (read + chunk + embed) | **5,981 chunks in 178 s** |
+| search | **fewer than 25 of ~300 queries scored in 13+ minutes** — ≥31 s/query, so the task is a **multi-hour** run |
+
+So indexing is not the wall clock, the search phase is, and the stack dumps put it in model
+inference (`torch/nn/modules/linear.py forward`, repeatedly). With `--first-stage-only` the only
+model work left per query is the **query embedding** — which is where tens of seconds per query has
+to be coming from, and which is the next thing to instrument rather than the harness. **No MTEB
+score exists and nothing is uploaded.** The run was stopped rather than left to occupy a shared host
+for hours.
 
 ### An unresolved observation, narrowed
 
@@ -103,7 +111,11 @@ Token indices sequence length is longer than the specified maximum sequence leng
 What has been **ruled out**: it is not a long document (MTEB's SciFact corpus has 5,183 rows whose
 longest `title + text` is **10,126 characters** and whose longest query is 204), and it is not the
 reranker — it appears in `--first-stage-only` mode, where no rerank runs. It is absent on a
-three-document corpus with the same checkpoint, so it scales with the corpus. The most likely reading
+three-document corpus with the same checkpoint, so it scales with the corpus. With the index
+instrument it also has a **position**: line 194 of the log, immediately after the `index: done in
+178s` line and before any `search:` progress line, i.e. on the indexing→search boundary on the first
+query. Given that the search phase is ≥31 s/query with only the query embedding left in the path,
+the two observations are most likely **the same fact**, and that is the hypothesis to test next. The most likely reading
 is that Laya's tokenizer is handed a **batch** and reports the aggregate length, which would make it
 noise rather than mis-indexing — but "most likely" is not measured, and the wording ("indexing
 errors") is alarming enough that it should not be left as an assumption. Recorded here with the
