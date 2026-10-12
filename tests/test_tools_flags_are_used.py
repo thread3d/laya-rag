@@ -9,8 +9,7 @@ wearing a reranker's name. The class is cheap to detect: an `add_argument` whose
 Five genuine instances exist today and are **named rather than exempted** — the test fails on any
 *new* one, and the list is the work remaining, not a permission:
 
-    tools/generation_eval.py         --list
-    tools/generator_free_iteration.py --samples
+    (none — see DEFAULT_MODE_ALIASES for the one flag that is a spelling of its tool's default)
 
 Three of the original five are no longer here, each by the route that fitted it: `multihop_hop2.py
 --rrf-k` and `laya_finetune_probe.py --seed` **named mechanisms their tools do not have** (no fusion, no
@@ -29,12 +28,17 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-#: Known inert flags: (file, flag). Each is a defect with the same shape as the MTEB one, recorded
-#: here so the check can be strict about everything else.
-KNOWN_INERT = {
-    ("generation_eval.py", "--list"),
-    ("generator_free_iteration.py", "--samples"),
+#: Flags that name the **default mode** rather than a distinct one. They are not defects — the flag
+#: works by selecting the branch that already runs — but the code never reads `args.<dest>`, so the
+#: detector cannot tell them from the inert ones. Kept separate from `KNOWN_INERT` on purpose: an
+#: alias is a documented spelling, an inert flag is a lie.
+DEFAULT_MODE_ALIASES = {
+    ("generation_eval.py", "--list"),          # `if args.check: ...` else this branch prints the table
 }
+
+#: Known inert flags: (file, flag). Each is a defect with the same shape as the MTEB one, recorded
+#: here so the check can be strict about everything else. **Currently empty**, which is the point.
+KNOWN_INERT: set[tuple[str, str]] = set()
 
 
 def inert_flags(path: Path) -> list[tuple[str, str]]:
@@ -77,7 +81,7 @@ def test_no_tool_gains_a_flag_it_never_reads():
         (path.name, flag)
         for path in tools
         for flag, _dest in inert_flags(path)
-        if (path.name, flag) not in KNOWN_INERT
+        if (path.name, flag) not in KNOWN_INERT | DEFAULT_MODE_ALIASES
     ]
     assert not offenders, (
         "these flags are parsed and never read, so they silently do nothing:\n  "

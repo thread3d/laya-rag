@@ -317,7 +317,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--iterations", type=int, default=2)
     ap.add_argument("--max-probes", type=int, default=4)
     ap.add_argument("--top-texts", type=int, default=20)
-    ap.add_argument("--samples", type=int, default=10000)
     ap.add_argument("--out", default=str(BENCH / "generator-free-iteration"))
     return ap.parse_args(argv)
 
