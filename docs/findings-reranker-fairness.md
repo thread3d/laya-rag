@@ -1,3 +1,10 @@
+> **Suspended by a defect found later.** The runs behind this page configured a
+> cross-encoder, and `rerank(order="recall")` was **sorting by the first-stage score**
+> rather than preserving the order it was handed, so the cross-encoder's scores could not
+> affect the result — every number here is its first stage's order. See §P4 of
+> [SCORE-LIFT.md](../SCORE-LIFT.md#p4--a-modern-and-where-possible-listwise-second-stage-on-multihop-rag)
+> and `tests/test_rerank_order.py`. These rows need re-taking.
+
 # The reranker-fairness pack: R@k on a reranker-excluded pool
 
 `docs/research/07` §4 (RESEARCH.md Tier 0.5) asks for **R@10/100/1000 and a reranker-excluded union

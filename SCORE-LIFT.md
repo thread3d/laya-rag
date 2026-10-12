@@ -594,6 +594,25 @@ pool survives, the result is *not* the `recall_score` order when the caller reor
 `order="relevance"` still ranks by the decision. All 1,665 tests pass, which also says no existing
 test had encoded the buggy behaviour.
 
+**The invalidation, scoped by an audit rather than by guesswork.** Scanning the report trees for
+settings that name a reranker finds **18 reports**, and they are exactly the affected set — each one's
+ordering was its first stage's, so each row is that first stage's number wearing a reranker's name:
+
+```
+eval/benchmarks/multihop-rag/   15 reports: rerank-experiment{,-full}.json, rerank-depth20{,-thr}.json,
+                                rerank-qcov.json, rerank-estimator-full.json, rerank-bridge.json,
+                                official-rerank-subset.json, and this session's p4*/p4b*/p4c* probes
+eval/engine-beir/                3 reports: scifact-chauto-ce.json (nDCG@10 0.7417),
+                                scifact-ceauto.json (0.7274), scifact-ceplain.json (0.7091)
+```
+
+**The SciFact three matter most**, because the repository quotes them: `docs/findings-reranker-fairness.md`,
+`docs/findings-rerank-selection.md` and the README all reference this family, and
+`scifact-chauto-ce`'s **0.7417 is competitive with the quoted `hybrid-biencoder` 0.7413** — so the
+"best SciFact row" claim is now in question in the direction of *understating* the engine (the CE was
+never given a chance to help). Everything else recorded in this document — the fusion rows, the
+extractive rows, the MTEB scores — configured no reranker and is untouched.
+
 **What this means for every recorded reranker row**: they were taken with a configured cross-encoder,
 a coverage λ of 0.7 auto, and this sort — so their order was the fused order and the reranker's
 contribution was zero. They need re-taking, and §P4's arms can now be run for real.
