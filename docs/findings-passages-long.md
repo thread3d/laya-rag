@@ -94,9 +94,25 @@ built to expose: adding a document's piece scores rewards length (more pieces, m
 Robust04's documents are the ones where that bias does the most damage. **CombSUM over passages does
 not rescue passage retrieval here**, which closes the aggregation half of §P7's second clause.
 
-The **adaptive** budget remains unmeasured — a `--passages p90` run reached TREC-NEWS and was
-stopped, and this round's attempt at it never got the heavy lock. What is now measured is the other
-half, and its verdict is negative.
+### The adaptive budget: attempted three times, and the cost is the finding
+
+`--passages p90` has now been run three times and **no report exists from any of them**. The first
+completed Robust04 and died with its wrapper during TREC-NEWS; the second never acquired the
+heavy-job lock; the third ran alone on Robust04 with the per-dataset report write in place — which
+should have made a finished dataset durable — and still produced nothing within the budget.
+
+So the honest record is **"implemented, unit-tested, and not measurable here at this scale"**, and
+the reason is cost rather than a result: a per-document passage budget of `max(200, ceiling/4)`
+characters against a fixed 600 nearly doubles the passage count on a 528,155-document corpus, on top
+of the whole-document index every run builds regardless, and this host is shared. **It is not
+refuted** — the mechanism may still help where a fixed cut is wrong — but a technique whose indexing
+cost puts one cell out of reach of the host is not on this programme's critical path (§10.1 lists P7
+as standing, "fill idle compute"), and leaving a job holding the lock for hours is worse than
+recording why it does not fit.
+
+**What is measured is the other half, and its verdict is negative** (above). If the adaptive budget
+is retried, the cheap route is a smaller corpus with long documents and a title map — TREC-NEWS's
+57 queries would do — run one dataset per invocation.
 
 ## What this does not show
 

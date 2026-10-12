@@ -1923,7 +1923,10 @@ loses on Robust04 (−0.0555) and TREC-NEWS (−0.0895), and the loss grows with
 fixed cut is refuted at every length tested. Of its second clause, **aggregation is measured and also
 negative** — CombSUM over 600-character pieces reads 0.2428 for Robust04 (−0.1094 against max-pool)
 and 0.2719 for TREC-NEWS (+0.0263), and in neither case reaches the whole-document row (0.4077 /
-0.3351). The **adaptive budget** is implemented, tested and still unmeasured
+0.3351). The **adaptive budget** is implemented, unit-tested and **not measurable here at this scale**:
+three attempts, no report, because a `max(200, ceiling/4)` per-document budget nearly doubles the
+passage count on a 528,155-document corpus on top of the whole-document index every run builds. It
+is not refuted — it does not fit this host's budget, which is a stated reason rather than a result
 (`findings-passages-long.md`).
 
 **Not started, and why.** **P1** is days of embedding (the eight lexical-only members are 2.7M–14.9M
