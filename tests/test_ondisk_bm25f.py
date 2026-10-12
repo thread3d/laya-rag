@@ -77,3 +77,62 @@ def test_the_build_streams_a_mapping_so_a_second_field_can_still_read_it(tmp_pat
 def test_bm25f_needs_at_least_one_field(tmp_path):
     with pytest.raises(ValueError):
         OnDiskBM25F(tmp_path / "bm25f", fields=())
+
+
+# ── search: the loop over the field postings ──────────────────────────────
+
+DOCS_BODY = {
+    "d1": {"body": "refunds take five business days and refunds are quick"},
+    "d2": {"body": "shipping is free and refunds need a receipt"},
+    "d3": {"body": "support is open on weekdays"},
+}
+
+
+def test_search_ranks_by_bm25f_and_names_the_documents(tmp_path):
+    index = _built(tmp_path)
+    hits = index.search("refund", k=10)
+    ids = [hit.chunk_id for hit in hits]
+    assert set(ids) == {"d1", "d2", "d3"}          # refunds/refund appear in all three
+    scores = [hit.score for hit in hits]
+    assert scores == sorted(scores, reverse=True)
+    assert index.search("refund", k=0) == []
+    assert index.search("nonexistentterm", k=5) == []
+
+
+def test_a_title_only_term_ranks_the_document_whose_title_has_it_first(tmp_path):
+    assert _built(tmp_path).search("shipping", k=3)[0].chunk_id == "d2"
+
+
+def test_one_field_with_b_zero_matches_the_single_field_backend(tmp_path):
+    """The parity the two backends were built for, now for the composed one."""
+    from laya_rag.ondisk import OnDiskBM25
+
+    plain = OnDiskBM25(tmp_path / "plain", k1=1.2, b=0.0, drop_stopwords=True, stem=False)
+    plain.build((doc_id, payload["body"]) for doc_id, payload in DOCS_BODY.items())
+    composed = OnDiskBM25F(tmp_path / "composed", fields=("body",), k1=1.2,
+                           b_fields={"body": 0.0}, stem=False)
+    composed.build(DOCS_BODY)
+
+    for query in ("refund", "shipping free", "weekdays support"):
+        left = [(h.chunk_id, round(h.score, 9)) for h in plain.search(query, k=5)]
+        right = [(h.chunk_id, round(h.score, 9)) for h in composed.search(query, k=5)]
+        assert left == right, query
+
+
+def test_the_idf_is_the_union_not_a_fields_own(tmp_path):
+    """Using `OnDiskBM25._idf` here would make a title-only term look common."""
+    index = _built(tmp_path)
+    body = index._indexes["body"]
+    body_idf = body._idf(body.terms["refund"]) if "refund" in body.terms else 0.0
+    union_idf = index._union_idf("refund")
+    assert union_idf > 0.0
+    # `refund` is in the body of two documents and the union of three, so the union IDF is smaller.
+    assert union_idf < body_idf
+
+
+def test_reopening_gives_the_same_ranking(tmp_path):
+    built = _built(tmp_path)
+    before = [(h.chunk_id, round(h.score, 9)) for h in built.search("refund policy", k=3)]
+    reopened = OnDiskBM25F.open(tmp_path / "bm25f", fields=("title", "body"))
+    after = [(h.chunk_id, round(h.score, 9)) for h in reopened.search("refund policy", k=3)]
+    assert before == after

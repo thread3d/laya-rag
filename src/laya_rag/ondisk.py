@@ -32,7 +32,7 @@ import numpy as np
 
 from .chunking import Chunk
 from .index_store import Hit, _normalise
-from .lexical import K1, B, STOPWORDS, LexicalHit, tokenize
+from .lexical import K1, B, STOPWORDS, LexicalHit, bm25f_term_score, tokenize
 
 #: File names for the dense half, kept beside the in-memory format's files under the same
 #: index directory so the two backends cannot silently read each other's data.
@@ -157,6 +157,96 @@ class OnDiskBM25F:
         (self.directory / _UNION_DF).write_text(
             json.dumps(self.union_df, separators=(",", ":")), encoding="utf-8"
         )
+
+
+    @classmethod
+    def open(cls, directory: Path, *, fields: Sequence[str] = ("title", "body"), **kwargs: Any) -> "OnDiskBM25F":
+        """Reopen a built index: the field indexes from disk, the union from its own file."""
+        index = cls(directory, fields=fields, **kwargs)
+        for field in index.fields:
+            index._indexes[field] = OnDiskBM25.open(index.field_directory(field))
+        index.union_df = json.loads((index.directory / _UNION_DF).read_text(encoding="utf-8"))
+        return index
+
+    def _union_idf(self, term: str) -> float:
+        """BM25's IDF over the **union** document frequency, never a field's own.
+
+        ``OnDiskBM25._idf`` answers a different question — how many documents contain the term *in
+        that field* — and using it here would make a title-only term look common, which is the one
+        thing BM25F exists to avoid.
+        """
+        documents = len(self._indexes[self.fields[0]]) if self._indexes else 0
+        df = int(self.union_df.get(term, 0))
+        if not documents or not df:
+            return 0.0
+        return max(math.log(1.0 + (documents - df + 0.5) / (df + 0.5)), 0.0)
+
+    def search(self, query: str, k: int = 20) -> list[LexicalHit]:
+        """The ``k`` highest-scoring documents, BM25F over the field postings."""
+        if k < 1:
+            return []
+        if not self._indexes:
+            self._load_fields()
+        terms = tokenize(query, stem=self.stem)
+        if self.drop_stopwords:
+            terms = [term for term in terms if term not in STOPWORDS]
+        totals: dict[int, float] = {}
+        for term in dict.fromkeys(terms):
+            idf = self._union_idf(term)
+            if idf == 0.0:
+                continue
+            # Per field, the rows that contain this term and how often — a slice of that field's
+            # postings, which is the whole reason the composition is cheap.
+            per_field: dict[str, dict[int, float]] = {}
+            for field in self.fields:
+                index = self._indexes[field]
+                term_id = index.terms.get(term)
+                if term_id is None:
+                    continue
+                start = int(index.offsets[term_id])
+                end = int(index.offsets[term_id + 1])
+                if end <= start:
+                    continue
+                per_field[field] = {
+                    int(row): float(tf) for row, tf in index._postings[start:end]
+                }
+            if not per_field:
+                continue
+            rows: set[int] = set()
+            for postings in per_field.values():
+                rows.update(postings)
+            for row in rows:
+                # A field the term is absent from contributes a zero rather than being skipped: the
+                # field *set* has to be the same for every document or a weight stops meaning one
+                # thing between documents.
+                contribution = bm25f_term_score(
+                    term_frequencies={
+                        field: per_field.get(field, {}).get(row, 0.0) for field in self.fields
+                    },
+                    lengths={
+                        field: float(self._indexes[field].lengths[row]) for field in self.fields
+                    },
+                    avg_lengths={
+                        field: float(self._indexes[field].avg_len) for field in self.fields
+                    },
+                    weights=self.weights,
+                    b_fields=self.b_fields,
+                    k1=self.k1,
+                    idf=idf,
+                )
+                if contribution:
+                    totals[row] = totals.get(row, 0.0) + contribution
+        if not totals:
+            return []
+        ids = self._indexes[self.fields[0]]._ids          # a property, not a method
+        ranked = sorted(totals.items(), key=lambda item: (-item[1], item[0]))[:k]
+        return [LexicalHit(chunk_id=ids[row], score=score) for row, score in ranked]
+
+    def _load_fields(self) -> None:
+        """Open the field indexes on first use, so a caller can construct then ``open`` lazily."""
+        for field in self.fields:
+            self._indexes[field] = OnDiskBM25.open(self.field_directory(field))
+        self.union_df = json.loads((self.directory / _UNION_DF).read_text(encoding="utf-8"))
 
 
 def union_document_frequency(
