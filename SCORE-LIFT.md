@@ -2244,8 +2244,9 @@ have been recorded as already-present on the strength of a substring match.
 Three separately-numbered sequences now live here — **P1–P12** (score), **C1–C9** (§8 boundaries),
 **S1–S7** (§9 datasets) — and read on their own each is coherent but the reader cannot answer "what
 do I do on Monday". This section is the missing execution layer: one order, one register of the
-bars that decide whether each item worked, an honest account of how to check this document, and — in
-§10.5 — **a live record of what has actually been run and what it returned**, because a planning
+bars that decide whether each item worked, an honest account of how to check this document, **§10.5**'s
+live record of what has actually been run and what it returned, and **§10.6**'s queued runs as
+executable commands, because a planning
 document that does not say which of its own items are done makes the reader reconstruct it from
 thirty findings pages.
 
@@ -2459,7 +2460,73 @@ its own findings.**
 0.7632 / 0.5983 — **+0.0512 / +0.0785 / +0.1043** on the system's worst published comparison, and
 still short of the published 0.480.
 
-### 10.6 The decision this document cannot make for you
+### 10.6 The queued runs, as commands
+
+Every measurement the programme is waiting on needs the heavy lock, so they queue. This is the queue as
+executable lines rather than as a list of intentions — each was specified or built in an earlier round,
+and each carries the trap that round found. **One at a time**; check `make heavy-status` first.
+
+**P1's remaining members** (largest last; the next one is `signal1m`). `nq`'s command is the pattern:
+
+```
+# CQADupStack — done, member row in eval/beir/cqadupstack-dense.json
+.venv/bin/python tools/cqadupstack.py --retrievers biencoder,hybrid-biencoder \
+    --dense-weight 0.3 --embed-chunk 5000 --out eval/beir/cqadupstack-dense
+
+# nq — RUNNING. Report lands at eval/beir/nq-dense.json when the 2.68M-document
+# embedding finishes, ~13 h from a 20:22 start.
+.venv/bin/python tools/beir.py --datasets nq \
+    --biencoder-model models/laya-retrieval --dense-weight 0.3 \
+    --retrievers biencoder,hybrid-biencoder \
+    --lexical-backend ondisk --embed-chunk 20000 --out eval/beir/nq-dense
+
+# then signal1m, dbpedia-entity, hotpotqa, climate-fever, fever, bioasq — same flags,
+# one --datasets name each, its own --out. ondisk and embed-chunk are not optional.
+```
+
+Two traps: **the on-disk lexical backend is required** above ~1M documents (the memory index keeps a
+`Counter` per document), and **dense rows only** keeps the lexical selector from seeing a second
+`bm25-engine` for the member. A run with `--limit*`, `--subforums` or a seed writes to
+`eval/beir/subsets/` instead — see §10.1.
+
+**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
+check names every stale figure, and the deficit test is derived so it needs no edit.
+
+**P4 arm 2** (`Qwen/Qwen3-Reranker-0.6B`, listwise). Weights are already in the writable cache, and the
+path is validated:
+
+```
+HF_HOME=$PWD/eval/hf-rerank .venv/bin/python tools/engine_multihop.py \
+    --out eval/benchmarks/multihop-rag/engine-p4-listwise \
+    --rerank-model Qwen/Qwen3-Reranker-0.6B --limit 200 --sample-seed 0
+```
+
+`HF_HOME` matters: the shared `~/.cache/huggingface` is not writable, and the failure is a
+`PermissionError` that looks like an intermittent cache lock. No threshold tuning is needed — the
+multihop and beir runners set `LAYA_RAG_RELEVANCE_THRESHOLD=0.0` themselves. Compare against the
+pointwise ceiling **0.3702** on the same subset, and re-take the subset for the base reranker in the
+same session if the comparison matters.
+
+**FEVER's BM25F row** (P2's falsifier, unrun branch):
+
+```
+HF_HOME=$PWD/eval/hf-rerank .venv/bin/python tools/beir.py --datasets fever \
+    --retrievers bm25-engine,bm25-title --title-boost 2 --bm25f \
+    --lexical-backend ondisk --out eval/beir/p2-fever-bm25f
+```
+
+`--bm25f` fuses the title-boosted channel, so `bm25-title` must be requested with it (the tool now
+says so instead of raising `UnboundLocalError`). The index is cached under `eval/beir/cache/fever.bm25f`
+and **reused** across `--title-weight` values, which is what makes the sweep affordable — run one
+build, then sweep.
+
+**The re-takes beyond SciFact.** The other twelve reports that configured a reranker and a coverage λ
+above zero (`eval/benchmarks/multihop-rag/rerank-*.json`) are the evidence §P4's premise rested on, and
+they were taken before the ordering fix. Re-taking the full-protocol ones is the way to find out whether
+"a pointwise cross-encoder loses" was ever measured.
+
+### 10.7 The decision this document cannot make for you
 
 §1–§6 and §8–§9 are **different kinds of work wearing the same document**. The first is *benchmark
 placement*: it raises numbers on corpora that already exist and is measurable within weeks. The
