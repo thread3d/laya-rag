@@ -493,7 +493,32 @@ checking before its arms are worth running**: if the second stage cannot change 
 "pointwise cross-encoder over the fused top-100" rejection this section rests on was never tested
 either. The check is bounded and code-level — whether `RagEngine.query` returns the reranker's order
 (or a `blend < 1` nudge of the fused order), and what `tools/engine_multihop.py`'s summary reads.
-**Do not run arm 2 until that is answered.**
+**It is answered, and the answer is worse than "not ordering by the reranker".** All **200 of 200
+per-query rankings are byte-identical** between the two runs (`per_query[i]["ranking"]` and the
+`chunks` order match exactly), so the cross-encoder's scores demonstrably do not reach the returned
+order at all. The mechanism is now narrow, and it is in the coverage pass rather than the reranker:
+
+- `RagEngine.query` builds `cross_scores` from `self.cross_encoder.score_pairs([...])` and passes them
+  into `_coverage_select_from` as the relevance signal (engine.py:1286–1315);
+- `resolved_rerank_coverage_lambda` returns **0.7 automatically whenever a `rerank_model` is set**
+  (config.py:427), so configuring a reranker *always* takes the coverage path;
+- the coverage pass then sets `order = "recall"` and `blend = 1.0`, so the final ordering is the
+  **coverage selection's**, and if that selection degenerates to the input order the reranker's scores
+  are consumed and discarded;
+- the 1.9× wall clock (170.6 s → 318.4 s) shows the 568M model really did run, so the cost is paid
+  and the effect is zero.
+
+**What this means for the section above.** The rejection this section rests on — "a *pointwise* MS
+MARCO cross-encoder over the fused top-100" loses — **cannot have been testing a cross-encoder** if
+the cross-encoder cannot change the order. The recorded `engine-hybrid` rows, and every reranker row
+taken with `--rerank-model`, are measuring the coverage/recall order. That is a defect report on the
+measurement, not a result about rerankers, and it is the largest one this programme has produced.
+
+**The next probe is one function and one assertion**: run `_coverage_select_from` directly with a
+known `relevance` vector and check whether its output depends on `relevance`, with and without atom
+coverage data on the index. If it does not, the fix is in that function and every reranker row in the
+repository needs re-taking. **Do not run arm 2, and do not quote any reranker row, until that is
+settled.**
 | `mixedbread-ai/mxbai-rerank-large-v2` | **yes**, `Qwen2ForCausalLM` | no — same custom path | 1.5B |
 
 So the first experiment is literally
