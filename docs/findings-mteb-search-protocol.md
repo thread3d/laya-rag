@@ -275,11 +275,28 @@ The engine is also **~5× slower** on this task (263.9 s against 54.8 s), which 
 same table makes visible: fusion, chunking and the index build are not free even with no decision
 model in the path.
 
-**Extending to the five-dataset set is in flight, and its baselines are collected so they are not
-re-run.** `BAAI/bge-small-en-v1.5` under MTEB: SciFact 0.71271, NFCorpus 0.34339, **ArguAna
-0.60413** (MAP@10 0.52341), **SCIDOCS 0.20518** (MAP@10 0.12292) — the last two measured while the
-matching engine runs were still going, so the pairs are half-complete and nothing is claimed from
-them here. FiQA2018 is unstarted.
+**Three tasks are complete, and the gap is corpus-dependent in a way that matters.** All six numbers
+are `nDCG@10` under MTEB, same harness, engine in `--first-stage-only` with `models/laya-retrieval`:
+
+| MTEB task | `bge-small` | this engine | gap | documents |
+| --- | ---: | ---: | ---: | --- |
+| SciFact | 0.71271 | 0.69482 | **−0.018** | short scientific abstracts |
+| NFCorpus | 0.34339 | 0.33318 | **−0.010** | short titles and abstracts |
+| ArguAna | 0.60413 | **0.51630** | **−0.088** | ~190-word argumentative passages |
+| FiQA2018 | 0.40347 | *running* | — | medium financial passages |
+| SCIDOCS | 0.20518 | *running* | — | paper titles and abstracts |
+
+The two short-document corpora put the engine within 0.01–0.02 of a stock 33M bi-encoder. **ArguAna
+puts it 0.088 behind — four to nine times the gap** — and ArguAna is the one whose documents are
+long argumentative text rather than an abstract. That is the same shape the repository's BEIR work
+found on the long-document corpora (Robust04, TREC-NEWS), where passage decomposition *lost* and the
+loss grew with document length, and it is the first time the two measurements agree from opposite
+directions: **this engine's weakness is long documents**, visible in a BM25 ablation and again in an
+external dense-retrieval protocol. Two tasks were enough to see a placement; three are enough to see
+a pattern, and the third was worth the wait.
+
+FiQA2018's baseline is collected (0.40347) and its engine half is running; SCIDOCS's engine half is
+queued. Nothing is claimed from either here.
 
 **The original "~33 workers" observation was real, and withdrawing it was over-confident.** This
 page's first version recorded MTEB forking ~33 worker processes and stalling, and round 5 withdrew
