@@ -120,6 +120,11 @@ where few candidates survive, and why it is not a document at all.
 engine-level measurement that motivated the mode was never affected — `engine_beir.py` sets
 `LAYA_RAG_SECOND_STAGE=0` through the environment, which works.
 
+**Confirmed in the same probe, before it even reached search**: with the flag applied, the run's
+index phase shows **no `rerank.py` frame in any dump and no 282,984-token warning at all**. The
+warning was the rerank prompt, exactly as the stack said, and it is gone the moment the second stage
+is actually off.
+
 **The two refuted hypotheses, kept because they were part of the cost.**
 
 *Attempt one — the query embedding.* With `--first-stage-only` the only per-query model work left is
