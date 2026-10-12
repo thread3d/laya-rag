@@ -2359,7 +2359,11 @@ the top of §1 was anchored too (it had been the most visible unguarded figure i
    reproduces from no report on disk.
 
    **The gates were then adversarially tested rather than assumed, and one of them had a hole.**
-   Perturbing `claim-check`'s anchored figures fails it with the anchor named, so that gate is live.
+   Perturbing `claim-check`'s anchored figures fails it with the anchor named, so that gate is live; so is
+   `make leakage-audit --check`, which caught a planted **dilution signature** (a report whose settings
+   record `limit_queries: 10` while carrying fifty per-query entries) and exited 2 — the rule the audit
+   was *not* enforcing while it crashed on a 24 GB latin-1 dump, which is why it is worth re-planting
+   rather than trusting that a fixed audit still detects.
    Perturbing the **summary blockquote at the top of §1** did *not* fail `consistency-check` — the
    gate was fine, that line simply was not one of its sites, and it is the first number a reader
    meets. It is anchored now (**43 → 47 sites**) and the perturbation fails as it should. The lesson
