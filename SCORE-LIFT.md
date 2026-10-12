@@ -278,6 +278,36 @@ dense pass — lessons this programme has already paid for twice.
 **So P1's next concrete step is the extension, not a run** — and the good news is that the per-forum
 size makes it testable in minutes once the path exists.
 
+**The extension, to the point where it is a transcription rather than a design.** `beir.py` already
+has every mechanism; `cqadupstack.py` uses four of them and the dense row needs three more, so the
+change is: add `--biencoder-model` (default `models/laya-retrieval`), `--dense-weight` (default 0.3)
+and `--embed-chunk` to the parser; build the encoder **once** in `main` rather than per forum; and
+give `rank_subforum` an `encoder`/`vectors` parameter plus two branches, mirroring
+`beir.py`'s own dense block (lines ~1559–1600):
+
+```python
+vectors = beir.cached_embed(encoder, corpus, cache_dir / f"{forum}.{encoder.name}",
+                            use_cache=True, chunk=embed_chunk)
+bi = beir.dense_rankings(corpus, queries, encoder, vectors, top_k)      # 'biencoder'
+...
+rankings["hybrid-biencoder"] = beir.hybrid_rankings(bi, lexical or {}, top_k, ...)
+```
+
+Two signatures have to be read before writing it — **`beir.hybrid_rankings`** (its full parameter
+list, since the row records a dense weight and a lexical weight) and **`beir.active_biencoder`**
+(how a dataset name resolves to a model, which is what decides whether the forum id or an explicit
+model has to be passed) — and `LEXICAL_RETRIEVERS` in `cqadupstack.py` is what currently rejects the
+two new names. **`--embed-chunk` matters here for the same reason it does everywhere else**: the
+twelve forums embed separately and a kill should cost one forum, not the member.
+
+**A note on how this round went, because the pattern has now happened twice.** Both "one flag"
+tasks (P4 and P1) opened with a specification of mine that was wrong, and both were corrected within
+a minute of actually running something. The lesson is not that the specifications were wrong — it is
+that **a cheap launch is a better specification tool than more reading**, and both times the
+expensive version would have been a mis-specified hours-long run. For P1 specifically, the cheapest
+possible launch is one forum with `--retrievers bm25-engine` to prove the twelve-forum plumbing
+before the dense path is written.
+
 ### P2 — Fix the lexical channel per corpus, starting with the two cells the control leads `[data]`
 
 **What.** (a) Make the lexical settings — stemming on/off, query-stopword retention, title boost,
