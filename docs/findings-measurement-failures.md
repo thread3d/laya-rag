@@ -183,6 +183,28 @@ that guesses intent is worse than none.
 
 ---
 
+## What they cost, counted rather than remembered
+
+`git rev-list --count` over the session's span: **133 commits.** The per-class figures below are
+`git log | grep -ci` keyword counts, so they are indicative rather than exact — a commit touching two
+classes counts twice, and one whose message does not name a class counts not at all:
+
+| class | commits |
+| --- | ---: |
+| MTEB (silence, the inert flag, the placement) | **30** |
+| the reranker (the ordering defect, both arms, the re-takes) | **15** |
+| on-disk BM25F | 11 |
+| flags | 5 |
+| consistency-check | 3 |
+| doubled text | 3 |
+| leakage audit | 2 |
+| inert-flag check | 2 |
+
+The two classes at the top are **34% of the session's commits**, and both are of the same shape: a
+number that looked right and was not. That is the argument for the checks in one line — not that the
+failures were embarrassing, but that **two of them cost a third of the work**, and each was caught by
+re-deriving it from a direction nobody had used the first time.
+
 ## The methods, in the order they proved useful
 
 1. **Perturb the claim.** If a gate cannot be made to fail, it is not a gate.
