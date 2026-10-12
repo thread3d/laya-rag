@@ -398,6 +398,15 @@ which is the difference between a 15-hour run and a 15-hour run that dies at hou
 chasing is now concrete: the summed deficit stands at **0.7085**, and CQADupStack's cell shows what a
 dense row does to one.
 
+**The on-disk build's cost curve now reaches 2.68M documents, and it is close to linear.** `nq`'s
+lexical index finished at 20:22, having started at 19:53 — **~29 minutes for 2,681,468 documents**,
+against the 240–396 s the class docstring records at 400,000. That is 6.7× the documents for 4.4–7.3×
+the time, so the spill-and-merge design is not degrading at this size, and the earlier extrapolation
+(15–18 h of *embedding*) is unaffected — the build is not the long pole, the embedding is.
+
+It is also the last phase in the harness that reported nothing while it worked, and the fix for that
+landed one round before the *next* member needs it: the remaining six are all larger than nq.
+
 **A note on how this round went, because the pattern has now happened twice.** Both "one flag"
 tasks (P4 and P1) opened with a specification of mine that was wrong, and both were corrected within
 a minute of actually running something. The lesson is not that the specifications were wrong — it is
