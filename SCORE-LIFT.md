@@ -2489,6 +2489,13 @@ Two traps: **the on-disk lexical backend is required** above ~1M documents (the 
 `bm25-engine` for the member. A run with `--limit*`, `--subforums` or a seed writes to
 `eval/beir/subsets/` instead — see §10.1.
 
+**What "healthy" looks like, checked mid-flight on `nq`** so a later reader can tell normal from
+broken without re-deriving it: the log's last line is a `N/2681468 (Xs)` counter — **~60 documents per
+second**, so a million documents is about 4.5 hours — the process appears in `make heavy-status`, the
+embedding cache grows to **34 GB** for the whole member, and the volume has **357 GB free**. Zero
+matches for `error`, `Traceback` or `no space` in the log. Disk is the failure that would waste a
+night silently, which is why it is the first thing to look at on a multi-hour job, not the last.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
