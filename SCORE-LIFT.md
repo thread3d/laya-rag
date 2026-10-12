@@ -2550,15 +2550,25 @@ one that re-takes `RERANK_COVERAGE_LAMBDA` at 0.0 and 0.7 on MultiHop with the o
 it runs, the default stands as *unjustified* rather than *justified* — which is a different thing from
 *wrong*, and the README now says which.
 
-**A note on what this round did not do.** `README.md`'s `RERANK_ORDER` row also cites a reranking
-figure (*"SciFact 0.654 (was 0.470 reordered)"*), and I could not tell from the documents whether that
-comparison ran with coverage λ at 0.7 (in which case the ordering was discarded and the figure means
-something else) or at 0.0 (in which case the cross-encoder genuinely ordered). **Flagging it on
-suspicion would be the same error this programme keeps catching** — a claim about a measurement nobody
-re-made — so it is recorded here as an open question with its two cases, and the report behind it is the
-thing to read before anyone touches that row.
+**The open question from last round is now answered by reading the reports, and the answer is not the
+one either case predicted.** `README.md`'s `RERANK_ORDER` row says *"SciFact 0.654 (was 0.470
+reordered)"*. Searching both report trees for the two halves:
 
-**The re-takes beyond SciFact.** The other twelve reports that configured a reranker and a coverage λ
+* **0.654 reproduces exactly** as SciFact `bm25` nDCG@10 = **0.6539** — the plain lexical row, with
+  `rerank_model: null`. So the first half is the recall order, as the row claims.
+* **0.470 reproduces from nothing with a reranker configured.** No SciFact report with a non-empty
+  `rerank_model` reads anywhere in 0.44–0.50. The only rows in that band are `adapted-runA.json`'s
+  **`dense`** (0.4711) and `adapted-ensemble-AB.json`'s `biencoder` (0.4711) and `dense-ensemble`
+  (0.4629) — **dense retrievers, not reranked lexical rankings**, which is a different claim wearing a
+  similar number.
+
+So the parenthetical's second half is **not reproducible as a reranking figure**, and the question was
+never "λ=0.7 or λ=0" — it is whether the number was ever a reranking measurement at all. It is recorded
+that way, with the two rows that do read 0.47 named so the next reader does not re-run this search. The
+row's *conclusion* (`auto` keeps recall order unless a scorer is supplied) may still be right; its
+*evidence* is a number that means something else.
+
+**The re-takes beyond SciFact.****The re-takes beyond SciFact.** The other twelve reports that configured a reranker and a coverage λ
 above zero (`eval/benchmarks/multihop-rag/rerank-*.json`) are the evidence §P4's premise rested on, and
 they were taken before the ordering fix. Re-taking the full-protocol ones is the way to find out whether
 "a pointwise cross-encoder loses" was ever measured.
