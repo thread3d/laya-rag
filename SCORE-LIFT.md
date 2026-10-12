@@ -606,7 +606,15 @@ eval/engine-beir/                3 reports: scifact-chauto-ce.json (nDCG@10 0.74
                                 scifact-ceauto.json (0.7274), scifact-ceplain.json (0.7091)
 ```
 
-**The SciFact three matter most**, because the repository quotes them: `docs/findings-reranker-fairness.md`,
+**A control arm shows the audit was over-inclusive, and the rule is sharper than "names a
+reranker".** `scifact-ceplain` sets `rerank_coverage_lambda: 0.0`, which means the coverage branch is
+skipped entirely and the cross-encoder orders through the ordinary `order="relevance"` path — never
+touching the defect. Re-taken with the fix it reads **nDCG@10 0.7091, identical to its recorded
+0.7091**, so the unaffected path is unperturbed and the fix is not a blanket change. The affected set
+is therefore reports with a cross-encoder **and a coverage λ above zero** (the auto 0.7 counts), not
+every report that merely names a model; `ceplain` and anything like it stays valid.
+
+**The SciFact rows matter most**, because the repository quotes them: `docs/findings-reranker-fairness.md`,
 `docs/findings-rerank-selection.md` and the README all reference this family, and
 `scifact-chauto-ce`'s **0.7417 is competitive with the quoted `hybrid-biencoder` 0.7413**, which is why
 it was the first re-take worth doing.
