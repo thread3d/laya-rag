@@ -19,7 +19,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -246,6 +246,146 @@ class BM25Index:
         index.stem = bool(payload.get("stem", False))
         index._build_postings()
         return index
+
+
+class BM25FIndex:
+    """BM25F: BM25 over named fields, each with its own length normalisation and weight.
+
+    `BM25Index` treats a document as one bag of words, so "the title matters more" can only be
+    expressed by *repeating* it — `tools/beir.py --title-boost 2`, which is the proxy this class
+    exists to replace. Repetition is not a field boost: it multiplies the term frequency **and**
+    the document length, so the length normalisation consumes part of the boost, and the two
+    fields cannot carry different `b`.
+
+    BM25F (Robertson, Zaragoza & Taylor, 2004) normalises each field by its own length, weights
+    the normalised frequencies, and sums them **before** saturation::
+
+        tf~(t, d)   = sum_f  w_f * tf_f(t, d) / (1 - b_f + b_f * len_f(d) / avg_len_f)
+        score(t, d) = idf(t) * tf~(t, d) * (k1 + 1) / (k1 + tf~(t, d))
+
+    so a term in the title contributes at the title's own scale however long the body is. The IDF
+    is the ordinary one over the **union** document frequency: a term counts as document-frequent
+    when it appears in any field, which is what keeps a title-only term rare and therefore strong.
+
+    In memory only, deliberately: a corpus large enough to need the on-disk backend is not
+    servable by this class, and a `save`/`load` pair that quietly produced a different index would
+    be worse than its absence.
+    """
+
+    def __init__(
+        self,
+        fields: Sequence[str] = ("title", "body"),
+        *,
+        k1: float = K1,
+        b: float = B,
+        b_fields: Mapping[str, float] | None = None,
+        weights: Mapping[str, float] | None = None,
+        drop_stopwords: bool = True,
+        stem: bool = False,
+    ) -> None:
+        if not fields:
+            raise ValueError("BM25F needs at least one field")
+        self.fields = tuple(str(name) for name in fields)
+        self.k1 = float(k1)
+        self.b_fields = {name: float(b) for name in self.fields}
+        self.weights = {name: 1.0 for name in self.fields}
+        for supplied, target in ((b_fields, self.b_fields), (weights, self.weights)):
+            if not supplied:
+                continue
+            unknown = set(supplied) - set(self.fields)
+            if unknown:
+                raise ValueError(
+                    f"{sorted(unknown)} are not fields of this index; it has {list(self.fields)}"
+                )
+            target.update({str(name): float(value) for name, value in supplied.items()})
+        self.drop_stopwords = bool(drop_stopwords)
+        self.stem = bool(stem)
+        self._ids: list[str] = []
+        self._lengths: list[dict[str, int]] = []
+        self._avg_len: dict[str, float] = {}
+        self._doc_freq: Counter[str] = Counter()
+        #: term -> [(row, field index, frequency)], so scoring touches only matching documents.
+        self._postings: dict[str, list[tuple[int, int, int]]] = {}
+
+    def __len__(self) -> int:
+        return len(self._ids)
+
+    def build(self, documents: Iterable[tuple[str, Mapping[str, str]]]) -> None:
+        """Index ``(doc_id, {field: text})`` pairs; a missing field is an empty one."""
+        self._ids = []
+        self._lengths = []
+        self._doc_freq = Counter()
+        self._postings = {}
+        totals = {name: 0 for name in self.fields}
+        for row, (doc_id, fields) in enumerate(documents):
+            self._ids.append(str(doc_id))
+            lengths: dict[str, int] = {}
+            terms_here: set[str] = set()
+            for field_index, name in enumerate(self.fields):
+                tokens = tokenize(str((fields or {}).get(name, "") or ""), stem=self.stem)
+                lengths[name] = len(tokens)
+                totals[name] += len(tokens)
+                for term, frequency in Counter(tokens).items():
+                    self._postings.setdefault(term, []).append((row, field_index, frequency))
+                    terms_here.add(term)
+            self._lengths.append(lengths)
+            for term in terms_here:
+                self._doc_freq[term] += 1
+        count = len(self._ids)
+        self._avg_len = {name: (totals[name] / count if count else 0.0) for name in self.fields}
+
+    def _idf(self, term: str) -> float:
+        n = len(self._ids)
+        df = self._doc_freq.get(term, 0)
+        if not n or not df:
+            return 0.0
+        return max(math.log(1.0 + (n - df + 0.5) / (df + 0.5)), 0.0)
+
+    def settings(self) -> dict[str, Any]:
+        """The configuration a report should carry, so a row says what produced it."""
+        return {
+            "fields": list(self.fields),
+            "k1": self.k1,
+            "b": dict(self.b_fields),
+            "weights": dict(self.weights),
+            "drop_stopwords": self.drop_stopwords,
+            "stem": self.stem,
+        }
+
+    def search(self, query: str, k: int = 20) -> list[LexicalHit]:
+        """Return the ``k`` highest-scoring documents for ``query``."""
+        if k < 1:
+            raise ValueError(f"k must be positive, got {k}")
+        if not self._ids:
+            return []
+        terms = tokenize(query, stem=self.stem)
+        if self.drop_stopwords:
+            terms = [t for t in terms if t not in STOPWORDS]
+        if not terms:
+            return []
+        scores = [0.0] * len(self._ids)
+        for term in terms:
+            idf = self._idf(term)
+            if idf == 0.0:
+                continue
+            postings = self._postings.get(term)
+            if not postings:
+                continue
+            # The field frequencies are summed before saturation, which is the whole difference
+            # from running BM25 on a concatenation of the fields.
+            weighted: dict[int, float] = {}
+            for row, field_index, frequency in postings:
+                name = self.fields[field_index]
+                average = self._avg_len.get(name) or 1.0
+                b = self.b_fields[name]
+                normaliser = 1.0 - b + b * (self._lengths[row].get(name, 0) / average)
+                weighted[row] = weighted.get(row, 0.0) + (
+                    self.weights[name] * frequency / (normaliser or 1.0)
+                )
+            for row, frequency in weighted.items():
+                scores[row] += idf * (frequency * (self.k1 + 1.0)) / (self.k1 + frequency)
+        ranked = sorted(range(len(scores)), key=lambda i: -scores[i])[:k]
+        return [LexicalHit(chunk_id=self._ids[i], score=scores[i]) for i in ranked if scores[i] > 0.0]
 
 
 class EagerBM25Index:

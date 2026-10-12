@@ -53,7 +53,13 @@ import evalkit  # noqa: E402
 from laya_rag.chunking import Chunk  # noqa: E402
 from laya_rag.config import EngineConfig  # noqa: E402
 from laya_rag.index_store import VectorIndex  # noqa: E402
-from laya_rag.lexical import STOPWORDS, BM25Index, reciprocal_rank_fusion, tokenize  # noqa: E402
+from laya_rag.lexical import (  # noqa: E402
+    STOPWORDS,
+    BM25FIndex,
+    BM25Index,
+    reciprocal_rank_fusion,
+    tokenize,
+)
 from laya_rag.ondisk import OnDiskBM25  # noqa: E402
 
 #: Public BEIR mirror used by the official scripts.
@@ -260,6 +266,60 @@ def load_titles(dataset_dir: Path) -> dict[str, str]:
     for row in _read_jsonl(dataset_dir / "corpus.jsonl"):
         titles[str(row["_id"])] = (row.get("title") or "").strip()
     return titles
+
+
+def load_fields(dataset_dir: Path) -> dict[str, dict[str, str]]:
+    """``_id -> {"title": ..., "body": ...}``, the two fields BM25F normalises separately.
+
+    BEIR's own baselines concatenate title and text. That is what ``bm25-title`` approximates by
+    repetition, and it is why a title boost cannot be expressed as a *parameter* there: repeating
+    the title inflates the term frequency and the document length together. This reads the two
+    apart so :class:`laya_rag.lexical.BM25FIndex` can weight and normalise them independently.
+    """
+    fields: dict[str, dict[str, str]] = {}
+    for row in _read_jsonl(dataset_dir / "corpus.jsonl"):
+        doc_id = str(row["_id"])
+        fields[doc_id] = {
+            "title": str(row.get("title") or ""),
+            "body": str(row.get("text") or ""),
+        }
+    return fields
+
+
+def bm25f_rankings(
+    fields: Mapping[str, Mapping[str, str]],
+    queries: Mapping[str, str],
+    top_k: int,
+    *,
+    k1: float = BEIR_K1,
+    b: float = BEIR_B,
+    b_title: float | None = None,
+    b_body: float | None = None,
+    title_weight: float = 5.0,
+    body_weight: float = 1.0,
+    drop_stopwords: bool = True,
+    stem: bool = True,
+) -> dict[str, list[str]]:
+    """A BM25F row: per-field length normalisation and weight, rather than title repetition.
+
+    Same tokeniser and stopword policy as ``bm25-engine``, so the two are comparable and the only
+    difference is how the two fields are combined.
+    """
+    index = BM25FIndex(
+        ("title", "body"),
+        k1=k1,
+        b=b,
+        b_fields={"title": b if b_title is None else b_title,
+                  "body": b if b_body is None else b_body},
+        weights={"title": title_weight, "body": body_weight},
+        drop_stopwords=drop_stopwords,
+        stem=stem,
+    )
+    index.build((doc_id, values) for doc_id, values in fields.items())
+    return {
+        query_id: [hit.chunk_id for hit in index.search(text, k=top_k)]
+        for query_id, text in queries.items()
+    }
 
 
 def restrict_qrels(qrels: Mapping[str, Mapping[str, float]],
@@ -1156,6 +1216,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-stem", dest="stem", action="store_false",
                         help="disable the engine's English stemming for its lexical path")
     parser.add_argument("--rrf-k", type=int, default=60, help="RRF constant for fusion rows")
+    parser.add_argument("--bm25f", action="store_true",
+                        help="also report a BM25F row: per-field length normalisation and weight, "
+                             "instead of repeating the title")
+    parser.add_argument("--title-weight", type=float, default=5.0,
+                        help="BM25F weight of the title field (body is 1.0)")
+    parser.add_argument("--bm25f-b-title", type=float, default=None,
+                        help="BM25F length normalisation for the title field (default: --b)")
+    parser.add_argument("--bm25f-b-body", type=float, default=None,
+                        help="BM25F length normalisation for the body field (default: --b)")
     parser.add_argument("--title-boost", type=int, default=1,
                         help="repeat each title N times before the body in a bm25-title row")
     parser.add_argument("--passages", default="",
@@ -1363,6 +1432,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             rankings["bm25-title"] = title_rankings
             results["bm25-title"] = {"note": f"title repeated {args.title_boost}x"}
+
+        if args.bm25f:
+            # Reported beside `bm25-title`: same channel, same tokeniser, and the only difference
+            # is that the fields are normalised and weighted separately instead of concatenated.
+            started = time.perf_counter()
+            fields = load_fields(dataset_dir)
+            rankings["bm25f"] = bm25f_rankings(
+                fields, queries, args.top_k, k1=args.k1, b=args.b,
+                b_title=args.bm25f_b_title, b_body=args.bm25f_b_body,
+                title_weight=args.title_weight, drop_stopwords=True, stem=args.stem,
+            )
+            results["bm25f"] = {
+                "seconds": round(time.perf_counter() - started, 2),
+                "note": f"BM25F: title weight {args.title_weight}, body weight 1.0, "
+                        f"b title={args.bm25f_b_title if args.bm25f_b_title is not None else args.b}, "
+                        f"body={args.bm25f_b_body if args.bm25f_b_body is not None else args.b}",
+            }
             # Fuse the title-boosted channel: it measured better on both datasets, and
             # everything downstream inherits it.
             lexical = title_rankings

@@ -124,21 +124,21 @@ of its hand-entered cells — see the note under §1.2.)
 
 | dataset | documents | rows measured | richest channel measured |
 | --- | ---: | --- | --- |
-| arguana | 8,674 | 12 rows | full |
+| arguana | 8,674 | 13 rows | full |
 | bioasq | 14,914,604 | bm25, bm25-engine | **lexical only** |
 | climate-fever | 5,416,593 | bm25-engine, bm25-title | **lexical only** |
 | cqadupstack | 457,199 | bm25, bm25-engine, bm25-title | **lexical only** |
 | dbpedia-entity | 4,635,922 | bm25-engine, bm25-title | **lexical only** |
 | fever | 5,416,568 | bm25-engine, bm25-title | **lexical only** |
-| fiqa | 57,638 | 8 rows | full |
+| fiqa | 57,638 | 9 rows | full |
 | hotpotqa | 5,233,329 | bm25-engine, bm25-title | **lexical only** |
 | msmarco | 8,841,823 | bm25, bm25-engine | **lexical only** *(not a member)* |
-| nfcorpus | 3,633 | 15 rows | full |
+| nfcorpus | 3,633 | 16 rows | full |
 | nq | 2,681,468 | bm25-engine, bm25-title | **lexical only** |
 | quora | 522,931 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | robust04 | 528,155 | biencoder, bm25, bm25-engine, bm25-title, hybrid-biencoder | adapted dense |
-| scidocs | 25,657 | 8 rows | full |
-| scifact | 5,183 | 16 rows | full |
+| scidocs | 25,657 | 9 rows | full |
+| scifact | 5,183 | 17 rows | full |
 | signal1m | 2,866,316 | bm25, bm25-engine, bm25-title | **lexical only** |
 | trec-covid | 171,332 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | trec-news | 594,977 | biencoder, bm25, bm25-engine, bm25-title, hybrid-biencoder | adapted dense |
@@ -328,9 +328,36 @@ rows already on disk, so the answer cost no new runs (`docs/findings-lexical-sel
 - Signal-1M is the sharpest reading: not a missing channel but a **misconfigured** one — the member
   has no dense row at all, and its only channel was tuned where its settings won.
 
-**Cost.** Hours for the selector profile (done, no embedding); the harness switch that would act on
-it is a small change to `tools/beir.py` and the engine's lexical config. BM25F is a few hundred lines
-in `lexical.py` plus re-indexing the affected corpora, and is untouched.
+**Measured for (b), and the proxy was not the problem.** `laya_rag.lexical.BM25FIndex` and the
+harness's `--bm25f`/`--title-weight`/`--bm25f-b-title`/`--bm25f-b-body` flags are in
+(`docs/findings-bm25f.md`). A weight sweep over the five small full-channel corpora:
+
+| corpus | `bm25-engine` | title ×2 proxy | best BM25F | weight |
+| --- | ---: | ---: | ---: | ---: |
+| SciFact | 0.6762 | 0.6824 | 0.6829 | 3 |
+| NFCorpus | 0.3244 | 0.3248 | 0.3255 | 3 |
+| ArguAna | 0.4169 | 0.4275 | **0.4407** | 12 |
+| SciDocs | 0.1497 | 0.1523 | 0.1557 | 12 |
+| FiQA-2018 | 0.2386 | 0.2386 | 0.2386 | any |
+| **macro** | **0.3612** | **0.3651** | **0.3687** | — |
+
+The optimal weight is **corpus-dependent and not in one direction** (3 on two, still rising at 12 on
+two, flat on FiQA), so there is no single deployed title weight — the same shape §P2(a) found for the
+other knobs. The proxy is *close* (0.3651 against 0.3662 at a shared weight) but not equivalent, and
+it fails exactly where theory says it should: **ArguAna +0.0132**, a corpus whose "titles" are shared
+topic keyword lists, so repeating them inflates the field that is already the whole signal. At `w=1`
+— fields separated but unweighted — ArguAna *loses* 0.011 against plain BM25, which locates the gain
+in the weight rather than the split.
+
+**The falsifier's second branch is still open, for a structural reason.** No FEVER row exists: the
+member is 5.4M documents, `BM25FIndex` is in-memory, and FEVER's existing lexical rows went through
+the on-disk postings backend, which has no field-aware mode. Extending that backend is the
+unblocking work: the postings format, the build loop and the memory accounting all assume one length
+per document.
+
+**Cost.** Hours for the selector profile and the BM25F sweep (done — neither needs embeddings); the
+harness switch that would act on the selector is a small change to `tools/beir.py` and the engine's
+lexical config. The on-disk BM25F backend is the remaining large piece.
 
 **Falsifier.** The per-corpus selector picks the same settings on every corpus, or BM25F does not
 move FEVER. The first is **refuted above** — the picks are 11/6/1 across the four configurations.
