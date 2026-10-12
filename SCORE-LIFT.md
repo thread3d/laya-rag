@@ -2613,6 +2613,14 @@ had been killed, each holding memory for a job nobody was waiting for. The discr
 therefore **"whose children are they?"**, not "how many are there?", and it is worth asking in that order
 because the second question is the one that panics an operator into killing a healthy run.
 
+**And the checkpoints are real, which is what makes the resumability claim worth anything.** The run
+writes `eval/beir/cache/nq.laya-retrieval.mean.parts/`, and the directory carries **part files dated
+within the last few minutes** — so `--embed-chunk 20000` is doing what it says and a kill costs the block
+in flight rather than six hours of embedding. Verified by looking at the filesystem rather than by
+trusting the flag, for the same reason every other claim in this record was: **a flag being read is not
+the same as a flag doing its job.** (The check that a flag is *read* exists;
+`tests/test_tools_flags_are_used.py`. That it *works* is only ever visible in the artefacts.)
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
