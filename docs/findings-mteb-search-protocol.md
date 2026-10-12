@@ -308,7 +308,11 @@ that a background job's shell wrapper is not the job.
 `tools/beir.py` and `tools/fusion_tuning.py` do, so `make heavy-status` can see a benchmark run and
 a second one is refused instead of contending. The **baseline path is deliberately excluded** — it
 evaluates a stock MTEB model, builds no engine index, and holds nothing another job needs — and a
-three-case test pins that decision rather than the flag.
+three-case test pins that decision rather than the flag. **Verified in use, which is the part that
+matters**: while the next sweep ran, `make heavy-status` reported `mteb_search.py pid 95977` and the
+run's own progress line read `search: 500/1406 queries in 253s (0.51s/query)` — a visible, serialised
+benchmark job instead of an invisible contender, which is what the four rounds of apparent stalls
+were partly made of.
 
 **A scripting lesson, recorded because it cost a round.** The three-pair sweep was launched with
 `| grep -E "main_score|Error"`, which filtered out the adapter's own progress lines — so a run that
