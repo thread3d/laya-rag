@@ -450,6 +450,28 @@ declined on **licence**, not on measurement. Two Apache-2.0 alternatives load on
 | `BAAI/bge-reranker-base` (measured, loses) | yes | yes | 2023 baseline |
 | `BAAI/bge-reranker-v2-m3` | **yes**, `XLMRobertaForSequenceClassification` | **yes — zero code change** | 568M, 2024, multilingual |
 | `Qwen/Qwen3-Reranker-0.6B` | **yes**, `Qwen3ForCausalLM` | no — needs a yes/no-logit path | Apache-2.0, listwise-capable |
+
+**The next run, specified so it is not mis-specified.** `tools/engine_multihop.py` already takes
+`--rerank-model`, so arm 1 needs no code:
+
+```
+.venv/bin/python tools/engine_multihop.py --rerank-model BAAI/bge-reranker-v2-m3 \
+    --limit 200 --sample-seed <s>
+```
+
+Three things to get right, each of which otherwise wastes hours:
+
+- **The reranker is query-time only**, so the index must be *reused* rather than rebuilt — keep the
+  tag the recorded row used, or the run pays a full MultiHop ingest for a change that cannot affect
+  the index.
+- **A limited run is a smoke, not a result.** `--limit` with `--sample-seed` matches
+  `tools/multihop_official.py`'s sampling, so a 200-query pair (the base reranker against `v2-m3` on
+  the *same* seed) is comparable and bracketable; it must be labelled a subset wherever it appears.
+- **jobkit refusing a fingerprint change is correct** — a new `--rerank-model` is a different
+  measurement, so it needs its own output stem rather than `--fresh` over the recorded row.
+
+Arm 2 (`Qwen3-Reranker-0.6B`, listwise) needs the yes/no-logit path and is real work; arm 1 is a
+flag and an afternoon.
 | `mixedbread-ai/mxbai-rerank-large-v2` | **yes**, `Qwen2ForCausalLM` | no — same custom path | 1.5B |
 
 So the first experiment is literally
