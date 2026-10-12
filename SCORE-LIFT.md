@@ -300,6 +300,27 @@ model has to be passed) — and `LEXICAL_RETRIEVERS` in `cqadupstack.py` is what
 two new names. **`--embed-chunk` matters here for the same reason it does everywhere else**: the
 twelve forums embed separately and a kill should cost one forum, not the member.
 
+**P1's first cell is measured, on one sub-forum, and the dense channel is worth having.** The
+extension landed and the prescribed cheap launch ran — `--subforums android`, the smallest forum at
+**22,998 documents**, embedding in **568.9 s**:
+
+| cqadupstack/android, 1 of 12 sub-forums | nDCG@10 | nDCG@100 | Recall@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| `bm25-engine` (the row this member already had) | 0.3681 | 0.4178 | 0.4595 | 0.3696 |
+| `biencoder` (dense alone) | 0.3580 | 0.4118 | 0.4673 | 0.3510 |
+| **`hybrid-biencoder`** (dense w=0.3 + `bm25-engine`) | **0.4067** | **0.4456** | **0.5079** | **0.4079** |
+
+**+0.0386 nDCG@10 over the lexical row** — and the shape matters: dense *alone* is slightly worse
+than BM25 (0.3580 against 0.3681), while the fusion is clearly better than either, which is the
+§1.2 prediction for the lexical-only members stated as a measurement rather than an expectation.
+Recall@10 moves +0.0484, the largest of the four.
+
+Two caveats travel with it, and the tool prints the first itself: it is **1 of 12 sub-forums**, so it
+is a subset run and not the member's row, and the member is then macro-averaged with seven others.
+The **cost** is now measured per forum: 568.9 s to embed 23k documents at ~40 docs/s, so the twelve
+forums are ~2–3 hours of embedding and the eight members are where §10.1's "days" comes from — the
+`--embed-chunk` checkpointing and the per-forum embedding cache are what make that resumable.
+
 **A note on how this round went, because the pattern has now happened twice.** Both "one flag"
 tasks (P4 and P1) opened with a specification of mine that was wrong, and both were corrected within
 a minute of actually running something. The lesson is not that the specifications were wrong — it is
