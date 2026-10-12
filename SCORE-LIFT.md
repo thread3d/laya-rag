@@ -2402,6 +2402,14 @@ the top of §1 was anchored too (it had been the most visible unguarded figure i
    identical to a working gate until someone perturbs the right line**, which is why each of these
    was perturbed rather than trusted.
 
+   **A fourth class of stale claim turned up in the same sweep, and it is the one aimed at newcomers.**
+   `docs/PROGRAMME-STATUS.md`'s "Starting again" block — the first thing a new contributor runs — said
+   `make test   # 1251 tests` and `make claim-check   # 58 prose claims`. The suite runs **1,718** and the
+   checker reports **65**. Both are now approximate or attributed ("~1,700 tests", "65 today") rather
+   than exact, because a count in a comment is a claim nothing checks and every commit invalidates it.
+   The general rule this session keeps arriving at: **do not write a number where a checked number would
+   do, and do not write an exact number where the thing it counts changes weekly.**
+
    **A third reference class was scanned — paths — and it is faithful too, and deliberately not
    automated.** Every backticked `eval/…`, `tools/…`, `docs/…` path in the tracked documents was
    resolved: **zero genuine stale pointers**. The seventeen that failed to resolve are all one of three
