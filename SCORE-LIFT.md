@@ -614,6 +614,22 @@ touching the defect. Re-taken with the fix it reads **nDCG@10 0.7091, identical 
 is therefore reports with a cross-encoder **and a coverage λ above zero** (the auto 0.7 counts), not
 every report that merely names a model; `ceplain` and anything like it stays valid.
 
+**The whole SciFact CE family is now re-taken**, which makes the conclusion stronger than a single
+row could:
+
+| scifact, `ms-marco-MiniLM-L-6-v2` | λ | recorded | re-taken | Δ |
+| --- | ---: | ---: | ---: | ---: |
+| `ceplain` | 0.0 (CE orders via `relevance`) | 0.7091 | **0.7091** | **0.0000** — the control |
+| `ceauto` | auto 0.7 | 0.7274 | **0.6762** | **−0.0512** |
+| `chauto-ce` | auto 0.7 | 0.7417 | **0.6422** | **−0.0995** |
+
+**On SciFact this cross-encoder is worse than the fused order in every configuration.** Where it
+genuinely ordered (`ceplain`, λ=0) it read **0.7091**; where the defect discarded its order the rows
+read 0.7274 and 0.7417 — so those two were the *fused* order wearing a cross-encoder's name, and the
+engine's SciFact number is the fused **0.7417**, not any CE ordering. The repository's own older note
+that a pointwise cross-encoder "lowered nDCG@10 on both BEIR collections" is now measured on this one
+at three configurations, with a control that does not move.
+
 **The SciFact rows matter most**, because the repository quotes them: `docs/findings-reranker-fairness.md`,
 `docs/findings-rerank-selection.md` and the README all reference this family, and
 `scifact-chauto-ce`'s **0.7417 is competitive with the quoted `hybrid-biencoder` 0.7413**, which is why
