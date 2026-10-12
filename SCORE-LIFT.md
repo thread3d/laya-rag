@@ -2422,6 +2422,25 @@ the top of §1 was anchored too (it had been the most visible unguarded figure i
    count updated in three documents when one is added, which is why these anchors went into the
    consistency registry (additive, no pinned count) rather than into `claim-check`.
 
+**The verification ledger, so the next session does not re-do it.** Eight classes of claim in this
+repository have been checked, each by the method named. Six are automated; the two that are not have
+their reasons written down, because *a checker that guesses intent is worse than no checker*:
+
+| class | result | how |
+| --- | --- | --- |
+| numeric claims against their reports | live; **one hole found and fixed** (the summary blockquote had no site) | `make consistency-check` (47 sites), `make claim-check` (65 checks) |
+| query dilution in reports | a planted signature is caught | `make leakage-audit --check` |
+| a patch that doubled its own text | one found in the tree, repaired | `tests/test_docs_no_doubled_text.py` |
+| a flag parsed and never read | **five found, all resolved** (three removed, one wired, one reclassified as a default-mode alias) | `tests/test_tools_flags_are_used.py` |
+| a documented `make` target that does not exist | one real (`charts-more`), fixed; four documented as *proposed*, listed | `tests/test_docs_make_targets_exist.py` |
+| a documented tool flag that does not exist | **zero** | `tests/test_docs_tool_flags_exist.py` |
+| documented paths that do not resolve | **zero genuine** — the seventeen are pending reports, proposed tools, or a historical mention | **not automated**: a checker cannot tell a dead pointer from a sentence about one |
+| the documented configuration surface | **five knobs were missing** (`SECOND_STAGE` among them); now zero | **not automated**: a completeness check would have to decide which internal knobs deserve a row |
+
+Two of the six automated checks produced false positives on their own first run — nineteen English
+"make up" hits, and four single-quoted flags read as undeclared. **Checking a checker is a different job
+from running it**, and it is now the job this section exists to make routine.
+
 ### 10.4 What could invalidate this document, and how it would look
 
 **A document-level falsifier is in §10.2, and it is the only one that retires the framing rather
