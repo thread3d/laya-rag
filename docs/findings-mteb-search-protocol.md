@@ -275,6 +275,24 @@ The engine is also **~5× slower** on this task (263.9 s against 54.8 s), which 
 same table makes visible: fusion, chunking and the index build are not free even with no decision
 model in the path.
 
+**A second task says the same thing, which is what makes it a reading rather than one corpus's
+accident.** The same pair on NFCorpus:
+
+| system | MTEB task | `main_score` | nDCG@10 | MAP@10 | time |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `BAAI/bge-small-en-v1.5` | SciFact | 0.71 | 0.71271 | 0.66811 | 54.8 s |
+| **this engine** (`laya-retrieval`) | SciFact | 0.69 | 0.69482 | 0.64817 | 263.9 s |
+| `BAAI/bge-small-en-v1.5` | NFCorpus | 0.34 | 0.34339 | 0.12280 | 46.4 s |
+| **this engine** (`laya-retrieval`) | NFCorpus | 0.33 | 0.33318 | **0.12463** | 201.1 s |
+
+Two tasks, same protocol, same harness: the engine is **0.018** below the stock bi-encoder on
+SciFact and **0.010** below it on NFCorpus, and it is **~4–5× slower** on both. On NFCorpus the
+engine's **MAP@10 is ahead** (0.12463 against 0.12280) while nDCG@10 is behind, which is the expected
+shape when a system orders the top of the list slightly worse but covers more of the relevant set —
+and it is the kind of detail a single aggregate hides. What the pair establishes is narrow and
+worth having: **under an external protocol, on two corpora, this engine performs just below a stock
+33M bi-encoder and costs several times more.**
+
 **Nothing is uploaded.** These are local MTEB runs; a submission is a separate act, and it should name
 the encoder explicitly, which the CLI now enforces.
 

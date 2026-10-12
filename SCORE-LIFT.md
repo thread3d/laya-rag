@@ -775,6 +775,9 @@ above published BM25.** MTEB's SciFact, `--first-stage-only`, two encoders:
 `BAAI/bge-small-en-v1.5` scores **0.71271** nDCG@10 (`main_score` 0.71) on the same task under the
 same harness, against this engine's **0.69482** — so the engine sits **0.018 below a stock
 `bge-small` bi-encoder**, measured rather than inferred, and **~5× slower** (263.9 s against 54.8 s).
+**A second task agrees**: NFCorpus `bge-small` 0.34339 against the engine's 0.33318 (−0.010), again
+~4× slower — with the engine's **MAP@10 ahead** (0.12463 against 0.12280), which is what a system
+that orders the top slightly worse but covers more relevant documents looks like.
 Reading 0.69482 against the BEIR-convention numbers (BM25 0.665, `bge-small` 0.72) would have been a
 cross-protocol claim; this is not. `--embed-model` now *requires* `--model-name`, so a
 run cannot be filed under a name that does not describe its encoder. **Nothing is uploaded.**
