@@ -1823,6 +1823,29 @@ finished before the first 5M-document job starts, because a harness change disco
 invalidates the run. **Land C3/C7's PDF loader inside W2–W4**, since it shares P1's ingest path and
 duplicating it later costs the same work twice.
 
+**Operating notes, learned the expensive way.** This section is about the lock, so these belong
+here rather than in a findings page nobody running P1 would open. Every one of them cost this
+programme at least a round.
+
+- **A background job's shell wrapper is not the job.** Killing the wrapper leaves the Python process
+  running — a `beir.py` run survived its wrapper for thirty minutes, and a five-task sweep left
+  **101 `mteb_search.py` processes** resident. Kill the *process* (`pkill -9 -f <script>`), and check
+  afterwards; `make heavy-status` shows what holds the lock.
+- **Never let a wrapper filter a long run's output.** A sweep launched as `... | grep main_score`
+  discarded the progress lines, so a working run looked exactly like a hang — the failure mode this
+  programme spent four rounds on, self-inflicted.
+- **Prefer one invocation to a shell loop.** `tools/beir.py` takes `--datasets`, `tools/mteb_search.py`
+  takes a comma-separated `--task`; both take the lock once and print per-item results. The loop was
+  the source of the process problem above.
+- **A long run's report must survive a kill.** `tools/beir.py` writes its JSON **after every
+  dataset** for this reason. Anything that only writes at the end should be distrusted at this scale.
+- **Contention masquerades as pathology.** Slow is not stuck. Before diagnosing a run, check what
+  else is resident — several rounds here were spent on a "stall" that was a contended host.
+- **State what a number is not.** Claims of *absence* ("no score exists") and of *level* (an MTEB
+  score read against BEIR baselines) are the two easiest to leave behind, because the number can be
+  real while the surrounding sentence is wrong. Five separate cleanups were needed for the first
+  kind alone.
+
 ### 10.2 The pre-registered bars
 
 Every item carries a falsifier in place, which is the right form but the wrong shape for the moment
