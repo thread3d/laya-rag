@@ -771,11 +771,12 @@ above published BM25.** MTEB's SciFact, `--first-stage-only`, two encoders:
 | `laya-rag/engine-multilingual` (decision checkpoint) | 0.37 | 0.36987 | 0.31667 | — | 1.05 s/query |
 | **`laya-rag/engine-retrieval`** (retrieval-trained) | **0.69** | **0.69482** | 0.64817 | 0.65887 | **0.21 s/query** |
 
-**Do not read 0.69482 against the BEIR-convention baselines** (BM25 0.665, `bge-small` 0.72) —
-this is MTEB's SciFact, with titles in the corpus and MTEB's own evaluator, so the two protocols
-differ by more than the retriever. The like-for-like result is the pair of rows: same task, same
-configuration, two encoders, **+0.32 for the retrieval-trained one**. Establishing the *level* needs
-a baseline run **through MTEB**, which is unrun. `--embed-model` now *requires* `--model-name`, so a
+**And the level is now a like-for-like reading, because the baseline was run through MTEB**:
+`BAAI/bge-small-en-v1.5` scores **0.71271** nDCG@10 (`main_score` 0.71) on the same task under the
+same harness, against this engine's **0.69482** — so the engine sits **0.018 below a stock
+`bge-small` bi-encoder**, measured rather than inferred, and **~5× slower** (263.9 s against 54.8 s).
+Reading 0.69482 against the BEIR-convention numbers (BM25 0.665, `bge-small` 0.72) would have been a
+cross-protocol claim; this is not. `--embed-model` now *requires* `--model-name`, so a
 run cannot be filed under a name that does not describe its encoder. **Nothing is uploaded.**
 
 **The earlier, weaker version of this:** `mteb.evaluate` on SciFact,

@@ -252,18 +252,28 @@ description that is false):
 | `engine-multilingual` (decision checkpoint) | 0.37 | 0.36987 | 0.39378 | 0.31667 | — | — | 1.05 s/query |
 | **`engine-retrieval` (retrieval-trained)** | **0.69** | **0.69482** | 0.72163 | 0.64817 | 0.65887 | 0.82211 | **0.21 s/query** |
 
-**0.69482 nDCG@10 on MTEB's SciFact.** It is tempting to read that against the published BM25
-(**0.665**) or a `bge-small` bi-encoder (**0.72**) that this repository's BEIR rows are anchored to,
-and **that comparison must not be made without a caveat**: those are BEIR-convention numbers — whole
-documents under BEIR's own corpus text — while this is **MTEB's SciFact**, whose corpus carries
-titles and whose evaluator is MTEB's, so the two differ by more than the retriever. The engine may
-be in that range or may not; **0.69482 stands on its own as a first under MTEB**, and the way to say
-anything about its level is to **run a baseline through MTEB as well** — `bge-small` or MTEB's
-published BM25 row — which is unrun and is the honest next step, not a comparison across protocols.
+**The baseline was run, so the level is now a like-for-like reading.** `--baseline-model` evaluates
+a stock MTEB model on the same task through the same harness — which is the only way an MTEB row can
+be read against anything, since the BEIR-convention numbers this repository quotes come from a
+different corpus text and a different evaluator:
 
-What *is* like-for-like is the pair of rows above: the same task, the same configuration, the same
-harness, two encoders — and the retrieval-trained one is worth **+0.32**. The rate is also 5× better
-(0.21 s/query), because that encoder is far smaller than the 322M decision checkpoint.
+| system, MTEB's SciFact | `main_score` | nDCG@10 | nDCG@100 | MAP@10 | MRR@10 | recall@10 | time |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `BAAI/bge-small-en-v1.5` (stock baseline) | **0.71** | **0.71271** | 0.73639 | 0.66811 | 0.68219 | 0.83622 | 54.8 s |
+| **this engine**, `models/laya-retrieval` | **0.69** | **0.69482** | 0.72163 | 0.64817 | 0.65887 | 0.82211 | 263.9 s |
+| this engine, multilingual decision encoder | 0.37 | 0.36987 | 0.39378 | 0.31667 | — | — | — |
+
+So under **one protocol, one task, one harness**, the engine with its own retrieval-trained encoder
+sits **0.018 below a stock `bge-small` bi-encoder** — a real, small, honestly-measured gap, and a
+much better statement than either "above published BM25" (a cross-protocol claim) or "0.37" (the
+decision model's encoder, which is not what this system ships for retrieval). It also agrees in
+sign and roughly in size with the repository's own BEIR result, where the adapted encoder regresses
+against `bge-small`; here the regression is 2.5% rather than the larger BEIR margin, on a different
+convention, which is worth noting and not worth conflating.
+
+The engine is also **~5× slower** on this task (263.9 s against 54.8 s), which is the cost side the
+same table makes visible: fusion, chunking and the index build are not free even with no decision
+model in the path.
 
 **Nothing is uploaded.** These are local MTEB runs; a submission is a separate act, and it should name
 the encoder explicitly, which the CLI now enforces.

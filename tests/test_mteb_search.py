@@ -313,3 +313,14 @@ def test_the_model_name_is_a_parameter_so_provenance_can_be_honest():
     assert m.parse_args(["--embed-model", "models/laya-retrieval",
                          "--model-name", "laya-rag/engine-retrieval"]).model_name == \
         "laya-rag/engine-retrieval"
+
+
+def test_the_baseline_flag_is_a_different_path_from_this_engine():
+    """Reading an MTEB row against BEIR numbers is a cross-protocol claim; this flag is the fix.
+
+    It evaluates a stock MTEB model on the same task through the same harness, which is the only
+    like-for-like baseline an MTEB score can have.
+    """
+    assert m.parse_args([]).baseline_model is None
+    assert m.parse_args(["--baseline-model", "BAAI/bge-small-en-v1.5"]).baseline_model == \
+        "BAAI/bge-small-en-v1.5"

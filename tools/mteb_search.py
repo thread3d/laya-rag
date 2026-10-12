@@ -382,6 +382,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                     help="encoder for the engine's dense channel (sets LAYA_RAG_EMBED_MODEL); "
                          "--model-name must be given with it, so a row cannot be filed under a "
                          "name that does not describe the encoder that produced it")
+    ap.add_argument("--baseline-model", default=None,
+                    help="evaluate a stock MTEB model on the same task **instead of** this engine, "
+                         "so a score can be read against something under the same protocol. "
+                         "Comparing an MTEB row to BEIR-convention numbers is a cross-protocol "
+                         "claim; this is what makes the comparison legitimate")
     ap.add_argument("--first-stage-only", action="store_true",
                     help="score the first stage's own order, with no decision model in the path "
                          "(the second stage costs 90+ minutes per SciFact task)")
@@ -412,6 +417,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ImportError as exc:  # pragma: no cover
         print(f"mteb_search: MTEB is not installed ({exc}); pip install -e '.[mteb]'")
         return 2
+    if args.baseline_model:
+        # Not this engine: a stock MTEB model scored by the same harness on the same task. That is
+        # the only like-for-like baseline an MTEB row can have — the BEIR-convention numbers this
+        # repository quotes (BM25 0.665, `bge-small` 0.72 on SciFact) come from a different corpus
+        # text and a different evaluator, and reading across them is the cross-protocol claim
+        # `BENCHMARKS.md` forbids.
+        import mteb
+
+        print(f"mteb_search: baseline {args.baseline_model} on {args.task} (not this engine)",
+              flush=True)
+        result = mteb.evaluate(mteb.get_model(args.baseline_model), mteb.get_task(args.task))
+        print(result)
+        return 0
+
     if args.embed_model and args.model_name == MODEL_NAME:
         print(
             "mteb_search: --embed-model needs --model-name — the default name says the encoder is "
