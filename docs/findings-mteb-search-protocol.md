@@ -278,13 +278,20 @@ model in the path.
 **Three tasks are complete, and the gap is corpus-dependent in a way that matters.** All six numbers
 are `nDCG@10` under MTEB, same harness, engine in `--first-stage-only` with `models/laya-retrieval`:
 
-| MTEB task | `bge-small` | this engine | gap | documents |
-| --- | ---: | ---: | ---: | --- |
-| SciFact | 0.71271 | 0.69482 | **−0.018** | short scientific abstracts |
-| NFCorpus | 0.34339 | 0.33318 | **−0.010** | short titles and abstracts |
-| ArguAna | 0.60413 | **0.51630** | **−0.088** | ~190-word argumentative passages |
-| FiQA2018 | 0.40347 | *running* | — | medium financial passages |
-| SCIDOCS | 0.20518 | *running* | — | paper titles and abstracts |
+| MTEB task | `bge-small` | this engine | gap | engine/baseline time | documents |
+| --- | ---: | ---: | ---: | ---: | --- |
+| SciFact | 0.71271 | 0.69482 | **−0.018** | 263.9 s / 54.8 s (**4.8×**) | short scientific abstracts |
+| NFCorpus | 0.34339 | 0.33318 | **−0.010** | 201.1 s / 46.4 s (**4.3×**) | short titles and abstracts |
+| ArguAna | 0.60413 | **0.51630** | **−0.088** | 753.5 s / 102.2 s (**7.4×**) | ~190-word argumentative passages |
+| FiQA2018 | 0.40347 | *running* | — | — | community financial answers |
+| SCIDOCS | 0.20518 | *running* | — | — | paper titles and abstracts |
+
+**The cost tracks document length too, and harder than the quality does.** The engine is 4.3–4.8×
+the baseline on the two short-document tasks and **7.4×** on ArguAna — so the same corpus property
+that costs it the most accuracy costs it the most wall clock, and the cost gap is the more
+consistent of the two. That matters for §P10b's placement argument: at this configuration the engine
+is neither competitive on quality nor comparable on cost, and both statements are now measured on
+three tasks rather than asserted from one.
 
 The two short-document corpora put the engine within 0.01–0.02 of a stock 33M bi-encoder. **ArguAna
 puts it 0.088 behind — four to nine times the gap** — and ArguAna is the one whose documents are
