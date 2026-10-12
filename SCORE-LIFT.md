@@ -540,8 +540,19 @@ on device 'mps': PermissionError at ~/.cache/huggingface/hub/models--BAAI--bge-r
 when downloading BAAI/bge-reranker-base. Check cache directory permissions.
 ```
 
-`~/.cache/huggingface` is not writable here, so **no reranker can be downloaded**, and
-`ensure_loaded` raises rather than falling back. That is incompatible with the P4 runs having
+**That reading was too strong, and the same round refuted it.** A one-query run of the same tool
+with `--rerank-model BAAI/bge-reranker-base` and **`HF_HOME` pointed at a writable directory**
+completed without error (`indexed 609 docs / 4592 chunks in 151s`, then the query), so the model
+loads here — the failure above is an **intermittent shared-cache condition**, and the error text says
+so itself: *"another user is downloading the same model (please wait); a previous download was
+canceled and the lock file needs manual removal"*. This is a shared host, and the rerank cache is a
+shared resource.
+
+So the defect claim above is withdrawn in favour of the weaker, supported one: **the two P4 arms
+produced identical rankings, and the load failure I observed is one candidate explanation among
+several rather than the established cause** — the same failure mode this section has now hit three
+times, which is why the corrected pair is being re-taken with a private `HF_HOME` before anything
+else is said about rerankers. That is incompatible with the P4 runs having
 produced numbers at all: a `query` that reached `score_pairs` would have raised. So the two arms'
 identical rankings most likely mean **the cross-encoder never scored anything in either arm** —
 the failure was absorbed somewhere between `score_pairs` and the report, and the wall-clock
