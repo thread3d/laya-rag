@@ -2401,6 +2401,18 @@ the top of §1 was anchored too (it had been the most visible unguarded figure i
    generalises past this document: **a gate that catches a wrong number and misses the number looks
    identical to a working gate until someone perturbs the right line**, which is why each of these
    was perturbed rather than trusted.
+
+   **A third reference class was scanned — paths — and it is faithful too, and deliberately not
+   automated.** Every backticked `eval/…`, `tools/…`, `docs/…` path in the tracked documents was
+   resolved: **zero genuine stale pointers**. The seventeen that failed to resolve are all one of three
+   legitimate kinds — a report a *running* job will write (`eval/beir/nq-dense.json`), a tool a *plan*
+   proposes (`docs/generation-placement.md`'s `tools/kilt.py`, `tools/lotte.py`, … in a section headed
+   "proposed"), or a **historical** mention (`eval/beir/p1-cqadupstack-android.json` is named in the
+   sentence that explains why it was moved to `eval/beir/subsets/`). The last one is the instructive
+   case: a checker cannot tell a dead pointer from a sentence about a dead pointer, and automating this
+   class would need a proposed/historical marking convention that the documents do not have. **A
+   checker that guesses intent is worse than no checker**, which is why the flag and `make` checks exist
+   and this one does not.
 2. **The rest of the document is still transcription, and registering it is a separate job.**
    `grep -c SCORE-LIFT tools/consistency_check.py tools/claim_check.py` is no longer **0 and 0** —
    `consistency_check.py` matches — but the ~30 quantities *outside* §1 and §4.3 are still
