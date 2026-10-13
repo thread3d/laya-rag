@@ -2816,6 +2816,18 @@ embedding cache grows to **34 GB** for the whole member, and the volume has **35
 matches for `error`, `Traceback` or `no space` in the log. Disk is the failure that would waste a
 night silently, which is why it is the first thing to look at on a multi-hour job, not the last.
 
+**And when the log is silent *after* the final-block line, read the index directory instead.** hotpotqa's
+log went **892 seconds without a write**, its last line the build's own `100% — final block`, with the process
+alive — which looks exactly like a stall and is not: the on-disk index was **merging**, writing `postings.bin`
+(432 MB, modified that second) and merge shards of ~500 MB each, four of them in the preceding twelve minutes.
+That phase is silent, it is real work, and at 5.2M documents it runs for a quarter of an hour.
+
+So this is the **fifth silent phase** of the session, and the diagnostic is the useful part rather than the
+fix: **the log tells you what the run has finished, and the filesystem tells you what it is doing.** For this
+phase, `ls -la eval/beir/cache/<member>.engine.bm25/` answers in one command what an hour of watching would not
+— and the *next* instrument worth building is a progress line on the merge, which is where the silence now
+lives.
+
 **A counter that looks unchanged is usually a counter read twice inside one interval.** The progress line
 prints every 20,000 documents, which at dbpedia's 137 documents/second is **one line every ~146 seconds** — so
 two readings a minute apart are *identical by construction*, and I misread exactly that as a stall before
