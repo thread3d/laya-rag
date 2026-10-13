@@ -2809,6 +2809,13 @@ embedding cache grows to **34 GB** for the whole member, and the volume has **35
 matches for `error`, `Traceback` or `no space` in the log. Disk is the failure that would waste a
 night silently, which is why it is the first thing to look at on a multi-hour job, not the last.
 
+**A counter that looks unchanged is usually a counter read twice inside one interval.** The progress line
+prints every 20,000 documents, which at dbpedia's 137 documents/second is **one line every ~146 seconds** — so
+two readings a minute apart are *identical by construction*, and I misread exactly that as a stall before
+checking the file's modification time (139 seconds old, and the last four readings advance on schedule). The
+instrumentation is right; **the sampling interval is part of the reading**, which is the same lesson as the
+rate and the ETA, arriving about the clock rather than the corpus.
+
 **And a pile of processes is not automatically a runaway — check the parent.** `pgrep -f beir.py`
 against this run returns **33 pids**, which looks alarming and is the embedding's own worker pool:
 `pgrep -P 30375` shows **32 direct children**, all alive under the run that owns the lock. The
