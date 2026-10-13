@@ -2881,7 +2881,29 @@ command pattern and its own `--out`. Its on-disk build reported 16% inside three
 instrument again: at this corpus size the phase that used to be silent is the one telling us the run is
 alive.
 
-**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+**Which of the remaining members can move the deficit at all, and a prediction the next four will test.**
+The deficit sums the nine *negative* gaps, so a member already ahead cannot contribute however well its
+dense row scores. Of the five left, **four are deficit cells and one is not**:
+
+| member | gap | best row today | dense row could move the macro? |
+| --- | ---: | --- | --- |
+| DBPedia-entity | −0.125 | `bm25-title` | yes — **running now** |
+| FEVER | −0.137 | `bm25-title` | yes |
+| Climate-FEVER | −0.071 | `bm25-title` | yes |
+| HotpotQA | −0.030 | `bm25-title` | yes |
+| **BioASQ** | **+0.015** | `bm25-engine` | **no — it is a winning cell**, and it is also the largest at 14.9M documents |
+
+So the queue's "largest last" is about cost, and for the *deficit* the sharper statement is: **BioASQ can
+buy coverage and nothing else**, which is worth knowing before spending a day on it.
+
+**And the four that can move it share a configuration worth naming as a prediction.** Every one of them has
+a **title-boosted** row as its best today — and the two members measured so far whose best row was
+title-boosted are exactly where the fusion lost or failed to help: on NQ the fusion beat the engine row by
++0.0094 and still finished 0.0052 *below* `bm25-title`; on Signal-1M the title boost was exactly neutral and
+the fusion lost to both lexical rows. The one cell that **did** move the deficit, cqadupstack, had a plain
+`bm25-engine` best row. **So the prediction is that none of the four remaining deficit cells moves the
+macro either** — and it is written here, before the first of them lands, precisely because that is the only
+way the next round's result can count as a test rather than as a story.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
