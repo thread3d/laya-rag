@@ -34,3 +34,15 @@ def test_the_prompt_module_passes_it_through(monkeypatch):
     from laya_rag.model import qwen3_rerank_prompt
 
     assert "<Instruct>: Find the abstract" in qwen3_rerank_prompt("q", "d", instruction="Find the abstract")
+
+
+def test_answer_positions_handles_both_padding_sides():
+    """The one trap in batching a generative reranker: where each row's answer is.
+
+    Right-padded rows end in pad tokens; left-padded rows end in the answer. The index correct for both
+    is the count of real tokens minus one, not the last column — which is why it is a function.
+    """
+    from laya_rag.model import answer_positions
+
+    assert answer_positions([[0, 0, 1, 1, 1], [1, 1, 1, 0, 0]]) == [4, 2]
+    assert answer_positions([[1, 1, 1]]) == [2]

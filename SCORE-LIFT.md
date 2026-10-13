@@ -890,6 +890,28 @@ knob with no row is half-built, with three tests — one of which checks that th
 which is the failure mode this session opened with. The re-run waits on the heavy lock, which `signal1m`
 holds; it is a 200-query subset, about twenty minutes when the lock frees.
 
+**And the scoring loop is batched now, which the re-run needed more than it needed a knob.** Scoring one
+pair at a time meant 20,000 forwards for a 200-query subset; `score_pairs` batches with the tokenizer's
+own padding. Two measurements came out of doing it, and the second is the useful one:
+
+**And writing that loop's test found a latent bug the measurements could not have.** My first version
+located each row's answer with *the count of real tokens minus one*, which is correct under **right**
+padding and **wrong under left** — and Qwen tokenizers commonly left-pad for generation, where the answer
+sits in the final column. Under left padding it would have read the second-to-last pad token and returned
+a plausible, wrong score for every row of every batch. **The batching parity check passed anyway**, because
+this tokenizer happens to right-pad: a green measurement over a latent bug, which is the shape this
+document's §10.3 catalogue is about, caught here by a unit test written for a helper rather than by the
+experiment it was serving. The helper now takes the last real token's index, which is correct either way.
+
+* **parity holds to float32 batching noise**: the same eight pairs score identically to four decimals
+  through batch 1 and batch 8, with a maximum difference of **6.5e-6** — so the path validated two rounds
+  ago is still the path, and batching is not a different retriever;
+* **the speedup is 1.2×, not the 3× I first measured.** My first timing included the model *loading*
+  inside the first call and read as a 3× win; warming both instances first gives **1.58 s against 1.32 s**
+  for eight short pairs. Honest conclusion: batching is correct and slightly faster, and the twenty-minute
+  re-run stays about twenty minutes. The bigger win would come from longer prompts, which this corpus does
+  not have.
+
 Two caveats still travel: **one model, one corpus, 200 queries**, so the falsification holds for this
 configuration rather than for listwise ranking in general.
 

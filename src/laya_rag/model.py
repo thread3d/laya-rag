@@ -524,6 +524,28 @@ def qwen3_rerank_prompt(query: str, document: str, *, instruction: str = "") -> 
     )
 
 
+def answer_positions(attention_mask: Any) -> list[int]:
+    """Each row's final **real** token — where a decoder-only model's answer is read from.
+
+    Batching is not a detail here: scoring one pair at a time cost ~1,100 s for 200 queries, and a batch
+    is the same arithmetic for a fraction of the forwards. The trap is padding. Right-padded rows end in
+    pad tokens and left-padded rows end in the answer either way, so the index that is correct for both
+    is the **count of real tokens minus one** rather than the last column — which is why this is a
+    function with a test rather than an inline expression.
+    """
+    positions: list[int] = []
+    for mask in attention_mask:
+        # **The last real token's index, not the count of real tokens minus one.** Those differ under left
+        # padding, and Qwen tokenizers commonly left-pad for generation: with a left-padded row the answer
+        # sits in the final column, so "count - 1" would read the second-to-last *pad* token and produce a
+        # plausible but wrong score for every row in the batch. This was a real latent bug — the batching
+        # parity check passed only because this tokenizer happens to right-pad — and it was caught by
+        # writing this function's test rather than by the measurement.
+        values = [int(value) for value in mask]
+        positions.append(max((i for i, value in enumerate(values) if value), default=len(values) - 1))
+    return positions
+
+
 def yes_no_probability(yes_logit: float, no_logit: float) -> float:
     """``P("yes")`` from the two logits, so the score keeps the meaning of a 0..1 relevance cut.
 
@@ -633,19 +655,24 @@ class GenerativeRerankerModel:
         assert torch is not None
         instruction = getattr(self.config, "rerank_instruction", "") or ""
         out: list[float] = []
-        for query, passage in rows:
-            text = qwen3_rerank_prompt(query, passage, instruction=instruction)
+        batch_size = max(1, self.config.embed_batch_size)
+        for start in range(0, len(rows), batch_size):
+            chunk = rows[start : start + batch_size]
+            prompts = [
+                qwen3_rerank_prompt(query, passage, instruction=instruction)
+                for query, passage in chunk
+            ]
             encoded = self._tokenizer(
-                text, return_tensors="pt", truncation=True,
-                max_length=self.config.embed_max_length,
+                prompts, padding=True, truncation=True,
+                max_length=self.config.embed_max_length, return_tensors="pt",
             ).to(self._device)
             with torch.no_grad():
-                logits = self._encoder(**encoded, return_dict=True).logits[0, -1]
-            out.append(
-                yes_no_probability(
-                    float(logits[self._yes_id]), float(logits[self._no_id])
+                logits = self._encoder(**encoded, return_dict=True).logits
+            for row, position in enumerate(answer_positions(encoded["attention_mask"])):
+                last = logits[row, position]
+                out.append(
+                    yes_no_probability(float(last[self._yes_id]), float(last[self._no_id]))
                 )
-            )
         return out
 
     def info(self) -> dict[str, Any]:
