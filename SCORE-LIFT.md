@@ -3060,6 +3060,13 @@ significant and large — arguana +0.1842 [+0.1717, +0.1969], fiqa +0.1431, scid
 one exception** (+0.0126 [−0.0085, +0.0337]). So the dense channel's value is real where the corpus is
 well-measured and the effect is large, and not established where the member is big and the gain is a point.
 
+**The budget changed, and so did what is reachable.** The goal was extended from 180 to **540 rounds**, so
+the waiting rounds can now outlast more than one member: dbpedia-entity's ~9 hours, and then hotpotqa's ~12 at
+the same rate — where before, the budget expired several hours short of the *first* one. That is worth stating
+in the record because it changes the plan rather than the state: the same wait-and-capture cycle now covers
+**several cells instead of none**, and P1's prediction will be tested by more than one member inside this
+session.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
