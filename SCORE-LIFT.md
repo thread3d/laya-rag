@@ -3046,6 +3046,16 @@ another channel. That is the useful finding for the five members
 left, and it is a *pattern from three cells*, which is exactly the kind of claim this session has learned to
 hold lightly: it predicts, and the next member can refute it.
 
+**And the queue is now ordered by value per hour, because the members and the short runs share one lock.** A chain
+that only runs members would hold the lock for **~40 hours straight** and lock out every twenty-minute item behind
+it. So the chain waits for hotpotqa, then runs **P4 arm 2 with the question-answering instruction** and **FEVER's
+BM25F row** in the first gap, and only then climate-fever and fever.
+
+That ordering is the §10.1 rule applied to a queue rather than to a session: the members never leave the lock
+idle, and the cheap tests go in the gap rather than a day later. The two short runs are ~20 minutes and a lexical
+build; the members are ~14 hours each, so the cost of the insertion is rounding error and the benefit is that
+§P4's one open question and P2's falsifier branch stop being "queued behind a day of embedding".
+
 **The fourth member is running now** — `dbpedia-entity`, **4,635,922 documents**, the next by size, same
 command pattern and its own `--out`. **Its measured rate is ~120 documents per second** (60,000 documents in
 499 s), so it is a **~10-hour** member: 2.4× signal1m's documents at less than half its rate, because DBpedia
