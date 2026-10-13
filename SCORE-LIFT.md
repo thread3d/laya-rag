@@ -139,12 +139,12 @@ of its hand-entered cells — see the note under §1.2.)
 | robust04 | 528,155 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | scidocs | 25,657 | 9 rows | full |
 | scifact | 5,183 | 17 rows | full |
-| signal1m | 2,866,316 | bm25, bm25-engine, bm25-title | **lexical only** |
+| signal1m | 2,866,316 | biencoder, bm25, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | trec-covid | 171,332 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | trec-news | 594,977 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | webis-touche2020 | 382,545 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 
-**lexical-only members (6 of 18):** bioasq, climate-fever, dbpedia-entity, fever, hotpotqa, signal1m
+**lexical-only members (5 of 18):** bioasq, climate-fever, dbpedia-entity, fever, hotpotqa
 **members with no report:** none
 **non-members present (not coverage):** msmarco
 
@@ -2729,7 +2729,7 @@ its own findings.**
 | item | state | cost |
 | --- | --- | --- |
 | **P4 arm 2** | **measured, and negative** | the listwise `Qwen3-Reranker-0.6B` reads **MAP@10 0.2047** against **0.3721** for the pointwise `bge-reranker-v2-m3` on the same 200-query sample — a 45% relative drop and below the fused order it was meant to improve. §P4's hypothesis is falsified for this configuration: one model, one corpus, 200 queries, with the model's compressed score scale recorded as a suspicion rather than a finding |
-| **P1** — the eight lexical-only cells | **2 of 8 measured, rest queued** | `cqadupstack` is in (`hybrid-biencoder` **0.3275** against the 0.3046 §1.2 was scoring — the summed deficit fell **0.7314 → 0.7085**) and **`nq` is in too, without moving it**: hybrid **0.3212** against the engine's 0.3118, but NQ's recorded best is already 0.3264 (`bm25-title`), so the member's `ours` value does not change. Coverage: lexical-only members **8 → 6 of 18**. Next: signal1m, dbpedia-entity, hotpotqa, climate-fever, fever, bioasq — largest last, one command each in §10.6 |
+| **P1** — the eight lexical-only cells | **3 of 8 measured, rest queued** | `cqadupstack` moved the deficit (**0.7314 → 0.7085**); `nq` and `signal1m` bought **coverage only** — and signal1m is the first cell where the fusion is *worse* than the engine row (−0.0139). Lexical-only members **8 → 5 of 18**. Next: dbpedia-entity, hotpotqa, climate-fever, fever, bioasq — largest last, one command each in §10.6 |
 | **P3 / P11** | unstarted | week-scale research bets |
 | **P8 / P9** | unstarted | a published-settings control on 5.4M documents; a fresh out-of-domain corpus |
 | **§P12 run 3 / T8+T11** | blocked on a build | the own-domain set is a separate tool, and run 3 depends on it |
@@ -2840,6 +2840,32 @@ because the cost is per token. **Read the counter, and check what it is counting
   minutes for nq's 2.68M long documents** finished here in a few minutes for 2.87M short ones, and the
   cost is per token rather than per document — a reminder that "documents" is the wrong unit for
   estimating this harness, which every one of these estimates has quietly assumed.
+
+**`signal1m` has landed, and it is the first cell where the fusion is worse than the engine row.** All
+2,866,316 documents embedded in 9,646 s (2.7 h) at 279 documents/second:
+
+| signal1m, 2.87M documents | nDCG@10 | Recall@10 | MRR@10 |
+| --- | ---: | ---: | ---: |
+| `bm25-engine` | **0.3131** | 0.1609 | **0.5639** |
+| `biencoder` (dense alone) | 0.2378 | 0.1106 | 0.4298 |
+| `hybrid-biencoder` (dense w=0.3) | 0.2992 | 0.1502 | 0.5621 |
+
+**The fusion loses 0.0139 nDCG@10 against the engine row** and dense alone loses much more, so this member
+gains **coverage and nothing else** — and its recorded best is `bm25` at **0.3640**, the flat lexical row
+§1.2 already flagged as the one member whose best measured row is the plain one. Three cells in, the shape
+is now clear enough to state:
+
+| member | fusion vs engine row | vs the member's best | deficit |
+| --- | ---: | ---: | --- |
+| cqadupstack | **+0.0386** | +0.0229 | **moved** 0.7314 → 0.7085 |
+| nq | +0.0094 | −0.0052 | unchanged |
+| signal1m | **−0.0139** | −0.0648 | unchanged |
+
+**The dense channel moves the BEIR-18 macro only where it beats a member's existing best row, and on
+short-document corpora it is not reliably better than the lexical one** — Signal-1M is tweets, and
+`bm25-engine` (0.3131) beats the fusion (0.2992) there. That is the useful finding for the five members
+left, and it is a *pattern from three cells*, which is exactly the kind of claim this session has learned to
+hold lightly: it predicts, and the next member can refute it.
 
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
