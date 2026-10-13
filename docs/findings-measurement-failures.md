@@ -183,6 +183,34 @@ that guesses intent is worse than none.
 
 ---
 
+## 13. A correct number, over-generalised
+
+**Looks like:** a measurement. Every figure in it is real, and the sentence around it is not.
+
+This one is different from the twelve above: nothing is mis-measured, mis-attributed or missing. The
+*sentence* claims more than the *data* supports, which is why no numeric gate can see it — the gate checks
+the number, and the number is right.
+
+**Instances, all from the last five rounds of this session, all caught by exercising the thing from a
+second direction:**
+
+* **"the model answers two orders of magnitude below a cross-encoder"** — true of the two hand-picked
+  passages it was measured on (0.0505), false of the model: the engine's own chunk of a relevant passage
+  scores **0.4455**. Corrected by running the engine path rather than the direct probe.
+* **"a run at the default threshold would find nothing"** — true of everything measured, which is not the
+  same as true. Now states the measured range: the highest score observed is 0.4455 against a 0.5 cut, and
+  whether anything clears it is unmeasured.
+* **"a listwise ranker is worse"** — true under the instruction arm 2 used, and the instruction is a
+  **7×** variable. Narrowed to "much worse *under a web-search instruction*", with the re-run named.
+* and, from the other side, **a speedup of "3×"** that was really **1.2×** — not over-generalised but
+  mis-*controlled*: the first timing included the model load. A measurement that includes its own setup is
+  the same family of error with the sign reversed.
+
+**The tell is that the sentence survives no matter which example you pick, and then one more example
+breaks it.** Three of these four were fixed by *running something the sentence did not cover*; none was
+fixed by re-reading, which is why this class is now in a catalogue about measurement rather than in a list
+of writing tips.
+
 ## What they cost, counted rather than remembered
 
 `git rev-list --count` over the session's span: **133 commits.** The per-class figures below are
