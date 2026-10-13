@@ -816,6 +816,13 @@ def _with_progress(documents: Iterable[tuple[str, str]], total: int,
         if every and seen % every == 0:
             share = f"{100 * seen / total:.0f}%" if total else "?"
             print(f"    on-disk index: {seen}/{total} documents ({share})", flush=True)
+    if every and seen and seen % every:
+        # The **last partial block**, which is otherwise silent: the interval prints at 4,500,000 but the
+        # corpus is 4,635,922, so the build looks stalled at 97% for however long the final block and the
+        # run merge take. Seen on dbpedia-entity, where eight minutes of no output was the tail of a build
+        # that was working — the same failure the interval was added to remove, one threshold short.
+        share = f"{100 * seen / total:.0f}%" if total else "?"
+        print(f"    on-disk index: {seen}/{total} documents ({share}) — final block", flush=True)
 
 
 def bm25_rankings(

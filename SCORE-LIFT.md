@@ -2903,7 +2903,15 @@ title-boosted are exactly where the fusion lost or failed to help: on NQ the fus
 the fusion lost to both lexical rows. The one cell that **did** move the deficit, cqadupstack, had a plain
 `bm25-engine` best row. **So the prediction is that none of the four remaining deficit cells moves the
 macro either** — and it is written here, before the first of them lands, precisely because that is the only
-way the next round's result can count as a test rather than as a story.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+way the next round's result can count as a test rather than as a story.**And the instrument had one threshold-shaped hole, found by dbpedia-entity. That member's on-disk
+build sat at `4,500,000/4,635,922 (97%)` with no output for eight minutes while it worked** — because the
+progress line prints every 250,000 documents and the corpus is 4,635,922, so the **final partial block
+never reached a threshold**. The build was fine; the reporting was one line short, and the fix is a final
+line at the end of the stream (with two tests: one that the partial block is reported, one that an exact
+multiple is not reported twice). *The same failure the interval was added to remove, one threshold short* —
+which is the fourth time in this session that a phase was silent in a way nobody had predicted.
+
+**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
