@@ -500,10 +500,10 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR-18 summed deficit",
             sites=(
-                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.7085, 4),
-                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.7085, 4),
-                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.7085, 4),
-                Site("SCORE-LIFT.md", r"It does not claim the \+0\.035", 0.7085, 4),
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.6963, 4),
+                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.6963, 4),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.6963, 4),
+                Site("SCORE-LIFT.md", r"It does not claim the \+0\.035", 0.6963, 4),
             ),
             authority=deficit_authority(),
             key="total",
@@ -512,8 +512,8 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR-18 deficit macro cost",
             sites=(
-                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.0394, 4),
-                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.0394, 4),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.0387, 4),
+                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.0387, 4),
             ),
             authority=deficit_authority(),
             key="macro",
@@ -522,10 +522,10 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR-18 half-closed macro gain",
             sites=(
-                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.020, 3),
-                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.020, 3),
-                Site("SCORE-LIFT.md", r"hold the programme to", 0.020, 3),
-                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.020, 3),
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.019, 3),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.019, 3),
+                Site("SCORE-LIFT.md", r"hold the programme to", 0.019, 3),
+                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.019, 3),
             ),
             authority=deficit_authority(),
             key="half",
