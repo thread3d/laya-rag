@@ -2950,6 +2950,20 @@ which is the fourth time in this session that a phase was silent in a way nobody
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
+**P3's encoder run** (the 2025 checkpoint against the 2023 baseline of **0.7077** nDCG@10 on SciFact):
+
+```
+HF_HOME=$PWD/eval/hf-rerank .venv/bin/python tools/beir.py --datasets scifact \
+    --biencoder-model Qwen/Qwen3-Embedding-0.6B --embed-pooling last \
+    --retrievers biencoder --out eval/beir/p3-qwen3-scifact
+```
+
+Three things are not optional. **`HF_HOME`**, because the shared cache is not writable and the failure looks
+like an intermittent lock. **`--embed-pooling last`** is belt-and-braces — the family table already returns
+`last` for this model, and passing it makes the run say which pooling it used rather than inheriting one. And
+**the run must be alone**: attempted alongside P1's member job it was starved to ~2 documents/second, and the
+cost of that competition landed on the *smaller* job (round 149's measurement, 8% on the bigger one).
+
 **P4 arm 2** (`Qwen/Qwen3-Reranker-0.6B`, listwise). Weights are already in the writable cache, and the
 path is validated:
 
