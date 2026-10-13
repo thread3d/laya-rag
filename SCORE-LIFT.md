@@ -2861,9 +2861,18 @@ is now clear enough to state:
 | nq | +0.0094 | −0.0052 | unchanged |
 | signal1m | **−0.0139** | −0.0648 | unchanged |
 
-**The dense channel moves the BEIR-18 macro only where it beats a member's existing best row, and on
-short-document corpora it is not reliably better than the lexical one** — Signal-1M is tweets, and
-`bm25-engine` (0.3131) beats the fusion (0.2992) there. That is the useful finding for the five members
+**The dense channel moves the BEIR-18 macro only where it beats a member's existing best row** — and
+there is a deeper scoping I had wrong when I wrote the row above: **Signal-1M cannot move the deficit at
+all.** Its `ours` value is **0.3640** against a published **0.296**, a **positive** gap of +0.068, so the
+member is one of the nine *winning* cells the deficit does not sum. Adding a channel there buys coverage
+completeness — the §1.1 claim — and nothing arithmetic, whatever it scores.
+
+And the member's own rows say something the aggregate hides: **the published-settings `bm25` row (0.3640)
+is 0.0509 above the engine's own lexical row (0.3131)**, while the title boost is *exactly* neutral
+(`bm25-title` 0.3131, identical). So on Signal-1M the engine's lexical configuration — stopwords dropped,
+English stemming on — costs fifty points of a thousand against plain BM25 on tweets, and the fusion
+(0.2992) sits below both. If that cell is ever worth improving, the lever is the tokenisation rather than
+another channel. That is the useful finding for the five members
 left, and it is a *pattern from three cells*, which is exactly the kind of claim this session has learned to
 hold lightly: it predicts, and the next member can refute it.
 
