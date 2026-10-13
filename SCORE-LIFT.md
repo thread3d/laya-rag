@@ -2965,7 +2965,7 @@ progress line prints every 250,000 documents and the corpus is 4,635,922, so the
 never reached a threshold**. The build was fine; the reporting was one line short, and the fix is a final
 line at the end of the stream (with two tests: one that the partial block is reported, one that an exact
 multiple is not reported twice). *The same failure the interval was added to remove, one threshold short* —
-which is the fourth time in this session that a phase was silent in a way nobody had predicted.
+which is the fourth time in this session that a phase was silent in a way nobody had predicted. **And it is confirmed in production**: hotpotqa's build — the first member started after the fix — ended with `on-disk index: 5233329/5233329 documents (100%) — final block`, so the line that was missing is the one now closing the phase rather than a silence that happens to look shorter.
 
 **And the weights, too — so the queue is pre-flighted in every dimension that fails late.** The writable
 `eval/hf-rerank` cache holds every model the queued runs need:
