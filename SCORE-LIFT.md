@@ -537,6 +537,16 @@ value, so `passage: ` arrived as `passage:` — a *different* prefix, silently. 
 stripping, with the reason in the comment. **A knob that cannot express the value it documents is the same
 failure as a knob nobody reads, one layer down.**
 
+**And the third mismatch on P3's list is closed too: the query-side line is now family-specific.**
+`QUERY_PREFIX` is bge's sentence — *"Represent this sentence for searching relevant passages: "* — and
+`EMBED_QUERY_INSTRUCTION=1` applied it to **any** encoder, so pointing the flag at Qwen3 Embedding or e5
+would prepend an instruction those models were never trained with: the same silent class as the pooling and
+the passage prefix, and the third of the three P3 named. The query side now takes the family's own line —
+Qwen3 Embedding's `Instruct: …\nQuery: `, e5's bare `query: `, bge's sentence as the default — with the
+choice split into `_query_text` so it can be asserted without a forward pass. Fifteen tests now cover the
+three families' pooling, prefixes and query lines between them, and **all three are the same failure
+mode**: a modern encoder that loads, runs, and retrieves slightly worse for a reason nothing reports.
+
 * **a family table**, each entry verified by loading the model rather than by reading a card: `bge` and
   `mxbai` → CLS, `qwen3-embedding` → **last**, `e5` → mean;
 * **`last` is now a legal pooling** at all — it was not in the accepted set, so a caller who knew what the

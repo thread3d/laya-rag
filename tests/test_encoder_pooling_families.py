@@ -91,3 +91,28 @@ def test_a_family_without_prefixes_is_quiet_and_unprefixed(capsys):
     model = BiEncoderModel(EngineConfig(embed_model="BAAI/bge-small-en-v1.5"))
     assert capsys.readouterr().out == ""
     assert model.passage_prefix == ""
+
+
+# ── the query-side line: each family's own, never another's ──────────────
+
+def test_the_query_prefix_table_is_family_specific():
+    from laya_rag.model import _family_query_prefix
+
+    assert _family_query_prefix("intfloat/multilingual-e5-large-instruct") == "query: "
+    qwen = _family_query_prefix("Qwen/Qwen3-Embedding-0.6B")
+    assert qwen.startswith("Instruct: ") and qwen.endswith("\nQuery: ")
+    # bge has no entry: its instruction is the default sentence, applied by the caller.
+    assert _family_query_prefix("BAAI/bge-small-en-v1.5") == ""
+
+
+def test_a_qwen3_query_does_not_get_bges_instruction():
+    """The third silent mismatch on P3's list: one family's instruction on another's encoder."""
+    from laya_rag.model import BiEncoderModel
+
+    model = BiEncoderModel(EngineConfig(embed_model="Qwen/Qwen3-Embedding-0.6B",
+                                        embed_query_instruction=True))
+    bge = BiEncoderModel(EngineConfig(embed_model="BAAI/bge-small-en-v1.5",
+                                      embed_query_instruction=True))
+    assert model._query_text("hello").startswith("Instruct: ")
+    assert "Represent this sentence" not in model._query_text("hello")
+    assert bge._query_text("hello").startswith("Represent this sentence")

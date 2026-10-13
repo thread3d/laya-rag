@@ -266,6 +266,26 @@ _FAMILY_PREFIXES: tuple[tuple[str, tuple[str, str]], ...] = (
 )
 
 
+#: The **query-side** line each family wants, which is not the same as its passage-side one. bge's is a
+#: sentence, Qwen3 Embedding's is an `Instruct:`/`Query:` pair, e5's is the bare `query: ` token — and
+#: applying one family's to another is the third silent mismatch on P3's list, of exactly the same shape
+#: as the pooling and the passage prefix.
+_FAMILY_QUERY_PREFIX: tuple[tuple[str, str], ...] = (
+    ("e5", "query: "),
+    ("qwen3-embedding",
+     "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: "),
+)
+
+
+def _family_query_prefix(model_id: str) -> str:
+    """The query-side prefix for a known family, or ``""`` — never another family's."""
+    lowered = (model_id or "").lower()
+    for needle, prefix in _FAMILY_QUERY_PREFIX:
+        if needle in lowered:
+            return prefix
+    return ""
+
+
 def _family_prefixes(model_id: str) -> tuple[str, str]:
     """``(query_prefix, passage_prefix)`` for a known family, or two empty strings."""
     lowered = (model_id or "").lower()
@@ -441,10 +461,16 @@ class BiEncoderModel:
         without it on BEIR SciFact, so the default is off and ``EMBED_QUERY_INSTRUCTION``
         turns it on.
         """
+        return self._encode([self._query_text(text)])[0]
+
+    def _query_text(self, text: str) -> str:
+        """The string this model wants for a query — prefixed only if the caller asked, and with the
+        **family's own** line rather than bge's sentence, which is the difference between an instruction
+        a model was trained with and one it was not. Split out so it can be asserted without a forward."""
         query = str(text or "")
         if self.query_instruction:
-            query = self.QUERY_PREFIX + query
-        return self._encode([query])[0]
+            query = (_family_query_prefix(self.model_id) or self.QUERY_PREFIX) + query
+        return query
 
     @property
     def dim(self) -> int:
