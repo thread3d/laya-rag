@@ -2832,6 +2832,14 @@ frequency pass**, it is silent by construction, and its length scales with the c
 documents. The two kills were damage done to a working run, and the number that would have prevented them is the
 one now recorded.
 
+**And its embedding rate is measured rather than inferred from its first block.** Three counters — 20,000 documents
+at 550.5 s, 40,000 at 766.0 s, 60,000 at 936.6 s — give **104 documents per second** and **~13.9 hours** for the
+member. The first block alone reads as 36 docs/s, which would have been **40 hours**: a 3× overestimate of exactly
+the kind the last four rounds have been collecting, and the reason the rule is *two counters*, not one.
+
+So hotpotqa is a ~14-hour member, and the queue behind it — climate-fever and fever, both ~5.4M documents — is
+reachable inside this session's budget rather than beyond it.
+
 **One thing the confirmation exposes rather than closes:** `union-df.json` is *still absent* after the pass
 finished. The build path writes that file; this path did not, yet it printed `reusing the on-disk lexical index`
 and then recomputed the union anyway. So either the reuse path always recomputes and never persists, or it
