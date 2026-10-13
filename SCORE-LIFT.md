@@ -2953,6 +2953,22 @@ line at the end of the stream (with two tests: one that the partial block is rep
 multiple is not reported twice). *The same failure the interval was added to remove, one threshold short* —
 which is the fourth time in this session that a phase was silent in a way nobody had predicted.
 
+**And the weights, too — so the queue is pre-flighted in every dimension that fails late.** The writable
+`eval/hf-rerank` cache holds every model the queued runs need:
+
+| model | cached | used by |
+| --- | ---: | --- |
+| `Qwen/Qwen3-Embedding-0.6B` | 2.41 GB | P3's encoder run |
+| `Qwen/Qwen3-Reranker-0.6B` | 2.41 GB | P4 arm 2 |
+| `BAAI/bge-reranker-base`, `-v2-m3` | 2.27 / 4.59 GB | arm 1's re-takes |
+| `cross-encoder/ms-marco-MiniLM-L-6-v2` | 0.18 GB | the SciFact CE rows |
+| `BAAI/bge-small-en-v1.5` | 0.27 GB | the 2023 comparison |
+
+Plus `models/laya-retrieval` on disk for the engine's own rows. **So the queue needs no downloads, no missing
+corpora, and no unwritable cache — a successor can launch any of §10.6's commands as written.** That is the
+question worth answering before a nine-hour run rather than during one, and it is answered by two filesystem
+checks rather than by assuming the last session left the machine provisioned.
+
 **The queued members' preconditions, checked rather than assumed.** A run that dies at hour three on a
 missing corpus is the most expensive kind of failure this harness can have, and it is discoverable in a
 second:
