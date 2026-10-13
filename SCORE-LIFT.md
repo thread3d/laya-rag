@@ -3110,8 +3110,23 @@ entry was written. The correction is not that the pattern was wrong but that **t
 it**, and dbpedia-entity is a large corpus (4.6M documents) where the dense channel has more to add than on
 NQ's short queries or Signal-1M's tweets.
 
-**So the deficit moves for the first time since CQADupStack: 0.6963 → 0.6963**, a fall of 0.0122 — and this
+**So the deficit moves for the first time since CQADupStack: 0.7085 → 0.6963**, a fall of 0.0122 — and this
 is the first evidence that P1's premise holds beyond one member.
+
+**And the size of that refutation has to be qualified by the same test applied to the other cells.** Paired
+bootstrap over the 400 scored queries, from each report's `per_query_nDCG@10`:
+
+| comparison | n | mean | 95% CI | significant? |
+| --- | ---: | ---: | --- | --- |
+| hybrid vs `bm25-engine` | 400 | **+0.0235** | **[+0.0067, +0.0411]** | **yes** |
+| hybrid vs **`bm25-title`** | 400 | **+0.0122** | **[−0.0046, +0.0287]** | **no** |
+
+The fusion's gain over the member's *engine* row is real; its gain over the member's **best row is not** — the
+interval includes zero at 400 queries. **So the deficit moved by 0.0122, and 0.0122 is not statistically
+distinguishable from zero.** That does not make the arithmetic wrong — §1.2 takes each member's best measured
+row, this is that row, and the table does what it says — but it does mean the headline figure is **built from
+point estimates whose differences are often inside sampling noise**, which is a statement about how the deficit
+is computed rather than about the dense channel.
 
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6963), the consistency
