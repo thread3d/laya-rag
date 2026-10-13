@@ -1427,6 +1427,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         """The bi-encoder for this dataset: a per-dataset override, else the global one."""
         model_id = dataset_models.get(dataset, args.biencoder_model)
         if model_id not in biencoders:
+            # A line *before* the encoder exists, so a silent log can be located: hotpotqa sat 45 minutes after
+            # `reusing the on-disk lexical index` with no embedding header, and this print splits that silence
+            # into "constructing the encoder" and "embedding". On a contended host the load is minutes, which is
+            # the fact that made the missing line feel like a hang.
+            print(f"    loading the bi-encoder {model_id}", flush=True)
             biencoders[model_id] = BiEncoder(
                 model_id, device=args.device, query_instruction=args.query_instruction,
                 pooling=args.biencoder_pooling,
