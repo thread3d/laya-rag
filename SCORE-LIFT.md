@@ -2844,7 +2844,15 @@ reachable inside this session's budget rather than beyond it.
 finished. The build path writes that file; this path did not, yet it printed `reusing the on-disk lexical index`
 and then recomputed the union anyway. So either the reuse path always recomputes and never persists, or it
 persisted nothing because it could not. Either way **every reuse of this index pays the ~30 minutes again** — a
-real inefficiency with a one-read diagnosis, and the next thing to look at rather than to guess about.
+real inefficiency with a one-read diagnosis, and the next thing to look at rather than to guess about.**And the thing the confirmation exposed is now diagnosed and fixed.** `OnDiskBM25F.exists_on_disk` checked only
+the **per-field** indexes, while `open` **requires** `union-df.json` — reads it, and raises without it. So a partial
+index (every field present, union file absent — exactly what a killed build leaves) was reported **reusable**, the
+`open` then failed, and the fallback silently recomputed the union over the whole corpus: **the ~30 minutes
+measured above, which the completeness check could have named instead of hiding.**
+
+The classmethod now requires the union file as well, with a test that builds an index, deletes `union-df.json`, and
+asserts the index is no longer considered reusable. That is the first defect this session has *found and fixed*
+rather than documented, and it came from following one open question to the code rather than reasoning about it.
 
 * the **first** run wrote its per-field index artefacts, then its log went quiet for 892 s. I read that as a stall
   and killed it. It was not: **`postings.bin` was still growing** — 432 MB when I looked, **1.33 GB** when I looked

@@ -49,3 +49,21 @@ def test_the_lower_and_upper_bounds_are_both_wrong_here():
 
 def test_nothing_indexed_is_an_empty_union():
     assert union_document_frequency([]) == {}
+
+
+def test_an_index_missing_the_union_file_is_not_reusable(tmp_path):
+    """`open` requires `union-df.json`, so `exists_on_disk` must too.
+
+    A killed build on hotpotqa left every field present and the union file absent; `exists_on_disk` said
+    reusable, `open` raised, and the fallback silently recomputed the union over 5,232,329 documents — about
+    thirty minutes of work that the completeness check could have named instead.
+    """
+    from laya_rag.ondisk import OnDiskBM25F
+
+    directory = tmp_path / "idx"
+    index = OnDiskBM25F(directory, fields=("title", "body"))
+    index.build({"a": {"title": "refunds", "body": "refunds take five days"}})
+    assert OnDiskBM25F.exists_on_disk(directory) is True
+    (directory / "union-df.json").unlink()
+    assert OnDiskBM25F.exists_on_disk(directory) is False
+

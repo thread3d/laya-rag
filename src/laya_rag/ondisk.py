@@ -123,8 +123,17 @@ class OnDiskBM25F:
 
     @classmethod
     def exists_on_disk(cls, directory: Path, fields: Sequence[str] = ("title", "body")) -> bool:
-        """Whether every field's index is present, which is what ``--fresh`` has to mean here."""
+        """Whether the index is complete: every field's postings **and** the union-df file.
+
+        The union file is not decoration. `open` requires it — it reads it and raises without it — so an index
+        with every field present but no `union-df.json` is **not** reusable, and calling it reusable costs a
+        silent recomputation of the union over the whole corpus: measured at **~30 minutes for 5,232,329
+        documents** on `hotpotqa`, where a killed build left exactly that partial state. The docstring said
+        "which is what `--fresh` has to mean here"; it now includes the file that makes reuse possible.
+        """
         directory = Path(directory)
+        if not (directory / _UNION_DF).is_file():
+            return False
         return all(
             OnDiskBM25.exists_on_disk(directory / f"{name}.bm25") for name in fields
         )
