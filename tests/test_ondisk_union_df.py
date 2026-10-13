@@ -67,3 +67,21 @@ def test_an_index_missing_the_union_file_is_not_reusable(tmp_path):
     (directory / "union-df.json").unlink()
     assert OnDiskBM25F.exists_on_disk(directory) is False
 
+
+def test_the_merge_phase_reports_its_progress(tmp_path, capsys, monkeypatch):
+    """The instrument added for a silence that cost three rounds: a line per merge group.
+
+    Two things have to be forced, and my first attempt forced only one: **many runs** (`block_docs=1`) *and* a
+    **fan-in below the run count**, because the collapse loop only runs while the level exceeds the fan-in. With
+    the default fan-in and twenty runs, nothing merges and the test proves nothing about the line.
+    """
+    import laya_rag.ondisk as od
+    from laya_rag.ondisk import OnDiskBM25
+
+    monkeypatch.setattr(od, "_MERGE_FAN_IN", 2)
+    docs = [(str(i), f"shared term{i} words here") for i in range(20)]
+    index = OnDiskBM25(tmp_path / "idx", drop_stopwords=False, stem=False)
+    index.build(docs, block_docs=1)
+    out = capsys.readouterr().out
+    assert "merge" in out and "at this level" in out
+    assert len(index.search("shared words", 5)) > 0
