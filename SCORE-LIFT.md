@@ -2953,6 +2953,23 @@ line at the end of the stream (with two tests: one that the partial block is rep
 multiple is not reported twice). *The same failure the interval was added to remove, one threshold short* —
 which is the fourth time in this session that a phase was silent in a way nobody had predicted.
 
+**The queued members' preconditions, checked rather than assumed.** A run that dies at hour three on a
+missing corpus is the most expensive kind of failure this harness can have, and it is discoverable in a
+second:
+
+| member | `corpus.jsonl` + `queries.jsonl` present? | on-disk size |
+| --- | --- | ---: |
+| DBPedia-entity | **ready** (running) | 2.1 GB |
+| HotpotQA | **ready** | 2.2 GB |
+| Climate-FEVER | **ready** | 3.4 GB |
+| FEVER | **ready** | 3.4 GB |
+| BioASQ | **ready** | 21.7 GB |
+
+All five are extractable and readable, and the volume has **325 GB free** — more than the ~10 GB of
+embeddings a 5M-document member writes plus its on-disk postings, and well past BioASQ's 21.7 GB corpus. So
+**none of the queued runs will fail on a missing dataset**, and the next session can launch any of them
+immediately rather than discovering the precondition at the wrong end of a run.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
