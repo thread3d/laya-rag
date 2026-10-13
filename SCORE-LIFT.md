@@ -2660,6 +2660,19 @@ and 0.005 ahead of the fusion. **Two cells in, one moved the macro and one did n
 shape of the answer for the remaining six: the dense channel is worth ~+0.01–0.04 over the *engine* row,
 so it moves the arithmetic only where the member has no title-boosted row ahead of it.
 
+**The third member is running, and the progress instrument added for it is working in production.**
+`signal1m` — **2,866,316 documents** — is embedding now (`--out eval/beir/signal1m-dense`,
+`--lexical-backend ondisk`, `--embed-chunk 20000`). Two things worth recording from its first minutes:
+
+* **the on-disk build reported as it worked** — `on-disk index: 1,000,000/2,866,316 documents (35%)`,
+  then `2,500,000 (87%)`, then it was done. That line is the fix from round 70, and this is the first
+  member larger than the one that motivated it to use it in anger: **before that fix the same phase
+  printed one line and then nothing for half an hour**, which is what made a working run look hung;
+* **Signal-1M is cheap to index because its documents are tweets.** The same build that took **29
+  minutes for nq's 2.68M long documents** finished here in a few minutes for 2.87M short ones, and the
+  cost is per token rather than per document — a reminder that "documents" is the wrong unit for
+  estimating this harness, which every one of these estimates has quietly assumed.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
