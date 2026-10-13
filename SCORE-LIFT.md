@@ -2826,6 +2826,18 @@ header appears within the hour** — and if it does not, the pass is not what is
 after all, which is a different investigation with a different first step (the line the merge fix added, once a
 build reaches it).
 
+**And the prediction held.** The header appeared — `embedding 5233329 documents with laya-retrieval.mean` — with
+the log fresh again, inside the predicted window. So the phase that cost three rounds was **the union document
+frequency pass**, it is silent by construction, and its length scales with the corpus: ~30 minutes for 5,232,329
+documents. The two kills were damage done to a working run, and the number that would have prevented them is the
+one now recorded.
+
+**One thing the confirmation exposes rather than closes:** `union-df.json` is *still absent* after the pass
+finished. The build path writes that file; this path did not, yet it printed `reusing the on-disk lexical index`
+and then recomputed the union anyway. So either the reuse path always recomputes and never persists, or it
+persisted nothing because it could not. Either way **every reuse of this index pays the ~30 minutes again** — a
+real inefficiency with a one-read diagnosis, and the next thing to look at rather than to guess about.
+
 * the **first** run wrote its per-field index artefacts, then its log went quiet for 892 s. I read that as a stall
   and killed it. It was not: **`postings.bin` was still growing** — 432 MB when I looked, **1.33 GB** when I looked
   again — so the phase writing it was doing exactly what it should, invisibly;
