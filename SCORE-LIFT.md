@@ -2664,6 +2664,11 @@ so it moves the arithmetic only where the member has no title-boosted row ahead 
 `signal1m` — **2,866,316 documents** — is embedding now (`--out eval/beir/signal1m-dense`,
 `--lexical-backend ondisk`, `--embed-chunk 20000`). Two things worth recording from its first minutes:
 
+Its **measured rate is 228 documents per second** — 3.5× nq's 66 — so the member is **~3.5 hours**,
+where a document-count estimate gives ~12. The unit is doing the work again: I have now estimated
+this harness's cost from *document counts* twice and been wrong by 4× (nq's ETA) and 3.5× (this one),
+because the cost is per token. **Read the counter, and check what it is counting.**
+
 * **the on-disk build reported as it worked** — `on-disk index: 1,000,000/2,866,316 documents (35%)`,
   then `2,500,000 (87%)`, then it was done. That line is the fix from round 70, and this is the first
   member larger than the one that motivated it to use it in anger: **before that fix the same phase
