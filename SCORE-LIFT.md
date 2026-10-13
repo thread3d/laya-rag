@@ -2822,7 +2822,7 @@ and 0.005 ahead of the fusion. **Two cells in, one moved the macro and one did n
 shape of the answer for the remaining six: the dense channel is worth ~+0.01–0.04 over the *engine* row,
 so it moves the arithmetic only where the member has no title-boosted row ahead of it.
 
-**The third member is running, and the progress instrument added for it is working in production.**
+**The third member ran, and the progress instrument built for it worked in production.**
 `signal1m` — **2,866,316 documents** — is embedding now (`--out eval/beir/signal1m-dense`,
 `--lexical-backend ondisk`, `--embed-chunk 20000`). Two things worth recording from its first minutes:
 
@@ -2866,6 +2866,11 @@ short-document corpora it is not reliably better than the lexical one** — Sign
 `bm25-engine` (0.3131) beats the fusion (0.2992) there. That is the useful finding for the five members
 left, and it is a *pattern from three cells*, which is exactly the kind of claim this session has learned to
 hold lightly: it predicts, and the next member can refute it.
+
+**The fourth member is running now** — `dbpedia-entity`, **4,635,922 documents**, the next by size, same
+command pattern and its own `--out`. Its on-disk build reported 16% inside three minutes, which is the
+instrument again: at this corpus size the phase that used to be silent is the one telling us the run is
+alive.
 
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
