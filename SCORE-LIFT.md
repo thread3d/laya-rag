@@ -2505,6 +2505,12 @@ programme at least a round.
   2255 queries to score (0 checkpointed)"* — a kill costs the whole pass, and on this host runs are
   killed routinely (five times this session, for lock contention and for being wrong about what they
   measured).
+- **Contention does not merely mask pathology — it is measurable, and it is large.** Running the P3 encoder
+  probe beside the dbpedia-entity embedding on this host gave `BiEncoderModel` **10 documents/second** for
+  `bge-small`, where the harness embeds the same corpus at **~130** — a **13×** cost, from two jobs that are
+  each perfectly healthy. So the one-heavy-job rule in this section is not tidiness: on this machine a second
+  model-heavy job removes an order of magnitude from the first, and any *rate* quoted for a run that shared
+  the host should say so.
 - **Contention masquerades as pathology.** Slow is not stuck. Before diagnosing a run, check what
   else is resident — several rounds here were spent on a "stall" that was a contended host.
 - **State what a number is not.** Claims of *absence* ("no score exists") and of *level* (an MTEB
