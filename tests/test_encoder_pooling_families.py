@@ -59,3 +59,35 @@ def test_the_last_token_index_is_padding_safe():
 
     assert [last_index(row) for row in ([1, 1, 1, 0, 0], [1, 1, 1, 1, 1])] == [2, 4]
     assert [last_index(row) for row in ([0, 0, 1, 1, 1], [1, 1, 1, 1, 1])] == [4, 4]
+
+
+# ── prefixes: a family trained with one on each side ─────────────────────
+
+def test_the_prefix_table_knows_e5_and_nothing_else():
+    from laya_rag.model import _family_prefixes
+
+    assert _family_prefixes("intfloat/multilingual-e5-large-instruct") == ("query: ", "passage: ")
+    assert _family_prefixes("BAAI/bge-small-en-v1.5") == ("", "")
+    assert _family_prefixes("") == ("", "")
+
+
+def test_a_family_that_needs_prefixes_says_so_when_it_has_none(capsys):
+    """Silent is the failure mode: this model retrieves worse, not wrongly, without both prefixes."""
+    BiEncoderModel(EngineConfig(embed_model="intfloat/multilingual-e5-large-instruct"))
+    out = capsys.readouterr().out
+    assert "trained with prefixes" in out
+    assert "EMBED_PASSAGE_PREFIX" in out
+
+
+def test_a_configured_pair_is_quiet(capsys, monkeypatch):
+    monkeypatch.setenv("LAYA_RAG_EMBED_QUERY_INSTRUCTION", "1")
+    monkeypatch.setenv("LAYA_RAG_EMBED_PASSAGE_PREFIX", "passage: ")
+    model = BiEncoderModel(EngineConfig(embed_model="intfloat/multilingual-e5-large-instruct"))
+    assert capsys.readouterr().out == ""
+    assert model.passage_prefix == "passage: "
+
+
+def test_a_family_without_prefixes_is_quiet_and_unprefixed(capsys):
+    model = BiEncoderModel(EngineConfig(embed_model="BAAI/bge-small-en-v1.5"))
+    assert capsys.readouterr().out == ""
+    assert model.passage_prefix == ""

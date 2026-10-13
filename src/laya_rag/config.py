@@ -137,6 +137,16 @@ class EngineConfig:
     embed_query_instruction: bool = field(
         default_factory=lambda: _env_bool("EMBED_QUERY_INSTRUCTION", False)
     )
+    #: Prefix prepended to every **document** before embedding. Some families are trained with one on
+    #: each side (`intfloat/e5-*`: `query: ` and `passage: `), and applying only the query half leaves
+    #: the two sides in different spaces — silently worse retrieval, not an error. `BiEncoderModel`
+    #: warns when a family that needs prefixes is used without any.
+    # Read **without stripping**: `_env` strips its value, and a prefix is whitespace-significant —
+    # e5's is `"passage: "` with a trailing space, and `"passage:"` is a different prefix. Found by a
+    # test asserting the knob round-trips the string it documents.
+    embed_passage_prefix: str = field(
+        default_factory=lambda: os.environ.get(f"{ENV_PREFIX}EMBED_PASSAGE_PREFIX") or ""
+    )
     # The RRF weight an auto-detected Laya retrieval adaptation is fused at. `1.0` — the
     # historical "a dense model is configured, so weight it fully" rule — measurably over-
     # dilutes a channel that is real but still weaker than BM25: on SciFact the adapted

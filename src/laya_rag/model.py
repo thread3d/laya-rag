@@ -258,6 +258,23 @@ _FAMILY_POOLING: tuple[tuple[str, str], ...] = (
 )
 
 
+#: Families trained with a prefix on **each** side. Applying one and not the other puts queries and
+#: documents in different spaces, which is the same silent failure as the wrong pooling: it retrieves,
+#: just worse. The e5 cards use exactly these two strings.
+_FAMILY_PREFIXES: tuple[tuple[str, tuple[str, str]], ...] = (
+    ("e5", ("query: ", "passage: ")),
+)
+
+
+def _family_prefixes(model_id: str) -> tuple[str, str]:
+    """``(query_prefix, passage_prefix)`` for a known family, or two empty strings."""
+    lowered = (model_id or "").lower()
+    for needle, prefixes in _FAMILY_PREFIXES:
+        if needle in lowered:
+            return prefixes
+    return ("", "")
+
+
 def _family_pooling(model_id: str) -> str:
     """The pooling a known family is trained with, or ``mean`` for a model nobody has verified.
 
@@ -295,6 +312,18 @@ class BiEncoderModel:
         self.model_id = self.config.embed_model
         self.pooling = self._resolve_pooling(self.config.embed_pooling)
         self.query_instruction = bool(self.config.embed_query_instruction)
+        self.passage_prefix = str(getattr(self.config, "embed_passage_prefix", "") or "")
+        wanted_query, wanted_passage = _family_prefixes(self.model_id)
+        if wanted_query and not (self.query_instruction and self.passage_prefix):
+            # Loud rather than silent: this model is trained with a prefix on each side, and without
+            # both it retrieves in a mismatched space. A warning, not an error, because a caller may
+            # have measured that it does not matter for their corpus — but they will have been told.
+            print(
+                f"warning: {self.model_id} is trained with prefixes ({wanted_query!r} / "
+                f"{wanted_passage!r}); configure EMBED_QUERY_INSTRUCTION=1 and EMBED_PASSAGE_PREFIX="
+                f"{wanted_passage!r} or the two sides embed into different spaces",
+                flush=True,
+            )
         self._tokenizer: Any | None = None
         self._encoder: Any | None = None
         self._torch: Any | None = None
@@ -399,8 +428,11 @@ class BiEncoderModel:
         return np.vstack(blocks)
 
     def embed(self, texts: Sequence[str]) -> np.ndarray:
-        """Embed documents. No query instruction on this side."""
-        return self._encode(texts)
+        """Embed documents, with the passage prefix when one is configured."""
+        rows = [str(text or "") for text in texts]
+        if self.passage_prefix:
+            rows = [self.passage_prefix + row for row in rows]
+        return self._encode(rows)
 
     def embed_one(self, text: str) -> np.ndarray:
         """Embed a query, with the retrieval instruction only if it is configured.

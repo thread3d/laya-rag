@@ -528,6 +528,15 @@ produce anything but a misleading negative.** `auto` pooling used to be one line
 contains `bge`, mean otherwise" — which loads `Qwen/Qwen3-Embedding-0.6B` and embeds it with **mean**
 pooling when it is trained on the **last** token. Three things changed:
 
+**The same fix applied to prefixes, and writing its test found a second silent flaw in the knob itself.**
+`intfloat/e5-*` is trained with `query: ` on one side and `passage: ` on the other; only the query half
+existed, so the two sides embedded into different spaces — the same silent class as the pooling. Now there
+is a `EMBED_PASSAGE_PREFIX`, a family table for it, and a **loud warning** when a family that needs both has
+neither. And the test asserting the knob round-trips its documented value caught this: `_env` **strips** its
+value, so `passage: ` arrived as `passage:` — a *different* prefix, silently. The field is now read without
+stripping, with the reason in the comment. **A knob that cannot express the value it documents is the same
+failure as a knob nobody reads, one layer down.**
+
 * **a family table**, each entry verified by loading the model rather than by reading a card: `bge` and
   `mxbai` → CLS, `qwen3-embedding` → **last**, `e5` → mean;
 * **`last` is now a legal pooling** at all — it was not in the accepted set, so a caller who knew what the
