@@ -2816,23 +2816,32 @@ embedding cache grows to **34 GB** for the whole member, and the volume has **35
 matches for `error`, `Traceback` or `no space` in the log. Disk is the failure that would waste a
 night silently, which is why it is the first thing to look at on a multi-hour job, not the last.
 
-**And hotpotqa's run then produced a sixth silent phase — this one reproducible, and unexplained.** 45
-minutes after its build's final-block line, with the index artefacts written (15 minutes in), the log had
-**nothing**: no embedding header, no `parts` directory, no file being written, load average 5.5 on 56 cores.
-`ps` and `top` are **denied by this session's sandbox**, so CPU state could not be read — which is the one
-diagnostic that would have settled it.
+**And hotpotqa's run then produced a sixth silent phase — reproducible, and my first explanation of it was
+wrong.** 45 minutes after the build's final-block line, with the index artefacts written 15 minutes in, the log
+had **nothing**: no embedding header, no `parts` directory, no file being written, load 5.5 on 56 cores. `ps`
+and `top` are **denied by this session's sandbox**, so CPU state — the one diagnostic that would have settled it
+— could not be read.
 
-**So I killed it and relaunched, which is cheap**: the relaunch printed `reusing the on-disk lexical index` and
-went straight past the 30-minute build, confirming that the on-disk index is a real checkpoint rather than a
-claim. It also confirmed the counts on the way past — `5233329 documents, 7405 scored queries`, matching
-§10.6's table exactly.
+**Killed and relaunched, which is cheap and was informative.** The relaunch printed `reusing the on-disk lexical
+index` and went straight past the 30-minute build, so the on-disk index is a real checkpoint rather than a claim;
+it confirmed the counts on the way past (`5233329 documents, 7405 scored queries`, matching §10.6 exactly); and
+**the silence recurred**, so it is a code path rather than a one-off hang.
 
-**And the silence recurred.** So it is a code path, not a one-off hang: something between "index ready" and
-"first embedding block" runs for many minutes without printing or writing. **The prime suspect is
-`union_document_frequency(documents)`** — it takes the whole corpus as an in-memory `Mapping`, and at 5.2M
-documents that is a large allocation on a shared machine, which is exactly the shape of cost that stays
-invisible until it meets a big corpus. That is a suspicion with a name and a next step, not a finding: the
-instrument to build is a line *before* the pass and a streaming implementation if the pass is the cost.
+**The suspect I named was refuted by reading the code, four minutes later.** I wrote that
+`union_document_frequency(documents)` might be holding the corpus in memory. It is not: the call site streams
+(`for payload in documents.values()`), the accumulator is one `term -> count` dict, and it runs **during** the
+build — before the artefacts exist — so it cannot be a silence that begins after them.
+
+**So where the silence is, by elimination, is the embedder's construction.** The dense path prints
+`embedding N documents with <model>` *before* its first block, so the absence of that header locates the delay
+strictly before embedding — in loading the tokenizer and the 322M encoder, which on a host holding a 34 GB
+embedding cache and a 432 MB postings file is not a fast operation. And the `--embed-chunk 20000` interval means
+a further silence of **200–330 seconds after** the header is normal for documents this long, which is the part
+that made the first explanation feel necessary.
+
+**Two things follow, both cheap:** a line before the embedder is constructed, so the two silences are
+distinguishable in a log; and a note that on this host the model load is minutes, not seconds, which is what
+"healthy" needs to say.
 
 **And when the log is silent *after* the final-block line, read the index directory instead.** hotpotqa's
 log went **892 seconds without a write**, its last line the build's own `100% — final block`, with the process
