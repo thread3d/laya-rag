@@ -523,6 +523,28 @@ Embedding is trained with last-token pooling. That is precisely the class of mis
 worse" — and it is why a naive `EMBED_MODEL=Qwen/Qwen3-Embedding-0.6B` run would produce a
 misleading negative.
 
+**And that silent failure is now closed, which is the precondition this task needed before it could
+produce anything but a misleading negative.** `auto` pooling used to be one line — "CLS if the name
+contains `bge`, mean otherwise" — which loads `Qwen/Qwen3-Embedding-0.6B` and embeds it with **mean**
+pooling when it is trained on the **last** token. Three things changed:
+
+* **a family table**, each entry verified by loading the model rather than by reading a card: `bge` and
+  `mxbai` → CLS, `qwen3-embedding` → **last**, `e5` → mean;
+* **`last` is now a legal pooling** at all — it was not in the accepted set, so a caller who knew what the
+  model needed could not ask for it;
+* **the last-token index is padding-safe from the start**, taken as the highest index whose mask is set
+  rather than as the last column — the same trap found in the generative reranker's batching an hour
+  earlier, applied here before it could bite. Its test says so.
+
+Nine tests, none needing weights. **The remaining P3 work is the encoder itself** — loading a 2025
+checkpoint and measuring it — and it now has a path that will not silently mis-embed it.
+
+**A practical note from this round, on a contended host:** the suite went from 64 s to over 600 s and I
+spent three runs hunting a regression in the encoder change before finding it in my own test — an
+`import torch` *inside the test body* stalls for minutes while a 33-worker embedding job saturates the
+machine. The test is pure Python now and the suite is back to 64 s. **On a shared host, an import in a test
+is a performance decision.**
+
 **The four code changes** (all in `src/laya_rag/model.py::BiEncoderModel`, ~150–250 lines):
 
 1. **Pooling.** `_resolve_pooling` accepts only `cls` and `mean`. Add `last` (last non-padding

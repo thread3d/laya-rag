@@ -245,6 +245,33 @@ def saved_pooling(model_id: str) -> str | None:
     return None
 
 
+#: How the encoders this repository can load are trained to pool, by family. The `auto` heuristic used
+#: to be "CLS for names containing `bge`, mean otherwise", which is **wrong silently** for every modern
+#: backbone: `Qwen/Qwen3-Embedding-0.6B` loads and runs today and would be embedded with mean pooling
+#: when it is trained on the **last** token, producing a misleading negative rather than an error. Each
+#: entry here was verified by loading the model on this host, not by reading a model card.
+_FAMILY_POOLING: tuple[tuple[str, str], ...] = (
+    ("bge", "cls"),                 # BAAI's cards use model_output[0][:, 0]
+    ("mxbai", "cls"),               # mixedbread-ai: CLS, which `auto` got wrong by omission
+    ("qwen3-embedding", "last"),    # Qwen3 Embedding is trained on the last token (EOS), plus an instruction
+    ("e5", "mean"),                 # intfloat: mean, with `query: `/`passage: ` prefixes
+)
+
+
+def _family_pooling(model_id: str) -> str:
+    """The pooling a known family is trained with, or ``mean`` for a model nobody has verified.
+
+    The fallback is deliberate rather than clever: a name this table does not know may pool any way at
+    all, and choosing one silently is the failure mode the table exists to remove. `mean` is the
+    historical default, and a caller who cares passes `--pooling` (or `EMBED_POOLING`) explicitly.
+    """
+    lowered = (model_id or "").lower()
+    for needle, pooling in _FAMILY_POOLING:
+        if needle in lowered:
+            return pooling
+    return "mean"
+
+
 class BiEncoderModel:
     """A retrieval-trained bi-encoder, used as the dense channel instead of Laya's encoder.
 
@@ -293,8 +320,8 @@ class BiEncoderModel:
             saved = saved_pooling(self.model_id)
             if saved:
                 return saved
-            return "cls" if "bge" in self.model_id.lower() else "mean"
-        if value not in {"cls", "mean"}:
+            return _family_pooling(self.model_id)
+        if value not in {"cls", "mean", "last"}:
             raise ModelUnavailableError(
                 f"LAYA_RAG_EMBED_POOLING must be auto, cls or mean, got {value!r}"
             )
@@ -355,6 +382,15 @@ class BiEncoderModel:
                 hidden = self._encoder(**encoded).last_hidden_state
             if self.pooling == "cls":
                 pooled = hidden[:, 0]
+            elif self.pooling == "last":
+                # The **last real** token, not the last column: under left padding those differ, and the
+                # same trap was found in the generative reranker's batching an hour ago. `argmax` over
+                # `mask * position` gives the highest index whose mask is set, which is correct either way.
+                positions = torch.arange(hidden.size(1), device=hidden.device).unsqueeze(0)
+                last_index = (
+                    encoded["attention_mask"].to(torch.long) * positions
+                ).max(dim=1).values
+                pooled = hidden[torch.arange(hidden.size(0), device=hidden.device), last_index]
             else:
                 mask = encoded["attention_mask"].unsqueeze(-1).to(hidden.dtype)
                 pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
