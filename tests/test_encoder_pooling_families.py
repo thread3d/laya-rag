@@ -144,3 +144,15 @@ def test_the_embedder_name_carries_its_pooling():
     assert qwen_last.name == "Qwen/Qwen3-Embedding-0.6B.last"
     assert qwen_mean.name == "Qwen/Qwen3-Embedding-0.6B.mean"
     assert qwen_last.name != qwen_mean.name
+
+
+def test_the_engine_embedder_speaks_the_harnesss_dense_interface():
+    """`dense_rankings` calls `embed` and `embed_queries`; this class had neither name for the latter.
+
+    Two classes for one job with different method names is how a comparison between the engine's encoder and
+    the harness's stops being one, silently.
+    """
+    model = BiEncoderModel(EngineConfig(embed_model="BAAI/bge-small-en-v1.5"))
+    for method in ("embed", "embed_queries", "embed_one"):
+        assert callable(getattr(model, method))
+    assert isinstance(type(model).name, property)

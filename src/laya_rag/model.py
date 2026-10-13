@@ -458,6 +458,18 @@ class BiEncoderModel:
             blocks.append(pooled.cpu().numpy().astype(np.float32))
         return np.vstack(blocks)
 
+    def embed_queries(self, texts: Sequence[str], fixed_length: bool = False) -> np.ndarray:
+        """The harness's dense-path interface: embed **queries**, instruction included.
+
+        `tools/beir.py`'s `dense_rankings` and `cached_embed` call `embed`/`embed_queries` on their embedder,
+        which is `bi_encoder.BiEncoder` there and this class in the engine — and the two had drifted apart:
+        this one offered `embed_one` and no batch query method, so it could not be passed to the harness's
+        dense path at all. Two classes for one job with different method names is how a *comparison* between
+        the engine's encoder and the harness's silently stops being one, which is the same shape as the three
+        silent mismatches fixed in this file last round.
+        """
+        return np.vstack([self.embed_one(text) for text in texts]) if texts else np.zeros((0, 1), np.float32)
+
     @property
     def name(self) -> str:
         """A cache key that carries the **pooling** as well as the model.
