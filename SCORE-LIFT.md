@@ -870,12 +870,17 @@ corpus, at this size, through the repository's scoring path, **the listwise rank
 either** — the third §P4 hypothesis to be measured and rejected, after "the reranker is old" (recovering
 only 0.05 of 0.16) and "the ordering is fine" (it was not).
 
-Two caveats travel, and one suspicion is labelled as a suspicion. It is **one model, one corpus, 200
-queries**, so it refutes the hypothesis for this configuration rather than for listwise ranking in
-general. And the model's score scale is compressed — a plainly relevant pair scores **0.0505** and the
-irrelevant one **0.0000** — so its ordering is computed over a range far narrower than a pointwise
-model's; **whether that is the model or this prompt is unmeasured**, and at ~1,100 s for 200 queries
-against 317 s for the pointwise arm, that is worth one more run rather than a guess.
+**The labelled suspicion has been tested and moved — the implementation is not the explanation.** The
+worry was that the compressed scale came from this repository's prompt wrapper. It does not: the token
+ids are the model's own `yes`/`no` (`9693`/`2152`, both single tokens, verified by converting them back),
+the template is the card's, and scoring the same pairs with and without `add_special_tokens=False` gives
+**identical results — 0.0505 and 0.0000**. So the scale is the model's behaviour on this instruction, not
+an artifact of the path built for it, and the remaining question is a model property rather than an
+implementation bug: *does a different `Instruct` line move it?* That is one cheap probe (a handful of
+forwards) and it is now the only open item in this section.
+
+Two caveats still travel: **one model, one corpus, 200 queries**, so the falsification holds for this
+configuration rather than for listwise ranking in general.
 
 **The path is validated with the real weights, and the validation turned up the trap the run would
 have hit.** `Qwen/Qwen3-Reranker-0.6B` is now fetched into the writable `eval/hf-rerank` (the shared
