@@ -903,6 +903,14 @@ this tokenizer happens to right-pad: a green measurement over a latent bug, whic
 document's §10.3 catalogue is about, caught here by a unit test written for a helper rather than by the
 experiment it was serving. The helper now takes the last real token's index, which is correct either way.
 
+**And the question the fix raises has been checked, because a fixed bug raises one: was the published
+number affected?** No, on two counts. `Qwen3-Reranker-0.6B`'s tokenizer reports `padding_side: right` — so
+under the old code the answer was at the last column and the scores were right, which is why the parity
+check passed rather than failing; and **the arm-2 result was produced by the single-pair path with no
+padding at all** (`logits[0, -1]` on one sequence is the last real token under either convention). So the
+0.2047 stands as measured, and the fix is insurance against a different tokenizer rather than a correction
+to a published figure.
+
 * **parity holds to float32 batching noise**: the same eight pairs score identically to four decimals
   through batch 1 and batch 8, with a maximum difference of **6.5e-6** — so the path validated two rounds
   ago is still the path, and batching is not a different retriever;
