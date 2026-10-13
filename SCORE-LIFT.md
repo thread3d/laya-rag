@@ -3036,6 +3036,30 @@ naming before someone reads 0.7085 as uniformly well determined. It also says wh
 from: not another channel on a well-measured member, but better measurement of the two cells where the gap and
 the sample are both small.
 
+**And the three cells' differences have now been tested, which changes how they should be stated.** The
+reports carry `per_query_nDCG@10`, so a **paired bootstrap needs no re-run at all** — 5,000 resamples over the
+queries both rows scored, joined across each member's `-dense` and base reports:
+
+| member | n | hybrid − `bm25-engine` | 95% CI | significant? |
+| --- | ---: | ---: | --- | --- |
+| **nq** | 3,452 | **+0.0094** | **[−0.0013, +0.0201]** | **no** |
+| **signal1m** | 97 | **−0.0140** | **[−0.0447, +0.0173]** | **no** |
+| cqadupstack | 457,199 docs | +0.0386 | *not tested (nested corpus)* | — |
+
+So of the two large members measured, **neither dense channel's difference from the engine's lexical row is
+statistically distinguishable from zero** — nq's headline +0.0094 does not survive its own confidence interval
+even at 3,452 queries. I had written both as effects ("beats the engine row by +0.0094", "loses 0.0139"); the
+honest form is **"is +0.0094 above it, with an interval that includes zero"**, and the conclusion that these
+members bought coverage rather than arithmetic is not weakened by that — it is what the arithmetic said anyway.
+
+**Two limits on what this can settle.** The *deficit* gaps are against published scalars, and no published
+scores are needed for that column — but no *per-query* published scores exist here either, so **the
+small-sample deficit cells (TREC-COVID 50, TREC-NEWS 57) cannot be tested this way**; their caveat is a caveat,
+not a measurable quantity, in this repository's data. And for contrast, the standard members' fusion gains *are*
+significant and large — arguana +0.1842 [+0.1717, +0.1969], fiqa +0.1431, scidocs +0.0495 — with **SciFact the
+one exception** (+0.0126 [−0.0085, +0.0337]). So the dense channel's value is real where the corpus is
+well-measured and the effect is large, and not established where the member is big and the gain is a point.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
