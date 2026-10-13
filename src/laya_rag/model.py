@@ -458,6 +458,18 @@ class BiEncoderModel:
             blocks.append(pooled.cpu().numpy().astype(np.float32))
         return np.vstack(blocks)
 
+    @property
+    def name(self) -> str:
+        """A cache key that carries the **pooling** as well as the model.
+
+        `bi_encoder.name` in the harness does the same, and for the same reason: two pooling modes are two
+        different embedders, so an embedding cache keyed by the model id alone would hand one mode's vectors
+        to the other — which is how a silent mismatch of exactly the kind this file spent three rounds
+        fixing would reappear through the cache. It was missing here, and found by passing
+        `BiEncoderModel` to the harness's `cached_embed`.
+        """
+        return f"{self.model_id}.{self.pooling}"
+
     def embed(self, texts: Sequence[str]) -> np.ndarray:
         """Embed documents, with the passage prefix when one is configured."""
         rows = [str(text or "") for text in texts]

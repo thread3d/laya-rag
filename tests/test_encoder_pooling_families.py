@@ -128,3 +128,19 @@ def test_truncation_is_a_knob_with_a_zero_default():
     assert EngineConfig().embed_truncate_dim == 0
     monkeypatch_free = EngineConfig(embed_model="Qwen/Qwen3-Embedding-0.6B", embed_truncate_dim=256)
     assert BiEncoderModel(monkeypatch_free).truncate_dim == 256
+
+
+# ── the cache key ────────────────────────────────────────────────────────
+
+def test_the_embedder_name_carries_its_pooling():
+    """Two pooling modes are two embedders, so an embedding cache keyed by model id alone would hand one
+    mode's vectors to the other — the silent mismatch this file exists for, arriving through the cache.
+
+    Found by passing `BiEncoderModel` to the harness's `cached_embed`, which requires `.name`.
+    """
+    qwen_last = BiEncoderModel(EngineConfig(embed_model="Qwen/Qwen3-Embedding-0.6B"))
+    qwen_mean = BiEncoderModel(EngineConfig(embed_model="Qwen/Qwen3-Embedding-0.6B",
+                                            embed_pooling="mean"))
+    assert qwen_last.name == "Qwen/Qwen3-Embedding-0.6B.last"
+    assert qwen_mean.name == "Qwen/Qwen3-Embedding-0.6B.mean"
+    assert qwen_last.name != qwen_mean.name
