@@ -917,6 +917,26 @@ passage first and reports the right reranker — `{'kind': 'generative-reranker'
 the call, ordered passages after, with the answerability gate satisfied. That is the path the arm-2 re-run
 will use, exercised end to end for the first time since batching changed it.
 
+**The instruction knob is not merely read — it changes engine behaviour, by 6.6× on this pair.** Same
+query, same index, same model, only `RERANK_INSTRUCTION` differing:
+
+| instruction | engine's relevant passage | irrelevant | partly |
+| --- | ---: | ---: | ---: |
+| the model's default (web search) | **0.4455** | 0.0000 | 0.0010 |
+| "Given a question, retrieve passages that answer the question" | **0.0675** | 0.0001 | 0.0007 |
+
+That is the third step of the same check this session keeps having to take — a flag that is *parsed* is not
+a flag that is *read* (`--first-stage-only`), a flag that is *read* is not a flag that *works*
+(`--embed-chunk`, verified on the filesystem), and a knob that is *documented* is not a knob that *acts*.
+This one acts.
+
+**And its direction reverses between the two measurements, so nothing is predicted from either.** On the
+three short pairs the question-answering line separated relevant from irrelevant better (0.0697 against
+0.0505); on the engine's own chunk the **default** scores 6.6× higher in absolute terms. Both are real, they
+point opposite ways, and the difference is the passage. So the arm-2 re-run is worth doing precisely because
+its outcome cannot be inferred: **an instruction effect that changes sign with the passage is not a lever
+one can reason about, only one that can be measured.**
+
 **And it scored 0.4455** for the relevant passage, where my earlier probes scored the same model at
 0.0505. The difference is the passage: the earlier one was `"Refunds are processed within five business
 days."` and the engine's chunk was `"Refunds are processed within five business days. This is the only
