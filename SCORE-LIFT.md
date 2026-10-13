@@ -134,7 +134,7 @@ of its hand-entered cells — see the note under §1.2.)
 | hotpotqa | 5,233,329 | bm25-engine, bm25-title | **lexical only** |
 | msmarco | 8,841,823 | bm25, bm25-engine | **lexical only** *(not a member)* |
 | nfcorpus | 3,633 | 16 rows | full |
-| nq | 2,681,468 | bm25-engine, bm25-title | **lexical only** |
+| nq | 2,681,468 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | quora | 522,931 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | robust04 | 528,155 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | scidocs | 25,657 | 9 rows | full |
@@ -144,7 +144,7 @@ of its hand-entered cells — see the note under §1.2.)
 | trec-news | 594,977 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | webis-touche2020 | 382,545 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 
-**lexical-only members (7 of 18):** bioasq, climate-fever, dbpedia-entity, fever, hotpotqa, nq, signal1m
+**lexical-only members (6 of 18):** bioasq, climate-fever, dbpedia-entity, fever, hotpotqa, signal1m
 **members with no report:** none
 **non-members present (not coverage):** msmarco
 
@@ -2555,7 +2555,7 @@ its own findings.**
 | item | state | cost |
 | --- | --- | --- |
 | **P4 arm 2** — `Qwen3-Reranker-0.6B`, listwise | unstarted; needs the yes/no-logit path | a real code change, not a flag; it is the only open question in §P4 now that the pointwise ceiling is **0.3702** |
-| **P1** — the eight lexical-only cells | **1 of 8 measured, 1 running** | `cqadupstack` is in: `hybrid-biencoder` **0.3275** against the 0.3046 §1.2 was scoring, so the summed deficit fell **0.7314 → 0.7085** and the lexical-only count **8 → 7 of 18**. `nq` (2.68M documents) is embedding now, ~15 h, checkpointed every 20k; then signal1m 2.87M, dbpedia 4.64M, hotpotqa 5.23M, climate-fever and fever 5.42M, bioasq 14.9M — largest last. **The only item that moves the BEIR-18 macro, and it is moving** |
+| **P1** — the eight lexical-only cells | **2 of 8 measured, rest queued** | `cqadupstack` is in (`hybrid-biencoder` **0.3275** against the 0.3046 §1.2 was scoring — the summed deficit fell **0.7314 → 0.7085**) and **`nq` is in too, without moving it**: hybrid **0.3212** against the engine's 0.3118, but NQ's recorded best is already 0.3264 (`bm25-title`), so the member's `ours` value does not change. Coverage: lexical-only members **8 → 6 of 18**. Next: signal1m, dbpedia-entity, hotpotqa, climate-fever, fever, bioasq — largest last, one command each in §10.6 |
 | **P3 / P11** | unstarted | week-scale research bets |
 | **P8 / P9** | unstarted | a published-settings control on 5.4M documents; a fresh out-of-domain corpus |
 | **§P12 run 3 / T8+T11** | blocked on a build | the own-domain set is a separate tool, and run 3 depends on it |
@@ -2627,6 +2627,26 @@ cited `../../eval/benchmarks/multihop-rag/ceiling-decomp.md`, so the report was 
 where a reader would look and the link resolved nowhere. Fixed, and
 `tests/test_docs_links_exist.py` checks all 195 relative links, skipping `eval/` targets when `eval/` is
 absent — the same absent-artefact convention the leakage audit and `claim-check` use.
+
+**`nq`'s report has landed, and the honest result is that it does not move the deficit.** All
+2,681,468 documents embedded in 37,342.9 s (10.4 h), twelve hours after the first one:
+
+| nq, 2.68M documents | nDCG@10 | nDCG@100 | Recall@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| `bm25-engine` | 0.3118 | 0.3746 | 0.4800 | 0.2693 |
+| `biencoder` (dense alone) | 0.2231 | 0.2933 | 0.3546 | 0.1935 |
+| **`hybrid-biencoder`** (dense w=0.3) | **0.3212** | **0.3939** | **0.5159** | **0.2741** |
+
+The fusion beats the engine row by **+0.0094 nDCG@10** and dense alone loses badly (−0.0887) — the same
+shape as CQADupStack, smaller in size. But **NQ's recorded best is already 0.3264** (`bm25-title`), so the
+new row does not become the member's `ours` value and **the summed deficit stays at 0.7085**. `nq` moves
+from lexical-only to dense in §1.1 (the generated table above), which is a coverage gain and not an
+arithmetic one — and that distinction is exactly what §1.2 is for.
+
+CQADupStack moved the deficit because its best row was a plain `bm25-engine`; NQ's was already title-boosted
+and 0.005 ahead of the fusion. **Two cells in, one moved the macro and one did not**, which is the useful
+shape of the answer for the remaining six: the dense channel is worth ~+0.01–0.04 over the *engine* row,
+so it moves the arithmetic only where the member has no title-boosted row ahead of it.
 
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
