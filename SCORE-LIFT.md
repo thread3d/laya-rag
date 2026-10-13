@@ -911,6 +911,22 @@ padding at all** (`logits[0, -1]` on one sequence is the last real token under e
 0.2047 stands as measured, and the fix is insurance against a different tokenizer rather than a correction
 to a published figure.
 
+**The engine-integrated path works, and running it corrected an over-generalisation of mine.** With
+`RERANK_MODEL=Qwen/Qwen3-Reranker-0.6B` on a three-document index, `RagEngine.query` returns the right
+passage first and reports the right reranker — `{'kind': 'generative-reranker', 'loaded': False}` before
+the call, ordered passages after, with the answerability gate satisfied. That is the path the arm-2 re-run
+will use, exercised end to end for the first time since batching changed it.
+
+**And it scored 0.4455** for the relevant passage, where my earlier probes scored the same model at
+0.0505. The difference is the passage: the earlier one was `"Refunds are processed within five business
+days."` and the engine's chunk was `"Refunds are processed within five business days. This is the only
+sentence about refunds."` — a passage that *states* its relevance. **So the scale is not uniformly
+compressed**; 0.0505 was a property of that pair, and the sentence I wrote two rounds ago saying the model
+"answers in a range two orders of magnitude below a cross-encoder's" was generalised from two hand-picked
+passages and should not have been. The *instruction sensitivity* measurement stands as measured — the same
+three instructions on the same pair, a 7× spread — but the absolute level is pair-dependent, and the
+threshold guidance in the README is about *the default* rather than about this model's ceiling.
+
 * **parity holds to float32 batching noise**: the same eight pairs score identically to four decimals
   through batch 1 and batch 8, with a maximum difference of **6.5e-6** — so the path validated two rounds
   ago is still the path, and batching is not a different retriever;
