@@ -3008,10 +3008,18 @@ cost of that competition landed on the *smaller* job (round 149's measurement, 8
 path is validated:
 
 ```
-HF_HOME=$PWD/eval/hf-rerank .venv/bin/python tools/engine_multihop.py \
-    --out eval/benchmarks/multihop-rag/engine-p4-listwise \
+HF_HOME=$PWD/eval/hf-rerank \
+LAYA_RAG_RERANK_INSTRUCTION='Given a question, retrieve passages that answer the question' \
+    .venv/bin/python tools/engine_multihop.py \
+    --out eval/benchmarks/multihop-rag/engine-p4-listwise-qa \
     --rerank-model Qwen/Qwen3-Reranker-0.6B --limit 200 --sample-seed 0
 ```
+
+**The stem is `-qa` and not the original, deliberately.** `engine-p4-listwise` already has a report — the
+arm-2 run whose instruction was the model's web-search default — and jobkit fingerprints the configuration per
+stem, so re-running with a different instruction under the same `--out` would be refused rather than silently
+overwriting a record. `-qa` also makes the two results legible side by side, which is the point of a re-run
+that exists to test one variable.
 
 `HF_HOME` matters: the shared `~/.cache/huggingface` is not writable, and the failure is a
 `PermissionError` that looks like an intermittent cache lock. No threshold tuning is needed — the
