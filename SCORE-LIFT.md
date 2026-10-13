@@ -3010,6 +3010,32 @@ embeddings a 5M-document member writes plus its on-disk postings, and well past 
 **none of the queued runs will fail on a missing dataset**, and the next session can launch any of them
 immediately rather than discovering the precondition at the wrong end of a run.
 
+**And the deficit is not uniformly well measured — 16% of it rests on three corpora of 50–249 scored
+queries.** The nine cells that sum to 0.7085, with the sample each gap is computed on:
+
+| member | gap | scored queries | in the P1 queue? |
+| --- | ---: | ---: | --- |
+| NQ | −0.218 | 3,452 | measured |
+| FEVER | −0.137 | 6,666 | queued |
+| DBPedia-entity | −0.125 | 400 | running |
+| Climate-FEVER | −0.071 | 1,535 | queued |
+| **TREC-NEWS** | **−0.054** | **57** | **no — adapted dense already** |
+| Robust04 | −0.033 | 249 | no |
+| HotpotQA | −0.030 | 7,405 | queued |
+| **TREC-COVID** | **−0.024** | **50** | **no — adapted dense already** |
+| CQADupStack | −0.018 | *(nested corpus; not counted here)* | measured |
+
+**TREC-NEWS and TREC-COVID contribute 0.078 between them on 57 and 50 queries**, and Robust04 another 0.033
+on 249 — so **0.111 of the 0.7085, about 16%, is measured on fewer than 250 queries each**, and 0.078 of it on
+fewer than 60. Neither of the two weakest cells is in the P1 queue, because both already have dense rows and
+are deficit cells anyway.
+
+That does not make the arithmetic wrong — the deficit is what those published numbers give — but it does mean
+**the headline figure carries a measurement-quality caveat that its own table does not show**, and it is worth
+naming before someone reads 0.7085 as uniformly well determined. It also says where the *confidence* would come
+from: not another channel on a well-measured member, but better measurement of the two cells where the gap and
+the sample are both small.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
