@@ -455,6 +455,16 @@ class OnDiskBM25:
                 target = run_dir / f"merge-{len(level):05d}-{start:05d}.npy"
                 _merge_run_group(group, target)
                 collapsed.append(target)
+                # Report per group, because this phase is otherwise **silent for a quarter of an hour** at
+                # 5M documents: hotpotqa's log went 892 seconds with no write while `postings.bin` and
+                # ~500 MB merge shards were being written, which reads as a stall and is work. A line per
+                # group bounds the silence to one merge rather than to one level.
+                groups = -(-len(level) // fan_in)
+                print(
+                    f"    on-disk index: merge {len(collapsed)}/{groups} at this level "
+                    f"({len(level)} runs)",
+                    flush=True,
+                )
             if len(collapsed) >= len(level):  # pragma: no cover - defensive
                 raise RuntimeError(f"run merge made no progress at fan-in {fan_in}")
             level = collapsed
