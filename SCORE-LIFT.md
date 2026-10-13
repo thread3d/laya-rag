@@ -3067,6 +3067,20 @@ in the record because it changes the plan rather than the state: the same wait-a
 **several cells instead of none**, and P1's prediction will be tested by more than one member inside this
 session.
 
+**And the same test applied to §P4's headline turns out the other way — which is the useful contrast.** The
+full-protocol reports carry `per_query` metrics for all 2,255 queries, so the reranker's gain can be bootstrapped
+the same way, paired by query:
+
+| metric | n | mean gain | 95% CI | significant? |
+| --- | ---: | ---: | --- | --- |
+| MAP@10 | 2,255 | **+0.0408** | **[+0.0339, +0.0476]** | **yes** |
+| Hits@4 | 2,255 | **+0.0656** | **[+0.0497, +0.0816]** | **yes** |
+
+So **the session's two headline positives are not alike**: §P4's +0.0408 MAP@10 from a modern reranker is
+significant with a tightly bounded interval on 2,255 queries, while §P1's +0.0094 from the dense channel on nq
+has an interval that includes zero at 3,452. The difference is not sample size — both are thousands of queries —
+it is **effect size**, which is exactly the distinction a bare mean cannot make and this record now can.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.7085), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
