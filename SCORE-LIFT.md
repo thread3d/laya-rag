@@ -853,17 +853,29 @@ published **0.480**.
 the direction and the ordering right and the magnitudes to within ~0.01 — which is what a seeded
 subset with `--sample-seed 0` is for, and it is worth recording that it was not exact.
 
-**Arm 2's path exists now, so the question is one run away rather than one project.** The blocker
-was never the model — `Qwen/Qwen3-Reranker-0.6B` is Apache-2.0 and loads here — but the *scoring*: a
-generative reranker has no classification head, so `AutoModelForSequenceClassification` does not load
-it and the engine had no way to score one. That path is now in `src/laya_rag/model.py`:
-`qwen3_rerank_prompt` (the card's chat template, spelled out because the prompt *is* the interface),
-`yes_no_probability` (softmax over **just** the yes/no logits, so `RELEVANCE_THRESHOLD` keeps its
-meaning and the two kinds of reranker are comparable at the same cut), and `build_reranker`, which
-picks the class the configuration names — next to `build_embedder`, because an engine that chose for
-itself could point `RERANK_MODEL` at a generative model and silently load a head that does not exist.
-Six tests cover the prompt, the probability (including the extremes a 0.6B model emits) and the
-choice.
+**Arm 2 has run, and it falsifies the section's own hypothesis: a listwise ranker is much worse.** Same
+200-query sample, same configuration, the ordering fix in place — only the reranker differs:
+
+| reranker, 200-query subset | Hits@10 | Hits@4 | MAP@10 | MRR@10 | seconds |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| none (the fused order) | 0.9200 | 0.7300 | 0.3189 | 0.6142 | — |
+| `BAAI/bge-reranker-base` (pointwise, 184M) | 0.8950 | 0.7700 | 0.3384 | 0.6362 | 170.6 |
+| **`BAAI/bge-reranker-v2-m3`** (pointwise, 568M) | **0.9350** | **0.8200** | **0.3721** | **0.7023** | 317.4 |
+| `Qwen/Qwen3-Reranker-0.6B` (**listwise**, 0.6B) | 0.8650 | 0.5950 | **0.2047** | 0.4220 | ~1,100 |
+
+**MAP@10 0.2047 against 0.3721 for the pointwise model — a 45% relative drop — and below the fused order
+it was meant to improve.** The section said the rejection it rested on was specific to *pointwise* MS
+MARCO cross-encoders and that "what remains open is a listwise or late-interaction ranker". On this
+corpus, at this size, through the repository's scoring path, **the listwise ranker is not the answer
+either** — the third §P4 hypothesis to be measured and rejected, after "the reranker is old" (recovering
+only 0.05 of 0.16) and "the ordering is fine" (it was not).
+
+Two caveats travel, and one suspicion is labelled as a suspicion. It is **one model, one corpus, 200
+queries**, so it refutes the hypothesis for this configuration rather than for listwise ranking in
+general. And the model's score scale is compressed — a plainly relevant pair scores **0.0505** and the
+irrelevant one **0.0000** — so its ordering is computed over a range far narrower than a pointwise
+model's; **whether that is the model or this prompt is unmeasured**, and at ~1,100 s for 200 queries
+against 317 s for the pointwise arm, that is worth one more run rather than a guess.
 
 **The path is validated with the real weights, and the validation turned up the trap the run would
 have hit.** `Qwen/Qwen3-Reranker-0.6B` is now fetched into the writable `eval/hf-rerank` (the shared
@@ -2554,7 +2566,7 @@ its own findings.**
 
 | item | state | cost |
 | --- | --- | --- |
-| **P4 arm 2** — `Qwen3-Reranker-0.6B`, listwise | unstarted; needs the yes/no-logit path | a real code change, not a flag; it is the only open question in §P4 now that the pointwise ceiling is **0.3702** |
+| **P4 arm 2** | **measured, and negative** | the listwise `Qwen3-Reranker-0.6B` reads **MAP@10 0.2047** against **0.3721** for the pointwise `bge-reranker-v2-m3` on the same 200-query sample — a 45% relative drop and below the fused order it was meant to improve. §P4's hypothesis is falsified for this configuration: one model, one corpus, 200 queries, with the model's compressed score scale recorded as a suspicion rather than a finding |
 | **P1** — the eight lexical-only cells | **2 of 8 measured, rest queued** | `cqadupstack` is in (`hybrid-biencoder` **0.3275** against the 0.3046 §1.2 was scoring — the summed deficit fell **0.7314 → 0.7085**) and **`nq` is in too, without moving it**: hybrid **0.3212** against the engine's 0.3118, but NQ's recorded best is already 0.3264 (`bm25-title`), so the member's `ours` value does not change. Coverage: lexical-only members **8 → 6 of 18**. Next: signal1m, dbpedia-entity, hotpotqa, climate-fever, fever, bioasq — largest last, one command each in §10.6 |
 | **P3 / P11** | unstarted | week-scale research bets |
 | **P8 / P9** | unstarted | a published-settings control on 5.4M documents; a fresh out-of-domain corpus |
