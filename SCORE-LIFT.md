@@ -629,6 +629,26 @@ independent confirmation that size and pedigree do not transfer here.
 
 ---
 
+**The first measurement in this task, and it is a baseline rather than a replacement.** With the three
+interfaces fixed (pooling, prefixes, MRL) and `BiEncoderModel` made to speak the harness's dense interface,
+the engine's own embedder can be scored through the harness's path at all — so:
+
+| encoder | pooling | dim | SciFact nDCG@10 | Recall@10 | MRR@10 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `BAAI/bge-small-en-v1.5` (2023, 33M) | cls | 384 | **0.7077** | 0.8386 | 0.6705 |
+| `Qwen/Qwen3-Embedding-0.6B` (2025) | last | 1024 | *pending* | — | — |
+
+One corpus, no titles in the indexed text, and the 2023 row is the *engine's* embedder rather than the
+harness's `bi_encoder` — so this is a like-for-like comparison of the two encoders through one path, not a
+restatement of the existing `biencoder` rows.
+
+**The 2025 half is pending for an operational reason worth recording**: run alongside P1's member job it was
+starved to ~2 documents/second, so the honest thing was to stop it and let the run that moves the deficit
+keep the machine. It should be run **through `tools/beir.py` under the lock** (§10.6's pattern, one dataset,
+`--biencoder-model Qwen/Qwen3-Embedding-0.6B`), which also puts it in the reports the §1.1 authority reads.
+The interface work it did produce — three silent mismatches closed, an interop gap fixed, nine tests — is the
+part that had to exist before any number here could be trusted.
+
 ### P4 — A modern, and where possible listwise, second stage on MultiHop-RAG
 
 **What.** MultiHop-RAG MAP@10 is the system's worst published comparison: **0.319 best measured
