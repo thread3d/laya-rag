@@ -547,6 +547,22 @@ choice split into `_query_text` so it can be asserted without a forward pass. Fi
 three families' pooling, prefixes and query lines between them, and **all three are the same failure
 mode**: a modern encoder that loads, runs, and retrieves slightly worse for a reason nothing reports.
 
+**And the fix's magnitude is measured, which is what the task's own prose was missing.** The doc says a
+naive `EMBED_MODEL=Qwen/Qwen3-Embedding-0.6B` run "would produce a misleading negative" without saying how
+misleading. Loading the real checkpoint and embedding one query against a relevant and an irrelevant
+document, under each pooling:
+
+| pooling | relevant | irrelevant | separation |
+| --- | ---: | ---: | ---: |
+| **`last`** (what the family table now returns) | +0.7196 | +0.3119 | **+0.4077** |
+| `mean` (what the old heuristic returned) | +0.6086 | +0.5248 | +0.0837 |
+| `cls` (what another guess would give) | +0.8712 | **+0.9071** | **−0.0359** |
+
+So the silent mismatch was worth **4.9× the separation** against mean — and against CLS it is not merely
+worse but **inverted**, ranking the irrelevant document higher. That is the difference between a
+misleading negative and a retriever that runs backwards while reporting nothing, and it is now a measured
+number rather than a sentence about a model card.
+
 * **a family table**, each entry verified by loading the model rather than by reading a card: `bge` and
   `mxbai` → CLS, `qwen3-embedding` → **last**, `e5` → mean;
 * **`last` is now a legal pooling** at all — it was not in the accepted set, so a caller who knew what the
