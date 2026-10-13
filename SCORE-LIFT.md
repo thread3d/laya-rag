@@ -2525,6 +2525,12 @@ programme at least a round.
   2255 queries to score (0 checkpointed)"* — a kill costs the whole pass, and on this host runs are
   killed routinely (five times this session, for lock contention and for being wrong about what they
   measured).
+- **Chain the members; do not babysit the gap.** With five members queued and each taking 3-12 hours, the
+  lock sits idle for as long as it takes a human (or a round) to notice a report and start the next run — tens
+  of minutes per member, hours across the queue. A three-line shell script that waits for the current member's
+  report file and then launches the next one removes that entirely, and it is safe because **the run takes the
+  heavy lock itself**: a premature start refuses rather than colliding. Verified armed each round rather than
+  assumed, because a background process that dies silently would produce exactly the slack it removes.
 - **Contention is real, but I overstated it by an order of magnitude — twice over.** I wrote that a second
   model-heavy job cost this host **13×**, from the P3 probe embedding `bge-small` at 10 documents/second
   where the harness manages ~130. That comparison was between *two different runs* — different corpus sizes,
