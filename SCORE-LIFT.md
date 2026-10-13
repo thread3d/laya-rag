@@ -2819,6 +2819,13 @@ night silently, which is why it is the first thing to look at on a multi-hour jo
 **And hotpotqa's sixth silent phase was diagnosed wrongly twice before it was understood — including by me
 killing two healthy runs.** With the evidence that settles it:
 
+**And the phase has a predicted length, written down before it finished.** hotpotqa's paragraphs average roughly
+150 tokens, so the union pass tokenises on the order of **780 million tokens**; at Python tokenisation speed that
+is **13–65 minutes**, and the pass has been running for about thirty. **The prediction is that the embedding
+header appears within the hour** — and if it does not, the pass is not what is happening and the run is stuck
+after all, which is a different investigation with a different first step (the line the merge fix added, once a
+build reaches it).
+
 * the **first** run wrote its per-field index artefacts, then its log went quiet for 892 s. I read that as a stall
   and killed it. It was not: **`postings.bin` was still growing** — 432 MB when I looked, **1.33 GB** when I looked
   again — so the phase writing it was doing exactly what it should, invisibly;
