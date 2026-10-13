@@ -2816,8 +2816,26 @@ embedding cache grows to **34 GB** for the whole member, and the volume has **35
 matches for `error`, `Traceback` or `no space` in the log. Disk is the failure that would waste a
 night silently, which is why it is the first thing to look at on a multi-hour job, not the last.
 
-**And hotpotqa's sixth silent phase was diagnosed wrongly twice before it was understood — including by me
-killing two healthy runs.** With the evidence that settles it:
+**And hotpotqa's sixth silent phase took three wrong explanations before the code settled it — the last two of
+them mine.** What is now established, with the message that identifies the path:
+
+* the silence **after** `reusing the on-disk lexical index` is the **embedder's construction**, not an index pass.
+  That message comes from `tools/beir.py`'s **lexical** path (`OnDiskBM25`), which had loaded its index correctly;
+  the next thing the dense path does is build the bi-encoder, and on this host that load takes **~30 minutes** for
+  the 322M encoder. When it finishes, the header appears and embedding runs at 104 documents/second — which is what
+  the current run does;
+* the **first** run's 892 s of silence was the *build's* write-and-merge phase, with `postings.bin` growing from
+  432 MB towards 1.33 GB. **I killed it on the strength of a stale log**, which destroyed about thirty minutes of
+  build work. The filesystem was defending the run and I read the log instead — one round after writing "the log
+  tells you what has finished, the filesystem tells you what it is doing" into this document;
+* and **round 194's union-pass suspicion was wrong twice over**: it is not what the silence was, and the union file
+  is a **BM25F** artefact, absent because these runs use the plain lexical index, which never writes one.
+
+**What the episode therefore cost and taught:** two killed runs, a partial BM25F index left behind, and a
+30-minute phase whose length is now measured rather than mysterious. **The fix committed in the same round is
+correct but unrelated to it** — `OnDiskBM25F.exists_on_disk` really did fail to require `union-df.json` that
+`open` requires, which is a latent defect on the BM25F path that no observed run has hit; it is worth keeping on
+those terms and not as an explanation of this silence.
 
 **And the phase has a predicted length, written down before it finished.** hotpotqa's paragraphs average roughly
 150 tokens, so the union pass tokenises on the order of **780 million tokens**; at Python tokenisation speed that
