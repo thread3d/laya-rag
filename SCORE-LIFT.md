@@ -2910,6 +2910,19 @@ that made the first explanation feel necessary.
 distinguishable in a log; and a note that on this host the model load is minutes, not seconds, which is what
 "healthy" needs to say.
 
+**And the two silences a 5M-document member has after its index exists are both large enough to be mistaken for
+hangs, with the numbers to tell them apart.** After `reusing the on-disk lexical index` (or after a build's final
+block), the dense path does two things that print nothing for a long time:
+
+| phase | measured on this host | what it looks like |
+| --- | --- | --- |
+| the bi-encoder's construction (322M encoder) | **~30 min** | `reusing ...` then nothing, no file changing |
+| the first `--embed-chunk 20000` block | **~200 s** at 104 docs/s | header printed, then nothing again |
+
+So a silent log here is **expected**, and the instrument that distinguishes it from a hang is the line now printed
+before the encoder is constructed (`loading the bi-encoder <id>`). **Do not kill on a stale log**: the first run of
+this member was killed twice for silence that was work, and the cost was thirty minutes of build each time.
+
 **And when the log is silent *after* the final-block line, read the index directory instead.** hotpotqa's
 log went **892 seconds without a write**, its last line the build's own `100% — final block`, with the process
 alive — which looks exactly like a stall and is not: the on-disk index was **merging**, writing `postings.bin`
