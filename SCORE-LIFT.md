@@ -2505,12 +2505,16 @@ programme at least a round.
   2255 queries to score (0 checkpointed)"* — a kill costs the whole pass, and on this host runs are
   killed routinely (five times this session, for lock contention and for being wrong about what they
   measured).
-- **Contention does not merely mask pathology — it is measurable, and it is large.** Running the P3 encoder
-  probe beside the dbpedia-entity embedding on this host gave `BiEncoderModel` **10 documents/second** for
-  `bge-small`, where the harness embeds the same corpus at **~130** — a **13×** cost, from two jobs that are
-  each perfectly healthy. So the one-heavy-job rule in this section is not tidiness: on this machine a second
-  model-heavy job removes an order of magnitude from the first, and any *rate* quoted for a run that shared
-  the host should say so.
+- **Contention is real, but I overstated it by an order of magnitude — twice over.** I wrote that a second
+  model-heavy job cost this host **13×**, from the P3 probe embedding `bge-small` at 10 documents/second
+  where the harness manages ~130. That comparison was between *two different runs* — different corpus sizes,
+  different contention, one measured in chunks and one in documents — which is the over-generalisation
+  pattern §10.3's catalogue now names (entry 13), committed in the same session that wrote the entry. The
+  honest measurement came from stopping the probe and watching the big run recover: **dbpedia-entity went
+  from 127 to 137 documents/second, an 8% cost**, while the *smaller* job was the one starved (Qwen3 at
+  ~2 documents/second). So the rule stands — the second job loses most of its throughput — but the number
+  attached to it is 8% on the first, not 13×, and the direction of the loss is the opposite of what I
+  assumed.
 - **Contention masquerades as pathology.** Slow is not stuck. Before diagnosing a run, check what
   else is resident — several rounds here were spent on a "stall" that was a contended host.
 - **State what a number is not.** Claims of *absence* ("no score exists") and of *level* (an MTEB
