@@ -2816,11 +2816,25 @@ embedding cache grows to **34 GB** for the whole member, and the volume has **35
 matches for `error`, `Traceback` or `no space` in the log. Disk is the failure that would waste a
 night silently, which is why it is the first thing to look at on a multi-hour job, not the last.
 
-**And hotpotqa's run then produced a sixth silent phase — reproducible, and my first explanation of it was
-wrong.** 45 minutes after the build's final-block line, with the index artefacts written 15 minutes in, the log
-had **nothing**: no embedding header, no `parts` directory, no file being written, load 5.5 on 56 cores. `ps`
-and `top` are **denied by this session's sandbox**, so CPU state — the one diagnostic that would have settled it
-— could not be read.
+**And hotpotqa's sixth silent phase was diagnosed wrongly twice before it was understood — including by me
+killing two healthy runs.** With the evidence that settles it:
+
+* the **first** run wrote its per-field index artefacts, then its log went quiet for 892 s. I read that as a stall
+  and killed it. It was not: **`postings.bin` was still growing** — 432 MB when I looked, **1.33 GB** when I looked
+  again — so the phase writing it was doing exactly what it should, invisibly;
+* that kill left the index **incomplete**: `union-df.json` is absent. It is written **after** the per-field
+  postings, which is why the artefacts exist while the run is silent — the ordering that makes the union pass the
+  last thing the build does;
+* the **second** run reused a partial index, said so, and went silent again for 12+ minutes — most plausibly
+  recomputing the union document frequency over all 5,232,329 documents, because the file it would otherwise load
+  is not there. **That is round 194's original suspicion, and round 195's refutation of it was wrong**: I reasoned
+  the union pass runs *before* the artefacts, and it runs *after* them.
+
+**Both lessons are mine rather than the code's.** A silent log beside a growing file is a working build — and "the
+log tells you what has finished, the filesystem tells you what it is doing" was written in this document one round
+before I killed a run the filesystem was defending. The diagnostic is `postings.bin`'s **size over time**, not its
+mtime; the instrument still missing is a line during the per-field postings write, which is where the silence
+lives.
 
 **Killed and relaunched, which is cheap and was informative.** The relaunch printed `reusing the on-disk lexical
 index` and went straight past the 30-minute build, so the on-disk index is a real checkpoint rather than a claim;
