@@ -333,6 +333,7 @@ class BiEncoderModel:
         self.pooling = self._resolve_pooling(self.config.embed_pooling)
         self.query_instruction = bool(self.config.embed_query_instruction)
         self.passage_prefix = str(getattr(self.config, "embed_passage_prefix", "") or "")
+        self.truncate_dim = int(getattr(self.config, "embed_truncate_dim", 0) or 0)
         wanted_query, wanted_passage = _family_prefixes(self.model_id)
         if wanted_query and not (self.query_instruction and self.passage_prefix):
             # Loud rather than silent: this model is trained with a prefix on each side, and without
@@ -443,6 +444,16 @@ class BiEncoderModel:
             else:
                 mask = encoded["attention_mask"].unsqueeze(-1).to(hidden.dtype)
                 pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+            # Truncate **before** normalising: an MRL prefix is a usable embedding, a truncated unit
+            # vector is not a unit vector, and normalising first would leave every similarity scaled by
+            # the discarded mass.
+            if self.truncate_dim:
+                if self.truncate_dim > pooled.size(1):
+                    raise ModelUnavailableError(
+                        f"EMBED_TRUNCATE_DIM={self.truncate_dim} exceeds the pooled width "
+                        f"{pooled.size(1)}"
+                    )
+                pooled = pooled[:, : self.truncate_dim]
             pooled = torch.nn.functional.normalize(pooled, p=2, dim=1)
             blocks.append(pooled.cpu().numpy().astype(np.float32))
         return np.vstack(blocks)

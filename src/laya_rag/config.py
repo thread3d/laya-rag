@@ -147,6 +147,13 @@ class EngineConfig:
     embed_passage_prefix: str = field(
         default_factory=lambda: os.environ.get(f"{ENV_PREFIX}EMBED_PASSAGE_PREFIX") or ""
     )
+    #: Matryoshka truncation: keep the first N dimensions of a pooled embedding. MRL-trained encoders
+    #: (Qwen3 Embedding, nomic, jina) are trained so that a prefix of the vector is itself a usable
+    #: embedding, which buys memory and search time at a little recall. **The truncation has to happen
+    #: before re-normalisation** — a truncated unit vector is not unit, and using one without re-scaling
+    #: makes every cosine smaller by an amount that depends on the dimension: silently wrong, in the same
+    #: family as the pooling and prefix mismatches. `0` keeps the full width.
+    embed_truncate_dim: int = field(default_factory=lambda: _env_int("EMBED_TRUNCATE_DIM", 0))
     # The RRF weight an auto-detected Laya retrieval adaptation is fused at. `1.0` — the
     # historical "a dense model is configured, so weight it fully" rule — measurably over-
     # dilutes a channel that is real but still weaker than BM25: on SciFact the adapted

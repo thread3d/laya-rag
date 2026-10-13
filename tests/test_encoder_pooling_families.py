@@ -116,3 +116,15 @@ def test_a_qwen3_query_does_not_get_bges_instruction():
     assert model._query_text("hello").startswith("Instruct: ")
     assert "Represent this sentence" not in model._query_text("hello")
     assert bge._query_text("hello").startswith("Represent this sentence")
+
+
+# ── Matryoshka truncation ────────────────────────────────────────────────
+
+def test_truncation_is_a_knob_with_a_zero_default():
+    """The guard that refuses an over-wide truncation lives in the encode path, which needs torch to
+    exercise; the knob and its default are assertable here, and the guard was verified against the real
+    checkpoint (`truncate=4096` against a pooled width of 1024 raises rather than silently keeping 1024).
+    """
+    assert EngineConfig().embed_truncate_dim == 0
+    monkeypatch_free = EngineConfig(embed_model="Qwen/Qwen3-Embedding-0.6B", embed_truncate_dim=256)
+    assert BiEncoderModel(monkeypatch_free).truncate_dim == 256

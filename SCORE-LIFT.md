@@ -552,6 +552,24 @@ naive `EMBED_MODEL=Qwen/Qwen3-Embedding-0.6B` run "would produce a misleading ne
 misleading. Loading the real checkpoint and embedding one query against a relevant and an irrelevant
 document, under each pooling:
 
+**The last interface on P3's list — Matryoshka truncation — is implemented and measured.** `EMBED_TRUNCATE_DIM`
+keeps the first N dimensions of a pooled embedding, for the MRL-trained models the task names. It truncates
+**before re-normalising**, which is the part that would otherwise be silently wrong (a truncated unit vector
+is not unit, so every cosine shrinks by an amount that depends on the dimension), and the real checkpoint
+confirms it: `|q| = 1.0000` at every width. One query against one relevant and one irrelevant document:
+
+| width | separation |
+| ---: | ---: |
+| 1024 (full) | +0.4077 |
+| 256 | +0.4133 |
+| 64 | +0.4217 |
+
+A **16× smaller** vector did not hurt this pair — which is a one-pair observation and is labelled as one,
+for the reason this section has now recorded twice: a direction read from two examples is how an
+over-generalisation starts. The guard also does its job rather than silently keeping the full width
+(`EMBED_TRUNCATE_DIM=4096` against a pooled width of 1024 raises), because a truncation that cannot
+truncate would make a memory measurement wrong in the direction that looks good.
+
 | pooling | relevant | irrelevant | separation |
 | --- | ---: | ---: | ---: |
 | **`last`** (what the family table now returns) | +0.7196 | +0.3119 | **+0.4077** |
