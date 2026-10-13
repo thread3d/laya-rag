@@ -207,6 +207,11 @@ class EngineConfig:
     # engine's fusion rule without a 322M-parameter forward per candidate. With it off the
     # answerability verdict is reported as **not measured** rather than guessed.
     second_stage: bool = field(default_factory=lambda: _env_bool("SECOND_STAGE", True))
+    # The instruction line a *generative* reranker is asked with. Empty means the prompt module's
+    # default (Qwen3's own web-search instruction). The model is instruction-sensitive — measured
+    # below a 7x spread in the separation between a relevant and an irrelevant passage across three
+    # instructions — so a listwise result is only as general as the line it was scored with.
+    rerank_instruction: str = field(default_factory=lambda: _env("RERANK_INSTRUCTION") or "")
 
     @property
     def resolved_chunk_overlap(self) -> int:

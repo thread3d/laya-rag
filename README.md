@@ -484,6 +484,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `RERANK_ORDER` | `auto` | `auto` orders by the scorer when `RERANK_MODEL` is set and keeps recall order otherwise; or force `recall` / `relevance` |
 | `RERANK_BLEND` | `1.0` | how far a supplied second stage may move the first-stage order, in `[0, 1]`; `1.0` replaces it (historical), below it is fused so the second stage nudges rather than overrides |
 | `SECOND_STAGE` | `true` | whether the decision model runs at all. `false` returns the first stage's own order with no model in the path — the configuration a *retrieval* benchmark is meant to score, and the only way to measure the fusion rule without a 322M-parameter forward per candidate. With it off the answerability verdict is reported as **not measured** rather than guessed |
+| `RERANK_INSTRUCTION` | *(empty)* | the instruction line a **generative** reranker is asked with; empty uses the model's own default. The model is instruction-sensitive — three instructions spread the relevant/irrelevant separation **7×** — so a listwise result holds only for the line it was scored with |
 | `ANN` | `false` | approximate nearest-neighbour search for the dense channel; off by default so small corpora keep exact results |
 | `ANN_NPROBE` | `16` | how many partitions the ANN search probes, when `ANN` is on |
 | `CHUNK_CHARS_AUTO_PERCENTILE` | `0.9` | the percentile of document length that corpus-aware chunk sizing aims at; p90 is the default and p75 chunks more, which is swept in `docs/findings-chunk-merge.md` |

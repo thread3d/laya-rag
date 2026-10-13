@@ -870,14 +870,25 @@ corpus, at this size, through the repository's scoring path, **the listwise rank
 either** — the third §P4 hypothesis to be measured and rejected, after "the reranker is old" (recovering
 only 0.05 of 0.16) and "the ordering is fine" (it was not).
 
-**The labelled suspicion has been tested and moved — the implementation is not the explanation.** The
-worry was that the compressed scale came from this repository's prompt wrapper. It does not: the token
-ids are the model's own `yes`/`no` (`9693`/`2152`, both single tokens, verified by converting them back),
-the template is the card's, and scoring the same pairs with and without `add_special_tokens=False` gives
-**identical results — 0.0505 and 0.0000**. So the scale is the model's behaviour on this instruction, not
-an artifact of the path built for it, and the remaining question is a model property rather than an
-implementation bug: *does a different `Instruct` line move it?* That is one cheap probe (a handful of
-forwards) and it is now the only open item in this section.
+**The instruction moves the result, so arm 2's negative is bounded by the line it was scored with.**
+Scoring the same pair under three instructions on the same model:
+
+| instruction | relevant | irrelevant | separation |
+| --- | ---: | ---: | ---: |
+| *(empty)* | 0.0101 | 0.0001 | 0.0100 |
+| the model's own web-search default (**what arm 2 used**) | 0.0505 | 0.0000 | 0.0505 |
+| "Given a question, retrieve passages that answer the question" | **0.0698** | 0.0001 | **0.0697** |
+
+**A 7× spread in the separation across three instructions**, and arm 2 ran the middle one — the model's
+web-search default — on a question-answering corpus where the third separates 38% better. So the honest
+statement of the arm-2 result is narrower than "a listwise ranker is worse": **a listwise ranker scored
+with a web-search instruction is much worse, and the instruction is a variable large enough that the
+comparison has to be re-run before the hypothesis is finally rejected.**
+
+`RERANK_INSTRUCTION` now exists as a knob (empty = the model's default), documented in the README because a
+knob with no row is half-built, with three tests — one of which checks that the *prompt* reads the field,
+which is the failure mode this session opened with. The re-run waits on the heavy lock, which `signal1m`
+holds; it is a 200-query subset, about twenty minutes when the lock frees.
 
 Two caveats still travel: **one model, one corpus, 200 queries**, so the falsification holds for this
 configuration rather than for listwise ranking in general.
