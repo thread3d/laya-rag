@@ -951,7 +951,12 @@ scoring three pairs gives the right *ordering* and a scale that would quietly br
 | "Shipping is free on orders over fifty dollars." (irrelevant) | 0.0000 |
 
 The ordering is correct and the level is **two orders of magnitude below a cross-encoder's**. The
-engine's `RELEVANCE_THRESHOLD` defaults to **0.5** (`_env_float("RELEVANCE_THRESHOLD", 0.5)`), so a run at the default would find *nothing* above it and return an empty result set for every query. **Two scopings matter, and I had the first one wrong for a commit.** `tools/engine_multihop.py` and `tools/engine_beir.py` both set `LAYA_RAG_RELEVANCE_THRESHOLD=0.0` for their own runs — they want the ranking, not the gate's kept set — so **the arm-2 benchmark row is unaffected** and needs no threshold tuning. The trap is for the engine used *directly*: the API, the library, a service, where the default stands and a generative reranker would look like it had broken retrieval.— a reranker that looks like it
+engine's `RELEVANCE_THRESHOLD` defaults to **0.5** (`_env_float("RELEVANCE_THRESHOLD", 0.5)`), so a run at the default would filter **everything observed so far**: the highest score any relevant
+passage has produced in this repository's measurements is **0.4455**, against a 0.5 cut. That is a
+measured range and not a prediction — whether some passage clears 0.5 is unmeasured, and the honest
+statement is "the default filters what has been measured" rather than "the default filters
+everything". I had written the stronger version twice, which is a sign that a sentence predicting a
+model's behaviour is the wrong shape for the evidence available. **Two scopings matter, and I had the first one wrong for a commit.** `tools/engine_multihop.py` and `tools/engine_beir.py` both set `LAYA_RAG_RELEVANCE_THRESHOLD=0.0` for their own runs — they want the ranking, not the gate's kept set — so **the arm-2 benchmark row is unaffected** and needs no threshold tuning. The trap is for the engine used *directly*: the API, the library, a service, where the default stands and a generative reranker would look like it had broken retrieval.— a reranker that looks like it
 destroyed retrieval. It has not: the model answers a different question in a different scale, and the
 threshold has to be set for it (or the score calibrated). That belongs in the run's configuration, not
 in a post-mortem, which is why it is written here before the run exists.
