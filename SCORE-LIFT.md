@@ -2877,9 +2877,14 @@ left, and it is a *pattern from three cells*, which is exactly the kind of claim
 hold lightly: it predicts, and the next member can refute it.
 
 **The fourth member is running now** — `dbpedia-entity`, **4,635,922 documents**, the next by size, same
-command pattern and its own `--out`. Its on-disk build reported 16% inside three minutes, which is the
-instrument again: at this corpus size the phase that used to be silent is the one telling us the run is
-alive.
+command pattern and its own `--out`. **Its measured rate is ~120 documents per second** (60,000 documents in
+499 s), so it is a **~10-hour** member: 2.4× signal1m's documents at less than half its rate, because DBpedia
+abstracts are prose where Signal-1M's are tweets.
+
+That means it will **not land inside this session's remaining budget**, and it is worth saying plainly rather
+than filling rounds: the run is healthy, checkpointed every 20,000 documents, and its report will be the
+first thing a later session reads. The prediction it tests is registered above — *none of the four remaining
+deficit cells moves the macro* — and dbpedia-entity is the first of the four.
 
 **Which of the remaining members can move the deficit at all, and a prediction the next four will test.**
 The deficit sums the nine *negative* gaps, so a member already ahead cannot contribute however well its
