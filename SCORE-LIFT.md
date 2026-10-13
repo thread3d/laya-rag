@@ -2887,6 +2887,13 @@ because the cost is per token. **Read the counter, and check what it is counting
 | `biencoder` (dense alone) | 0.2378 | 0.1106 | 0.4298 |
 | `hybrid-biencoder` (dense w=0.3) | 0.2992 | 0.1502 | 0.5621 |
 
+**And the member is measured over 97 queries.** Signal-1M's qrels score 97 of them, against 3,452 for nq and
+400 for dbpedia-entity, so both gaps this cell contributes — the fusion losing 0.0139 to the engine row, and
+`bm25` beating the engine's own row by 0.0509 — are differences on a sample of 97, untested for significance,
+where one or two points sits inside sampling noise. **The arithmetic does not change** (the cell is a winning
+cell and the deficit never summed it), but the row should not be cited as evidence about the dense channel —
+and §P1's pattern does not need it to be.
+
 **The fusion loses 0.0139 nDCG@10 against the engine row** and dense alone loses much more, so this member
 gains **coverage and nothing else** — and its recorded best is `bm25` at **0.3640**, the flat lexical row
 §1.2 already flagged as the one member whose best measured row is the plain one. Three cells in, the shape
@@ -2968,6 +2975,23 @@ Plus `models/laya-retrieval` on disk for the engine's own rows. **So the queue n
 corpora, and no unwritable cache — a successor can launch any of §10.6's commands as written.** That is the
 question worth answering before a nine-hour run rather than during one, and it is answered by two filesystem
 checks rather than by assuming the last session left the machine provisioned.
+
+**What "complete" means for each queued run, counted rather than assumed.** A report that scores fewer
+queries than the corpus's qrels is a *partial* run, and it looks exactly like a finished one:
+
+| member | `queries.jsonl` | **scored (qrels)** | note |
+| --- | ---: | ---: | --- |
+| DBPedia-entity | 467 | **400** | running |
+| HotpotQA | 97,852 | **7,405** | 92% of its queries are unscored |
+| Climate-FEVER | 1,535 | 1,535 | fully scored |
+| FEVER | 123,142 | **6,666** | 95% unscored |
+| BioASQ | 500 | 500 | fully scored |
+| *nq (done)* | 3,452 | 3,452 | its report used all of them |
+| *signal1m (done)* | 97 | **97** | see the caveat in §P1 |
+
+**The qrels column is the one a report must match**, and `queries.jsonl` is not a proxy for it: HotpotQA ships
+thirteen queries for every scored one, FEVER twenty. A successor checks a new report's query count against the
+third column, not the second.
 
 **The queued members' preconditions, checked rather than assumed.** A run that dies at hour three on a
 missing corpus is the most expensive kind of failure this harness can have, and it is discoverable in a
