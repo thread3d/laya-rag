@@ -3349,7 +3349,21 @@ hub hang, but if a cache entry is incomplete, offline mode cannot repair it and 
 like a tensor bug. The next step is one command — run P4 arm 2 **without** the offline pair and see whether the
 load succeeds — and that is a cheaper test than any theory about it.
 
-**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+**And the offline fix is refuted by its own test: climate-fever took ~28 minutes to reach its header *with*
+`HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` set.** The index completed at 15:04 and the header appeared at 15:32, so
+the silence survived the remedy I recommended a day earlier. **The load itself is the cost** — the engine's 322M
+encoder takes about half an hour to construct on this host, and no environment variable changes that.
+
+That closes a question that has now been answered three ways: round 194 blamed the union pass (wrong — the union
+file is a BM25F artefact and these runs never write one), round 195 blamed the load (right, then abandoned), round
+203 returned to the load with the code as evidence, and round 243 replaced it with a hub call that this run
+**falsifies**. The recorded conclusion is the one the test supports: **~28 minutes, offline or not, is what this
+encoder costs here** — and the honest note is that the earlier version of this paragraph told a successor to set two
+variables that make no difference.
+
+The instrument is still right: the `loading the bi-encoder <id>` line marks the phase, so the silence is *expected*
+rather than mysterious. What was wrong was the explanation, not the mitigation of the mystery. Embedding now runs
+at the usual rate.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6963), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
