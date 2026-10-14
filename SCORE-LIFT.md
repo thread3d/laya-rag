@@ -3363,7 +3363,18 @@ variables that make no difference.
 
 The instrument is still right: the `loading the bi-encoder <id>` line marks the phase, so the silence is *expected*
 rather than mysterious. What was wrong was the explanation, not the mitigation of the mystery. Embedding now runs
-at the usual rate.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+at the usual rate.**And climate-fever is three times slower per document than hotpotqa, which changes what is reachable.** Its
+series — five points, 20,000 to 80,000 documents — gives **67 documents per second**, so the member needs **~30
+hours** against hotpotqa's 12.6. The corpus is the same size; the documents are not: Climate-FEVER's claims and
+evidence are long prose where HotpotQA's are paragraphs, and this harness's cost is per token.
+
+**The arithmetic that follows is worth stating before it is discovered at the end of a run.** Two ~30-hour members
+would need ~60 hours, and the session has ~43 (259 rounds at the cadence used here). So **`fever` — the last
+queued deficit cell — will not be reached in this session**, and the honest handover is that climate-fever's row is
+the fifth cell if it lands and the sixth is the next session's first run.
+
+That is a *rate* prediction and this session has been wrong about rates five times, which is why it is written as
+one: if climate-fever finishes materially before ~30 hours, the estimate was wrong again and the series says so.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6963), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
