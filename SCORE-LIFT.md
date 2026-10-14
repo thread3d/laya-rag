@@ -3288,6 +3288,19 @@ row, this is that row, and the table does what it says — but it does mean the 
 point estimates whose differences are often inside sampling noise**, which is a statement about how the deficit
 is computed rather than about the dense channel.
 
+**And two instruments are now confirmed in production, on the same run.** FEVER's BM25F build — the first large
+build since either line was added — printed
+
+```
+on-disk index: 5416568/5416568 documents (100%) — final block
+on-disk index: merge 1/7 at this level (448 runs)
+```
+
+The final-block line closes the stream, and the **merge line reports while the merge works** — the one shipped
+unverified in round 193, then verified only by a forced-fan-in test in round 210, is now seen doing its job on
+**448 runs of a 5.4M-document corpus**. Both instruments exist because a silence was diagnosed rather than
+guessed at, which is the only kind of instrument worth having.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6963), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
