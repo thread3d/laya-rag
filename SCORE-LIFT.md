@@ -3301,6 +3301,18 @@ unverified in round 193, then verified only by a forced-fan-in test in round 210
 **448 runs of a 5.4M-document corpus**. Both instruments exist because a silence was diagnosed rather than
 guessed at, which is the only kind of instrument worth having.
 
+**One anomaly to carry forward: FEVER's union-DF pass is running three times longer than hotpotqa's.** The
+BM25F build writes `union-df.json`, and its absence is the phase indicator — hotpotqa's equivalent pass took ~30
+minutes for 5,232,329 documents, and FEVER's has now been silent for **over 90 minutes** on 5,416,568 (a 3.5%
+larger corpus). The process is alive, the phase writes nothing by construction, and it has **not been killed**: the
+rule that cost two runs this session is that silence is not evidence of a hang.
+
+But the *size* of the difference is unexplained and is recorded as such rather than rationalised. FEVER's claims and
+evidence are longer prose, which plausibly doubles the tokenisation, and a larger vocabulary makes the `dict[str,
+int]` accumulator slower per update — **together that is maybe 2×, not 3.5×**. So either the pass is superlinear in
+a way the estimate missed, or it is doing something else. The measured duration when it finishes is the number that
+settles it, and the instrument to build if it recurs is a line **inside** the union pass rather than before it.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6963), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
