@@ -2916,6 +2916,18 @@ block), the dense path does two things that print nothing for a long time:
 
 | phase | measured on this host | what it looks like |
 | --- | --- | --- |
+**And the pre-embedding silence has a cause, which the workspace's own notes carry: a model-loading tool hangs
+on a hub call even when the weights are cached.** Measured there as *"no output" to ~7 seconds* once
+`HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` are set. That is a better explanation than "the 322M encoder takes
+thirty minutes to load", and it is consistent with everything observed: no file changing, no CPU signal
+readable, and then normal embedding at 100 docs/s once the call finally timed out.
+
+**So the queued runs now set both variables.** The chain was replaced rather than edited — bash reads a running
+script by byte offset, so editing one in place is a way to corrupt it — and the three remaining members and the
+two short runs all launch with the offline pair exported. **If the next member reaches its header in seconds
+rather than half an hour, this is confirmed**; if it still takes thirty minutes, the load itself is the cost and
+this note is wrong.
+
 | the bi-encoder's construction (322M encoder) | **~30 min** | `reusing ...` then nothing, no file changing |
 | the first `--embed-chunk 20000` block | **~200 s** at 104 docs/s | header printed, then nothing again |
 
