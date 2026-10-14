@@ -3313,6 +3313,24 @@ int]` accumulator slower per update — **together that is maybe 2×, not 3.5×*
 a way the estimate missed, or it is doing something else. The measured duration when it finishes is the number that
 settles it, and the instrument to build if it recurs is a line **inside** the union pass rather than before it.
 
+**And P2's falsifier branch is now a measured negative rather than a queued hope: the BM25F union pass is
+impractical as written at 5.4M documents.** The run built its per-field indexes in ~33 minutes (postings.bin
+2.2 GB, 448 runs merged) and then sat in the union pass for **~2h45m with no output**, against a linear estimate
+of 10–20 minutes for 10.8M `tokenize` calls. It was killed at that point, on a criterion stated in advance — the
+pass exceeds its estimate tenfold **and** holds the heavy lock that P4 arm 2, climate-fever and fever are all
+waiting on.
+
+**Why this is a result and not just an abandonment.** `union_document_frequency` streams the corpus and
+accumulates one `term -> count` dict, which is linear in tokens; ten times that is not explained by longer prose.
+The likely mechanism is the accumulator itself — a vocabulary of tens of millions of `str` keys, built by Python
+dict operations with GC pressure — which would make the pass *effectively* superlinear in vocabulary while
+staying linear in code. **The fix is not to wait longer but to change the estimator**: exact union DF is not
+recoverable from per-field counts (that is why the pass exists), but it *is* recoverable from a hashed or
+approximate counter, or from writing the union during the per-field pass instead of after it.
+
+So P2's BM25F row stays unmeasured, and this time the reason is recorded with the evidence, the estimate it beat,
+and the two candidate fixes — which is more than the earlier attempts at this run left behind.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6963), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
