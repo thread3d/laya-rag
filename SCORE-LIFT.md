@@ -3331,6 +3331,24 @@ approximate counter, or from writing the union during the per-field pass instead
 So P2's BM25F row stays unmeasured, and this time the reason is recorded with the evidence, the estimate it beat,
 and the two candidate fixes — which is more than the earlier attempts at this run left behind.
 
+**And P4 arm 2 does not fail on the lock — it fails on the model, and the offline variables I recommended may be
+the cause.** The step died twice with
+
+```
+RuntimeError: Invalid buffer size: 4.63 GB
+  ... torch/nn/modules/linear.py: return F.linear(input, self.weight, self.bias)
+```
+
+which is a **weight-loading failure, not a lock signal** (the lock signal is exit 2 with a named holder, and this
+is a traceback). The same command **succeeded in round 121 without the offline variables** — and 4.63 GB is
+suspiciously close to twice the 2.41 GB the checkpoint occupies in the cache, i.e. a partial or
+wrongly-typed load.
+
+**So the round-243 recommendation needs the caveat it did not carry**: `HF_HUB_OFFLINE=1` avoids the multi-minute
+hub hang, but if a cache entry is incomplete, offline mode cannot repair it and the load fails in a way that looks
+like a tensor bug. The next step is one command — run P4 arm 2 **without** the offline pair and see whether the
+load succeeds — and that is a cheaper test than any theory about it.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6963), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
