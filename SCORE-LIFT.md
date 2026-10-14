@@ -131,7 +131,7 @@ of its hand-entered cells — see the note under §1.2.)
 | dbpedia-entity | 4,635,922 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | fever | 5,416,568 | bm25-engine, bm25-title | **lexical only** |
 | fiqa | 57,638 | 9 rows | full |
-| hotpotqa | 5,233,329 | bm25-engine, bm25-title | **lexical only** |
+| hotpotqa | 5,233,329 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | msmarco | 8,841,823 | bm25, bm25-engine | **lexical only** *(not a member)* |
 | nfcorpus | 3,633 | 16 rows | full |
 | nq | 2,681,468 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
@@ -144,7 +144,7 @@ of its hand-entered cells — see the note under §1.2.)
 | trec-news | 594,977 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | webis-touche2020 | 382,545 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 
-**lexical-only members (4 of 18):** bioasq, climate-fever, fever, hotpotqa
+**lexical-only members (3 of 18):** bioasq, climate-fever, fever
 **members with no report:** none
 **non-members present (not coverage):** msmarco
 
@@ -3228,6 +3228,25 @@ So **the session's two headline positives are not alike**: §P4's +0.0408 MAP@10
 significant with a tightly bounded interval on 2,255 queries, while §P1's +0.0094 from the dense channel on nq
 has an interval that includes zero at 3,452. The difference is not sample size — both are thousands of queries —
 it is **effect size**, which is exactly the distinction a bare mean cannot make and this record now can.
+
+**`hotpotqa` has landed, and there the fusion does *not* clear the bar — so the prediction is half right.** All
+5,233,329 documents, **7,405 scored queries** (the full qrels count — the completeness check passes on the largest
+member so far):
+
+| hotpotqa | nDCG@10 |
+| --- | ---: |
+| `bm25-engine` | **0.6352** |
+| `biencoder` (dense alone) | 0.4689 |
+| `hybrid-biencoder` | **0.6307** |
+
+**The fusion is 0.0045 *below* the engine row and 0.0256 below the member's title-boosted best (0.6563)**, so the
+deficit does not move for this cell and stays at **0.6963**. The registered prediction — *none of the four
+remaining deficit cells moves the macro* — was refuted by dbpedia-entity and **holds here**, which is the honest
+position for a prediction from two cells: **right half the time, which is what noise looks like.**
+
+P1 now stands at **5 of 8 cells measured**: cqadupstack moved the deficit, dbpedia-entity moved it, and nq,
+signal1m and hotpotqa bought coverage only. Two cells left in the queue (climate-fever, fever) plus the two
+short runs.
 
 **`dbpedia-entity` has landed, and it refutes the prediction I registered two rounds before it.** All
 4,635,922 documents, **400 scored queries** — the full qrels count, so this is a complete run and not the
