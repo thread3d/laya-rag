@@ -3374,7 +3374,21 @@ queued deficit cell — will not be reached in this session**, and the honest ha
 the fifth cell if it lands and the sixth is the next session's first run.
 
 That is a *rate* prediction and this session has been wrong about rates five times, which is why it is written as
-one: if climate-fever finishes materially before ~30 hours, the estimate was wrong again and the series says so.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+one: if climate-fever finishes materially before ~30 hours, the estimate was wrong again and the series says so.**And the offline hypothesis for P4 arm 2 is refuted too — the model loads fine either way.** A direct probe of the
+reranker, run twice in the same shell, gives **0.0853 for the same pair with and without
+`HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1`**. So neither the environment pair nor a damaged cache explains
+`RuntimeError: Invalid buffer size: 4.63 GB`; the model loads and scores standalone.
+
+**What the failure therefore points at is the *combined* path, not the model**: `engine_multihop.py` holds the
+engine's 322M encoder *and* the 0.6B reranker at once, and a 4.63 GB allocation is the kind of request that fails
+when the two are resident together on this host's unified memory. That is a hypothesis with a test — run the same
+200-query arm with `--device cpu` explicitly, or with the reranker alone against a prebuilt index — and not another
+environment variable.
+
+This is the fourth consecutive explanation of a silence or failure in this area that a cheap measurement has
+overturned (union pass, hub call, incomplete cache), and the pattern is now unambiguous: **in this repository the
+first explanation of a model-path failure is usually wrong, and a two-minute probe settles it faster than the
+reasoning does.****When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6963), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
