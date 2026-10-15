@@ -3368,10 +3368,15 @@ series — five points, 20,000 to 80,000 documents — gives **67 documents per 
 hours** against hotpotqa's 12.6. The corpus is the same size; the documents are not: Climate-FEVER's claims and
 evidence are long prose where HotpotQA's are paragraphs, and this harness's cost is per token.
 
-**The arithmetic that follows is worth stating before it is discovered at the end of a run.** Two ~30-hour members
-would need ~60 hours, and the session has ~43 (259 rounds at the cadence used here). So **`fever` — the last
-queued deficit cell — will not be reached in this session**, and the honest handover is that climate-fever's row is
-the fifth cell if it lands and the sixth is the next session's first run.
+**The arithmetic that follows was stated before it could be discovered at the end of a run, and the budget has
+since been extended twice.** Two ~30-hour members need ~60 hours; at the time this was written the session had ~43,
+so the note said **`fever` would not be reached**. The goal has since been raised first to 540 rounds and then to
+**900**, which at the cadence used here is ~160 hours — so **`fever` is reachable again and the earlier conclusion is
+withdrawn.** The estimate it rested on (47–67 documents per second, ~30 hours for climate-fever) has held across 60
+series points, so the *rate* is the reliable part and the *budget* was the variable.
+
+Kept as a lesson rather than deleted: **a conclusion that depends on a budget must name the budget**, or it becomes
+false the moment someone extends it — which is what happened here, to a sentence written eleven rounds ago.
 
 That is a *rate* prediction and this session has been wrong about rates five times, which is why it is written as
 one: if climate-fever finishes materially before ~30 hours, the estimate was wrong again and the series says so.**And the offline hypothesis for P4 arm 2 is refuted too — the model loads fine either way.** A direct probe of the
