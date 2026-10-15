@@ -3370,9 +3370,9 @@ evidence are long prose where HotpotQA's are paragraphs, and this harness's cost
 
 **The arithmetic that follows was stated before it could be discovered at the end of a run, and the budget has
 since been extended twice.** Two ~30-hour members need ~60 hours; at the time this was written the session had ~43,
-so the note said **`fever` would not be reached**. The goal has since been raised first to 540 rounds and then to
-**900**, which at the cadence used here is ~160 hours — so **`fever` is reachable again and the earlier conclusion is
-withdrawn.** The estimate it rested on (47–67 documents per second, ~30 hours for climate-fever) has held across 60
+so the note said **`fever` would not be reached**. The goal has since been raised repeatedly (540, then 900, then **1260** rounds), which at the cadence used here
+is hundreds of hours — so **`fever` is reachable again and the earlier conclusion is withdrawn.** The sentence
+deliberately does not name a single new cap, because the cap is the thing that keeps moving. The estimate it rested on (47–67 documents per second, ~30 hours for climate-fever) has held across 60
 series points, so the *rate* is the reliable part and the *budget* was the variable.
 
 Kept as a lesson rather than deleted: **a conclusion that depends on a budget must name the budget**, or it becomes
