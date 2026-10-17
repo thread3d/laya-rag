@@ -3674,3 +3674,44 @@ this document argues against**, because the measurement machinery that makes eit
 already built and is currently idle.
 
 ---
+
+### 10.8 Handover — where a new session should start
+
+**State.** HEAD == `origin/main`, clean tree, **1,746 tests pass**, `consistency-check` 47 sites at 18 of 18,
+`claim-check` 65 checks. One heavy job: **`bioasq`** (14,914,604 documents, 500 scored queries) embedding at
+~39 docs/s on a measured, stable rate, **~100 hours** to run, needing ~73 GB against ~248 GB free.
+
+**The headline number.** The BEIR-18 summed deficit is **0.6154** (macro cost 0.0342), down from **0.7314** when this
+stretch began — 16% of it. Its composition is the finding: climate-fever contributed **0.0713** and *closed its cell*,
+cqadupstack 0.0229, dbpedia-entity 0.0122, fever 0.0096, and nq/signal1m/hotpotqa contributed coverage only.
+**The dense channel pays where lexical retrieval is weakest**; where lexical is strong it is neutral or negative.
+Seven of eight deficit-relevant cells are measured, and the eighth (`bioasq`, +0.015, a *winning* cell) cannot move
+the macro — so **P1's arithmetic is done and its remaining run is a coverage claim.**
+
+**Do this first when `bioasq` lands** (its report will carry `settings.producer` and `settings.argv`, which is the
+check that the round-517 field works):
+1. `make channel-coverage` → regenerate §1.1, let the consistency gate name what moves;
+2. record the row against bioasq's published 0.504 and its own best;
+3. **then run the re-takes**, because the lock frees and they need it.
+
+**The re-take repair, as a procedure** (the ordering defect `rerank(order="recall")` made every configured
+cross-encoder inert, invalidating ~17 reports):
+1. read a report's `_settings` — it is the tool's own `argparse` dump, so it **carries the flag names**;
+2. find the flag **only one tool declares** (`--atom-lam`/`--seed-k` → `multihop_rerank_experiment.py`;
+   engine-only flags → `engine_multihop.py`);
+3. build the command with the recorded values and **a new `--out`** (`-retake`), never the recorded stem;
+4. two families are pinned this way, four are inferred — the four `rerank-bridge`/`depth20`/`estimator`/`qcov`
+   reports share one flag profile and are *probably* the experiment tool, which is not proof.
+
+**Open items, none of them measurements:** P8/P9 (a published-settings control; a fresh out-of-domain corpus);
+§P12 run 3 / T8+T11; P3's 2025-encoder run through `beir.py` under the lock (command in §10.6, baseline 0.7077);
+`bioasq` for coverage. **Closed with mechanisms recorded:** P4 arm 2 on *both* instructions (listwise is worse and
+the QA instruction is 23% worse than the web-search default), P2's BM25F (the union pass is impractical at 5.4M
+documents — change the estimator, do not wait), and the P4 weight-load defect (one pair per forward, because this
+transformers build ignores `num_logits_to_keep`).
+
+**Read §10.1 before touching a long job.** The four-costliest lessons there cost runs, not rounds: do not kill on a
+silent log; check the *size* of an artefact over time, not its mtime; one heavy job at a time; and **a conclusion that
+depends on a budget must name the budget** — the session that wrote the opposite of that sentence in this document
+was this one.
+
