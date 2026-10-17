@@ -784,7 +784,14 @@ class GenerativeRerankerModel:
         assert torch is not None
         instruction = getattr(self.config, "rerank_instruction", "") or ""
         out: list[float] = []
-        batch_size = max(1, self.config.embed_batch_size)
+        # **One pair per forward, deliberately.** A causal LM returns logits over `(batch, seq, vocab)`, and this
+        # checkpoint's vocabulary is 151,936 — so batch 8 x ~1000 positions is **4.9 GB**, which is the
+        # `RuntimeError: Invalid buffer size: 4.63 GB` this path died with three times. The obvious fix is to ask
+        # for the final position only (`num_logits_to_keep=1`), but **this transformers build's Qwen3 model does not
+        # implement that argument** — measured, not assumed: grep finds it nowhere in `modeling_qwen3.py`, and
+        # passing it changes nothing. So the batch is pinned to 1, which is the configuration that demonstrably
+        # works (round 121 ran 200 queries this way), at the cost of speed: ~18 minutes per 200-query arm.
+        batch_size = 1
         for start in range(0, len(rows), batch_size):
             chunk = rows[start : start + batch_size]
             prompts = [
