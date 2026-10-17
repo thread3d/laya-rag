@@ -3526,6 +3526,18 @@ Two of the six families are now pinned by an argument that is unique to one tool
 **The repair is a procedure now rather than an inventory**: flags → unique flag → tool → command, with `_settings`
 supplying the values.
 
+**And the procedure has a boundary worth stating, because the method does not always pin.** The remaining four
+(`rerank-bridge`, `rerank-depth20*`, `rerank-estimator-full`, `rerank-qcov`) have **identical flag-rarity profiles** —
+`--overlap` declared by five tools, `--sample-seed` by seven, and no flag unique to one — so they are not pinned by
+the artefact. Their settings match the *same interface family* as `rerank-experiment` (which `--atom-lam`/`--seed-k`
+pinned to `multihop_rerank_experiment.py`), which strongly suggests the same tool with different `--out` values, and
+**is not proof**: those four settings lack `atom_lam` and `seed_k`, so they may equally be earlier versions of that
+tool.
+
+So the honest state of the repair is: **two families pinned, four inferred, and the `producer` field now written
+which will settle every future case from the artefact rather than from inference.** Where a method stops working, the
+record should say so — which is the difference between a procedure and a habit.
+
 **And the coverage member is running, with a measured rate rather than an estimate.** `bioasq` — 14,914,604
 documents, 500 scored queries, reusing its on-disk lexical index — is embedding at **38.5 documents per second**
 (two counters: 20,000 at 526.8 s, 40,000 at 1047.0 s), which puts the member at **~107 hours**. The first two blocks
