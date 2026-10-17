@@ -3551,7 +3551,18 @@ free** — comfortable, and stated rather than discovered at hour ninety.
 
 This is the run that completes **18 of 18** members with a dense row. It cannot move the deficit — bioasq is a
 winning cell (+0.015) — so what it buys is the §1.1 coverage claim and nothing arithmetic, which is why it is
-running while the deficit work is closed rather than before it.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+running while the deficit work is closed rather than before it.**And a correction about my own instrument, because I changed it on a wrong diagnosis.** Round 544 reported that
+the progress watcher "lagged" — it had shown 620,000 twice while the log was at 640,000. It had not: the counter
+prints **every 20,000 documents**, which at 39 docs/s is one line per **~8.5 minutes**, so two readings closer
+together than that legitimately repeat the same value, and the watcher's 16:59 line was an accurate copy of what the
+log said at 16:59. **My reading cadence was the artefact, not the instrument** — the same sampling-interval lesson as
+the counter that "looked unchanged", now misapplied in the opposite direction: I blamed the tool.
+
+The rewritten watcher is kept, for a different and real reason: it records **the run-second of the counter it
+copied**, so each line is self-dating and a reader can tell a repeated reading from a stalled run without holding the
+log's state in their head.
+
+**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6154), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
