@@ -3491,7 +3491,14 @@ different commands and the correct one cannot be recovered from the artefact. **
 the producing script (or `argv`) in every report's `_settings`**, which is a few lines in the shared writer and would
 have turned this inventory into a loop.
 
-**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+**And the coverage member is running, with a measured rate rather than an estimate.** `bioasq` — 14,914,604
+documents, 500 scored queries, reusing its on-disk lexical index — is embedding at **38.5 documents per second**
+(two counters: 20,000 at 526.8 s, 40,000 at 1047.0 s), which puts the member at **~107 hours**. The first two blocks
+read slow as they always do; the series will settle it, and nothing in the plan depends on the point estimate.
+
+This is the run that completes **18 of 18** members with a dense row. It cannot move the deficit — bioasq is a
+winning cell (+0.015) — so what it buys is the §1.1 coverage claim and nothing arithmetic, which is why it is
+running while the deficit work is closed rather than before it.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6154), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
