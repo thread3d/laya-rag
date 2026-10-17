@@ -3497,6 +3497,22 @@ every `rerank-*`, `p4-*`, `p4b-*` and `p4c-*` report comes from **`multihop_rera
 work is **six or so command shapes**, each affected report's `_settings` supplying the arguments — a guess no longer,
 and a loop next time once reports carry `producer`/`argv`.
 
+**And the reconstruction is mechanical after all — the mapping I guessed was partly wrong, and the artefact says
+so.** A report's `_settings` is the tool's own `argparse` dump (`vars(args)`), so it carries **the flag names
+themselves**: `p4-base.json` records `out`, `top_k`, `rerank_model`, `limit`, `sample_seed`, `index_dir`,
+`dense_weight` — an interface belonging to **`engine_multihop.py`**, not to `multihop_rerank_experiment.py` as I
+wrote one round earlier. So the `p4-*`, `p4b-*` and `p4c-*` family re-takes as:
+
+```
+HF_HOME=$PWD/eval/hf-rerank .venv/bin/python tools/engine_multihop.py \
+    --out eval/benchmarks/multihop-rag/<report>-retake \
+    --rerank-model BAAI/bge-reranker-base --limit 200 --sample-seed 0
+```
+
+with a **new `--out`**, because re-writing under a recorded stem is the collision the runbook already warns about.
+The repair is therefore: read `_settings`, match the flag set to the tool that declares it, pass the recorded values
+— **not six guesses, and not a research question.**
+
 **And the coverage member is running, with a measured rate rather than an estimate.** `bioasq` — 14,914,604
 documents, 500 scored queries, reusing its on-disk lexical index — is embedding at **38.5 documents per second**
 (two counters: 20,000 at 526.8 s, 40,000 at 1047.0 s), which puts the member at **~107 hours**. The first two blocks
