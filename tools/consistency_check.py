@@ -500,10 +500,10 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR-18 summed deficit",
             sites=(
-                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.6250, 4),
-                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.6250, 4),
-                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.6250, 4),
-                Site("SCORE-LIFT.md", r"It does not claim the \+0\.031", 0.6250, 4),
+                Site("SCORE-LIFT.md", r"\*\*Eight of the", 0.6154, 4),
+                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.6154, 4),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.6154, 4),
+                Site("SCORE-LIFT.md", r"It does not claim the \+0\.031", 0.6154, 4),
             ),
             authority=deficit_authority(),
             key="total",
@@ -512,8 +512,8 @@ def registry() -> list[Quantity]:
         Quantity(
             name="BEIR-18 deficit macro cost",
             sites=(
-                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.0347, 4),
-                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.0347, 4),
+                Site("SCORE-LIFT.md", r"^\*\*The deficit arithmetic", 0.0342, 4),
+                Site("SCORE-LIFT.md", r"^> — summed deficit", 0.0342, 4),
             ),
             authority=deficit_authority(),
             key="macro",
