@@ -3463,7 +3463,27 @@ both below the fused order they were meant to improve.
 
 **The lesson is the probe's, not the instruction's**: a separation measured on three hand-picked pairs did not
 predict a 200-query corpus, which is the fourth time this session a small probe has been contradicted by the thing
-it was screening for. Probes are for screening *mechanisms*, not for ranking settings.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+it was screening for. Probes are for screening *mechanisms*, not for ranking settings.**And the re-take inventory is now written down, which is what the repair was missing.** The ordering defect
+(`rerank(order="recall")` sorting by the first-stage score) made every configured cross-encoder inert, and the
+session recorded that it invalidated eighteen reports without listing them. They are identifiable from the reports
+themselves — `_settings` carries `rerank_model`, and a **non-null** value means a live CE call went through the
+engine path:
+
+```
+engine-p4-base-full   engine-p4-full        (both re-taken post-fix — the full-protocol pair)
+engine-p4-listwise    engine-p4-listwise-qa (the listwise pair, both post-fix)
+p4-base   p4-probe   p4-v2m3   p4b-base   p4b-v2m3   p4c-base   p4c-v2m3
+rerank-bridge   rerank-depth20   rerank-depth20-thr   rerank-estimator-full
+rerank-experiment   rerank-experiment-full   rerank-qcov
+```
+
+Seventeen with a live CE, of which the four `engine-p4*` runs are already post-fix; `official` has `rerank: False`
+and is unaffected, and the `ce-scores*` files are score *caches* rather than rankings. **Each remaining entry needs
+its own command reconstructed from its `_settings`** (model, depth, overlap, `rrf_k`, `coverage_lambda`), which is
+why this is an inventory rather than a single loop — and it is the honest state of the repair: the set is known,
+the commands are not yet.
+
+**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6154), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
