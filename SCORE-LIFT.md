@@ -3502,6 +3502,12 @@ documents, 500 scored queries, reusing its on-disk lexical index — is embeddin
 (two counters: 20,000 at 526.8 s, 40,000 at 1047.0 s), which puts the member at **~107 hours**. The first two blocks
 read slow as they always do; the series will settle it, and nothing in the plan depends on the point estimate.
 
+**And its disk appetite is checked against the headroom, because that is what would kill a hundred-hour run
+silently.** On disk now: `bioasq.engine.bm25` at **12 GB** (the lexical index) and
+`bioasq.laya-retrieval.mean.parts` at **762 MB** and growing (the checkpointed embedding). The finished vector file
+will be 14.9M documents x 1024 dims x 4 bytes = **~61 GB**, so the member needs **~73 GB** in total against **249 GB
+free** — comfortable, and stated rather than discovered at hour ninety.
+
 This is the run that completes **18 of 18** members with a dense row. It cannot move the deficit — bioasq is a
 winning cell (+0.015) — so what it buys is the §1.1 coverage claim and nothing arithmetic, which is why it is
 running while the deficit work is closed rather than before it.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
