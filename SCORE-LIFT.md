@@ -3699,6 +3699,13 @@ check that the round-517 field works) and `channel_coverage`'s output. A session
 that file first** and spend its round on the judgement — recording the row, moving the figures, and deciding
 what the 18-of-18 coverage claim is worth — rather than re-running the mechanical part.
 
+**And the automation is verified by dry run rather than assumed.** Running its core commands against *fever's*
+existing report reads the member correctly — `6666` scored queries, `5416568` documents, rows
+0.6323/0.5358/0.6845, matching what §P1 records — and `channel_coverage` returns the current deficit 0.6154. The
+same dry run also shows **`producer: None, argv: None`** on that report, which is right: it was written before the
+round-517 patch, so **bioasq's report is the first that will carry the field** — which is exactly the check §10.8
+names as the first thing to read when it lands.
+
 **The re-take repair, as a procedure** (the ordering defect `rerank(order="recall")` made every configured
 cross-encoder inert, invalidating ~17 reports):
 1. read a report's `_settings` — it is the tool's own `argparse` dump, so it **carries the flag names**;
