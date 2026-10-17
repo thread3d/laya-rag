@@ -3513,6 +3513,19 @@ with a **new `--out`**, because re-writing under a recorded stem is the collisio
 The repair is therefore: read `_settings`, match the flag set to the tool that declares it, pass the recorded values
 — **not six guesses, and not a research question.**
 
+**And the general method is now demonstrated twice, which is what makes it a method.** Read the report's flag set,
+then find the flag that **only one tool declares**:
+
+| family | flags in `_settings` | the flag that pins it | tool |
+| --- | --- | --- | --- |
+| `p4-*`, `p4b-*`, `p4c-*` | `limit`, `sample_seed`, `index_dir`, `dense_weight` | `--index-dir` (engine-only) | **`engine_multihop.py`** |
+| `rerank-experiment*` | `atom_weight`, `seed_k`, `overlap`, `depth` | **`--atom-lam` and `--seed-k`, declared by no other tool** | **`multihop_rerank_experiment.py`** |
+
+Two of the six families are now pinned by an argument that is unique to one tool, and the remaining four
+(`rerank-bridge`, `rerank-depth20*`, `rerank-estimator-full`, `rerank-qcov`) take the same one-command treatment.
+**The repair is a procedure now rather than an inventory**: flags → unique flag → tool → command, with `_settings`
+supplying the values.
+
 **And the coverage member is running, with a measured rate rather than an estimate.** `bioasq` — 14,914,604
 documents, 500 scored queries, reusing its on-disk lexical index — is embedding at **38.5 documents per second**
 (two counters: 20,000 at 526.8 s, 40,000 at 1047.0 s), which puts the member at **~107 hours**. The first two blocks
