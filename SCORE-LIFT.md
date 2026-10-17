@@ -3483,6 +3483,14 @@ its own command reconstructed from its `_settings`** (model, depth, overlap, `rr
 why this is an inventory rather than a single loop — and it is the honest state of the repair: the set is known,
 the commands are not yet.
 
+**And the reason is now specific, which makes it fixable.** A report's `_settings` records its *parameters* —
+`model`, `overlap`, `depth`, `rrf_k`, `rerank_model`, `limit_queries`, `sample_seed`, even a per-query
+`atom_weight` array — but **not the tool that wrote it**. Nothing in the file says whether it came from
+`multihop_coverage.py`, `multihop_ltr.py` or one of the others, so the same parameter set can correspond to several
+different commands and the correct one cannot be recovered from the artefact. **The concrete improvement is to record
+the producing script (or `argv`) in every report's `_settings`**, which is a few lines in the shared writer and would
+have turned this inventory into a loop.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6154), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
