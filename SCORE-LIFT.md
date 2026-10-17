@@ -3445,7 +3445,25 @@ gain is the largest, while the corpora where lexical is strong (signal1m, hotpot
 **What remains for P1 is a decision, not a measurement**: run `bioasq` (14.9M documents, the largest corpus, likely
 ~50+ hours) for the coverage claim alone, knowing it cannot change the deficit.
 
-**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
+**And §P4's open question is now answered — the instruction mattered, and it moved the result the *wrong* way.**
+The re-run the section has been waiting for, with everything else fixed:
+
+| listwise arm, 200 queries | MAP@10 | Hits@4 | MRR@10 |
+| --- | ---: | ---: | ---: |
+| `Qwen3-Reranker-0.6B`, web-search default | 0.2047 | 0.5950 | 0.4220 |
+| **`Qwen3-Reranker-0.6B`, question-answering instruction** | **0.1574** | 0.5150 | 0.3296 |
+| `bge-reranker-v2-m3` (pointwise) | **0.3721** | 0.8200 | 0.7023 |
+| fused order, no reranker | 0.3189 | 0.7300 | 0.6142 |
+
+**The question-answering line is 23% *worse* than the web-search default on the corpus**, where my three-pair probe
+said it separated 38% better. So the round-124 caveat is resolved in the opposite direction from its own evidence:
+the listwise negative was **not** an artifact of a poorly-chosen instruction, and the hypothesis "what remains is a
+listwise ranker" is now **rejected under two instructions** — neither within 0.15 MAP@10 of the pointwise model, and
+both below the fused order they were meant to improve.
+
+**The lesson is the probe's, not the instruction's**: a separation measured on three hand-picked pairs did not
+predict a 200-query corpus, which is the fourth time this session a small probe has been contradicted by the thing
+it was screening for. Probes are for screening *mechanisms*, not for ranking settings.**When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6154), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
 
