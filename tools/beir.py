@@ -1439,6 +1439,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return biencoders[model_id]
     report: dict[str, Any] = {
         "settings": {
+            # **Which tool produced this report, and with what arguments.** The §P4 re-take inventory could
+            # not be turned into commands because a report records its *parameters* but not its producer:
+            # one parameter set can map to several scripts, so the command is not recoverable from the
+            # artefact. Recorded here — and every BEIR report is what the §1.1 and §1.2 authorities read —
+            # so the next inventory is a loop rather than seventeen reconstructions.
+            "producer": Path(sys.argv[0]).name,
+            "argv": sys.argv[1:],
             "top_k": args.top_k,
             "bm25_k1": args.k1,
             "bm25_b": args.b,
