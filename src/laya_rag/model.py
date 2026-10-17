@@ -791,14 +791,29 @@ class GenerativeRerankerModel:
                 qwen3_rerank_prompt(query, passage, instruction=instruction)
                 for query, passage in chunk
             ]
-            encoded = self._tokenizer(
-                prompts, padding=True, truncation=True,
-                max_length=self.config.embed_max_length, return_tensors="pt",
-            ).to(self._device)
+            # **Left padding and one kept position, or the forward allocates the whole vocabulary.**
+            # A causal LM's logits are (batch, seq, vocab) — for Qwen3-Reranker that is
+            # batch x ~1000 x 151,936 x 4 bytes, i.e. **4.9 GB at batch 8**, which is the
+            # `RuntimeError: Invalid buffer size: 4.63 GB` this path died with. The single-pair path
+            # before batching existed fit; batching is what broke it. `num_logits_to_keep=1` keeps only
+            # the final position, and **left padding is what makes that position the answer** rather
+            # than a pad token — the same padding-side trap as `answer_positions`, in the direction
+            # that costs 4 GB instead of correctness.
+            previous_side = self._tokenizer.padding_side
+            self._tokenizer.padding_side = "left"
+            try:
+                encoded = self._tokenizer(
+                    prompts, padding=True, truncation=True,
+                    max_length=self.config.embed_max_length, return_tensors="pt",
+                ).to(self._device)
+            finally:
+                self._tokenizer.padding_side = previous_side
             with torch.no_grad():
-                logits = self._encoder(**encoded, return_dict=True).logits
-            for row, position in enumerate(answer_positions(encoded["attention_mask"])):
-                last = logits[row, position]
+                logits = self._encoder(
+                    **encoded, return_dict=True, num_logits_to_keep=1
+                ).logits
+            for row in range(len(chunk)):
+                last = logits[row, -1]           # the only kept position: the row's final real token
                 out.append(
                     yes_no_probability(float(last[self._yes_id]), float(last[self._no_id]))
                 )
