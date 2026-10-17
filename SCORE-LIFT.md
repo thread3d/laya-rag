@@ -3693,6 +3693,11 @@ check that the round-517 field works):
 1. `make channel-coverage` → regenerate §1.1, let the consistency gate name what moves;
 2. record the row against bioasq's published 0.504 and its own best;
 3. **then run the re-takes**, because the lock frees and they need it.
+**And steps 1–2 are automated, because the run outlasts any watching round.** `/tmp/bioasq_landed.sh` waits for
+the report, then writes `/tmp/bioasq-landed.txt` with the member's rows, its `settings.producer`/`argv` (the
+check that the round-517 field works) and `channel_coverage`'s output. A session arriving later should **read
+that file first** and spend its round on the judgement — recording the row, moving the figures, and deciding
+what the 18-of-18 coverage claim is worth — rather than re-running the mechanical part.
 
 **The re-take repair, as a procedure** (the ordering defect `rerank(order="recall")` made every configured
 cross-encoder inert, invalidating ~17 reports):
