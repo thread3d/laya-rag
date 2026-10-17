@@ -3491,6 +3491,12 @@ different commands and the correct one cannot be recovered from the artefact. **
 the producing script (or `argv`) in every report's `_settings`**, which is a few lines in the shared writer and would
 have turned this inventory into a loop.
 
+**And for this inventory the mapping is recoverable from names after all.** The tools and the report families line up:
+every `rerank-*`, `p4-*`, `p4b-*` and `p4c-*` report comes from **`multihop_rerank_experiment.py`**, and `ltr*`,
+`tri-*`, `pool-dedup`, `ceiling-decomp`, `hop2` and `official*` come from their same-named tools. So the remaining
+work is **six or so command shapes**, each affected report's `_settings` supplying the arguments — a guess no longer,
+and a loop next time once reports carry `producer`/`argv`.
+
 **And the coverage member is running, with a measured rate rather than an estimate.** `bioasq` — 14,914,604
 documents, 500 scored queries, reusing its on-disk lexical index — is embedding at **38.5 documents per second**
 (two counters: 20,000 at 526.8 s, 40,000 at 1047.0 s), which puts the member at **~107 hours**. The first two blocks
