@@ -3556,6 +3556,17 @@ outside `eval/`, on a machine the workspace notes describe as shared with other 
 member — it needs ~61 GB of the 208 — but **the margin is now ~3.4× the remaining need rather than ~4×**, and any
 projection quoted later should be re-read against the volume rather than against this paragraph.
 
+**And the trend needs one more sentence, because it is not ours to control.** The volume is **1.6 TiB used with 199
+GB free**, while this workspace is **278 GB of it** — so the pressure comes from elsewhere on a shared disk, and it
+has moved 249 → 208 → 199 GB in an evening. bioasq needs ~61 GB, so the margin is **~3× and falling for reasons
+nothing here can see**.
+
+**The documented fallback, if free space drops below ~80 GB**: the three completed members' embedding vectors
+(`hotpotqa`, `fever`, `climate-fever`, ~49 GB together) are the only large artefact that is *regenerable* — the
+reports are what this document quotes, and the vectors cost ~30 hours each to rebuild. Deleting them is the last
+resort and should be recorded when it happens; **the alternative — losing a 79-hour embedding to a full disk — is
+worse.**
+
 This is the run that completes **18 of 18** members with a dense row. It cannot move the deficit — bioasq is a
 winning cell (+0.015) — so what it buys is the §1.1 coverage claim and nothing arithmetic, which is why it is
 running while the deficit work is closed rather than before it.**And a correction about my own instrument, because I changed it on a wrong diagnosis.** Round 544 reported that
