@@ -3549,6 +3549,13 @@ silently.** On disk now: `bioasq.engine.bm25` at **12 GB** (the lexical index) a
 will be 14.9M documents x 1024 dims x 4 bytes = **~61 GB**, so the member needs **~73 GB** in total against **249 GB
 free** — comfortable, and stated rather than discovered at hour ninety.
 
+**And the headroom needs re-stating, because a shared volume moves for reasons this run does not control.** The
+projection above assumed **249 GB free**; a later reading is **208 GB**, a **~36 GB drop in ten minutes** — and a
+sweep of `eval/` shows **nothing written in the last hour except bioasq's own 60 MB parts**. So the drop came from
+outside `eval/`, on a machine the workspace notes describe as shared with other users. That does not endanger the
+member — it needs ~61 GB of the 208 — but **the margin is now ~3.4× the remaining need rather than ~4×**, and any
+projection quoted later should be re-read against the volume rather than against this paragraph.
+
 This is the run that completes **18 of 18** members with a dense row. It cannot move the deficit — bioasq is a
 winning cell (+0.015) — so what it buys is the §1.1 coverage claim and nothing arithmetic, which is why it is
 running while the deficit work is closed rather than before it.**And a correction about my own instrument, because I changed it on a wrong diagnosis.** Round 544 reported that
