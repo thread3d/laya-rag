@@ -3580,6 +3580,14 @@ The rewritten watcher is kept, for a different and real reason: it records **the
 copied**, so each line is self-dating and a reader can tell a repeated reading from a stalled run without holding the
 log's state in their head.
 
+**And one of my own estimates was wrong in the same direction, so it goes on the record.** In the small hours of the
+bioasq wait I repeatedly wrote that the run was "~1 h" or "~50 min" from completion once it passed 65%. It was not: at
+**66.4%** it had **5.01 M documents left**, which at the measured **39.6 docs/s** is **126,600 s — 35 hours**, not one.
+The mistake was reading the *percentage complete* as though it were the *fraction remaining*: 66% done leaves a
+**third of the corpus**, and a third of 14.9 M documents is a day of embedding, not an hour. The arithmetic had been
+right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
+document's §1.2 records about numbers that are right until they are spoken about carelessly.
+
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6154), the consistency
 check names every stale figure, and the deficit test is derived so it needs no edit.
