@@ -1334,6 +1334,27 @@ footnote, not an unexplained one.
 
 ---
 
+### Correction: the 0.815 conflict was in my reading, not in the README
+
+The README paragraph those three rounds interrogated says, in full:
+
+> a **feature gate** over the retrieval and evidence signals the engine already has scores **held-out ROC-AUC
+> 0.815** (balanced accuracy 0.725) on a fresh 300-query MultiHop split **where the scalar scores 0.520** — but
+> that is a **within-question-type** number: with a whole question type held out it falls to **0.767** [0.671, 0.827]
+
+**It already says everything I "discovered".** The 0.815 is attributed to a **feature gate**, not to the head; the
+scalar's **0.520** is stated in the same sentence; and the within-type versus held-out-type distinction — the design
+point I spent a round reconstructing — is in the clause after it, with an interval.
+
+**So there is no conflict, and the "fourth number with no artefact" was produced by my own `grep | cut -c1-130`**, which
+truncated the sentence before the words "feature gate" and "scalar scores 0.520". I then spent three rounds
+investigating a contradiction that **a full read of the paragraph would have prevented**, and committed claims about the
+README being wrong when it was correct on every point.
+
+**That is the session's own failure class pointed at itself**: a correct number, mis-attributed in transit — and this
+time the transit was my `cut`. The record now says so, because a correction that only lives in a chat message is the
+same defect one layer up.
+
 ### The README's 0.815 has no artefact where one would expect it
 
 The reconciliation's first step is to find the file that produced 0.815. `eval/trust-report.json` exists and is the
