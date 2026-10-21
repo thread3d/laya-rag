@@ -1290,6 +1290,29 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### Correction: "the flag lies" was premature — `--bm25f` *adds a row*, and the run had not reached it
+
+I concluded one commit earlier that `--bm25f` on the on-disk backend "names an intent the on-disk path does not
+implement". **That was wrong, and the flag's own help text refutes it:**
+
+```
+--bm25f            also report a BM25F row: per-field length normalisation and weight, instead of repeating the title
+--title-weight     BM25F weight of the title field (body is 1.0)   [default 5.0]
+```
+
+**`--bm25f` means "also report a BM25F row"** — it *adds* one beside the others rather than converting the run. So the
+`fever.control.bm25` index and the `reusing ... fever.engine` line are the **standard retrievers' work, which happens
+first**; the BM25F row — the slow one, over the on-disk backend via `ondisk_bm25f_rankings()` — comes **after** them.
+
+**So the run is not mislabelled and the flag does not lie**: it is early in a multi-row job, and I read the first row's
+log line as if it were the whole run. **That is the same error as the `cut -c1-130` truncation two commits ago** — a
+fragment read as a whole — now applied to a log rather than a sentence, and again committed as a conclusion before the
+evidence was complete.
+
+**What survives**: the index observed on disk is flat, with no field directories and no `union-df.json`. **What does not**:
+that this means the field-weighted path is unreachable. The run should be allowed to finish and its **BM25F row** read
+before any conclusion about the flag is drawn.
+
 ### The run answered a question about the tool, not about FEVER
 
 The launched run finished indexing after ~1 h 45 m and then printed:
