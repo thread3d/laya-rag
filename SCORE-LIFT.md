@@ -1290,6 +1290,26 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### And the crux: union DF cannot be accumulated as a scalar — which is *why* the pass exists
+
+One more look at `ondisk.py` refutes my own simplification and identifies the real difficulty. The union DF is computed
+**after** the per-field indexes are built (`self.union_df = union_document_frequency(...)` at line 159, written to
+`union-df.json` at 167) — and it cannot simply be moved into the build loop, because **union DF is not the sum of the
+per-field DFs**: a document containing a term in two fields must be counted **once**, so the union needs *per-term
+document identity across fields*, not a running scalar.
+
+**So P2's phrase — "a hashed/approximate counter or in-pass accumulation" — was describing the two real options, not a
+refactor**:
+
+| option | cost | risk |
+| --- | --- | --- |
+| **per-term document bitmaps** in memory | exact, but ~14.9 M bits per term is not viable at scale | memory |
+| **hashed/approximate counter** accumulated in-pass | cheap, single pass | the IDF is *approximate*, and the control must say so |
+
+**That is the decision the last measurement actually needs** — not "where to put the loop", but **whether a published-
+settings control may use an approximate union DF**, and if so with what error bound. **A control whose IDF is
+approximate is still a control**, provided the approximation is stated; a control that never finishes is not.
+
 ### The task is much smaller than I specified: BM25F exists, and only its union-DF pass is slow
 
 One check shrank the specification above by half. `src/laya_rag/ondisk.py` **already implements BM25F over one on-disk
