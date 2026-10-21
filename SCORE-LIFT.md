@@ -1290,6 +1290,28 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### A run is in flight, and what it is (and is not) is recorded here
+
+Rather than leave P8's gate as a decision, the cheapest of its two options was **tried** at 2026-10-21 ~21:30:
+
+```
+tools/beir.py --datasets fever --bm25f --lexical-backend ondisk --embed-chunk 20000 --out eval/beir/fever-bm25f
+```
+
+**What it produced in ~40 minutes**: `eval/beir/cache/fever.control.bm25` at **2.3 GB**, complete with `postings.bin`,
+`df.npy`, `lengths.npy`, `offsets.npy`, `ids.json`, `terms.json`. **What it did not produce**:
+`union-df.json` anywhere, and **no per-field index directories** — so despite `--bm25f`, this run has built the **flat
+control index**, not a field-weighted BM25F. Its log has been silent for ~29 minutes after `merge 7/7` with two processes
+alive.
+
+**It is being left running.** That is this document's own most-repeated rule — *do not kill a job on a silent log; watch
+the size of an artefact over time* — and it has cost the programme two healthy runs to relearn. **But the honest reading
+is that this run may not be the experiment P8 needs**: a flat control index is the thing FEVER is *already* measured
+against (0.6323), so if it completes as-is it will re-measure the existing row rather than the field-weighted one.
+
+**So the next session should check `fever.control.bm25` for `union-df.json` and for field subdirectories first**, and
+only then decide whether the row it can score is the published-settings control or a repeat of the flat one.
+
 ### And "ten lines" was wrong too: the saving needs the builder restructured
 
 Reading the loop refutes my own estimate a third time in three rounds:
