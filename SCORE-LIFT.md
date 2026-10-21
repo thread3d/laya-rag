@@ -1290,6 +1290,25 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### The task is much smaller than I specified: BM25F exists, and only its union-DF pass is slow
+
+One check shrank the specification above by half. `src/laya_rag/ondisk.py` **already implements BM25F over one on-disk
+BM25 index per field**, with the union document frequency — 69 mentions of "field", and the class composes per-field
+`OnDiskBM25` instances rather than inventing a third index form.
+
+**So the engineering task is not "build a streaming BM25F scorer".** The scorer exists and is the one P2 measured. What
+is impractical is **one function** — `union_document_frequency()` at `ondisk.py:261`, the separate pass that computes
+the union DF across fields, which is what ran >2 h 45 m at 5.4 M documents.
+
+**The real task is therefore: compute the union DF *during* indexing** — accumulated in the same pass that writes each
+field's postings — so that `union_document_frequency()` becomes a table lookup instead of a traversal. That is a change
+to one function and its caller, not a new scorer, and **the acceptance tests above still apply unchanged**: agreement on
+SciFact, cost on FEVER, and the control row it unlocks.
+
+**Recorded because it changes the estimate materially**: the specified "build a scorer with two staged tests" was a
+multi-session job; "move one accumulation into the indexing pass" is a focused one, and nothing about the earlier
+reasoning would have revealed that without opening the module.
+
 ### The one engineering task, specified: a streaming BM25F estimator
 
 The decision that gates the document's last cell is small enough to specify completely, so it is specified here rather
