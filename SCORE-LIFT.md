@@ -1290,6 +1290,25 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### The one engineering task, specified: a streaming BM25F estimator
+
+The decision that gates the document's last cell is small enough to specify completely, so it is specified here rather
+than left as "change the estimator".
+
+**Build**: a streaming BM25F scorer for the on-disk index that computes per-field term frequencies and document
+lengths in a **single pass** over `postings.bin`, accumulating the per-term field statistics as it goes and writing a
+compact per-field DF table — no union pass, no second traversal. The estimator's only required output is the ranking
+the control needs: **a top-1000 list per query under published field weights**.
+
+**Acceptance test, in order**: (1) **agreement** — on a small corpus where both are tractable (SciFact, 5,183 docs)
+the streaming scorer's top-1000 must match the existing flat BM25 to within ranking ties, which is the check that the
+new estimator agrees with the one already trusted; (2) **cost** — it must complete FEVER's 5.4 M documents in **under
+30 minutes**, the bar P2's union pass failed at 2 h 45 m; (3) **the measurement it unlocks** — a FEVER control row at
+published field weights, scored over all 3,452 queries, which is P8's negative half.
+
+**Falsifier**: if (1) fails, the estimator is wrong and the control is meaningless; if (2) fails, the estimator is right
+and still useless, which is P2's outcome repeating and should be recorded as such rather than as a near miss.
+
 ### P8's FEVER control is blocked by the same result that closed P2 — not by time
 
 The one remaining measurement in this document is P8's FEVER published-settings row. Two facts close the question of
