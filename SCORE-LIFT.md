@@ -3588,6 +3588,31 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
 
+### Six re-takes: the defect hurt the *better* reranker more, and `p4c-*` prove the fix
+
+Five more re-takes chained with the same pinned interface (`p4-v2m3`, `p4b-base`, `p4b-v2m3`, `p4c-base`,
+`p4c-v2m3`), each ~6 minutes, each to a new `--out`:
+
+| report | MAP@10 old | MAP@10 retake | delta MAP | delta Hits@4 | delta MRR@10 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `p4-base` | 0.3189 | **0.3384** | **+0.0196** | +0.0400 | +0.0220 |
+| `p4-v2m3` | 0.3189 | **0.3721** | **+0.0533** | +0.0900 | +0.0881 |
+| `p4b-base` | 0.3189 | 0.3384 | +0.0196 | +0.0400 | +0.0220 |
+| `p4b-v2m3` | 0.3189 | 0.3721 | +0.0533 | +0.0900 | +0.0881 |
+| `p4c-base` | 0.3384 | 0.3384 | **+0.0000** | 0 | 0 |
+| `p4c-v2m3` | 0.3721 | 0.3721 | **+0.0000** | 0 | 0 |
+
+**Two findings, and the second is the stronger.** First, **the defect hurt the *better* reranker more**: `bge-reranker-base`
+gains +0.0196 MAP from correct ordering, but `bge-reranker-v2-m3` gains **+0.0533** — a stronger cross-encoder has
+more precision to lose when the passage order is scrambled, so the invalid reports were biased **against** the
+model the section ended up recommending, by a factor of nearly three. Corrected, the comparison is
+**v2-m3 0.3721 vs base 0.3384 = +0.0337** in v2-m3's favour, which is a wider margin than the invalid reports showed.
+
+Second, **`p4c-base` and `p4c-v2m3` are identical to their re-takes to four decimals** — because the `p4c-*` series
+*was* the post-fix run. That is an independent confirmation, not a re-derivation: a freshly re-taken report
+reproduces a previously recorded correct one **exactly**, which is what a correct, deterministic pipeline looks
+like and what the invalid ones could never have done.
+
 ### The first re-take: the ordering defect *understated* the cross-encoder
 
 `p4-base` re-taken with the pinned interface (`engine_multihop.py`, confirmed against its own `argparse`:
