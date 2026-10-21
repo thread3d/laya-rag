@@ -1278,6 +1278,22 @@ costs at most the dataset in flight — two tests pin it, one by failing a later
 
 ---
 
+### P8 (updated): the BioASQ half is now *confirmed*, and the FEVER half is still abandoned
+
+P8 asks two integrity questions. **The positive one is now settled as a fact rather than a provisional reading**:
+`bioasq-dense.json` (this stretch, 102.5 h) records `bm25-engine` at **0.5193** over all 500 scored queries, which
+matches the figure P8 was written against and **confirms that our BM25 beats the published 0.465 by +0.052** — five
+times the control tolerance, and unexplained. The completed run does not explain it; it removes any residual doubt
+that the number was an artefact of a partial run.
+
+**The negative one is untouched.** The published-settings control row on FEVER remains **abandoned at 502 of 3,452
+queries**, and the candidates P8 lists (field weighting, corpus release/duplicate handling, query-set version) are
+still untested. That is a *new experiment*, not a continuation: it needs the published column's field weights
+implemented in the control, which is P2's work applied to FEVER.
+
+**So P8 should be read as two items, one done and one not** — and the ledger's "abandoned at 502/3,452" is the
+starting point for the second, not a blank slate.
+
 ### P8 — Fix the FEVER anomaly, and re-check BioASQ
 
 **What.** FEVER is the largest lexical-control gap measured anywhere here: **ours 0.6323 against a
