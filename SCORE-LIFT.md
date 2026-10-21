@@ -3588,6 +3588,31 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
 
+### The first re-take: the ordering defect *understated* the cross-encoder
+
+`p4-base` re-taken with the pinned interface (`engine_multihop.py`, confirmed against its own `argparse`:
+`--out`, `--rerank-model`, `--limit`, `--sample-seed`), 200 queries in **172 s**, new `--out` so the invalid
+report is preserved:
+
+| metric | `p4-base` (invalid) | `p4-base-retake` | delta |
+| --- | ---: | ---: | ---: |
+| MAP@10 | 0.3189 | **0.3384** | **+0.0196** |
+| Hits@4 | 0.730 | **0.770** | **+0.0400** |
+| MRR@10 | 0.6142 | **0.6362** | **+0.0220** |
+| Hits@10 | 0.920 | 0.895 | −0.025 |
+
+**The one-line `rerank(order="recall")` bug made the reranker look worse than it is.** With the order preserved,
+MAP@10 gains **+0.0196**, Hits@4 gains **+0.0400**, MRR@10 **+0.0220** — the cross-encoder's precision benefit was
+being partly thrown away, and Hits@10 falls slightly because the CE trades a little deep recall for much better
+early rank. **So the defect ran against the section's own conclusion rather than in its favour**: the corrected
+numbers strengthen P4's finding that reranking helps, and the recorded MAP@10 figures for the P4 family are
+**conservative by ~0.02**.
+
+**And the provenance field does not appear here either, for a different reason**: only `tools/beir.py` was
+patched, not `tools/engine_multihop.py`. So `producer: None` on this engine report is also correct — the field
+covers BEIR reports only, and the engine tools still need it. **That is a gap to close rather than a test that
+failed**, and it is recorded as such.
+
 ### P1 closed: `bioasq` landed, coverage is 18 of 18, and its dense row is a *negative*
 
 `bioasq-dense.json` was written on **2026-10-21 at 19:13** after **102.5 hours** of embedding
