@@ -1290,6 +1290,34 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### And "ten lines" was wrong too: the saving needs the builder restructured
+
+Reading the loop refutes my own estimate a third time in three rounds:
+
+```python
+for field in self.fields:
+    index.build((doc_id, str((payload or {}).get(field, ""))) ...)   # tokenises THIS field only
+    self._indexes[field] = index
+self.union_df = union_document_frequency(                           # re-tokenises ALL fields
+    [tokenize(str(payload.get(field, "")), stem=self.stem) for field in self.fields]
+    for payload in documents.values())
+```
+
+**The per-field builds never tokenise all fields at once** — each sees only its own text — so there is no existing loop
+to drop the union into. The union pass genuinely tokenises every field of every document, and that is where the 2 h 45 m
+goes. **A ten-line accumulator cannot capture tokens that are never computed together.**
+
+**The real options are two, and both are honest:**
+
+| option | what it costs |
+| --- | --- |
+| **accept the pass** | the control is *slow but exact*, and 2 h 45 m for a one-off row is arguably acceptable — it was abandoned for impatience, not impossibility |
+| **restructure the builder** | tokenise each document's all fields **once**, feed both the per-field postings and a hashed union from that single tokenisation; a real refactor of `OnDiskBM25F.build`, and then the union is free |
+
+**So the last task is not "ten lines" — it is a decision between waiting 2 h 45 m once and refactoring a builder.** The
+first is available today and needs no code; the second is the right long-term fix and is a real change. **The document now
+says which is which**, which is more useful than an estimate that shrank every time someone read the code.
+
 ### Premise confirmed: `build` receives every field of every document
 
 The previous paragraph rests on one load-bearing claim, so it was checked rather than asserted:
