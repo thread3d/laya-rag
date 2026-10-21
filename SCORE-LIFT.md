@@ -3588,6 +3588,27 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
 
+### The engine's full-set P4 numbers were never invalid — and they confirm the headline
+
+The two full-protocol engine re-takes (2,255 queries each, ~28 and ~50 minutes):
+
+| report | MAP@10 old | MAP@10 retake | delta | Hits@4 |
+| --- | ---: | ---: | ---: | --- |
+| `engine-p4-base-full` | 0.3294 | **0.3294** | **0.0000** | 0.776 -> 0.776 |
+| `engine-p4-full` (v2-m3) | 0.3702 | **0.3702** | **0.0000** | 0.842 -> 0.842 |
+
+**Both reproduce exactly**, which means the `engine-p4-*full` reports were recorded **after** the fix and the
+headline P4 numbers were never affected by the ordering defect. That matters more than the corrections do: the
+**+0.0408** gap between v2-m3 (0.3702) and base (0.3294) — the figure the paired bootstrap was computed on — is
+**intact**, and the corrected sampled runs (0.3384 / 0.3721, a +0.0337 gap) agree with it in sign and roughly in
+magnitude.
+
+**So the repair's effect is now bounded and stated.** Of the ten cross-encoder reports re-taken, **five reproduce
+exactly** (`p4c-base`, `p4c-v2m3`, `engine-p4-listwise`, `engine-p4-base-full`, `engine-p4-full`) because they were
+post-fix runs, and **four moved** (`p4-base`, `p4b-base`, `p4-v2m3`, `p4b-v2m3`) plus `engine-p4-listwise-qa`,
+because they were pre-fix. The defect therefore **touched the sampled 200-query arm, not the engine's full-protocol
+arm** — and one conclusion (the QA-instruction penalty) is deleted outright.
+
 ### The listwise re-take refutes a recorded conclusion: the QA penalty was the bug
 
 Two more re-takes (the generative `Qwen3-Reranker-0.6B`, ~23 min each, 200 queries):
