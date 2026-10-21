@@ -1334,6 +1334,27 @@ footnote, not an unexplained one.
 
 ---
 
+### P9's new question has an answer: the 0.80 and the 0.52 are different measurements
+
+Following P9's re-aim — *"what was the 0.80 AUC measured on?"* — the origin is identifiable in two findings files:
+
+| source | AUC | what it measured |
+| --- | ---: | --- |
+| `docs/findings-bridge-gate-measurement.md` | **0.8108 / 0.8085** | the **bridge gate**, with a paired bootstrap interval [−0.0032, −0.0014] |
+| `docs/findings-encoder-adaptation.md` | **0.8008** | Laya's calibrated relevance head, before adaptation |
+| `answerability-selective` / `-grouped` | **0.5196** | a 300-sample balanced selection, grouped by question type |
+
+**So there is no contradiction to explain away — there are three different measurements**, and only the third is at
+chance. The honest question is therefore **whether the two designs should agree**: the bridge-gate study measured a
+discrimination task with its own data and its own bootstrap, while the answerability selections measure a balanced
+150/150 split. **A balanced split is a much harder task than a natural-prevalence one** — AUC is prevalence-independent
+in expectation, but a *balanced* selection changes which items the head is asked to separate, and that is the most
+likely reason a gate can show 0.81 in one design and 0.52 in another.
+
+**That is P9's concrete first step**: re-evaluate the two answerability selections under the bridge-gate design's
+protocol, or state that the 0.52 selections are a *harder* question and report both. Either way it is a comparison of
+two files that already exist, not a new corpus.
+
 ### P9's current state is measurable from the artefacts — and it is chance
 
 P9 asks whether the answerability gate is portable or an in-domain instrument. **Two existing reports already bear on
