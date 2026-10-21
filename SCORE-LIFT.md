@@ -3588,6 +3588,25 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
 
+### The writer narrowed by a two-test screen: it must score *and* limit queries
+
+Rather than guess again, I screened statically for tools that **both write a `summary`** (i.e. score) and
+**accept `--limit-queries`**: `beir.py`, `engine_musique.py`, `laya_maxsim_probe.py`, `multihop_atom_index.py`,
+`multihop_coverage.py`, `multihop_diagnostics.py`, `multihop_rerank_experiment.py`, `musique.py`, `ondisk.py`,
+`twowiki.py`. Ranking those ten against the report's seven settings gives:
+
+| tool | settings matched |
+| --- | --- |
+| **`multihop_diagnostics.py`** | **5 / 7** |
+| `musique.py` | 5 / 7 |
+| everything else, including `multihop_rerank_experiment.py` | < 5 / 7 |
+
+**So the original pick is now positively eliminated** — it writes summaries but matches fewer than five of the
+settings — and the writer is most likely **`multihop_diagnostics.py`**. That is a *screening* result, not an
+identification: two tools tie at 5/7 and the tie is broken only by the benchmark (`musique.py` is a different
+corpus). **Four screens have now been tried and each moved the answer without settling it**, which is the argument
+for the `producer` field stated as evidence rather than as principle.
+
 ### The mapping resolved one step further — and it is the cache builder, not the reporter
 
 Running the candidate with the reconstructed command (`multihop_ce_cache.py --model BAAI/bge-small-en-v1.5 --overlap
