@@ -1290,6 +1290,27 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### Premise confirmed: `build` receives every field of every document
+
+The previous paragraph rests on one load-bearing claim, so it was checked rather than asserted:
+
+```python
+def build(self, documents: Mapping[str, Mapping[str, str]]) -> None:   # ondisk.py:141
+    for field in self.fields:                                          # ondisk.py:143
+```
+
+**`documents` is `document -> field -> text`, and the same mapping is iterated once per field.** So every field of every
+document is present at build time — the union DF needs **no second traversal of the corpus**, only a second *use* of data
+already in hand.
+
+**Which also locates the real cost of the exact pass**: it is not I/O but **tokenisation** — `union_document_frequency`
+re-tokenises every document's every field to recover distinct terms, which is the expensive work the per-field builds
+have already done moments earlier. So the accumulator belongs **inside the existing tokenisation loop of the first
+field's pass**, where the tokens are already in memory for the union.
+
+**That is now a ten-line change with a confirmed precondition**, not a design question — and the precondition was one
+grep away from being settled three rounds ago.
+
 ### The fix is now concrete: accumulate during the *first* field's traversal
 
 Reading the function settles both the shape and the cost. `union_document_frequency(documents)` takes
