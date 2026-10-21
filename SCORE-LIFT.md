@@ -1334,6 +1334,23 @@ footnote, not an unexplained one.
 
 ---
 
+### The README's 0.815 has no artefact where one would expect it
+
+The reconciliation's first step is to find the file that produced 0.815. `eval/trust-report.json` exists and is the
+obvious candidate — and **it contains no AUC at all**: its verification block records `citation_mechanics_clean`,
+`content_clean`, `injection_count`, and flags, but nothing about discrimination. So the README's **"held-out ROC-AUC
+0.815 (balanced accuracy 0.725) on a fresh 300-query [set]"** is **not produced by the trust report**, and no other
+artefact in `eval/` reports it under that name.
+
+**That makes the claim a different kind of problem from the others in this document**: not a number whose qualifier was
+dropped, but **a number with no artefact I can find**. It may well be real — the phrase "held-out" and the paired
+balanced accuracy suggest a specific study — but **`make claim-check` cannot resolve it**, because claim-check pins
+numbers to reports and this one is in a report-shaped sentence with no report behind it.
+
+**So P9 now has a precise first task**: locate or re-run the study that produced 0.815/0.725. Until then the README
+quotes a figure this repository cannot currently reproduce, and the selection artefacts say the same instrument is at
+chance.
+
 ### And a fourth number: the README credits the engine with 0.815 / 0.725, which conflicts with 0.5196
 
 Chasing the dropped label turned up a claim the document has been repeating without reconciling:
