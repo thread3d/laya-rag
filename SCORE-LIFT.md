@@ -125,7 +125,7 @@ of its hand-entered cells — see the note under §1.2.)
 | dataset | documents | rows measured | richest channel measured |
 | --- | ---: | --- | --- |
 | arguana | 8,674 | 13 rows | full |
-| bioasq | 14,914,604 | bm25, bm25-engine | **lexical only** |
+| bioasq | 14,914,604 | biencoder, bm25, bm25-engine, hybrid-biencoder | dense |
 | climate-fever | 5,416,593 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | cqadupstack | 457,199 | biencoder, bm25, bm25-engine, bm25-title, hybrid-biencoder | dense |
 | dbpedia-entity | 4,635,922 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
@@ -144,7 +144,7 @@ of its hand-entered cells — see the note under §1.2.)
 | trec-news | 594,977 | biencoder, bm25, bm25-engine, bm25-passages@600, bm25-title, hybrid-biencoder | adapted dense |
 | webis-touche2020 | 382,545 | biencoder, bm25-engine, bm25-title, hybrid-biencoder | dense |
 
-**lexical-only members (1 of 18):** bioasq
+**lexical-only members (0 of 18):** none
 **members with no report:** none
 **non-members present (not coverage):** msmarco
 
@@ -3587,6 +3587,37 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 **third of the corpus**, and a third of 14.9 M documents is a day of embedding, not an hour. The arithmetic had been
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
+
+### P1 closed: `bioasq` landed, coverage is 18 of 18, and its dense row is a *negative*
+
+`bioasq-dense.json` was written on **2026-10-21 at 19:13** after **102.5 hours** of embedding
+(14,914,604 documents at **40.4 docs/s**) plus a 796-second scoring pass:
+
+| retriever | nDCG@10 | R@10 |
+| --- | ---: | ---: |
+| `bm25-engine` | **0.5193** | 0.5496 |
+| `hybrid-biencoder` | 0.4506 | 0.4990 |
+| `biencoder` | 0.2641 | 0.2838 |
+
+**The dense channel does not pay on bioasq.** Fusion lands *below* the lexical row by **−0.069** and the
+bi-encoder alone is **half** it — the opposite of climate-fever and cqadupstack, and consistent with a corpus
+(biomedical abstracts, 14.9M documents) where BM25's exact-term matching is the strong channel. And as
+predicted when the run was queued, **it moves nothing**: bioasq was a *winning* cell (+0.015), so the deficit
+stays **0.6154** and the macro cost **0.0342**. **What the run bought is the coverage claim — 18 of 18
+members now carry a dense row, and the document's lexical-only set is empty for the first time.**
+
+**And the provenance field this document promised would be tested by this report is not in it — because the
+run started thirteen minutes before the patch.** The lock was created at **12:11:37** on 2026-10-17; the
+`producer`/`argv` commit (`4058f4d`) landed at **12:24:13**. A Python process loads its script at start, so the
+report correctly records `producer: None, argv: None`: **the field's first real test awaits the next BEIR run**,
+and §10.8's claim that "bioasq's report is the first that will carry the field" was wrong by thirteen minutes.
+Recorded rather than quietly dropped, because a test that silently does not run is worse than no test.
+
+**Two more numbers the artefacts corrected.** The merged vectors are **45.8 GB**, not the ~61 GB projected —
+14.9M x **768** dims x 4 B — so this model's retrieval width is **768, not 1024**, and the projection in the
+pre-flight paragraph was wrong on the dimension. And "embedded in 369,025 s" was **not** the end of the run:
+the 500 queries still had to be retrieved and scored, which took another 796 seconds. **Embedding finishing is
+not the run finishing**, in the live case as in the rule.
 
 **When a member's report lands**: `make channel-coverage` regenerates §1.1 (the gate will demand it —
 CQADupStack's move took the lexical-only count 8 → 7 and the deficit 0.7314 → 0.6154), the consistency
