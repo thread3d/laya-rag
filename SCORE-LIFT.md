@@ -3605,6 +3605,24 @@ told me nothing about whether the field would ever appear in a report. The probe
 engine run onward, the mapping problem this document spent four screens on cannot recur** — the artefact will name
 its own tool.
 
+### The identification does not survive its own flag check — corrected
+
+I wrote one round earlier that `multihop_diagnostics.py` was the writer. **Checking its flags refutes that**:
+it declares `--model`, `--overlap`, `--rrf-k`, `--limit-queries`, `--out`, `--top-k` — and **not**
+`--sample-seed`, `--rerank-model` or `--depth`, all three of which the report records. So it cannot be the writer
+either, and the "inherited settings" reading was a plausible story that the next fact contradicted.
+
+**The settings match `multihop_ce_cache.py` exactly** — it declares all eight (`--model`, `--overlap`, `--depth`,
+`--rrf-k`, `--rerank-model`, `--limit-queries`, `--sample-seed`, plus `--shard`/`--merge`/`--batch-size`) — but the
+version in the tree **writes no `summary`**. So one of two things is true: the writer is an older version or a wrapper
+of that tool, or a tool no longer in `tools/` produced it. **Neither can be settled from the artefacts**, which is
+the fifth turn in this mapping and the point at which the honest answer is *not identified* rather than a sixth
+hypothesis.
+
+**The record of the five screens is the finding**: a unique flag, interface overlap, artefact type, a two-test screen,
+and a jobkit intersection each moved the answer and none settled it. **The `producer` field exists precisely so that
+no successor has to run this experiment again** — and from the next engine or BEIR run onward, they will not.
+
 ### The writer identified: `multihop_diagnostics.py`, consuming the cache's settings
 
 One more discriminator settles it without a run. The reports carry a `_job` key, which turns out to be written by
