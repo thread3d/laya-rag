@@ -3588,6 +3588,28 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
 
+### The listwise re-take refutes a recorded conclusion: the QA penalty was the bug
+
+Two more re-takes (the generative `Qwen3-Reranker-0.6B`, ~23 min each, 200 queries):
+
+| report | MAP@10 old | MAP@10 retake | delta |
+| --- | ---: | ---: | ---: |
+| `engine-p4-listwise` (web-search instruction) | 0.2047 | 0.2047 | **0.0000** |
+| `engine-p4-listwise-qa` (QA instruction) | 0.1574 | **0.2047** | **+0.0473** |
+
+**The two instructions now tie exactly at 0.2047.** The recorded P4 arm 2 conclusion — that re-running the listwise
+reranker with the question-answering instruction made it **23% worse still** — was therefore **an artefact of the
+ordering bug, not a property of the instruction**: `engine-p4-listwise` was already a post-fix run (hence unchanged),
+while `engine-p4-listwise-qa` was recorded pre-fix, and correcting it moves it onto the same value to four decimals.
+
+**What survives and what does not.** The P4 arm 2 *primary* negative **survives untouched**: listwise reranking at
+**0.2047** is far below pointwise at **0.3384**, so the section's conclusion that a listwise reranker is worse stands.
+What does **not** survive is the secondary claim that the instruction choice mattered — **it does not**, and the
+document said it did.
+
+That is the third recorded conclusion this repair has changed (the P4 MAP figures by ~0.02-0.05, the v2-m3 margin,
+and now the QA-instruction penalty), and the first one it has **deleted** rather than adjusted.
+
 ### Six re-takes: the defect hurt the *better* reranker more, and `p4c-*` prove the fix
 
 Five more re-takes chained with the same pinned interface (`p4-v2m3`, `p4b-base`, `p4b-v2m3`, `p4c-base`,
