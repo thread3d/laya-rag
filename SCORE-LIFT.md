@@ -1334,6 +1334,26 @@ footnote, not an unexplained one.
 
 ---
 
+### And a fourth number: the README credits the engine with 0.815 / 0.725, which conflicts with 0.5196
+
+Chasing the dropped label turned up a claim the document has been repeating without reconciling:
+
+| source | figure | object |
+| --- | ---: | --- |
+| `docs/findings-bridge-gate-measurement.md` | 0.8108 | a **twelve-feature model** |
+| `README.md` (line 1500) | **ROC-AUC 0.815, balanced accuracy 0.725**, "fresh 300-query" | the **engine's answerability gate** |
+| `README.md` (line 1328) | "already reaches AUC **0.815**" | the **gate** |
+| `answerability-selective` / `-grouped` | **0.5196** | the gate's **head**, balanced 150/150 |
+
+**So "the gate" now has two mutually inconsistent measurements on 300-query sets**: the trust-report figure
+(**0.815 AUC, 0.725 balanced accuracy**) and the selection figure (**0.5196 AUC**). A balanced accuracy of 0.725 is
+*real discrimination*; an AUC of 0.5196 is chance. **Both cannot describe the same instrument**.
+
+That is now P9's concrete first step, and it is a *reconciliation of two files that already exist*, not a corpus and not
+a feature model: **run the trust-report protocol and the selection protocol on the same queries and see which number
+survives.** Until that happens, the README's 0.815 and this document's 0.52 are **both on the record and one of them is
+wrong**.
+
 ### P9 answered: the 0.80 was a *twelve-feature model*, the head alone is the 0.52
 
 Reading the bridge-gate finding's own table settles it, and the settlement is uncomfortable:
