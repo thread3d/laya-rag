@@ -1290,6 +1290,29 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### The run answered a question about the tool, not about FEVER
+
+The launched run finished indexing after ~1 h 45 m and then printed:
+
+```
+reusing the on-disk lexical index at .../eval/beir/cache/fever.engine
+```
+
+**That is the finding.** It built `fever.control.bm25` — **flat**: 2.3 GB, `postings.bin`/`df.npy`/`lengths.npy`/
+`offsets.npy`/`ids.json`/`terms.json`, **no per-field subdirectories and no `union-df.json`** — and then went on to
+**reuse the existing engine index** for retrieval. So `--bm25f` combined with `--lexical-backend ondisk` does **not**
+produce a field-weighted BM25F index at this scale; it produces a flat control index and then retrieves with the engine
+index that already existed.
+
+**So the run will not produce P8's published-settings row** — it will re-measure the engine's FEVER row that is already
+recorded (0.6323). **What it did produce is a fact about the tool**: the name `--bm25f` describes an intent the on-disk
+path does not implement, which is the same class of defect this document catalogues — *a flag that is parsed and does
+something other than what it says*.
+
+**That is worth more than the row would have been**: it explains why P2's union pass was abandoned at 502/3,452 — the
+field-weighted path was never reached — and it means the next session's first check is whether `--bm25f` builds field
+indexes **on the in-memory backend**, where the code path differs.
+
 ### A run is in flight, and what it is (and is not) is recorded here
 
 Rather than leave P8's gate as a decision, the cheapest of its two options was **tried** at 2026-10-21 ~21:30:
