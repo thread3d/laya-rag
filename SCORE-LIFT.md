@@ -1290,6 +1290,18 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### Where the implementation and its first test go
+
+A last pointer so the next session does not have to find these: **`tests/test_ondisk_union_df.py` already exists** and
+covers the exact union DF, so the hashed variant's agreement test (test 1 above) belongs **beside it** — the same
+fixture, one assertion that both estimators return identical counts. The function to change is
+`union_document_frequency()` at `ondisk.py:261`, called once at `ondisk.py:159` and persisted at `167`, with
+`tests/test_ondisk_bm25f.py` covering the class's behaviour and `tests/test_ondisk_scale.py` the scale path.
+
+**So the work is: one new hashed estimator, one agreement assertion in an existing file, then the two cost/measurement
+tests.** That is a focused change with its tests already located — which is as far as this session can responsibly take
+it.
+
 ### The decision, made: a 64-bit hashed document set, with a stated bound
 
 The choice between "exact bitmaps" and "approximate counter" is decidable on arithmetic rather than on taste. For a
