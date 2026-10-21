@@ -4011,7 +4011,9 @@ the macro — so **P1's arithmetic is done and its remaining run is a coverage c
 **What a successor should do first.** `bioasq` has landed (see `P1 closed` below), so the sequence it was queued
 for is done: §1.1 was regenerated from `channel_coverage` (18 of 18), the row was recorded against the published
 0.504, and the re-takes ran — ten of them, with the tally and the corrections in §P1. **The remaining work is
-decided, not queued**: P8 (a published-settings control), P9 (a fresh out-of-domain corpus), and §P12 run 3 with
+decided, not queued**: P8 (a published-settings control — its BioASQ half is now *confirmed* and its FEVER row is still abandoned at
+502 of 3,452), P9 (**whether the answerability gate is portable or an in-domain instrument** — it is a
+calibration question, not a corpus question, and this line previously mis-described it), and §P12 run 3 with
 T8+T11. **Six CE reports cannot be re-taken at all** — their writer is not in `tools/` today and an identical
 settings block proved not to be evidence of authorship, so their numbers stand with the provenance caveat written
 beside them.
