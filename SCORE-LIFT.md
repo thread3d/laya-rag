@@ -3605,6 +3605,26 @@ told me nothing about whether the field would ever appear in a report. The probe
 engine run onward, the mapping problem this document spent four screens on cannot recur** — the artefact will name
 its own tool.
 
+### A decisive negative: the settings match is not evidence of authorship
+
+`multihop_ce_cache.py` matches **all eight** of the report's settings and is the only tool that does. One grep
+settles whether that means anything:
+
+```
+$ grep -c "summary" tools/multihop_ce_cache.py
+0
+```
+
+**It never writes a summary, in any path.** So it cannot be the producer of `rerank-experiment.json` no matter how
+exactly the flags line up — **an identical settings block is not evidence of authorship**, because the settings are a
+shared configuration object that several tools of this family accept. The writer is a tool that is not in `tools/`
+today: either a version that has been removed or a wrapper outside the tree.
+
+**That is the end of the mapping, and it ends on a proof rather than on exhaustion**: five screens produced five
+answers, and the last one is the decisive *negative* — the best-fitting candidate is disqualified by a single fact
+about its code. **The `producer` field is the fix, and from this round onward it is in the artefacts rather than in
+this prose.**
+
 ### The identification does not survive its own flag check — corrected
 
 I wrote one round earlier that `multihop_diagnostics.py` was the writer. **Checking its flags refutes that**:
