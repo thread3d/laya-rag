@@ -1278,6 +1278,18 @@ costs at most the dataset in flight — two tests pin it, one by failing a later
 
 ---
 
+### P8's artefact named: `eval/beir/lexical-control.json`
+
+The control P8 refers to is a **report, not a run** — `eval/beir/lexical-control.json` aggregates the
+published-lexical comparison across **17 corpora**: **7 within the tight 0.008 tolerance, 11 within the loose 0.02**,
+with **`in_our_favour: [hotpotqa, bioasq]`** and **`against_us: [quora, climate-fever, fever, trec-news]`**.
+
+That is exactly the two-sided picture P8 describes, and it makes the shape of the problem explicit: **most cells agree
+to within 0.02; a handful do not; and the two extremes are the ones P8 names.** BioASQ is the largest positive and is
+now confirmed over all 500 queries; FEVER is the largest negative and its dedicated published-settings row is still
+abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
+it already says which, by how much, and in whose favour.
+
 ### P8 (updated): the BioASQ half is now *confirmed*, and the FEVER half is still abandoned
 
 P8 asks two integrity questions. **The positive one is now settled as a fact rather than a provisional reading**:
