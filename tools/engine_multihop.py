@@ -298,6 +298,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         run.record(jobkit.META_KEY, {
             "_settings": {
                 **vars(args),
+                # The tool that wrote this report, and the arguments it was given. Added because four successive
+                # static screens failed to identify a report's producer from its settings alone (see SCORE-LIFT.md):
+                # the flags describe an interface that several tools share, and one of them is a cache builder
+                # rather than a reporter. A field in the artefact settles in one look what inference cannot.
+                "producer": Path(__file__).name,
+                "argv": sys.argv[1:],
                 "index_dir": str(index_dir),
                 "index_identity": identity,
                 "embed_model_effective": config.embed_model or "engine-default",

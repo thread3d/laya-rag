@@ -3588,6 +3588,23 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
 
+### The gap closed: `engine_multihop.py` now records its own provenance too
+
+The `producer`/`argv` field existed only in `tools/beir.py`, so every engine report — including the ten re-takes above —
+still said `producer: None`. It is now written by `tools/engine_multihop.py` as well, and **verified by execution
+rather than by parse**: a single-query probe (`--limit 1`) wrote
+
+```
+producer: engine_multihop.py
+argv: ['--out', '/tmp/probe-producer', '--rerank-model', 'BAAI/bge-reranker-base',
+       '--limit', '1', '--sample-seed', '0']
+```
+
+**That is the difference between the two checks this session keeps confusing**: `ast.parse` accepted the patch, and
+told me nothing about whether the field would ever appear in a report. The probe told me it does. **From the next
+engine run onward, the mapping problem this document spent four screens on cannot recur** — the artefact will name
+its own tool.
+
 ### The writer narrowed by a two-test screen: it must score *and* limit queries
 
 Rather than guess again, I screened statically for tools that **both write a `summary`** (i.e. score) and
