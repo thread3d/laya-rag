@@ -1334,6 +1334,28 @@ footnote, not an unexplained one.
 
 ---
 
+### P9 closed: the answerability claim belongs to a feature gate, and the head alone is at chance
+
+With the mis-read corrected, P9's substance is answerable from artefacts already on disk, and it is now **closed** as a
+question — not as a measurement, because nothing new was run.
+
+**What P9 asked**: whether the answerability gate is portable or an in-domain instrument.
+**What the record answers**:
+
+| object | figure | source |
+| --- | ---: | --- |
+| a **feature gate** over retrieval + evidence signals | **0.815 AUC / 0.725 balanced accuracy** (within question type); **0.767 [0.671, 0.827]** with a type held out | `README.md` §"the honest case", matching `findings-bridge-gate-measurement.md` |
+| the **scalar head alone** | **0.520** in that same study; **0.5196** on the balanced 150/150 selection | `README.md` and `answerability-selective`/`-grouped` |
+
+**So the honest statement of the contribution is**: *a calibrated scalar scores at chance; a twelve-signal feature gate
+over the engine's existing outputs reaches 0.815 within question type and 0.767 across a held-out type.* **That is a
+feature-engineering result, not a property of the head** — and the README already says so, which is why P9's premise
+was wrong rather than the README's numbers.
+
+**What remains for P9 is a decision, not a run**: whether to publish the feature gate as the answerability contribution
+(naming its inputs honestly) or to state that the scalar alone is not discriminative. **The measurement does not need
+repeating; the framing does.**
+
 ### Correction: the 0.815 conflict was in my reading, not in the README
 
 The README paragraph those three rounds interrogated says, in full:
