@@ -1290,6 +1290,22 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### The fix is now concrete: accumulate during the *first* field's traversal
+
+Reading the function settles both the shape and the cost. `union_document_frequency(documents)` takes
+`document -> field -> tokens` and iterates every document to count each term once across its fields — so **the expense
+is a full traversal of the corpus that happens *after* the per-field indexes exist**, not the counting itself.
+
+**But a per-field build already traverses the documents and already sees every field on each document** (it filters to
+one field while writing that field's postings). So the union DF can be accumulated **during the first field's
+traversal**, from the same documents, with a per-term set of 64-bit document hashes — and the later call at line 159
+becomes a lookup of a table the build has already produced.
+
+**That makes the change small and local after all**: one accumulator in the build loop, one hash per (term, document)
+pair, and `union_document_frequency()` kept as the exact reference the test compares against. **The 2 h 45 m was a second
+traversal, not an expensive formula** — which is precisely the kind of thing that is invisible until the function is
+read.
+
 ### Where the implementation and its first test go
 
 A last pointer so the next session does not have to find these: **`tests/test_ondisk_union_df.py` already exists** and
