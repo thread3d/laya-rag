@@ -1334,6 +1334,25 @@ footnote, not an unexplained one.
 
 ---
 
+### P9's current state is measurable from the artefacts — and it is chance
+
+P9 asks whether the answerability gate is portable or an in-domain instrument. **Two existing reports already bear on
+it**, and they are both `n = 300` with a balanced 150/150 class split:
+
+| report | `head_auc` | `head_auc_reached` | reached |
+| --- | ---: | ---: | ---: |
+| `answerability-selective` | **0.5196** | 0.572 | 249 |
+| `answerability-grouped` (by question type) | **0.5196** | 0.572 | 249 |
+
+**An AUC of 0.5196 against a chance line of 0.50 is not discrimination.** The gate's head separates answerable from
+unanswerable at essentially chance on this selection, and — tellingly — **grouping by question type changes nothing**
+to four decimals, so the failure is not a composition artefact of mixing question types.
+
+That does not *finish* P9 (these are two selections, not a portability study across domains), but it changes what P9
+is: **the question is no longer "is the gate portable?" but "the gate does not discriminate here at all, so what was
+the 0.80 AUC measured on?"** — a question about the *measurement* that produced the gate, not about carrying it to a
+new domain. **A successor should start from these two files**, not from a new corpus.
+
 ### P9 — Make the answerability gate portable, or say plainly that it is an in-domain instrument
 
 **What.** The single highest-value *novel* contribution available, per
