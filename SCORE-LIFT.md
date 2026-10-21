@@ -4151,10 +4151,12 @@ the macro — so **P1's arithmetic is done and its remaining run is a coverage c
 **What a successor should do first.** `bioasq` has landed (see `P1 closed` below), so the sequence it was queued
 for is done: §1.1 was regenerated from `channel_coverage` (18 of 18), the row was recorded against the published
 0.504, and the re-takes ran — ten of them, with the tally and the corrections in §P1. **The remaining work is
-decided, not queued**: P8 (a published-settings control — its BioASQ half is now *confirmed* and its FEVER row is still abandoned at
-502 of 3,452), P9 (**whether the answerability gate is portable or an in-domain instrument** — it is a
-calibration question, not a corpus question, and this line previously mis-described it), and §P12 run 3 with
-T8+T11. **Six CE reports cannot be re-taken at all** — their writer is not in `tools/` today and an identical
+decided, not queued**: **P8** (a published-settings control — its BioASQ half is now *confirmed* and its FEVER row is still abandoned at
+502 of 3,452) is the one measurement left. **P9 is closed as a question**, and **§P12 run 3's T8 and T11 are
+already resolved in this document**: T8 was tested and rejected by its own falsifier (*"eRAG's labels agree with
+a hand-labelled sample" — they do not, so reference-free labelling is not adopted*), and T11 is not a task but a
+cited build route for §7.2. **So this line previously listed three items of which one is closed, one was never a
+measurement, and one is a single abandoned control row.** **Six CE reports cannot be re-taken at all** — their writer is not in `tools/` today and an identical
 settings block proved not to be evidence of authorship, so their numbers stand with the provenance caveat written
 beside them.
 
