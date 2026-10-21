@@ -3898,9 +3898,20 @@ already built and is currently idle.
 
 ### 10.8 Handover — where a new session should start
 
-**State.** HEAD == `origin/main`, clean tree, **1,746 tests pass**, `consistency-check` 47 sites at 18 of 18,
-`claim-check` 65 checks. One heavy job: **`bioasq`** (14,914,604 documents, 500 scored queries) embedding at
-~39 docs/s on a measured, stable rate, **~100 hours** to run, needing ~73 GB against ~248 GB free.
+**State.** HEAD == `origin/main`, clean tree, **1,748 tests pass**, `consistency-check` 47 sites at **18 of 18**,
+`claim-check` 65 checks, and **no heavy job** — the lock is free. **P1 is closed**: `bioasq` landed after 102.5 h
+(14,914,604 documents at 40.4 docs/s) with `bm25-engine` 0.5193, `hybrid-biencoder` 0.4506 and `biencoder`
+0.2641, so **18 of 18 members carry a dense row** and the lexical-only set is empty. The deficit is unchanged at
+**0.6154** because bioasq was a winning cell (+0.015) — the run bought the coverage claim, not a deficit movement.
+
+**The repair is bounded, not finished.** Ten cross-encoder reports have been re-taken: **five reproduce exactly**
+(`p4c-base`, `p4c-v2m3`, `engine-p4-listwise`, `engine-p4-base-full`, `engine-p4-full`) because they were post-fix
+runs, and **five moved** (`p4-base`, `p4b-base`, `p4-v2m3`, `p4b-v2m3`, `engine-p4-listwise-qa`). The headline is
+intact — `engine-p4-full` 0.3702 vs `engine-p4-base-full` 0.3294 reproduces exactly, so **+0.0408 for v2-m3 stands**.
+What changed: the sampled P4 figures are **+0.0196 to +0.0533 higher** than recorded, the v2-m3 margin widens to
+**+0.0337**, and **one recorded conclusion is deleted** — the QA-instruction penalty was the bug, not the instruction
+(both instructions now give 0.2047 at the same 200 queries). **The `producer` field is written by both `tools/beir.py`
+and `tools/engine_multihop.py`**, execution-verified, so the mapping problem cannot recur.
 
 **The headline number.** The BEIR-18 summed deficit is **0.6154** (macro cost 0.0342), down from **0.7314** when this
 stretch began — 16% of it. Its composition is the finding: climate-fever contributed **0.0713** and *closed its cell*,
