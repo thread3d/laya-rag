@@ -1290,6 +1290,23 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### P8's FEVER control is blocked by the same result that closed P2 — not by time
+
+The one remaining measurement in this document is P8's FEVER published-settings row. Two facts close the question of
+whether it can simply be resumed:
+
+1. **There is nothing to resume.** The abandoned run left no artefact — `eval/beir/` contains the aggregate
+   `lexical-control.json` (17 corpora, 7 within 0.008, 11 within 0.02) but **no partially written FEVER control report**.
+   The 502 of 3,452 queries were killed before anything was written.
+2. **The estimator it needs is the one P2 measured as impractical.** The published column is multi-field, so the control
+   requires field-weighted BM25F — and P2's union pass at **5.4 M documents ran >2 h 45 m with no output** and was
+   recorded as impractical as written, needing "a hashed/approximate counter or in-pass accumulation".
+
+**So P8's FEVER half is blocked by design, not by the host's availability**: it cannot be run with the estimator that
+exists, and the fix for the estimator is P2's unfinished work. **That is the honest disposition — and it means this
+document currently has no measurement that can be run with the code it has.** What it has instead is one *decision*
+(change the BM25F estimator) standing between it and the last cell with a −0.121 deviation.
+
 ### P8 (updated): the BioASQ half is now *confirmed*, and the FEVER half is still abandoned
 
 P8 asks two integrity questions. **The positive one is now settled as a fact rather than a provisional reading**:
