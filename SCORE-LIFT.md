@@ -3980,16 +3980,13 @@ cqadupstack 0.0229, dbpedia-entity 0.0122, fever 0.0096, and nq/signal1m/hotpotq
 Seven of eight deficit-relevant cells are measured, and the eighth (`bioasq`, +0.015, a *winning* cell) cannot move
 the macro — so **P1's arithmetic is done and its remaining run is a coverage claim.**
 
-**Do this first when `bioasq` lands** (its report will carry `settings.producer` and `settings.argv`, which is the
-check that the round-517 field works):
-1. `make channel-coverage` → regenerate §1.1, let the consistency gate name what moves;
-2. record the row against bioasq's published 0.504 and its own best;
-3. **then run the re-takes**, because the lock frees and they need it.
-**And steps 1–2 are automated, because the run outlasts any watching round.** `/tmp/bioasq_landed.sh` waits for
-the report, then writes `/tmp/bioasq-landed.txt` with the member's rows, its `settings.producer`/`argv` (the
-check that the round-517 field works) and `channel_coverage`'s output. A session arriving later should **read
-that file first** and spend its round on the judgement — recording the row, moving the figures, and deciding
-what the 18-of-18 coverage claim is worth — rather than re-running the mechanical part.
+**What a successor should do first.** `bioasq` has landed (see `P1 closed` below), so the sequence it was queued
+for is done: §1.1 was regenerated from `channel_coverage` (18 of 18), the row was recorded against the published
+0.504, and the re-takes ran — ten of them, with the tally and the corrections in §P1. **The remaining work is
+decided, not queued**: P8 (a published-settings control), P9 (a fresh out-of-domain corpus), and §P12 run 3 with
+T8+T11. **Six CE reports cannot be re-taken at all** — their writer is not in `tools/` today and an identical
+settings block proved not to be evidence of authorship, so their numbers stand with the provenance caveat written
+beside them.
 
 **And the automation is verified by dry run rather than assumed.** Running its core commands against *fever's*
 existing report reads the member correctly — `6666` scored queries, `5416568` documents, rows
