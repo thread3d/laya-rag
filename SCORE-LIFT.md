@@ -3588,6 +3588,24 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
 
+### The mapping method corrected again: rank the interface, do not trust one unique flag
+
+I had pinned `rerank-experiment*` to `multihop_rerank_experiment.py` because `--atom-lam` and `--seed-k` are
+declared by no other tool. **That was wrong for this report.** Its `_settings` are
+`model`/`overlap`/`depth`/`rrf_k`/`rerank_model`/`limit_queries`/`sample_seed`/`top_k`, and
+`multihop_rerank_experiment.py` declares **none** of those six — it has only ten flags, all about seed-k atoms and
+beams.
+
+**Counting the shared interface instead of hunting one unique flag gives a better answer**: of eight settings,
+`multihop_ce_cache.py` declares **7**, `musique.py` and `multihop_diagnostics.py` declare 6. So the producer is most
+likely `multihop_ce_cache.py` — and *still a candidate, not a proof*: 7 of 8 is a ranking, not an identification,
+and two tools tie at 6.
+
+**The methodological point is the interesting one**: a single "unique flag" is a *weaker* signal than the overlap
+of the whole interface, because one flag can be shared by accident while eight settings describe a tool's shape.
+The first method produced a confident wrong answer; the second produces a ranked guess with its margin stated.
+Neither substitutes for the `producer` field — which is why it was added.
+
 ### The engine's full-set P4 numbers were never invalid — and they confirm the headline
 
 The two full-protocol engine re-takes (2,255 queries each, ~28 and ~50 minutes):
