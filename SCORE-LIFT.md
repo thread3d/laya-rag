@@ -3588,6 +3588,23 @@ The mistake was reading the *percentage complete* as though it were the *fractio
 right all evening at every other point — it was the informal phrasing that broke, which is exactly the pattern this
 document's §1.2 records about numbers that are right until they are spoken about carelessly.
 
+### The mapping resolved one step further — and it is the cache builder, not the reporter
+
+Running the candidate with the reconstructed command (`multihop_ce_cache.py --model BAAI/bge-small-en-v1.5 --overlap
+200 --depth 100 --rrf-k 60 --rerank-model BAAI/bge-reranker-base --limit-queries 400 --sample-seed 17`) reproduced the
+original's **wall time to 0.3%: 566.3 s against 564.7 s**, and its settings block matches field for field. So the
+command was reconstructed **exactly**.
+
+**But the output is not the same kind of artefact.** The retake contains `_settings`, `golds`, `queries` and `_job` —
+and **no `summary`**: it is a **CE-score cache**, not a scored report. So `multihop_ce_cache.py` is the tool that
+*creates the cache* `rerank-experiment*` scores from, and the report writer is a different tool still.
+
+**That is the mapping's third correction, and a precise one**: the wall-time match *proves* the cache builder rather
+than the report writer — because a tool that scored anything would have written a summary. The chain went
+wrong tool (`multihop_rerank_experiment.py`) -> better candidate by interface overlap (`multihop_ce_cache.py`, 7 of 8)
+-> **confirmed cache builder, reporter still unidentified**. The `producer` field would have settled all three in one
+look, which is the whole reason it exists.
+
 ### The mapping method corrected again: rank the interface, do not trust one unique flag
 
 I had pinned `rerank-experiment*` to `multihop_rerank_experiment.py` because `--atom-lam` and `--seed-k` are
