@@ -3605,6 +3605,28 @@ told me nothing about whether the field would ever appear in a report. The probe
 engine run onward, the mapping problem this document spent four screens on cannot recur** — the artefact will name
 its own tool.
 
+### The writer identified: `multihop_diagnostics.py`, consuming the cache's settings
+
+One more discriminator settles it without a run. The reports carry a `_job` key, which turns out to be written by
+**`jobkit.py`** — the shared job library, so it identifies the *shape* rather than the tool. Intersecting jobkit
+users with the report's two most distinctive flags gives:
+
+| intersect | tools |
+| --- | --- |
+| jobkit **and** `--rerank-model` | `engine_beir`, `engine_extractive`, `engine_multihop`, `engine_musique`, `frames_extractive`, `multihop_ce_cache` |
+| jobkit **and** `--overlap` | `multihop_ce_cache`, **`multihop_diagnostics`** |
+
+Only `multihop_ce_cache.py` is in both — and we proved it writes **no `summary`**. **`multihop_diagnostics.py`** is
+jobkit plus `--overlap` but *lacks* `--rerank-model`, which looked like a refutation until the settings are read
+carefully: the `rerank_model` in the report is **inherited from the cache the diagnostics tool consumed**, not a flag
+it declares itself. That explains in one stroke both the five-of-seven flag match and the settings that looked like a
+cache builder's.
+
+**So the pipeline is: `multihop_ce_cache.py` builds the CE scores, `multihop_diagnostics.py` scores and reports them,
+carrying the cache's settings forward.** That is a *reading* of the evidence, not a run — but it is the first
+explanation that accounts for every observation instead of most of them, which is what the previous four screens
+lacked.
+
 ### The writer narrowed by a two-test screen: it must score *and* limit queries
 
 Rather than guess again, I screened statically for tools that **both write a `summary`** (i.e. score) and
