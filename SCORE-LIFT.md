@@ -1334,6 +1334,26 @@ footnote, not an unexplained one.
 
 ---
 
+### P9 answered: the 0.80 was a *twelve-feature model*, the head alone is the 0.52
+
+Reading the bridge-gate finding's own table settles it, and the settlement is uncomfortable:
+
+| number | what it actually is |
+| --- | --- |
+| **0.8108** | a **twelve-feature model's** AUC over 300 labelled queries, 200 stratified splits — the "twelve features" column |
+| 0.8085 | the same model **plus** a `bridge_conditioned` feature, i.e. also a twelve-plus-one-feature model |
+| **0.5196** | the **gate's calibrated head alone**, on a balanced 150/150 selection |
+
+**So the 0.80 was never the head's discrimination — it was a fitted model over twelve features**, of which the head's
+output is at most one input. The head by itself sits at **0.52**, which is chance. **The two numbers never contradicted
+each other because they measure different objects**, and the document's habit of quoting "0.80 AUC" for the
+answerability gate attributes a *feature-engineered model's* performance to a *calibrated head*.
+
+**That is a significant correction to how P9's premise is stated, and to any claim built on "AUC 0.80" as a property of
+the head.** The bridge-gate finding is internally honest — its table labels the column — but the summary sentence that
+carried the number lost the label. P9's real question is therefore **not** portability but **what the head contributes
+on its own**, and the honest answer from `answerability-selective` is: at chance on a balanced selection.
+
 ### P9's new question has an answer: the 0.80 and the 0.52 are different measurements
 
 Following P9's re-aim — *"what was the 0.80 AUC measured on?"* — the origin is identifiable in two findings files:
