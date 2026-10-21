@@ -1290,6 +1290,27 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### The decision, made: a 64-bit hashed document set, with a stated bound
+
+The choice between "exact bitmaps" and "approximate counter" is decidable on arithmetic rather than on taste. For a
+single term appearing in **d** documents, a **64-bit** hash of each document id collides within that term with
+probability at most `d^2 / 2^65`:
+
+| documents containing the term | bound on union-DF error from collisions |
+| ---: | ---: |
+| 10,000 | **2.7e-12** |
+| 100,000 | **2.7e-10** |
+| 1,000,000 | **2.7e-08** |
+
+**Those bounds are negligible against an IDF that enters a BM25 score as a logarithm** — a relative DF error of 3e-8
+moves `log((N - df + 0.5)/(df + 0.5))` by far less than any reported precision. So the streaming estimator should
+**hash each (term, document) pair to 64 bits and count distinct hashes per term**, in the same pass that writes the
+postings: exact for practical purposes, single pass, and **with the approximation stated as a bound rather than
+apologised for**.
+
+**That converts the document's last blocker from a judgement call into an implementation with a known error.** The
+acceptance tests stand: SciFact agreement, FEVER under 30 minutes, then the control row at published field weights.
+
 ### And the crux: union DF cannot be accumulated as a scalar — which is *why* the pass exists
 
 One more look at `ondisk.py` refutes my own simplification and identifies the real difficulty. The union DF is computed
