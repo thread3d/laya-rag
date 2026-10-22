@@ -416,6 +416,10 @@ def ondisk_bm25f_rankings(
         chunks = [items[j::jobs] for j in range(min(jobs, total_items))]
         out: dict[str, list[str]] = {}
         done = 0
+        # Each worker opens the index itself. Inheriting the parent's copy through a global would need
+        # `fork`; this host's Python defaults to `spawn` on macOS, where globals are not inherited — the
+        # attempt fails with KeyError: 'index'. The cost is one term dictionary per worker, so `--jobs`
+        # is bounded by memory as much as by cores (the on-disk dict is large at FEVER's size).
         with mp.Pool(
             processes=len(chunks),
             initializer=_init_worker,
