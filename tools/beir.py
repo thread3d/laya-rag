@@ -339,16 +339,10 @@ def bm25f_rankings(
         stem=stem,
     )
     index.build((doc_id, values) for doc_id, values in fields.items())
-    rankings: dict[str, list[str]] = {}
-    total = len(queries)
-    for position, (query_id, text) in enumerate(queries.items(), 1):
-        rankings[query_id] = [hit.chunk_id for hit in index.search(text, k=top_k)]
-        # Progress, because this phase is otherwise silent for hours and nothing else can show it: the
-        # postings are mmap'd, so the descriptor offsets never advance, and the host is shared, so load
-        # average says nothing about this process. A counter is the only honest progress signal here.
-        if position % 250 == 0 or position == total:
-            print(f"  scored {position}/{total} queries", flush=True)
-    return rankings
+    return {
+        query_id: [hit.chunk_id for hit in index.search(text, k=top_k)]
+        for query_id, text in queries.items()
+    }
 
 
 def ondisk_bm25f_rankings(
@@ -394,10 +388,16 @@ def ondisk_bm25f_rankings(
             drop_stopwords=drop_stopwords, stem=stem,
         )
         index.build(fields)
-    return {
-        query_id: [hit.chunk_id for hit in index.search(text, k=top_k)]
-        for query_id, text in queries.items()
-    }
+    rankings: dict[str, list[str]] = {}
+    total = len(queries)
+    for position, (query_id, text) in enumerate(queries.items(), 1):
+        rankings[query_id] = [hit.chunk_id for hit in index.search(text, k=top_k)]
+        # Progress, because this phase is otherwise silent for hours and nothing else can show it: the
+        # postings are mmap'd, so the descriptor offsets never advance, and the host is shared, so load
+        # average says nothing about this process. A counter is the only honest progress signal here.
+        if position % 250 == 0 or position == total:
+            print(f"  scored {position}/{total} queries", flush=True)
+    return rankings
 
 
 def restrict_qrels(qrels: Mapping[str, Mapping[str, float]],
