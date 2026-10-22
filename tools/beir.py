@@ -416,15 +416,13 @@ def ondisk_bm25f_rankings(
         chunks = [items[j::jobs] for j in range(min(jobs, total_items))]
         out: dict[str, list[str]] = {}
         done = 0
-        # Each worker opens the index itself. Inheriting the parent's copy through a global would need
-        # `fork`; this host's Python defaults to `spawn` on macOS, where globals are not inherited — the
-        # attempt fails with KeyError: 'index'. The cost is one term dictionary per worker, so `--jobs`
-        # is bounded by memory as much as by cores (the on-disk dict is large at FEVER's size).
-        with mp.Pool(
-            processes=len(chunks),
-            initializer=_init_worker,
-            initargs=(directory, fields_list, k1, b_fields, weights, drop_stopwords, stem, top_k),
-        ) as pool:
+        # `fork`, explicitly: macOS defaults to `spawn` since Python 3.8, and a spawned child re-imports and
+        # re-opens everything — N term dictionaries and N startups, which is why the first attempt could not
+        # show a pool at all on a corpus this size. Under `fork` the child inherits the parent's memory, so the
+        # mmap'd postings are shared copy-on-write and the dictionary is not duplicated.
+        _WORKER["index"] = index
+        _WORKER["top_k"] = top_k
+        with mp.get_context("fork").Pool(processes=len(chunks)) as pool:
             for part in pool.imap_unordered(_score_chunk, chunks):
                 for qid, hits in part:
                     out[qid] = hits
