@@ -1310,6 +1310,25 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### The last piece: run names collide, and that is the whole obstacle
+
+Reading the writer shows the change is smaller than feared. `OnDiskBM25.build` spills its postings to
+`<index>/runs/run-{len(runs):04d}.npy` (`ondisk.py:408`) and folds them with `_merge_run_group(paths, target)`
+(`ondisk.py:295`), which the log reports as `merge k/7 at this level (448 runs)`.
+
+**So parallel run generation needs exactly two things:**
+
+1. **unique run names per writer** — `run-{N:04d}.npy` collides if two processes both start at 0; a per-process prefix
+   (`run-{pid}-{i:04d}.npy`) removes the collision without touching the format;
+2. **N writers over corpus slices**, each producing its own runs into the same `runs/` directory.
+
+**The merge then runs unchanged** — it takes a list of run paths and folds them, which is precisely what
+`_merge_run_group` already does, at whatever count the shards produce (the 448-run case proves it scales past one writer's
+spill count).
+
+**Nothing in the reporting layer, the ranking format or the metric code has to change** — which is why this is the right
+target and the earlier rankings-merge design was not.
+
 ### Correction: scores are discarded, so a ranking merge needs a schema change — and it is not the right target
 
 Two facts, checked rather than assumed, change the port I specified:
