@@ -4813,16 +4813,21 @@ cqadupstack 0.0229, dbpedia-entity 0.0122, fever 0.0096, and nq/signal1m/hotpotq
 Seven of eight deficit-relevant cells are measured, and the eighth (`bioasq`, +0.015, a *winning* cell) cannot move
 the macro — so **P1's arithmetic is done and its remaining run is a coverage claim.**
 
-**Parallelise run *generation* in the on-disk index builder** — that is the one thing standing between this document and
-its last cell. Two checks settled the target after the first specification was refuted: **every ranking function returns ids
-only** (`[hit.chunk_id ...]` drops the score), so a shard merge by top-k is impossible without changing the report schema and
-would be silently wrong on ties; and **the builder already shards the corpus and merges the runs** — `merge 7/7 at this
-level (448 runs)` in the log is that machinery. So the work is to emit runs from several processes over corpus slices,
-leaving the merge and the reporting untouched. Artefacts already on disk mean the build need not repeat: `fever.bm25f/`
-**2.6 GB** with its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the
-scoring phase and is not the answer to the corpus-wide cost. **After this the remaining work is decided, not queued**: P9 is
-closed as a question, T8 was rejected by its own falsifier, T11 is a cited build route, and six CE reports cannot be
-re-taken at all.
+**Parallelise the on-disk index build — and it is a two-phase protocol, not a flag.** Three specifications were refuted
+before this one, so read the reasons before writing code: a shard merge by top-k is impossible because **every ranking
+function returns ids only** (`[hit.chunk_id ...]` drops the score) and would be silently wrong on ties; corpus-sharded *rows*
+are therefore the wrong target; and **the runs already written by the builder share a term-id space** —
+`run_dir = self.directory / "runs"` sits inside each *field* index and every `build()` constructs its own `term_to_id`, so
+two independent writers produce runs that **cannot be merged** without a vocabulary remap. That is why
+`run-{pid}-{i:04d}.npy` (landed) is necessary and not sufficient.
+
+**The shape that can work**: phase 1, parallel — each writer emits postings keyed by **term string** into its own runs; phase
+2, serial — unify the vocabulary, remap to global term ids, then the existing `_merge_run_group`. **The gate is a test that a
+serially built index and a parallel one are identical** (same postings; same top-k on a probe query), which is the same shape
+as the check that made `--jobs` trustworthy. Artefacts on disk mean the build need not repeat: `fever.bm25f/` **2.6 GB** with
+its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the scoring phase and
+is not the answer to the corpus-wide cost. **After this the remaining work is decided, not queued**: P9 is closed as a
+question, T8 was rejected by its own falsifier, T11 is a cited build route, and six CE reports cannot be re-taken at all.
 
 **And the automation is verified by dry run rather than assumed.** Running its core commands against *fever's*
 existing report reads the member correctly — `6666` scored queries, `5416568` documents, rows
