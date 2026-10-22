@@ -566,8 +566,12 @@ of the three into one encoder (or a two-model subset) is the obvious next questi
 NFCorpus and TREC-COVID (item 4), but TREC-COVID's abstracts are *shorter* than NFCorpus's and
 Robust04/TREC-NEWS were not on the BEIR mirror this project uses. Both have since been reached from
 a different source and measured lexical-only (Robust04 0.4077, TREC-NEWS 0.3351,
-`docs/findings-beir-recovered.md`), so the passage question is now askable on the two corpora it was
-written for — an adaptive passage budget and aggregation beyond max-pool are still unbuilt.
+`docs/findings-beir-recovered.md`). **The passage question has since been asked and answered, in the
+negative**: at a 600-character passage budget Robust04 reads **0.3522** and TREC-NEWS **0.2456**
+(`eval/beir/passages-long.json`), i.e. **−0.0555 and −0.0895 against document-level BM25 on the same
+qrels** — so long-document passage decomposition is **disproven on exactly the two corpora it was
+written for**, not merely untested. An adaptive passage budget and aggregation beyond max-pool remain
+unbuilt, and are the only versions of the claim still open.
 
 **The full 18-dataset BEIR average now needs only scale work, not new modelling.** The
 on-disk postings and streaming vectors landed; what remains for BioASQ (14.9M) is a bounded external
