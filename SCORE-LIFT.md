@@ -1310,6 +1310,32 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### The sharding port, specified: merge *rankings*, never per-shard metrics
+
+Reading the template gives the exact shape and one trap.
+
+`tools/engine_beir.py` does it with two flags and two library calls:
+
+```python
+ap.add_argument("--shard", default="0/1", help="run one contiguous slice, 'i/n'")
+ap.add_argument("--merge", type=int, default=0, help="only fold N finished shards into the report, then exit")
+shard_index, shard_count = jobkit.parse_shard(args.shard)
+merged = jobkit.merge_shards(stem, args.merge, fingerprint=..., build=...)
+```
+
+**And `jobkit.merge_shards` takes a caller-supplied `build` callable**, which is the important detail: the merge policy is
+the caller's, so a retrieval row must merge **per-query rankings** — concatenate each query's hits from every shard, keep
+the top *k* by score — **and only then compute nDCG against the qrels**.
+
+**Averaging per-shard metrics would be wrong**, and wrong in the same way as the qrels-dilution trap already catalogued: a
+query whose gold document lives in shard 3 scores zero in the other shards, so a mean of shard metrics measures shard
+composition rather than retrieval quality. **The score is defined on the merged ranking, not on an average of partial ones.**
+
+**That is the whole specification:** port `--shard`/`--merge` and `jobkit.parse_shard` into `beir.py`; have each shard
+build its field indexes and union DF over its slice and write per-query rankings; merge by union-and-top-k; score once, on
+the merged rankings. **One shard set, reused for the title row, the field rows and the union DF** — which is what makes the
+corpus-wide phases parallel instead of just the query loop.
+
 ### The cheap way out was tested and does not exist: the title channel is mandatory
 
 Before committing to the sharding port, one shortcut was worth testing: the serial bottleneck is the `bm25-title` row, so
