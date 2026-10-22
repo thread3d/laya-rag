@@ -4924,7 +4924,21 @@ two independent writers produce runs that **cannot be merged** without a vocabul
 serially built index and a parallel one are identical** (same postings; same top-k on a probe query), which is the same shape
 as the check that made `--jobs` trustworthy. Artefacts on disk mean the build need not repeat: `fever.bm25f/` **2.6 GB** with
 its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the scoring phase and
-is not the answer to the corpus-wide cost. **What is genuinely unstarted**: **P6b** and **P7**, plus Touché-2020 in the fusion sweep — the three standing items that
+is not the answer to the corpus-wide cost. ### P7 attempted and stopped: `bm25-passages@600` is not a harness retriever
+
+P7 looked runnable, so it was tried: `tools/beir.py --datasets robust04 --retrievers bm25-engine,bm25-passages@600`. The run
+completed and wrote a report containing **only `bm25-engine`** — no passages row, no warning.
+
+**The name does not exist in `tools/beir.py`** (zero occurrences). `passages@600` appears in exactly one place,
+`tools/lexical_selector.py`, so the passage rows in the coverage table come from a different path entirely. **A retriever name
+that is accepted and silently ignored is the "flag parsed and never read" class in another costume** — and it would have
+produced a report that *looks* like a P7 measurement and contains none.
+
+**Both artefacts were deleted rather than left in `subsets/`**, because a subset report is precisely what a future session
+would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
+passage rows and reuse that, rather than passing a name to the harness.
+
+**What is genuinely unstarted**: **P6b** and **P7**, plus Touché-2020 in the fusion sweep — the three standing items that
 were always "never on the critical path". They are bounded, and **two of the reasons they were deferred have since been
 removed**: the Touché corpus build was stopped once for cost, and corpus-wide work is now poolable (`--jobs`, four phases
 verified identical); and the FEVER control showed that a field-weighted row can be produced at 5.4M documents in about forty
