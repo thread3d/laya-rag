@@ -1290,6 +1290,25 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### Measuring the process, not the machine — and what it showed
+
+I spent six hours reading **load average** as evidence that the run was working. **That was wrong twice over**: this host
+is shared with other users, so load is a *machine* signal, and the first pid I probed (`74588`) turned out to be the
+**bash wrapper**, not Python — so the first `lsof` showed no index files and I nearly concluded a stall from a probe of the
+wrong process.
+
+**The interpreter is pid 74589, and it holds four open descriptors on the field index:**
+
+| fd | file | size |
+| --- | --- | ---: |
+| txt / 5r | `fever.bm25f/title.bm25/postings.bin` | **122.6 MB** |
+| txt / 6r | `fever.bm25f/body.bm25/postings.bin` | **2,194.6 MB** |
+
+**That is a fact about the process rather than about the host**: the BM25F scoring pass has both field postings open, which
+is what it does while scoring and could not do if it were stalled or on the flat path. **Ten lines of `lsof` replaced six
+hours of load average** — the fifth time this session has found that the right instrument was one command away and the
+wrong one was already in hand.
+
 ### And the phase P2 blamed was the *cheap* one
 
 Three hours of observation make the attribution explicit:
