@@ -1310,6 +1310,22 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### The first half has landed, and its safety is verified rather than asserted
+
+`src/laya_rag/ondisk.py` now names runs `run-{pid}-{i:04d}.npy`, so two writer processes spilling into the same `runs/`
+directory can no longer overwrite each other's `run-0000`.
+
+**The safety argument was checked in the code rather than assumed**: `_merge_run_group(paths, target)` opens each path with
+`np.load(path, mmap_mode="r")` and folds them through a heap on `(term, row, tf)` — **it never parses a filename**, and a
+k-way heap merge is order-independent, so a changed naming scheme cannot alter the merged index. The suite's merge and
+fan-in tests exercise that path and pass (1,752).
+
+**A small manual build cannot demonstrate this** — 120 documents never spill, so no run file is created and the probe shows
+an empty `runs/`. That is offered as a limitation rather than as evidence, which is the difference between the two.
+
+**What remains is the caller side only**: N writers over corpus slices feeding that directory, with the merge and every
+downstream consumer untouched.
+
 ### The last piece: run names collide, and that is the whole obstacle
 
 Reading the writer shows the change is smaller than feared. `OnDiskBM25.build` spills its postings to
