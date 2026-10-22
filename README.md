@@ -1545,7 +1545,7 @@ Recorded so they are not retried from intuition:
 | experiment | result | verdict |
 | --- | --- | --- |
 | BM25 pseudo-relevance feedback (10 docs, 15 terms ×2) | SciFact 0.682 → 0.424 | rejected — the expansion drifts short queries badly |
-| Passage-level indexing (600-char, max-pool) | SciFact 0.682 → 0.659; TREC-COVID 0.306 → 0.245 | rejected at abstract size; untested on genuinely long documents |
+| Passage-level indexing (600-char, max-pool) | SciFact 0.682 → 0.659; TREC-COVID 0.306 → 0.245; **Robust04 0.408 → 0.352; TREC-NEWS 0.335 → 0.246** | rejected at abstract size, **and now rejected on genuinely long documents too** — the two corpora the caveat waited for |
 | Score fusion (CombSUM, max-normalised) | SciFact 0.712 vs RRF's 0.741 | rejected — BM25 and cosine scales do not normalise against each other, which is what RRF avoids |
 | `bge-large` instead of `bge-base` | ArguAna 0.6377 → 0.6378 | no gain for 3× the embedding cost — encoder size saturates at 110M here |
 | Cross-encoder reranking (MiniLM-L6) | SciFact 0.691 vs fusion's 0.741 | rejected against a now-stronger first stage |
