@@ -1290,6 +1290,32 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### The hang has a mechanism: a deepening loop that grows 4x per retry
+
+The frozen offsets pointed at the query path, and reading it gives a concrete mechanism:
+
+```python
+window = min(self.live_count, k)
+while True:
+    kept = [hit for hit in self._rank(query, window, block) if allow(chunk.path)]
+    if len(kept) >= k or window >= self.live_count:
+        return kept[:k]
+    window = min(self.live_count, max(window * 4, k))    # 4x deeper, re-rank from scratch
+```
+
+**If `allow()` rejects most candidates, the loop re-ranks with a window four times larger each time** — `k`, `4k`,
+`16k`, ... up to `live_count` = 5.4 M. That is about **eleven re-rankings**, each four times the work of the last, so the
+total is dominated by the final pass over millions of positions — **with no file offsets advancing, because the postings
+are already open and the work is in-memory scoring**.
+
+**That matches every symptom exactly**: frozen read offsets, no output, no files written, heavy CPU, and hours of runtime
+on a corpus where FEVER's chunks pass a title-oriented filter rarely.
+
+**So the diagnosis is a filter-selectivity blowup, not corruption and not a slow phase.** The fix is either a cheaper
+`allow` (filter during the ranking rather than after) or a **bounded** deepening (stop at a maximum window and return what
+it has), and the latter is a two-line change with an obvious falsifier: the same query set must return the same results
+when the filter is permissive, and **must terminate** when it is not.
+
 ### The run was killed for a measured reason, and the artefacts survive
 
 After the process-level probe, the run was stopped — and **this is the first kill in the session made on evidence rather
