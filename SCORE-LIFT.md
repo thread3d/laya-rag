@@ -1290,6 +1290,26 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### P2's blocker retired: the union pass completed in ~28 minutes, not >2 h 45 m
+
+**`eval/beir/cache/fever.bm25f/union-df.json` now exists — 33.5 MB.** The field-weighted BM25F index for FEVER's 5.4 M
+documents was built on the on-disk backend, and its union document frequency — the exact step P2 measured as impractical
+and abandoned — **completed in roughly 28 minutes**.
+
+| step | P2's measurement | this run |
+| --- | --- | --- |
+| field-weighted index | "union pass > 2 h 45 m, no output" | built, merged (**433 runs**) |
+| union DF | never completed (abandoned at 502/3,452) | **completed, 33.5 MB** |
+| configuration | (unrecorded) | `--bm25f --lexical-backend ondisk --embed-chunk 20000` |
+
+**So P2's "impractical as written" verdict does not survive this configuration.** The phrase "as written" was doing a
+lot of work in that sentence, and the specific writing that failed was never recorded — which is why the verdict looked
+like a property of the corpus rather than of the invocation.
+
+**That also means the last cell in this document is no longer blocked by engineering**: the estimator exists, the index is
+built, and what remains is **the scoring pass and its row**. The document's final measurement is now one command away
+rather than one refactor away.
+
 ### Correction: "the flag lies" was premature — `--bm25f` *adds a row*, and the run had not reached it
 
 I concluded one commit earlier that `--bm25f` on the on-disk backend "names an intent the on-disk path does not
