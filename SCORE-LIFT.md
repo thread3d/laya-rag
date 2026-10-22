@@ -1310,6 +1310,26 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### Measured: the scoring phase is slower than the phase P2 blamed, by orders of magnitude
+
+With the counter in place, the re-run gives the first **measured** rate for this configuration:
+
+| | |
+| --- | --- |
+| elapsed since restart | ~27 min |
+| `scored N/M` marks | **zero** |
+| implied rate | **< 250 queries in 27 min** — under 10/min |
+| implied total | **> 4.4 h for 6,666 queries**, and the bound is loose because 250 had not been reached |
+
+**So the scoring pass is genuinely slow — not stalled, and not a mystery any more.** And that gives P2's verdict a
+correct basis it never had: **a field-weighted BM25F control at FEVER's 5.4 M documents costs hours in scoring**, not in
+the union pass (28 min) that P2 blamed. **The conclusion survives; the reason is replaced.**
+
+**The practical consequence is a design choice, not patience**: a published-settings control at this scale needs either a
+cheaper per-query path (prune candidates before the field-weighted scoring, or score a bounded sample and say so), or it
+should be stated as **out of reach on this host** with the measured rate beside the claim. **What it should not be is a
+seven-hour silence whose outcome nobody can see** — which is what it was until the counter existed.
+
 ### My stall evidence was invalid: the index is mmap'd, so offsets never move
 
 I killed the previous run because `lsof -o` showed the postings' offsets frozen for 620 seconds. **That evidence was
