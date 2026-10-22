@@ -1632,7 +1632,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             title_rankings = bm25_rankings(
                 corpus, queries, args.top_k, k1=args.k1, b=args.b,
                 drop_stopwords=True, stem=args.stem,
-                titles=titles, title_boost=args.title_boost,
+                titles=titles, title_boost=args.title_boost, jobs=args.jobs
             )
             rankings["bm25-title"] = title_rankings
             results["bm25-title"] = {"note": f"title repeated {args.title_boost}x"}
