@@ -1310,6 +1310,29 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### And the phase split needs three intermediate artefacts, not one
+
+Reading the tail of `build()` completes the design and rules out the shortcut of a `runs_only` flag:
+
+```python
+flush()
+self.n_docs = len(ids)
+self.terms = term_to_id
+self.lengths = np.asarray(lengths, dtype=np.int32)
+```
+
+**`ids`, `lengths` and `doc_freq` are build-local lists** that exist only inside the call; only the runs survive to disk. So a
+split cannot just stop before the merge — it must **persist those three alongside the runs**, or the merge phase has no
+document table to attach postings to.
+
+**The full shape, therefore**: phase 1 (parallel) — each writer tokenises its corpus slice with an injected vocabulary and
+writes its runs **plus its `ids`/`lengths`/`doc_freq` fragments**; phase 2 (serial) — concatenate the fragments in shard
+order (ids must be renumbered consistently), then `_merge_run_group` and pack. **The identity gate compares all of it**: same
+postings, same document table, same top-k.
+
+**That is the last unspecified piece**, and it is why a `runs_only` flag alone would have produced runs that cannot be merged —
+the same class of near-miss this task has produced three times already, caught this time before writing code rather than after.
+
 ### Both preconditions have landed; what remains is splitting build() into two phases
 
 Two pieces of the parallel build are now in the tree and verified, and finding them showed how much of this task is discovered
