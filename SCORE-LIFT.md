@@ -1290,6 +1290,26 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### And the cheap fix I proposed does not exist: `block` is a size, not a predicate
+
+I wrote that the fix could be to "filter during ranking rather than after it", reusing `_rank`'s `block` argument. **A
+signature check refutes that**: `def _rank(self, query: np.ndarray, count: int, block: int)` — **`block` is an integer
+block size for the scoring pass**, not a predicate. There is no existing hook to filter candidates during ranking.
+
+**So the fix is the other one, and only the other one**: a **bounded deepening** in the query loop —
+
+```python
+if window >= self.live_count or deepenings >= _MAX_DEEPEN:
+    return kept[:k]                       # best effort, bounded
+```
+
+— with its falsifier unchanged: **identical results when the filter is permissive** (the bound is never reached) and
+**termination when it is not**. A predicate-aware ranker would be better and is a real refactor, not a two-line change.
+
+**Two guesses about this loop in two rounds, both wrong before reading a signature** — the same pattern as every other
+estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
+prose.
+
 ### The hang has a mechanism: a deepening loop that grows 4x per retry
 
 The frozen offsets pointed at the query path, and reading it gives a concrete mechanism:
