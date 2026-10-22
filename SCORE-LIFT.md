@@ -1310,6 +1310,26 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### Both preconditions have landed; what remains is splitting build() into two phases
+
+Two pieces of the parallel build are now in the tree and verified, and finding them showed how much of this task is discovered
+by running rather than reading:
+
+| precondition | landed | how it was found |
+| --- | --- | --- |
+| run filenames must not collide across writers | `run-{pid}-{i:04d}.npy` | read the merge (it takes paths, never parses names) |
+| writers must share one term-id space | `build(vocabulary=...)` | **executed** it: an injected vocabulary raised `IndexError` in `doc_freq`, which was sized only by ids that build created |
+
+**Verified**: a build with an injected vocabulary produces the same `terms` mapping and the same top-k as one that built its
+own.
+
+**What remains, stated precisely**: `build()` currently *flushes runs and then merges them into the final postings in one
+call*, so running it N times against one directory would have each writer overwrite the packed output. Parallel generation
+therefore needs `build()` split into **produce-runs** and **merge-runs** phases, with the vocabulary computed by a prior pass
+and passed to the writers. **The gate is unchanged**: a serial build and a parallel one must produce identical postings and
+identical top-k on a probe query — and the `doc_freq` coupling is the evidence that a test comparing more than the top-k
+would be worth writing.
+
 ### And "caller-side only" was wrong: the runs share a term-id space
 
 I described the remaining piece as a caller-side change. **Reading the writer refutes that**, and it took one line:
