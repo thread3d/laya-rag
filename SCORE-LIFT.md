@@ -1310,6 +1310,20 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### The sharding design has a template in the tree, and one harness is missing it
+
+The claim above was checked rather than assumed. `--shard` is implemented by **eleven** tools —
+`arguana_stance`, `endtoend_multihop`, `engine_beir`, `engine_extractive`, `engine_multihop`, `engine_musique`,
+`frames_extractive`, `multihop_ce_cache`, `multihop_diagnostics`, `multihop_ordering`, `order_eval` — and **not** by
+`tools/beir.py`, the replica harness that produces the BEIR-18 table.
+
+**So the corpus-level sharding does not need to be designed from scratch**: `engine_beir.py` already shards a BEIR corpus
+for a single-retriever engine row, and `beir.py` is its replica sibling. The work is **porting that pattern across**, not
+inventing concurrency — which is a much better-scoped task than the one the research question started as.
+
+**And it explains why the FEVER run is slow in a way `--jobs` cannot fix**: the rows that dominate its wall clock are the
+*corpus-wide* ones, computed by the one harness in the family that never learned to shard.
+
 ### Parallelisation: what the research found, and what it says to build instead
 
 The question "can this use the 56 threads" turned out to be two questions, and only the first is a flag.
