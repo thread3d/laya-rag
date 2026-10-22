@@ -1310,6 +1310,27 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### My stall evidence was invalid: the index is mmap'd, so offsets never move
+
+I killed the previous run because `lsof -o` showed the postings' offsets frozen for 620 seconds. **That evidence was
+worthless, and the module says so in its second line**: the on-disk index keeps `postings.bin` **memory-mapped** and
+searches through the mmap. **A mmap'd file's descriptor offset does not advance during reads** — so a frozen offset is
+exactly what a *healthy* search looks like, and my instrument could not distinguish work from a stall in either
+direction.
+
+**Two wrong instruments in one investigation.** First load average (a machine signal on a shared host), then `lsof`
+offsets (a sequential-read signal on a memory-mapped file). **Both were already in my hands, and neither was checked
+against how the code actually reads.**
+
+**So the honest status of the kill is: made on invalid evidence, possibly killing a working run** — the same error P2
+made, committed in the act of documenting it. What survives from the investigation is the **bounded deepening**, which is
+a defensible safety improvement on its own terms (a filter that rejects everything must not re-rank 4x forever), but
+**its justification is not the stall I claimed**.
+
+**What would settle it**: CPU time actually consumed by the process (`ps` is denied here), or a phase counter in the
+tool's own log. **Neither the host's load nor a mmap'd fd's offset can answer it**, and until one of them is added, the
+correct action on a long run is the one this document has prescribed all along: **leave it alone.**
+
 ### The hang has a mechanism: a deepening loop that grows 4x per retry
 
 The frozen offsets pointed at the query path, and reading it gives a concrete mechanism:
