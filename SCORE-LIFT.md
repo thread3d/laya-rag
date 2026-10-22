@@ -4721,17 +4721,15 @@ cqadupstack 0.0229, dbpedia-entity 0.0122, fever 0.0096, and nq/signal1m/hotpotq
 Seven of eight deficit-relevant cells are measured, and the eighth (`bioasq`, +0.015, a *winning* cell) cannot move
 the macro — so **P1's arithmetic is done and its remaining run is a coverage claim.**
 
-**What a successor should do first.** `bioasq` has landed (see `P1 closed` below), so the sequence it was queued
-for is done: §1.1 was regenerated from `channel_coverage` (18 of 18), the row was recorded against the published
-0.504, and the re-takes ran — ten of them, with the tally and the corrections in §P1. **The remaining work is
-decided, not queued**: **P8** (a published-settings control — its BioASQ half is now *confirmed* and its FEVER row is still abandoned at
-502 of 3,452) is the one measurement left. **P9 is closed as a question**, and **§P12 run 3's T8 and T11 are
-already resolved in this document**: T8 was tested and rejected by its own falsifier (*"eRAG's labels agree with
-a hand-labelled sample" — they do not, so reference-free labelling is not adopted*), and T11 is not a task but a
-cited build route for §7.2. **So this line previously listed three items of which one is closed, one was never a
-measurement, and one is a single abandoned control row.** **Six CE reports cannot be re-taken at all** — their writer is not in `tools/` today and an identical
-settings block proved not to be evidence of authorship, so their numbers stand with the provenance caveat written
-beside them.
+**What a successor should do first.** **Port `--shard` from `tools/engine_beir.py` into `tools/beir.py`** — that is the one thing
+standing between this document and its last cell, and everything needed for it is specified in §P8: the template
+(`--shard`/`--merge`, `jobkit.parse_shard`, `jobkit.merge_shards` with a caller-supplied `build`), the merge rule
+(**per-query rankings unioned and top-k'd, then scored once — never averaged per-shard metrics**, which is the
+qrels-dilution trap in another form), the reuse (**one shard set for the title row, the field rows and the union DF**),
+and the artefacts already on disk (**`fever.bm25f/` 2.6 GB plus its 33.5 MB union DF**, so the build need not repeat).
+`--jobs` is already done, `fork`-based and verified at 3.25x with identical metrics. **After P8, the remaining work is
+decided, not queued**: P9 is closed as a question, T8 was rejected by its own falsifier, T11 is a cited build route, and six
+CE reports cannot be re-taken at all.
 
 **And the automation is verified by dry run rather than assumed.** Running its core commands against *fever's*
 existing report reads the member correctly — `6666` scored queries, `5416568` documents, rows
