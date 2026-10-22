@@ -1657,6 +1657,7 @@ laya-rag/
 │                          bench_index_parallel.py, bench_biencoder_parallel.py,
 │                          ondisk.py, compare.py (cross-system tables,
 │                          error bars, charts), diagram.py (the architecture diagram),
+│                          make_social_card.py (the repository social preview card),
 │                          the multiHop harnesses (multihop_official.py,
 │                          multihop_gate.py, multihop_recalibrate.py,
 │                          multihop_coverage.py, multihop_doclevel.py,
@@ -1672,8 +1673,9 @@ laya-rag/
 │                          calibration_report.py, mteb_search.py, musique.py, twowiki.py,
 │                          generator_free_iteration.py, quantization_probe.py,
 │                          charts_pass.py, heavylock.py (the one-heavy-job lock)
-├── docs/                  generated figures, `FINDINGS.md` (the index of every measured
-│                          result), and the per-topic findings documents
+├── docs/                  `index.md` (the guide index), generated figures, `FINDINGS.md`
+│                          (the index of every measured result), and the per-topic findings
+│                          documents
 ├── tests/                 Python suite, real-weights suite, metrics and adversarial checks
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
@@ -1785,4 +1787,5 @@ number. Re-run a benchmark before treating a recorded figure as reproducible und
 
 ## License
 
-Apache-2.0. Laya carries its own license in its checkout under `vendor/`.
+Apache-2.0; the full text is in [`LICENSE`](LICENSE). Laya is Apache-2.0 as well and carries its own
+license in its checkout under `vendor/`.
