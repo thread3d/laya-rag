@@ -1310,6 +1310,30 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### Verdict: out of reach on this host, with the rate beside the claim
+
+The criterion was set before the evidence arrived — *a `scored 250` mark within ~1.5 hours or the configuration is not
+viable* — and it was met with room to spare:
+
+| elapsed | marks | implied rate | implied total |
+| --- | --- | --- | --- |
+| 27 min | none | < 9.3/min | > 12 h |
+| 45 min | none | < 5.6/min | > 20 h |
+| 85 min | none | < 3.0/min | > 37 h |
+| **115 min** | **none** | **< 2.2/min** | **> 51 h** |
+
+**The estimate grew every time the mark failed to appear**, which is the opposite of convergence: the true rate may be
+worse than the bound. The run was stopped and the lock freed.
+
+**So P8's FEVER half closes as a negative with a number**: *a field-weighted BM25F control at FEVER's 5.4 M documents costs
+under 2.2 queries/minute — over 51 hours for the 6,666-query row — against a 28-minute union pass.* **The expensive phase
+is scoring, and it is expensive by two orders of magnitude over the phase P2 blamed.**
+
+**What would make it viable, stated so a successor need not rediscover it**: prune candidates before field-weighted
+scoring (the deepening loop's window), score a bounded sample and label it as a sample, or move the control to a corpus
+where per-query cost is bounded by the candidate set rather than the corpus. **What it is not is a matter of waiting
+longer** — 195 hours of session budget do not make a 51-hour row into a measurement programme.
+
 ### The rate, tightened: < 5.6 queries/min, so ~20 hours for the row
 
 The counter's first mark still had not appeared **45 minutes** after the restart, and only the interpreter remained. That
