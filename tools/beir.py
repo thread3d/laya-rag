@@ -886,6 +886,7 @@ def bm25_rankings(
     checkpoint: Path | None = None,
     backend: str = "memory",
     index_dir: Path | None = None,
+    jobs: int = 1,
 ) -> dict[str, list[str]]:
     """Lexical ranking at the published BEIR BM25 settings.
 
@@ -923,6 +924,20 @@ def bm25_rankings(
         return [hit.chunk_id for hit in index.search(text, k=top_k)]
 
     if checkpoint is None:
+        if jobs > 1 and len(queries) > 1:
+            # Same shape and same reason as the BM25F pass: this is ~85% of the function's time and every query is
+            # independent, so it pools over queries. `fork` because macOS otherwise spawns and re-opens the index.
+            import multiprocessing as mp
+
+            items = list(queries.items())
+            chunks = [items[j::jobs] for j in range(min(jobs, len(items)))]
+            _WORKER["index"] = index
+            _WORKER["top_k"] = top_k
+            pooled: dict[str, list[str]] = {}
+            with mp.get_context("fork").Pool(processes=len(chunks)) as pool:
+                for part in pool.imap_unordered(_score_chunk, chunks):
+                    pooled.update(dict(part))
+            return pooled
         return {query_id: rank(query_id, text) for query_id, text in queries.items()}
 
     fingerprint = {
@@ -1593,7 +1608,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 corpus, queries, args.top_k, k1=args.k1, b=args.b,
                 checkpoint=(Path(str(args.out) + ".lexical-control.jsonl")
                             if args.lexical_checkpoint else None),
-                **on_disk("control"),
+                jobs=args.jobs, **on_disk("control"),
             )
             results["bm25"] = {"seconds": round(time.perf_counter() - started, 2)}
 
@@ -1605,7 +1620,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             drop_stopwords=True, stem=args.stem,
             checkpoint=(Path(str(args.out) + ".lexical.jsonl")
                         if args.lexical_checkpoint else None),
-            **on_disk("engine"),
+            jobs=args.jobs, **on_disk("engine"),
         )
         rankings["bm25-engine"] = lexical
         results["bm25-engine"] = {
