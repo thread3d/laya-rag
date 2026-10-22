@@ -1424,8 +1424,8 @@ for position, (query_id, text) in enumerate(queries.items(), 1):
     rankings[query_id] = [hit.chunk_id for hit in index.search(text, k=top_k)]
 ```
 
-**That is one query at a time on one core.** `tools/beir.py` and `src/laya_rag/ondisk.py` have no `--shard`,
-no `--jobs`, no `--workers`, no `ProcessPool` — the scoring pass is **sequential by construction**, on a host with
+**That is one query at a time on one core.** At the time of writing `tools/beir.py` and `src/laya_rag/ondisk.py` had
+no `--shard`, no `--jobs`, no `--workers` and no `ProcessPool` — the scoring pass was **sequential by construction**, on a host with
 **28 physical / 56 logical cores**. The index is **read-only and mmap'd**, and each query is independent, so the work is
 **embarrassingly parallel**: a fork shares the mapped pages and the gain is near-linear.
 
