@@ -3700,11 +3700,14 @@ its own findings.**
 | --- | --- | --- |
 | **P4 arm 2** | **measured, and negative** | the listwise `Qwen3-Reranker-0.6B` reads **MAP@10 0.2047** against **0.3721** for the pointwise `bge-reranker-v2-m3` on the same 200-query sample — a 45% relative drop and below the fused order it was meant to improve. §P4's hypothesis is falsified for this configuration: one model, one corpus, 200 queries, with the model's compressed score scale recorded as a suspicion rather than a finding |
 | **P1** — the eight lexical-only cells | **3 of 8 measured, rest queued** | `cqadupstack` moved the deficit (**0.7314 → 0.6154**); `nq` and `signal1m` bought **coverage only** — and signal1m is the first cell where the fusion is *worse* than the engine row (−0.0139). Lexical-only members **8 → 5 of 18**. Next: dbpedia-entity, hotpotqa, climate-fever, fever, bioasq — largest last, one command each in §10.6 |
-| **P3 / P11** | unstarted | week-scale research bets |
-| **P8 / P9** | unstarted | a published-settings control on 5.4M documents; a fresh out-of-domain corpus |
-| **§P12 run 3 / T8+T11** | blocked on a build | the own-domain set is a separate tool, and run 3 depends on it |
+| **P3** | **measured** — SciFact **0.7077** with the interfaces in place | — |
+| **P11** | **unstarted** | Stage 1 measured and validated; Stage 2 conversion never tried along its three axes |
+| **P8** | **closed** — BioASQ confirmed; **FEVER explained**: `bm25f` 0.7288 takes −0.121 to −0.0242 | — |
+| **P9** | **closed as a question** — the 0.815 is a *feature gate*; the head alone is 0.5196 | framing decision only |
+| **T8 / T11** | **decided** — T8 rejected by its own falsifier; T11 is a cited build route | — |
 | **on-disk `BM25F`** | **complete, wired, parity-checked; FEVER's row waits on the lock** | `ondisk.OnDiskBM25F` composes one `OnDiskBM25` per field (fields are query-time weights, so a sweep needs no rebuild) and accumulates the union DF at build time — the count is **not** derivable from the per-field DFs (`max` is a lower bound, the sum an upper). **27 tests**, two of them parities: one field with `b=0` reproduces `OnDiskBM25`'s scores exactly, and the on-disk row reproduces `bm25f_rankings` exactly through both the adapter and the CLI |
-| **P6b**, Touché-2020 in the fusion sweep | unstarted | bounded; Touché's corpus build was stopped once already |
+| **P6a / P6b** | **P6a needs a security decision** (`.bin` → safetensors bypass) · **P6b unstarted** | a conversion, or a generation pipeline |
+| **Touché-2020 in the fusion sweep** | **measured** — `touche.json`, fusion **0.3509** vs engine 0.4419 | include it in the analysis |
 | **the `reranker` rows' re-takes beyond SciFact** | partial | SciFact's three are done with a control; the MultiHop pair is done full-protocol; nothing else names a reranker |
 
 **P4 is measured on the full protocol**: with the ordering defect fixed, `bge-reranker-v2-m3` reads
