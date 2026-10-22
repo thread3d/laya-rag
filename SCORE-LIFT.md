@@ -1426,7 +1426,7 @@ index in an initialiser so the mmap is shared, and — before any 51-hour result
 parallel and sequential rankings are identical** on a small corpus. **A faster wrong answer is worth nothing**, which is why
 the equality test comes before the re-run, not after it.
 
-### Verdict: out of reach on this host, with the rate beside the claim
+### The first verdict — **superseded above, kept for the record** — was "out of reach on this host"
 
 The criterion was set before the evidence arrived — *a `scored 250` mark within ~1.5 hours or the configuration is not
 viable* — and it was met with room to spare:
@@ -1487,7 +1487,7 @@ the union pass (28 min) that P2 blamed. **The conclusion survives; the reason is
 
 **The practical consequence is a design choice, not patience**: a published-settings control at this scale needs either a
 cheaper per-query path (prune candidates before the field-weighted scoring, or score a bounded sample and say so), or it
-should be stated as **out of reach on this host** with the measured rate beside the claim. **What it should not be is a
+should be stated as **out of reach single-process** with the measured rate beside the claim — the host is not the constraint, the serial harness is. **What it should not be is a
 seven-hour silence whose outcome nobody can see** — which is what it was until the counter existed.
 
 ### My stall evidence was invalid: the index is mmap'd, so offsets never move
