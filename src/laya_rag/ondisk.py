@@ -55,6 +55,10 @@ _LENGTHS = "lengths.npy"
 _DF = "df.npy"
 #: The accumulated union document frequency, term -> count, for BM25F's IDF.
 _UNION_DF = "union-df.json"
+
+# How many times the query loop may widen its candidate window before returning what it has. See
+# the comment in the deepening loop: unbounded deepening is a filter-selectivity blowup.
+_MAX_DEEPENINGS = 8
 _BM25_META = "meta.json"
 _ANN = "ann.faiss"
 
@@ -972,6 +976,7 @@ class OnDiskVectorIndex:
         # The predicate needs each candidate's path, which lives in its record. Rank a
         # window, read only those records, and deepen if too few survive.
         window = min(self.live_count, k)
+        deepenings = 0
         while True:
             kept: list[Hit] = []
             for score, position in self._rank(query, window, block):
@@ -981,6 +986,13 @@ class OnDiskVectorIndex:
                     if len(kept) >= k:
                         break
             if len(kept) >= k or window >= self.live_count:
+                return kept[:k]
+            # A filter that rejects most candidates re-ranks 4x wider on every retry: k, 4k, 16k, up to
+            # live_count. On FEVER's 5.4M documents that is eleven passes with the last over millions of
+            # positions, measured as a stall (offsets frozen for 620 s, no output for 7 h). Eight rounds
+            # reach 65,536k, far past any selective filter's need, so permissive callers are unaffected.
+            deepenings += 1
+            if deepenings >= _MAX_DEEPENINGS:
                 return kept[:k]
             window = min(self.live_count, max(window * 4, k))
 
