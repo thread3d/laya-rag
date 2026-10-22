@@ -1310,6 +1310,28 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### And "caller-side only" was wrong: the runs share a term-id space
+
+I described the remaining piece as a caller-side change. **Reading the writer refutes that**, and it took one line:
+
+```python
+run_dir = self.directory / "runs"          # self.directory is the FIELD index, <index>/<field>.bm25/
+...
+term_to_id: dict[str, int] = {}            # built fresh by each build()
+```
+
+**Each field's build owns `runs/`, `terms.json`, `ids`, `lengths`, `offsets` and a `term_to_id` mapping that it constructs
+itself.** `_merge_run_group` folds run files of `(term_id, row, tf)` triples — **under the assumption that every run already
+agrees on the term-id space**.
+
+**Two independent writers would each build their own `term_to_id`, so their runs would be mergeable only after a vocabulary
+remap** — which is not what the merge does. **So parallel run generation is a two-phase protocol** (parallel: postings keyed
+by term *string*; serial: unify the vocabulary, then remap and merge), not a caller-side tweak.
+
+**Third optimistic estimate on this task, third refutation** — and the useful part is that it is now *impossible to build the
+wrong thing*: anyone who tries N writers into one `runs/` directory will produce runs with incompatible id spaces and a
+silently wrong index. **`run-{pid}-{i:04d}` is necessary and not sufficient.**
+
 ### The first half has landed, and its safety is verified rather than asserted
 
 `src/laya_rag/ondisk.py` now names runs `run-{pid}-{i:04d}.npy`, so two writer processes spilling into the same `runs/`
