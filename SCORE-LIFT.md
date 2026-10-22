@@ -4756,15 +4756,16 @@ cqadupstack 0.0229, dbpedia-entity 0.0122, fever 0.0096, and nq/signal1m/hotpotq
 Seven of eight deficit-relevant cells are measured, and the eighth (`bioasq`, +0.015, a *winning* cell) cannot move
 the macro — so **P1's arithmetic is done and its remaining run is a coverage claim.**
 
-**What a successor should do first.** **Port `--shard` from `tools/engine_beir.py` into `tools/beir.py`** — that is the one thing
-standing between this document and its last cell, and everything needed for it is specified in §P8: the template
-(`--shard`/`--merge`, `jobkit.parse_shard`, `jobkit.merge_shards` with a caller-supplied `build`), the merge rule
-(**per-query rankings unioned and top-k'd, then scored once — never averaged per-shard metrics**, which is the
-qrels-dilution trap in another form), the reuse (**one shard set for the title row, the field rows and the union DF**),
-and the artefacts already on disk (**`fever.bm25f/` 2.6 GB plus its 33.5 MB union DF**, so the build need not repeat).
-`--jobs` is already done, `fork`-based and verified at 3.25x with identical metrics. **After P8, the remaining work is
-decided, not queued**: P9 is closed as a question, T8 was rejected by its own falsifier, T11 is a cited build route, and six
-CE reports cannot be re-taken at all.
+**Parallelise run *generation* in the on-disk index builder** — that is the one thing standing between this document and
+its last cell. Two checks settled the target after the first specification was refuted: **every ranking function returns ids
+only** (`[hit.chunk_id ...]` drops the score), so a shard merge by top-k is impossible without changing the report schema and
+would be silently wrong on ties; and **the builder already shards the corpus and merges the runs** — `merge 7/7 at this
+level (448 runs)` in the log is that machinery. So the work is to emit runs from several processes over corpus slices,
+leaving the merge and the reporting untouched. Artefacts already on disk mean the build need not repeat: `fever.bm25f/`
+**2.6 GB** with its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the
+scoring phase and is not the answer to the corpus-wide cost. **After this the remaining work is decided, not queued**: P9 is
+closed as a question, T8 was rejected by its own falsifier, T11 is a cited build route, and six CE reports cannot be
+re-taken at all.
 
 **And the automation is verified by dry run rather than assumed.** Running its core commands against *fever's*
 existing report reads the member correctly — `6666` scored queries, `5416568` documents, rows
