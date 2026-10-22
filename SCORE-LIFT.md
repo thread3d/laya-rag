@@ -5025,6 +5025,18 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### P11 is unstarted too — the "only P6 is left" claim was wrong
+
+Writing the remaining-work list three times has now been wrong three times. The fourth item is **P11**, "realise the pool bet
+or close it": Stage 1 is measured and validated (gold-fact coverage **0.8326 → 0.8937**, pool ceiling **0.5955 → 0.6203**,
+both surviving a shuffled-probe control), but **Stage 2 — converting that into MAP@10 — has been attempted once** (a pointwise
+scorer at 0.2939, −0.0198 against the hand rule) **and never along its three named axes**: cross-corpus training, pool-mined
+hard negatives, and a listwise objective.
+
+**So the honest remaining list is: P6a, P6b, P11, and the optional index-build split.** Three of those four need modelling work
+(new model, or a trained ranker) rather than a flag or a file, which is the property they share and the reason they have
+outlived every session that tried to summarise the backlog — **including this one, three times.**
+
 **What is genuinely unstarted**: **P6b** and **P7**, plus Touché-2020 in the fusion sweep — the three standing items that
 were always "never on the critical path". They are bounded, and **two of the reasons they were deferred have since been
 removed**: the Touché corpus build was stopped once for cost, and corpus-wide work is now poolable (`--jobs`, four phases
