@@ -1312,7 +1312,10 @@ prose.
 
 ### P8's FEVER anomaly is largely explained: field weighting closes 80% of the gap
 
-The control row finally exists — `eval/beir/fever-bm25f.json`, **6,666 queries over 5,416,568 documents**:
+The control row finally exists — `eval/beir/subsets/fever-bm25f-control.json`, **6,666 queries over 5,416,568
+documents**. It is filed under `subsets/` deliberately: a top-level report is read by `channel_coverage` as *the member's*
+row, and placing this one there displaced FEVER and moved the nine-tenths figure — two tests caught it within the minute,
+which is the trap in AGENTS.md §5.4 doing exactly what it was written down for.
 
 | row | nDCG@10 | R@10 |
 | --- | ---: | ---: |
