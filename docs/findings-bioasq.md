@@ -123,6 +123,11 @@ make beir BEIR_ARGS="--datasets bioasq --retrievers bm25,bm25-engine --no-downlo
   --out eval/beir/bioasq --lexical-checkpoint --lexical-backend ondisk"
 ```
 
+**On a corpus this size, add `--jobs N` when the run scores a `--bm25f` row.** The scoring pass is one query at a
+time by default; it pools over queries under `--jobs` (fork-based, since macOS otherwise `spawn`s and re-opens the index
+per worker). Verified on `scifact` at `--jobs 4`: the metric dicts differ only in `seconds` (7.34 s → 2.26 s), with
+`nDCG@10` identical. It does **not** accelerate the corpus-wide rows, which remain serial.
+
 | dataset | documents | retriever | nDCG@10 | Recall@10 | nDCG@100 | Recall@100 | MRR@10 | MAP@100 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | bioasq | 14,914,604 | `bm25` (published settings control) | **0.5168** | 0.5342 | 0.5869 | 0.7563 | 0.6049 | 0.4669 |
