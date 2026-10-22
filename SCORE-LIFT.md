@@ -1310,6 +1310,27 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### A fifth serial phase, found by watching for workers and finding none
+
+After wiring `--jobs` into every lexical row and verifying it on scifact, the FEVER run still showed **one process and zero
+children** sixteen minutes in. Checking the branch's line numbers against its `def` (the AGENTS.md §10 check) confirmed the
+wiring was right: `if jobs > 1` at 927 sits inside `bm25_rankings` (876), and at 413 inside `ondisk_bm25f_rankings` (367).
+
+**So the silence is a different phase**: before any row runs, the harness **loads the corpus** — 5.4 M FEVER documents — and
+that step is serial and untouched by `--jobs`. Every pooled row waits behind it.
+
+| phase | pooled | cost |
+| --- | --- | --- |
+| **corpus load (5.4 M docs)** | **no** | the current wait |
+| `bm25` control row | **yes**, verified identical | minutes at 16 workers |
+| `bm25-engine` row | **yes**, verified identical | minutes |
+| `bm25-title` row | **yes**, verified identical | minutes |
+| `bm25f` scoring | **yes** | minutes |
+
+**That is the fifth time in this thread that the phase I parallelised was not the phase the wall clock was in** — and the
+first time the check that found it was the right one: **count the workers under your own pid.** A flag that is correct and
+verified can still be idle because the program has not reached it.
+
 ### And the phase split needs three intermediate artefacts, not one
 
 Reading the tail of `build()` completes the design and rules out the shortcut of a `runs_only` flag:
