@@ -4924,7 +4924,22 @@ two independent writers produce runs that **cannot be merged** without a vocabul
 serially built index and a parallel one are identical** (same postings; same top-k on a probe query), which is the same shape
 as the check that made `--jobs` trustworthy. Artefacts on disk mean the build need not repeat: `fever.bm25f/` **2.6 GB** with
 its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the scoring phase and
-is not the answer to the corpus-wide cost. ### The last unstarted task, costed: P6 is model work, not configuration
+is not the answer to the corpus-wide cost. ### Touché-2020 in the fusion sweep: the row exists, and fusion loses there too
+
+The other half of the standing list was "Touché-2020 in the fusion sweep", deferred because its corpus build was stopped
+once. **The row is already measured** — under the stem `touche.json`, not `webis-touche2020.json`:
+
+| row | nDCG@10 |
+| --- | ---: |
+| `bm25-engine` | **0.4419** |
+| `biencoder` | 0.2202 |
+| `hybrid-biencoder` | 0.3509 |
+
+**So Touché is another cell where fusion is worse than the engine alone (−0.0910)**, which is the point the sweep was meant
+to test — and it agrees with signal1m, the other cell where the fusion loses. **What was "deferred for cost" is a report on
+disk**, and the sweep's remaining work is to include it in the analysis rather than to build the corpus again.
+
+### The last unstarted task, costed: P6 is model work, not configuration
 
 P6 has two halves and neither is a flag:
 
