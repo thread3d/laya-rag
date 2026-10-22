@@ -358,6 +358,7 @@ class OnDiskBM25:
         documents: Iterable[tuple[str, str]],
         block_docs: int = 50000,
         block_tokens: int = 1_000_000,
+        vocabulary: Mapping[str, int] | None = None,
     ) -> None:
         """Stream ``(doc_id, text)`` through sorted runs, then merge to packed form.
 
@@ -378,10 +379,16 @@ class OnDiskBM25:
         self.directory.mkdir(parents=True, exist_ok=True)
         run_dir = self.directory / "runs"
         run_dir.mkdir(exist_ok=True)
-        term_to_id: dict[str, int] = {}
+        # A caller may supply the term -> id mapping so that several writers agree on one id space. That is the
+        # precondition for generating runs in parallel and merging them: `_merge_run_group` folds runs of
+        # (term_id, row, tf) triples and assumes every run already shares the vocabulary. Default None keeps the
+        # single-writer behaviour exactly as it was.
+        term_to_id: dict[str, int] = dict(vocabulary) if vocabulary is not None else {}
         ids: list[str] = []
         lengths: list[int] = []
-        doc_freq: list[int] = []
+        # One slot per known term: an injected vocabulary already owns ids 0..n-1, and the loop below appends a slot
+        # only when it *creates* an id, so the list must start at the vocabulary's size or `doc_freq[tid]` overruns.
+        doc_freq: list[int] = [0] * len(term_to_id)
         runs: list[Path] = []
         # The block holds *entries*, not one `term -> count` dict per document. Term ids are
         # assigned as the documents stream, in the same first-appearance order the deferred
