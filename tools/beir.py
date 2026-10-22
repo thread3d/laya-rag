@@ -345,6 +345,25 @@ def bm25f_rankings(
     }
 
 
+_WORKER: dict[str, object] = {}
+
+
+def _init_worker(index_dir, fields_list, k1, b_fields, weights, drop_stopwords, stem, top_k):
+    """Open the index once per worker. The postings are mmap'd, so forked workers share the pages."""
+    from laya_rag.ondisk import OnDiskBM25F
+
+    _WORKER["index"] = OnDiskBM25F.open(
+        Path(index_dir), fields=fields_list, k1=k1, b_fields=b_fields, weights=weights,
+        drop_stopwords=drop_stopwords, stem=stem,
+    )
+    _WORKER["top_k"] = top_k
+
+
+def _score_chunk(items):
+    index, top_k = _WORKER["index"], _WORKER["top_k"]
+    return [(qid, [hit.chunk_id for hit in index.search(text, k=top_k)]) for qid, text in items]
+
+
 def ondisk_bm25f_rankings(
     fields: Mapping[str, Mapping[str, str]],
     queries: Mapping[str, str],
@@ -360,6 +379,7 @@ def ondisk_bm25f_rankings(
     drop_stopwords: bool = True,
     stem: bool = True,
     rebuild: bool = False,
+    jobs: int = 1,
 ) -> dict[str, list[str]]:
     """The same BM25F row as :func:`bm25f_rankings`, over the on-disk backend.
 
@@ -388,6 +408,26 @@ def ondisk_bm25f_rankings(
             drop_stopwords=drop_stopwords, stem=stem,
         )
         index.build(fields)
+    items = list(queries.items())
+    total_items = len(items)
+    if jobs > 1 and total_items > 1:
+        import multiprocessing as mp
+
+        chunks = [items[j::jobs] for j in range(min(jobs, total_items))]
+        out: dict[str, list[str]] = {}
+        done = 0
+        with mp.Pool(
+            processes=len(chunks),
+            initializer=_init_worker,
+            initargs=(directory, fields_list, k1, b_fields, weights, drop_stopwords, stem, top_k),
+        ) as pool:
+            for part in pool.imap_unordered(_score_chunk, chunks):
+                for qid, hits in part:
+                    out[qid] = hits
+                done += len(part)
+                print(f"  scored {done}/{total_items} queries", flush=True)
+        return out
+
     rankings: dict[str, list[str]] = {}
     total = len(queries)
     for position, (query_id, text) in enumerate(queries.items(), 1):
@@ -1321,6 +1361,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="memory (default) or ondisk: the latter spills BM25 postings to a "
                              "memory-mapped file and is what a multi-million-document corpus "
                              "needs, since the in-memory index keeps a Counter per document")
+    parser.add_argument("--jobs", type=int, default=1,
+                        help="worker processes for the on-disk BM25F scoring pass; the loop is "
+                             "sequential by default and the index is read-only, so it scales")
     parser.add_argument("--embed-chunk", type=int, default=0,
                         help="checkpoint the corpus embedding every N documents so an interrupted "
                              "run resumes instead of restarting; 0 keeps the single-pass behaviour")
@@ -1596,7 +1639,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     k1=args.k1, b=args.b,
                     b_title=args.bm25f_b_title, b_body=args.bm25f_b_body,
                     title_weight=args.title_weight, drop_stopwords=True, stem=args.stem,
-                    rebuild=args.no_cache,
+                    rebuild=args.no_cache, jobs=args.jobs,
                 )
                 bm25f_note += " (on-disk backend)"
             else:
