@@ -1621,7 +1621,11 @@ weight 0.3; **FEVER 0.6323 → 0.6749**, **NQ 0.3118 → 0.3264**, **DBPedia 0.3
 from title-weighted BM25. Every other cell is unchanged, and the title row was a no-op or worse on
 ROBUST04, Signal-1M, Quora and Touché-2020. In every closed cell the row recorded before the pass
 reproduces exactly (SciFact 0.6762, FEVER 0.6323, HotpotQA 0.6352, CQADupStack 0.2988), so the new rows
-are comparable rather than merely higher.
+are comparable rather than merely higher. **On FEVER, genuine per-field weighting does better than title
+repetition**: `bm25f` — separate length normalisation and weight per field — reads **0.7288** against the title
+row's 0.6749 and the flat control's 0.6323, which is **−0.0242 from the published anchor instead of −0.121**.
+The title-repeat trick was a cheap approximation of the same idea; the field-weighted row is what the published
+column actually does.
 **Stronger scorers did not pay off here**: besides the pointwise reranker and the failed fine-tune
 listed above, all three Phase 2 ordering heads lost to the baselines they targeted (topical late
 interaction, relational NLI stance, and a cross-encoder adapted on MuSiQue's own train pairs). And any
