@@ -4924,7 +4924,26 @@ two independent writers produce runs that **cannot be merged** without a vocabul
 serially built index and a parallel one are identical** (same postings; same top-k on a probe query), which is the same shape
 as the check that made `--jobs` trustworthy. Artefacts on disk mean the build need not repeat: `fever.bm25f/` **2.6 GB** with
 its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the scoring phase and
-is not the answer to the corpus-wide cost. ### P7 closed by reading: passage retrieval is **worse** on both long corpora
+is not the answer to the corpus-wide cost. ### The last unstarted task, costed: P6 is model work, not configuration
+
+P6 has two halves and neither is a flag:
+
+- **P6a — SPLADE-v3** instead of the OpenSearch sparse encoder. The reason the latter was chosen is a
+  **packaging** constraint (`transformers` 4.57 refuses `torch.load` of `.bin` under torch 2.2.2, so only
+  `safetensors` checkpoints load), not quality. `naver/splade-v3` ships `.bin`, so this needs a **conversion
+  to safetensors** — a one-off, offline, and then the existing sparse path runs it.
+- **P6b — doc2query** document expansion. This needs a **generation model** (a T5-family checkpoint), a
+  pass over each target corpus to synthesise expansion terms, and an index rebuild — per corpus. On the
+  small sets that is minutes; on the 5M-document ones it is a run of the size this document has just spent
+  a session learning to parallelise.
+
+**So "unstarted" is accurate and the estimate is now concrete**: P6a is a **conversion** (one artefact, then
+re-measure); P6b is a **generation pipeline** (model, passes, rebuilds) that only pays if the expansion text is
+produced once and cached. **Neither is blocked by a flag, a lock, or a missing measurement** — they are the two
+places where this programme would have to add a model to the stack, which is why they have stayed on the
+standing list.
+
+### P7 closed by reading: passage retrieval is **worse** on both long corpora
 
 The measurement already existed and nobody had read it. `eval/beir/passages-long.json`:
 
