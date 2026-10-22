@@ -1310,6 +1310,23 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### And there is a working precedent for the merge, not just a template
+
+`tools/multihop_ce_cache.py` does exactly the shape the port needs:
+
+```python
+merged = jobkit.merge_shards(args.out, args.merge, fingerprint=fingerprint, build=_build_report)
+```
+
+**A `build` callable receives the finished shards and assembles the merged artefact** — which is precisely where a BEIR row
+puts its ranking union: for each retriever and each query, concatenate the shards' hits, keep the top *k* by score, then
+score once against the qrels.
+
+**So the port is a copy of a working pattern rather than a design**: `--shard`/`--merge` and `jobkit.parse_shard` from
+`engine_beir.py`, the `build`-callable merge from `multihop_ce_cache.py`, and the only new code is the ranking union inside
+that callable — which is also the only place a test is genuinely needed, because **a wrong merge produces a plausible
+number rather than an error.**
+
 ### The sharding port, specified: merge *rankings*, never per-shard metrics
 
 Reading the template gives the exact shape and one trap.
