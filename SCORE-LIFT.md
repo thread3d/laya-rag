@@ -4924,7 +4924,26 @@ two independent writers produce runs that **cannot be merged** without a vocabul
 serially built index and a parallel one are identical** (same postings; same top-k on a probe query), which is the same shape
 as the check that made `--jobs` trustworthy. Artefacts on disk mean the build need not repeat: `fever.bm25f/` **2.6 GB** with
 its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the scoring phase and
-is not the answer to the corpus-wide cost. ### P7 attempted and stopped: `bm25-passages@600` is not a harness retriever
+is not the answer to the corpus-wide cost. ### P7 closed by reading: passage retrieval is **worse** on both long corpora
+
+The measurement already existed and nobody had read it. `eval/beir/passages-long.json`:
+
+| dataset | `bm25-engine` (document level) | `bm25-passages@600` | delta |
+| --- | ---: | ---: | ---: |
+| robust04 | 0.4077 | **0.3522** | **−0.0555** |
+| trec-news | 0.3351 | **0.2456** | **−0.0895** |
+
+**So `RANKINGS.md`'s "untested, not disproven" is now tested and disproven**: splitting long documents into 600-character
+passages **loses 0.056 on Robust04 and 0.090 on TREC-NEWS**, on exactly the two corpora the hypothesis was written for, with
+the same retriever and the same qrels. **P7's own falsifier was that long documents would reward decomposition — they do
+not.**
+
+**This is the third task closed by reading an existing artefact rather than running anything** (after P9's AUC and T8's
+eRAG test), and the pattern is worth stating: **the programme has more answers on disk than it has questions open.** My
+attempt to re-run it produced engine-only reports because the retriever name belongs to a path that no longer accepts it —
+whereas the report it was named for has been sitting in `eval/beir/` the whole time.
+
+### P7 attempted and stopped: `bm25-passages@600` is not a harness retriever
 
 P7 looked runnable, so it was tried: `tools/beir.py --datasets robust04 --retrievers bm25-engine,bm25-passages@600`. The run
 completed and wrote a report containing **only `bm25-engine`** — no passages row, no warning.
