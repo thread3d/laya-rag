@@ -4924,8 +4924,13 @@ two independent writers produce runs that **cannot be merged** without a vocabul
 serially built index and a parallel one are identical** (same postings; same top-k on a probe query), which is the same shape
 as the check that made `--jobs` trustworthy. Artefacts on disk mean the build need not repeat: `fever.bm25f/` **2.6 GB** with
 its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the scoring phase and
-is not the answer to the corpus-wide cost. **After this the remaining work is decided, not queued**: P9 is closed as a
-question, T8 was rejected by its own falsifier, T11 is a cited build route, and six CE reports cannot be re-taken at all.
+is not the answer to the corpus-wide cost. **What is genuinely unstarted**: **P6b** and **P7**, plus Touché-2020 in the fusion sweep — the three standing items that
+were always "never on the critical path". They are bounded, and **two of the reasons they were deferred have since been
+removed**: the Touché corpus build was stopped once for cost, and corpus-wide work is now poolable (`--jobs`, four phases
+verified identical); and the FEVER control showed that a field-weighted row can be produced at 5.4M documents in about forty
+minutes once the phases are pooled. **So they are cheaper today than when they were deferred — worth re-estimating before
+starting, not re-reading the old estimate.** Everything else is decided, not queued: P9 is closed as a question, T8 was
+rejected by its own falsifier, T11 is a cited build route, and six CE reports cannot be re-taken at all.
 
 **And the automation is verified by dry run rather than assumed.** Running its core commands against *fever's*
 existing report reads the member correctly — `6666` scored queries, `5416568` documents, rows
