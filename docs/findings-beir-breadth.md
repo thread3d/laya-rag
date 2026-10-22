@@ -85,10 +85,25 @@ drawing rather than assuming. Twelve corpora now have both our number and a publ
 
 **11 of the 17 corpora agree within ±0.02** (7 within ±0.008). ArguAna and HotpotQA sit *above* their
 anchors — HotpotQA by +0.032 on the **full 7,405 queries** (its earlier +0.034 was a 600-query subset,
-now superseded), and **BioASQ by +0.054**, now the largest positive gap and unexplained. **FEVER (−0.121, the largest gap measured by far)**, TREC-NEWS (−0.063),
+now superseded), and **BioASQ by +0.054**, now the largest positive gap and unexplained. **FEVER (−0.121 before the field-weighted control above, the largest gap measured by far)**, TREC-NEWS (−0.063),
 Climate-FEVER (−0.052), Quora
 (−0.020) and NQ (−0.017) sit below. An earlier version of this line claimed "eight of nine agree
 within ±0.008", which was simply a miscount; the table is the record.
+
+**FEVER's −0.121 is now explained, and it was a settings artefact.** A per-field BM25F control on the
+same 6,666 queries and 5,416,568 documents scores **0.7288**, against the flat control's 0.6323 and the
+published 0.753 — so **field weighting closes about 80% of the gap**, leaving **−0.0242**:
+
+| FEVER row | nDCG@10 | gap to published 0.753 |
+| --- | ---: | ---: |
+| `bm25-engine` (flat control) | 0.6323 | **−0.121** |
+| `bm25-title` (title repeated) | 0.7002 | −0.0528 |
+| **`bm25f` (per-field weights)** | **0.7288** | **−0.0242** |
+
+The published column is multi-field and the flat control was not, so the comparison was measuring the
+settings difference and attributing it to retrieval quality. Report: `eval/beir/subsets/fever-bm25f-control.json`.
+The residual 0.0242 is still above both tolerances and is not claimed as noise: corpus release,
+near-duplicate handling and query-set version remain untested (SCORE-LIFT §P8).
 
 **The tempting explanation — that the gap grows with corpus size — is wrong**, and DBPedia is what
 kills it: at 4.6M documents, the largest corpus measured, the gap is −0.008, smaller than SciDocs at
