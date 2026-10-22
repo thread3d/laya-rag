@@ -1310,6 +1310,24 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### Correction: scores are discarded, so a ranking merge needs a schema change — and it is not the right target
+
+Two facts, checked rather than assumed, change the port I specified:
+
+1. **Every ranking function returns `dict[str, list[str]]`** — `[hit.chunk_id for hit in index.search(...)]` drops
+   `hit.score`. **A shard merge by top-k cannot be done from these artefacts**: ranking across shards needs the scores.
+2. **The on-disk builder already shards the corpus and merges the runs** — that is what
+   `merge 7/7 at this level (448 runs)` in the log has been saying all along.
+
+**So corpus-sharded *rows* were the wrong target.** The expensive serial work is the **index build**, and its merge
+machinery — per-field postings merged across runs — already exists and is already used. **What is missing is parallel run
+*generation*, not a rankings merge.**
+
+**That makes the real task smaller and safer than what I specified**: emit index runs from several processes over corpus
+slices (the run format and the merge are both already there), instead of threading a shard flag through the reporting
+layer and inventing a score-carrying ranking format. **A rankings merge would have required changing the report schema and
+would have been silently wrong on ties; run-level parallelism needs neither.**
+
 ### And there is a working precedent for the merge, not just a template
 
 `tools/multihop_ce_cache.py` does exactly the shape the port needs:
