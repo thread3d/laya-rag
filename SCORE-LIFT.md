@@ -114,6 +114,15 @@ feasible deficit is smaller than 0.6154 by whatever fraction of the other eight 
 problem** — and that fraction is unmeasured. **The number is not wrong; it is an upper bound on the
 engineering gap**, and it should be read that way until each cell has had a settings-matched control.
 
+**What the existing sweep says about how big that fraction might be.** `bm25f-w1` through `w12` already
+measure the field-weighted row against the engine row on **five small corpora** — and **none of the five is a
+deficit cell**, so the gap this addresses is genuinely unmeasured there. But the size of the effect is
+informative: the gain is **+0.001 to +0.024** at its best title weight (arguana +0.0238, scidocs +0.0060,
+scifact +0.0067, nfcorpus +0.0011, fiqa 0.0000), against **FEVER's +0.0965**. **So FEVER is an outlier by a
+factor of four**, consistent with it being the cell where a flat control hurt most — and it means the other
+eight cells, if they inflate the deficit at all, probably do so by less than a hundredth each rather than by a
+tenth. **The upper-bound reading survives; its likely size is now bounded from the small-corpus sweep.**
+
 ---
 
 ## 1. Where the numbers actually are
