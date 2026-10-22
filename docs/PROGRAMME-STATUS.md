@@ -52,7 +52,9 @@ Negatives are results here, and these are the ones worth keeping:
    at **0.3640** against a published 0.330) — see `docs/findings-beir-recovered.md`. **Both of the
    "blocked" 5.4M-document corpora are done** as lexical rows: **Climate-FEVER** (nDCG@10 **0.1610**)
    and **FEVER** (**0.6323** over all 6,666 queries, against a published 0.753 — the largest
-   lexical-control gap measured). NQ (2.68M) completed in ~25 min and HotpotQA's full 7,405-query set
+   lexical-control gap measured, and now **~80% explained**: a per-field BM25F control on the same
+   queries and corpus scores **0.7288**, so the gap narrows to **−0.0242** and what looked like a
+   quality deficit was mostly a flat-vs-multi-field settings difference). NQ (2.68M) completed in ~25 min and HotpotQA's full 7,405-query set
    reads **0.6352**; the full **TREC-COVID** collection (171,332 documents, 50 queries) is measured at
    **0.6188** — against a published BM25 of **0.595**. **CQADupStack was never 404 at all** — it is
    twelve independent sub-collections behind one name, which the one-corpus harness could not express,
