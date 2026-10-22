@@ -106,6 +106,14 @@ five datasets), and it is engineering the repo has already built the machinery f
 that does the second lever — a 2025-era encoder, which the current code cannot load *correctly*
 without four small changes — have room to pay.
 
+**One caveat now attaches to that headline, and it is worth stating where the number is quoted.** The
+deficit is computed against published anchors, so **any cell where our row used weaker settings inflates
+it**. FEVER is the case measured: its **−0.121** was ~80% a flat-versus-multi-field settings difference
+(a per-field control scores **0.7288** against the flat 0.6323 and the published 0.753), so **the true
+feasible deficit is smaller than 0.6154 by whatever fraction of the other eight cells has the same
+problem** — and that fraction is unmeasured. **The number is not wrong; it is an upper bound on the
+engineering gap**, and it should be read that way until each cell has had a settings-matched control.
+
 ---
 
 ## 1. Where the numbers actually are
