@@ -4100,12 +4100,12 @@ queries.** The nine cells that sum to 0.6154, with the sample each gap is comput
 | member | gap | scored queries | in the P1 queue? |
 | --- | ---: | ---: | --- |
 | NQ | −0.218 | 3,452 | measured |
-| FEVER | −0.137 | 6,666 | queued |
+| FEVER | −0.137 | 6,666 | measured — and **explained**: field weighting takes it to −0.0242 |
 | DBPedia-entity | **−0.113** | **`hybrid-biencoder`** | **measured — and it DID move the macro** |
-| Climate-FEVER | −0.071 | 1,535 | queued |
+| Climate-FEVER | −0.071 | 1,535 | measured |
 | **TREC-NEWS** | **−0.054** | **57** | **no — adapted dense already** |
 | Robust04 | −0.033 | 249 | no |
-| HotpotQA | −0.030 | 7,405 | queued |
+| HotpotQA | −0.030 | 7,405 | measured |
 | **TREC-COVID** | **−0.024** | **50** | **no — adapted dense already** |
 | CQADupStack | −0.018 | *(nested corpus; not counted here)* | measured |
 
