@@ -4924,7 +4924,23 @@ two independent writers produce runs that **cannot be merged** without a vocabul
 serially built index and a parallel one are identical** (same postings; same top-k on a probe query), which is the same shape
 as the check that made `--jobs` trustworthy. Artefacts on disk mean the build need not repeat: `fever.bm25f/` **2.6 GB** with
 its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the scoring phase and
-is not the answer to the corpus-wide cost. ### P6a's premise checked: the sparse channel is measured, and it pays on two of three
+is not the answer to the corpus-wide cost. ### And the conversion is a security decision, not a build step
+
+`tools/sparse.py` states the constraint in its own docstring: the OpenSearch encoder "ships `safetensors`", while "the SPLADE
+checkpoints on the Hub ship only `pytorch_model.bin`, and transformers 4.57 refuses to [load them]" under torch 2.2.2, which
+is the newest macOS x86_64 wheel.
+
+**So `naver/splade-v3` cannot be loaded by the normal path at all**, and producing a safetensors copy means calling
+`torch.load(..., weights_only=True)` on a `.bin` **deliberately, to bypass the guard that the transformers pin exists to
+enforce** (CVE-2025-32434 is why `.bin` loading was disabled). That is a defensible one-off for a known checkpoint on a known
+machine — and it is **a security judgement, not a build step**, which is exactly the kind of choice an agent should surface
+rather than make quietly at the end of a long session.
+
+**So P6a's first action is a decision, and it is the human's**: convert (accepting the bypass for a pinned, checksummed
+download) or drop SPLADE-v3 and leave the sparse channel at the OpenSearch encoder it has measured. **Both are recorded here;
+neither was taken unilaterally.**
+
+### P6a's premise checked: the sparse channel is measured, and it pays on two of three
 
 Before treating P6a as unstarted, its reports were read — `eval/beir/large-splade-fixed.json` and `splade-small-fixed.json`
 (the two runs of the sparse encoder, differing in the bi-encoder size):
