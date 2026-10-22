@@ -1310,6 +1310,34 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### Correction to the verdict: it is out of reach *single-process*, on a 56-thread machine
+
+The verdict above records the cost but not **why** it is that cost, and the reason changes the conclusion:
+
+```python
+for position, (query_id, text) in enumerate(queries.items(), 1):
+    rankings[query_id] = [hit.chunk_id for hit in index.search(text, k=top_k)]
+```
+
+**That is one query at a time on one core.** `tools/beir.py` and `src/laya_rag/ondisk.py` have no `--shard`,
+no `--jobs`, no `--workers`, no `ProcessPool` — the scoring pass is **sequential by construction**, on a host with
+**28 physical / 56 logical cores**. The index is **read-only and mmap'd**, and each query is independent, so the work is
+**embarrassingly parallel**: a fork shares the mapped pages and the gain is near-linear.
+
+| as measured | 8 workers | 28 workers |
+| --- | ---: | ---: |
+| **> 51 h** at < 2.2 q/min, 1 core | **~6.4 h** | **~1.8 h** |
+
+**So "out of reach on this host" is wrong**: it is out of reach **in a single-process implementation**, and that is an
+engineering limit I recorded as a hardware one — **the same class of error as P2's "impractical as written"**, one layer
+up. The correct statement is **"out of reach single-process; parallelisable and unmeasured."**
+
+**The implementation is specified and the attempt failed safely**: an opt-in `--jobs` on the **on-disk** path only (my
+first attempt landed in the in-memory `bm25f_rankings` instead and was reverted, with the suite green), workers opening the
+index in an initialiser so the mmap is shared, and — before any 51-hour result is trusted — **an equality test that
+parallel and sequential rankings are identical** on a small corpus. **A faster wrong answer is worth nothing**, which is why
+the equality test comes before the re-run, not after it.
+
 ### Verdict: out of reach on this host, with the rate beside the claim
 
 The criterion was set before the evidence arrived — *a `scored 250` mark within ~1.5 hours or the configuration is not
