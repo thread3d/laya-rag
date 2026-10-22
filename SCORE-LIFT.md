@@ -1310,6 +1310,37 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### P8's FEVER anomaly is largely explained: field weighting closes 80% of the gap
+
+The control row finally exists — `eval/beir/fever-bm25f.json`, **6,666 queries over 5,416,568 documents**:
+
+| row | nDCG@10 | R@10 |
+| --- | ---: | ---: |
+| `bm25-engine` (flat control) | 0.6323 | 0.7846 |
+| `bm25-title` (title repeated) | 0.7002 | 0.8214 |
+| **`bm25f` (per-field weights)** | **0.7288** | **0.8421** |
+
+**Against the published anchor of 0.753, the gap falls from −0.121 to −0.0242** — so **field weighting explains about
+80% of FEVER's deviation**, which is precisely the first candidate P8 listed ("the published column is multi-field, the
+control is flat"). This is the largest credibility hole in the benchmark table, and it was **a settings artefact, not a
+defect**.
+
+| measurement | gap to published 0.753 |
+| --- | ---: |
+| flat control (recorded before) | **−0.121** |
+| title repeated | −0.0528 |
+| **per-field weights** | **−0.0242** |
+
+**What this does and does not show.** It shows the harness was comparing a flat BM25 against a multi-field published system
+and attributing the difference to quality. It does **not** claim the remaining 0.0242 is noise: that is still above both
+tolerances (0.008 tight, 0.02 loose), and the residual candidates P8 listed — corpus release, near-duplicate handling,
+query-set version — remain untested. **But the "unidentified" label in `findings-beir-breadth.md` is now wrong**, and the
+monotone progression above is the evidence.
+
+**And the run only finished because of the instrumentation this stretch added**: four pooled phases with verified-identical
+results, a progress counter in the executed function, and the corpus-load phase identified by counting workers rather than
+reading load average. **The number took six hours of wrong instruments and then forty minutes of the right ones.**
+
 ### A fifth serial phase, found by watching for workers and finding none
 
 After wiring `--jobs` into every lexical row and verifying it on scifact, the FEVER run still showed **one process and zero
