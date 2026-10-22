@@ -4889,7 +4889,7 @@ already built and is currently idle.
 
 ### 10.8 Handover — where a new session should start
 
-**State.** HEAD == `origin/main`, clean tree, **1,748 tests pass**, `consistency-check` 47 sites at **18 of 18**,
+**State.** HEAD == `origin/main`, clean tree, **1,752 tests pass**, `consistency-check` 47 sites at **18 of 18**,
 `claim-check` 65 checks, and **no heavy job** — the lock is free. **P1 is closed**: `bioasq` landed after 102.5 h
 (14,914,604 documents at 40.4 docs/s) with `bm25-engine` 0.5193, `hybrid-biencoder` 0.4506 and `biencoder`
 0.2641, so **18 of 18 members carry a dense row** and the lexical-only set is empty. The deficit is unchanged at
