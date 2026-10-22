@@ -1310,6 +1310,26 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### The rate, tightened: < 5.6 queries/min, so ~20 hours for the row
+
+The counter's first mark still had not appeared **45 minutes** after the restart, and only the interpreter remained. That
+tightens the bound by an order of magnitude:
+
+| reading | value |
+| --- | --- |
+| elapsed, no `scored 250/6666` mark | **45 min** |
+| rate | **< 5.6 queries/min** |
+| implied total | **≈ 20 hours** for 6,666 queries |
+
+**Twenty hours is inside this session's remaining budget** (948 rounds at ~9 min ≈ 140 h), so the run is worth letting
+finish rather than abandoning — **which is the first time in this investigation that "wait" has been backed by an
+arithmetic case rather than by hope.**
+
+**And the number itself is the finding**: a field-weighted BM25F control at 5.4 M documents costs **~20 hours of scoring**
+against **28 minutes of union pass**. Anyone planning that control now has the ratio, and the recommendation writes
+itself: **score a bounded sample and label it, or prune before scoring** — because 20 hours per control row is not a
+measurement programme, it is a vigil.
+
 ### Measured: the scoring phase is slower than the phase P2 blamed, by orders of magnitude
 
 With the counter in place, the re-run gives the first **measured** rate for this configuration:
