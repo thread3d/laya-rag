@@ -1290,6 +1290,24 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### And the phase P2 blamed was the *cheap* one
+
+Three hours of observation make the attribution explicit:
+
+| phase | measured here | P2's claim |
+| --- | ---: | --- |
+| field-weighted index build | ~35 min (two merges) | — |
+| **union DF pass** | **~28 min** | "> 2 h 45 m, no output" — the phase blamed for the abandonment |
+| **scoring pass** | **still running after 3 h** | never reached — the run was abandoned at 502/3,452 |
+
+**So the expensive phase is scoring, not the union pass.** P2 attributed the abandonment to the union pass, and this run
+shows that pass completing in **28 minutes** while the *scoring* — the phase P2 never reached — runs for **hours**.
+
+**That is a misattribution of the kind this document keeps finding**: the abandoned run's last visible phase was the one
+named, and the expensive phase never had a chance to be observed. **A verdict about cost must name the phase it measured**,
+and P2's did not — which is why "impractical" migrated from *"this pass"* to *"BM25F at this scale"* without anyone
+noticing the difference.
+
 ### P2's blocker retired: the union pass completed in ~28 minutes, not >2 h 45 m
 
 **`eval/beir/cache/fever.bm25f/union-df.json` now exists — 33.5 MB.** The field-weighted BM25F index for FEVER's 5.4 M
