@@ -1310,6 +1310,24 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### The cheap way out was tested and does not exist: the title channel is mandatory
+
+Before committing to the sharding port, one shortcut was worth testing: the serial bottleneck is the `bm25-title` row, so
+can `--bm25f` be asked for **without** it? The harness refuses:
+
+```
+$ tools/beir.py --datasets scifact --retrievers bm25-engine --bm25f --title-weight 5 --lexical-backend ondisk --jobs 4
+  scored 300/300 queries
+  --bm25f fuses the title-boosted channel, so it needs `bm25-title` in --retrievers (with --title-boost above 1)
+```
+
+**It refuses with the default `--title-boost` too**, so the channel is required unconditionally, and the corpus-wide title
+row has to be computed. **So the sharding port is the only fix**, which is worth knowing before someone spends an afternoon
+looking for a flag combination.
+
+**One useful confirmation in the same output**: `scored 300/300 queries` — **the parallel `bm25f` path does engage** under
+the fork context. So `--jobs` is working and is simply aimed at the smaller half of the wall clock.
+
 ### The sharding design has a template in the tree, and one harness is missing it
 
 The claim above was checked rather than assumed. `--shard` is implemented by **eleven** tools —
