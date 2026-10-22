@@ -1310,6 +1310,36 @@ if window >= self.live_count or deepenings >= _MAX_DEEPEN:
 estimate in this stretch, and the reason the next session should start from `_rank`'s signature rather than from this
 prose.
 
+### Parallelisation: what the research found, and what it says to build instead
+
+The question "can this use the 56 threads" turned out to be two questions, and only the first is a flag.
+
+**1. Start method — found and fixed.** macOS defaults to **`spawn`** since Python 3.8, so a pooled child re-imports and
+re-opens everything: N term dictionaries and N startups. That is why a 28-worker run created **zero** workers, and why
+handing the parent's index to a child through a global raised `KeyError: 'index'` — under `spawn` there is nothing to
+inherit. Under **`mp.get_context("fork")`** the child inherits the parent's memory, so mmap'd postings are shared
+copy-on-write and the dictionary is not duplicated. Verified on scifact at `--jobs 4`: metric dicts differ only in
+`seconds` (**7.34 s → 2.26 s, 3.25x**), nDCG identical.
+
+**2. Where the time actually goes — and it is not the loop I parallelised.**
+
+| phase | parallel before | cost at FEVER |
+| --- | --- | --- |
+| `bm25-title` row | no | **5.4 M documents, serial — the first bottleneck** |
+| bm25f index build | no | ~35 min (done, on disk) |
+| union DF | no | ~28 min (done, 33.5 MB) |
+| `bm25f` scoring | **no → yes** | hours serial; minutes pooled |
+
+**A `--jobs` flag on the scoring loop cannot move a wall clock dominated by a serial corpus pass that runs before it.** The
+FEVER run sits in exactly that phase — `reusing the on-disk lexical index` and nothing after it for tens of minutes.
+
+**So the correct design is corpus-level sharding, not loop-level pooling**: split the corpus into N shards once, let each
+worker build/scan its shard for **every** phase (the title row, the field rows, the union DF), and merge the per-shard
+results at the end. The on-disk backend already has the primitives — `--shard 0/N` exists in the engine tools and the
+per-field indexes are separate files — so the work is threading that through the harness rather than inventing
+concurrency. **Loop-level `--jobs` stays as a cheap win for the scoring phase; it is not the answer to the question
+asked.**
+
 ### Correction to the verdict: it is out of reach *single-process*, on a 56-thread machine
 
 The verdict above records the cost but not **why** it is that cost, and the reason changes the conclusion:
