@@ -405,7 +405,9 @@ class OnDiskBM25:
                 axis=1,
             )
             order = np.lexsort((arr[:, 1], arr[:, 0]))
-            run_path = run_dir / f"run-{len(runs):04d}.npy"
+            # The pid is in the name so several writer processes can spill into the same `runs/` directory
+            # without colliding on "run-0000": the merge takes a list of paths and does not parse names.
+            run_path = run_dir / f"run-{os.getpid()}-{len(runs):04d}.npy"
             np.save(run_path, arr[order])
             runs.append(run_path)
             block_term_ids.clear()
