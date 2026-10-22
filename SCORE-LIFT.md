@@ -1290,6 +1290,34 @@ now confirmed over all 500 queries; FEVER is the largest negative and its dedica
 abandoned at 502 of 3,452. **A successor should start from this file rather than re-deriving which cells disagree** —
 it already says which, by how much, and in whose favour.
 
+### The run was killed for a measured reason, and the artefacts survive
+
+After the process-level probe, the run was stopped — and **this is the first kill in the session made on evidence rather
+than on silence**:
+
+| evidence | value |
+| --- | --- |
+| read offsets, first sample | `92221231` / `92223353` |
+| after 200 s | **identical** |
+| after a further 420 s (620 s total) | **identical** |
+| log output | none for ~7 h |
+| files written | none |
+
+**The process had not advanced a single byte in ten minutes while holding the lock**, which is a stall and not a slow
+phase. It was killed with `SIGTERM`, and **the artefacts that matter survive**:
+
+| artefact | size | what it is |
+| --- | ---: | --- |
+| `eval/beir/cache/fever.bm25f/` | **2.6 GB** | the **field-weighted** index — `title.bm25/` 122.6 MB, `body.bm25/` 2,194.6 MB |
+| `.../union-df.json` | **33.5 MB** | the union document frequency P2 never completed |
+
+**So P2's blocker is retired for good**: the field-weighted index and its union DF were built in **~35 min + ~28 min**, and
+they are on disk. **What stalls is the scoring pass** — the phase P2 never reached and therefore never measured.
+
+**That is the finding, and it is sharper than "BM25F is slow"**: *the estimator works; the scorer hangs.* The next session
+has the index, the union DF, and a precise place to look — the scoring loop's read position, which stops at byte
+**92,221,231** of the title postings and **92,223,353** of the body postings, four offsets frozen together.
+
 ### Measuring the process, not the machine — and what it showed
 
 I spent six hours reading **load average** as evidence that the run was working. **That was wrong twice over**: this host
