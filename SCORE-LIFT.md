@@ -5059,6 +5059,22 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Why the join failed: different URL forms, and a sparse id space
+
+Two facts, both checked, account for the four zero-exclusion attempts:
+
+1. **The two files cover different query sets.** `MultiHopRAG.json` has **2,556** queries; `ce-scores-full.json` has
+   **2,255** with ids spanning **0..2555** — a *sparse* subset, so "query 0" in the cache is the benchmark's query 0 but the
+   n-th cache entry is not the n-th benchmark entry. Any positional assumption is wrong; only the ids are meaningful.
+2. **The URL forms differ.** An evidence URL looks like
+   `https://www.theverge.com/2023/9/28/23893269/ftx-sam-bankman-fried-trial`, while a pool entry is
+   `https://www.theverge.com/2023/9/28/23893269#13` — **the evidence URL carries a slug suffix the pool entry does not**, so the
+   evidence URL is *longer* than the pool entry and `pool_entry.startswith(evidence_url)` is false for every pair.
+
+**So the correct test is the other direction**, `evidence_url.startswith(pool_entry_without_fragment)` — or a path-prefix join
+on the numeric segment. **That is a one-line change to a join, not a fifth patch to a selector**, and it is the piece of
+information the four attempts lacked: **neither file is wrong, and the prefix simply runs the wrong way.**
+
 ### The mapping was attempted and withdrawn: four prefix variants, zero exclusions
 
 `MultiHopRAG.json`'s `evidence_list` carries **`url` + `fact`**, and a hand probe found **29 of query 0's 100 pool entries
