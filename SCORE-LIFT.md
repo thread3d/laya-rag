@@ -5059,6 +5059,18 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### P11's last axis is a filter, not a run
+
+`tools/multihop_ltr.py` has no hard-negative flag, but reading how it loads features shows the axis is smaller than that
+suggests: it takes `--tri-cache` and reads `json.loads(...)["scores"]` — **a per-(query, document) score table already on
+disk**. Mining hard negatives from it is therefore **a selection over existing data** (per query: non-gold candidates ranked
+just below the gold, above a threshold), not a new scoring pass.
+
+**So the remaining axis is: a `--hard-negatives N` flag, a selection function over `scores`, and a retrain** — the retrain
+being minutes on the caches that already exist. **That is a code change with a test, not a build**, which is the third time in
+this session that reading an interface turned "needs a run" into "needs a filter" (after P7's passage rows and the
+`passages@600` retriever name that was never a harness row at all).
+
 ### And the arm that *does* generalise is significant: `blend-0.75` beats `ce` off-corpus
 
 The negative above would be incomplete without the same test applied to the arm that won, so it was run — paired bootstrap
