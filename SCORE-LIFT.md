@@ -5059,6 +5059,26 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The cross-corpus axis closes as a **negative**: the coverage-quota advantage does not transfer
+
+The held-out build finished (2,417 MuSiQue validation queries, 55 minutes) and settles the question:
+
+| arm | **MuSiQue held-out** | MuSiQue train (in-sample) | MultiHop (in-corpus) |
+| --- | ---: | ---: | ---: |
+| `fused` | 0.3852 | 0.4066 | 0.2473 |
+| `ce` | 0.4032 | 0.4312 | 0.2881 |
+| **`blend-0.75`** | **0.4151** | **0.4452** | 0.2975 |
+| `coverage-0.7` | 0.3743 | 0.3861 | — |
+| `covquota-3-0.7` | **0.3984** | 0.4234 | **0.3147** |
+
+**On MultiHop, `covquota` was the best arm and beat `ce` by +0.0266 [+0.0230, +0.0303]. On MuSiQue held-out it is below
+`ce` by −0.0048**, and `blend-0.75` wins on both MuSiQue splits. **So the coverage-quota advantage is corpus-specific, not a
+general conversion of the pool bet** — and the arm that generalises is the plain blend, which was never the headline.
+
+**That is P11's cross-corpus axis, answered: negative.** The honest summary of the pool bet is now: **it converts on MultiHop,
+the conversion does not transfer, and the arm that transfers is a blend that does not need the pool at all.** The remaining
+axis — pool-mined hard negatives — is the only one left, and this result lowers the prior on it paying.
+
 ### The cross-corpus cache is built: 8.4 hours, 19,938 queries, and the arms do not transfer cleanly
 
 `eval/benchmarks/musique/ce-scores-train.json` now exists — the **training** cache for the cross-corpus axis, built in **8.4
