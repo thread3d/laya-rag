@@ -5059,6 +5059,17 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### And a cell with no titles cannot have a field-weighted control at all
+
+`robust04` failed in the chain with `ValueError: cannot mmap an empty file`, and the cause is the corpus, not the code: **its
+`title` field is empty for every document** (`{"_id": …, "text": …, "title": ""}` — five of five sampled). The `title` postings
+index therefore holds no runs, `np.save` writes a zero-byte `.npy`, and `np.load(..., mmap_mode="r")` refuses it.
+
+**So a settings-matched per-field control is only defined where the corpus carries a second field that has content**: it ran on
+`trec-covid` (titles present, 0.6426) and cannot run on `robust04` (no titles). That is a **scope limit on item 3**, not a bug —
+the published multi-field column has a title field to weight, and this corpus does not, so its −0.033 cannot be tested the same
+way until a title-bearing variant of Robust04 is obtained.
+
 ### Item 3, first cell: TREC-COVID's gap is field weighting too
 
 The settings-matched control chain is running; its first result repeats FEVER's pattern on a second deficit cell.
