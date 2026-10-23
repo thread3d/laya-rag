@@ -5069,10 +5069,18 @@ One more read narrows the blocker rather than restating it: `eval/benchmarks/mul
 ```
 
 **So the identity the tri-cache lacks is recoverable from the CE cache**: a candidate is a hard negative if its text is not
-among the query's `golds` and its CE score sits just below them. **What is missing is the scored candidate list alongside
-those golds** — and **I could not confirm where it lives**: there is no `ce-scores-full.jsonl`, and the `.jsonl` files present
-are jobkit manifests for other runs. So the join is expressible in principle and **unverified in its second input**, which is
-where this note stops rather than asserting a path it has not seen.
+among the query's `golds` and its CE score sits just below them. **And the candidates are in the same file**: `queries[qid]` is a dict whose `pool` key holds the candidate identities
+(`https://…#chunk`), beside the gold texts and the scores. So **the join is a single-file filter**:
+
+```
+for qid, block in cache["queries"].items():
+    gold = set(cache["golds"][qid])
+    negatives = [c for c, s in ranked(block) if c not in gold][:N]
+```
+
+**Verified by reading the file, not by inference from its name** — which is where the previous two attempts on this axis went
+wrong: the tri-cache has no identities, and the `.jsonl` I named does not exist. **This one has both, and the mining is a
+selection over it.**
 
 **So the axis is expressible after all — from two files that both exist**, and the mining is a join between them. That is
 neither "a filter" nor "needs a new cache": it is **a join plus a retrain**, and stating which is the difference between a
