@@ -5059,6 +5059,23 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 4 landed: shards union and score exactly, and a partial union is refused
+
+`tools/beir_merge_rankings.py` is the consumer the sidecar was written for. It takes `--dump-rankings` sidecars (never
+reports), unions them per query, and **scores the union once against the full qrels**.
+
+**Validated end to end on a real dataset, not on a fixture**: scifact's 300 queries split into two 150-query shards, merged,
+score **nDCG@10 0.6762 over 300 queries** — identical to the single-run value. **And the refusal works**: merging only one
+shard exits with *"150 qrels queries are unranked by the union — refusing to score a partial set"*, which is the
+qrels-dilution trap stopped before it can produce a number.
+
+**So item 4 is complete in the only form that is safe**: the exchange artefact (`--dump-rankings`), the consumer that unions and
+scores (`beir_merge_rankings.py`), and a four-test offline suite pinning the union semantics — disjoint shards add up,
+duplicates count once, retrievers stay independent, and a metrics report is rejected as a sidecar.
+
+**What is still not built is the shard *producer*** — the `--shard i/n` flag on `beir.py` — and that is now a small, safe piece of
+work rather than a risky one, because the merge and its guard exist to catch it if it is wrong.
+
 ### Item 3, fourth cell: NQ also crosses its anchor
 
 | NQ row | nDCG@10 | gap to the anchor **0.329** |
