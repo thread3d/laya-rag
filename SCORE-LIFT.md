@@ -5059,6 +5059,27 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Correction: the tri-cache carries no document identities, so mining is not a filter after all
+
+Reading the actual file refutes the sentence above. `tri-scores-real-bridge.json` → `scores` is
+**`{query_id: [100 floats]}`** — a flat vector per query, **with no document ids, no ordering and no gold labels**:
+
+```json
+"16": [0.9599, 0.9242, 0.7909, 0.7118, 0.9118, ...]      # 100 values, unsorted, unlabelled
+```
+
+**You cannot mine a hard negative from a vector you cannot attribute to a document.** The axis therefore needs
+**candidate identities** that this cache does not carry — either a richer cache (the CE cache has `(query, doc, score)`), or
+mining at query time against the index.
+
+**That is the fourth time this session that "it is smaller than it looked" was wrong on inspection** — after the ten-line
+index change, the fork-shared global, and the `runs_only` split. **The pattern is consistent enough to state as a rule**: an
+estimate that shrinks on every reading is not converging, it is being talked down; only an estimate that survives a read is
+worth building against.
+
+**So P11's last axis is back to "needs a cache with identities, or mining code against the index"** — not a filter over what
+is on disk.
+
 ### P11's last axis is a filter, not a run
 
 `tools/multihop_ltr.py` has no hard-negative flag, but reading how it loads features shows the axis is smaller than that
