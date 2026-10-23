@@ -5076,6 +5076,29 @@ scores once.** `evaluate_rankings` then sees the whole set, which is the only wa
 remaining runtime is corpus load.** Recorded as specified-not-implemented, with the reason stated, rather than shipped as a
 flag that would silently produce subset scores under full-set names.
 
+### Item 1 solved: the writer is `multihop_rerank_experiment.py`, and the reports reproduce exactly
+
+The writer was never in dispute — it was **recorded in the session logs**, which AGENTS.md §9 says are recoverable and which I had
+not consulted. `grep` across `~/.dsh/sessions/**/session.v3.jsonl.zstd` returns the producing commands verbatim:
+
+```
+python tools/multihop_rerank_experiment.py --cache eval/benchmarks/multihop-rag/ce-scores-full \
+    --out eval/benchmarks/multihop-rag/rerank-experiment-full
+python tools/multihop_rerank_experiment.py --ce-cache …/ce-scores-full.json --out …/rerank-estimator-full
+```
+
+**The tool's docstring says it outright** — *"It reads the cache written by `tools/multihop_ce_cache.py` (no model, no
+network)"* — and its flags are `--cache`, `--samples`, `--top-k`, `--rrf-k`, `--depth-limit`, `--score-threshold`,
+`--atom-lam`, `--seed-k`, `--beam`, `--out`.
+
+**And it reproduces the recorded numbers exactly.** Re-running `rerank-estimator-full` from its cache gives `ce` **0.2948** and
+`fused` **0.2546** — identical to four decimals.
+
+**So the "seven un-re-takeable reports" were never invalidated either.** They do not go through the engine's
+`rerank(order="recall")` path at all: they are cache experiments, and the cache carries the fused ranking in its own order. **My
+flag-count refutation of this writer was wrong because the `_settings` I matched were the *cache's* settings, copied forward —
+not the writer's own flags.** Two rounds of inference lost to one `grep` of a log I knew existed.
+
 ### Item 3, second cell: TREC-NEWS does **not** improve — the settings effect is not universal
 
 | TREC-NEWS row | nDCG@10 | gap to the anchor **0.398** |
