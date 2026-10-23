@@ -5196,6 +5196,17 @@ rather than mines.
 behaviour**, including the refusal and the never-leak-a-gold property; the wiring into training is the remaining step, and it
 can wait until someone has the mapping.
 
+### P6b's model is now in the workspace
+
+The dependency that made P6b the last task is no longer missing: **`castorini/doc2query-t5-base-msmarco` is downloaded**
+into `eval/hf-doc2query` (**864 MB**, six files), fetched with `HF_HOME=$PWD/eval/hf-doc2query` so it lives inside the workspace
+where the sandbox can read it.
+
+**So P6b's first action is now a run, not a dependency.** What remains is the pipeline itself — generate expansion terms per
+corpus, concatenate them to the passage text (the same place `--title-boost` repeats a title), rebuild the index, and measure
+the same rows. **The cost is T5 inference over the corpus**, which on this host is the slow part and the reason the axis was
+never tried; the model download was the part that could be done in two minutes and has been.
+
 ### P6b has no prior art here — it is greenfield, and that is the whole cost
 
 A last mechanical check settles what P6b's cost actually is: **`doc2query` appears in this repository only in two research
