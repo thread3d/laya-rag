@@ -5059,6 +5059,28 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3, fourth cell: NQ also crosses its anchor
+
+| NQ row | nDCG@10 | gap to the anchor **0.329** |
+| --- | ---: | ---: |
+| `bm25-engine` — the member row | 0.3118 | **−0.0172** |
+| `bm25-title` | 0.3201 | −0.0089 |
+| **`bm25f`** | **0.3345** | **+0.0055** |
+
+Report: `eval/beir/subsets/bm25f-nq.json`. The battery after four cells:
+
+| cell | flat gap | per-field gap | reading |
+| --- | ---: | ---: | --- |
+| FEVER | −0.1210 | **−0.0242** | mostly settings |
+| TREC-COVID | −0.0372 | **−0.0134** | mostly settings |
+| DBPedia-Entity | −0.0077 | **+0.0144** | anchor beaten |
+| **NQ** | **−0.0172** | **+0.0055** | **anchor beaten** |
+| **TREC-NEWS** | **−0.0629** | **−0.0653** | **not settings** |
+
+**Four of five tested cells are settings-dominated, two of them enough to beat the published anchor** — and the mean of the five
+per-field gaps is **−0.0106**, against a flat mean of **−0.0512**. **So the headline 0.6154 is not merely an upper bound by
+construction: on the cells tested it overstates the engineering gap by a factor of about five.**
+
 ### Item 4, first half landed: `--dump-rankings` writes the exchange artefact
 
 The merge needs rankings, and a report holds only metrics — so the precondition is a rankings sidecar, and it now exists.
