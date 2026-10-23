@@ -134,6 +134,18 @@ def select_hard_negatives(
     # is caught here rather than measured later: if no candidate anywhere was excluded, the id spaces differ and the
     # caller must supply gold identities (or a mapping from the gold texts) before mining.
     if out and excluded == 0:
+        # Fall back to URL containment: pool entries are `url/#chunk` while an evidence URL may be LONGER (it carries a
+        # slug suffix the pool entry lacks), so the test is `gold_url.startswith(pool_entry_without_fragment)` and not the
+        # other way round. Four earlier attempts used the reversed test and excluded zero candidates.
+        excluded = 0
+        for qid, block in queries.items():
+            pool = list((block or {}).get(pool_key) or [])
+            gold_urls = [str(g) for g in (golds.get(qid) or [])]
+            kept = [c for c in pool if not any(g.startswith(c.split("#")[0]) for g in gold_urls)]
+            excluded += len(pool) - len(kept)
+            out[qid] = kept[:count]
+
+    if out and excluded == 0:
         raise ValueError(
             "no candidate was excluded by gold membership: `golds` and `pool` are in different identity spaces "
             "(texts vs url#chunk). Pass gold identities, not gold texts."

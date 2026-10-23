@@ -5059,6 +5059,25 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The join now works: 6,762 negatives, zero gold leaks
+
+With the prefix reversed, the selector runs on the real cache:
+
+| check | value |
+| --- | --- |
+| queries yielding negatives | **2,254 of 2,255** |
+| negatives selected (3 per query) | **6,762** |
+| **gold leaks** | **0** |
+
+**So P11's last axis has its first component**: `select_hard_negatives(cache, count)` with `golds` supplied as evidence URLs
+returns rank-ordered non-gold candidates, verified leak-free on 6,762 selections. **What remains is the training wiring** —
+`--hard-negatives N` feeding those candidates into the LTR's negatives — and a retrain, which is minutes on the caches that
+exist.
+
+**The four failed attempts were one reversed `startswith`.** That is the cheapest possible bug and the most expensive to find
+by patching, because every variant looked correct at the line and produced a *plausible* result — zero exclusions — that no
+test could distinguish from "this corpus has no gold in its pool".
+
 ### Why the join failed: different URL forms, and a sparse id space
 
 Two facts, both checked, account for the four zero-exclusion attempts:
