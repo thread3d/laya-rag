@@ -5086,8 +5086,17 @@ stayed untried rather than being a five-minute flag change.
 
 **And the tool matters**: `tools/multihop_ce_cache.py` sets `ROOT_BENCH = eval/benchmarks/multihop-rag` — it is
 **hardcoded to MultiHop-RAG** and takes no corpus flag, so it cannot build the MuSiQue cache. That cache came from
-**`tools/musique.py`**, which is what the cross-corpus axis must use. Naming the wrong tool here would have cost a
-session an afternoon before it noticed the hardcoded path.
+**`tools/musique.py`**, which is what the cross-corpus axis must use. **The command is expressible today** — it takes
+`--split`, `--limit-queries`, `--rerank-model`, `--depth`, `--rrf-k`, `--batch-size`, `--out`, so the un-limited training
+cache is
+
+```sh
+.venv/bin/python tools/musique.py --split train --rerank-model BAAI/bge-reranker-base \
+    --depth 100 --out eval/benchmarks/musique/ce-scores-train
+```
+
+and `multihop_ltr.py --ce-cache` points at it for the retrain. **Naming the wrong tool here would have cost a session an
+afternoon before it noticed the hardcoded path**
 
 **And the cache is half-built already**: `eval/benchmarks/musique/` holds `ce-scores-validation.json` and
 `ce-scores-validation-limit.json` — a **validation split**, and the second is a `--limit` subset. So cross-corpus
