@@ -5059,6 +5059,27 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### P11's Stage 2 is already measured — and one arm beats the hand rule
+
+P11's description says the conversion "has been attempted once (a logistic/pointwise scorer at 0.2939 MAP@10, **−0.0198
+against the hand rule**)". `eval/benchmarks/multihop-rag/ltr-full.json` holds that attempt **and four others**:
+
+| approach | MAP@10 | vs the hand rule (0.3137) |
+| --- | ---: | ---: |
+| `fused` | 0.2473 | −0.0664 |
+| `ce` | 0.2881 | −0.0256 |
+| **`ltr`** | **0.2939** | **−0.0198** ← the recorded attempt |
+| `blend-0.75` | 0.2975 | −0.0162 |
+| **`covquota-3-0.7`** | **0.3147** | **+0.0010** |
+
+**So the pool bet's conversion is not "attempted once and failed": a coverage-quota blend of the same signals already lands
++0.0010 above the hand rule**, with the best Hits@10 of any arm (0.8918) as well. **P11's premise — that stage 2 has never been
+realised — is too pessimistic**, and the arm that realises it is the one the document did not name.
+
+**What this does not establish**: +0.0010 is inside any plausible noise band on 1,500 test queries, so this is **not** "P11 won".
+It is: **the conversion is closer than the document says, by a method already in the tree** — and the honest next step is a
+paired bootstrap on `covquota` versus the hand rule, which is a computation over `per_query`, not a new model.
+
 ### P11 is unstarted too — the "only P6 is left" claim was wrong
 
 Writing the remaining-work list three times has now been wrong three times. The fourth item is **P11**, "realise the pool bet
