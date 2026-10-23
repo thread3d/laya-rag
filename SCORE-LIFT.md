@@ -5196,6 +5196,26 @@ rather than mines.
 behaviour**, including the refusal and the never-leak-a-gold property; the wiring into training is the remaining step, and it
 can wait until someone has the mapping.
 
+### And P6b hits the same CVE guard as P6a — the last task is blocked by the decision already taken
+
+Loading the model fails, and with the identical error that stopped SPLADE-v3:
+
+```
+ValueError: Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require
+users to upgrade torch to at least v2.   [CVE-2025-32434]
+```
+
+**`castorini/doc2query-t5-base-msmarco` ships `pytorch_model.bin`**, and torch 2.2.2 is the newest macOS x86_64 wheel — so the
+model cannot be loaded without the same deliberate bypass that was **declined for SPLADE-v3 on 2026-10-21**.
+
+**So P6b is not an open research question; it is the same decision, applied twice.** The reasoning the user gave for P6a holds
+verbatim here — *do not trade a known security guard for an unmeasured model* — and applying it consistently **closes P6b as
+"blocked by the same constraint, decided the same way"**, with the model left on disk in case that decision is ever revisited.
+
+**That is the document's whole backlog resolved**: every task is measured, read, decided, or blocked by one named, already-taken
+decision — and the four `.bin`-dependent directions (SPLADE-v3, doc2query, and the two that would follow them) share that one
+cause rather than four separate ones.
+
 ### P6b's model is now in the workspace
 
 The dependency that made P6b the last task is no longer missing: **`castorini/doc2query-t5-base-msmarco` is downloaded**
