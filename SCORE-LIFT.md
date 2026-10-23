@@ -5059,6 +5059,25 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3, first cell: TREC-COVID's gap is field weighting too
+
+The settings-matched control chain is running; its first result repeats FEVER's pattern on a second deficit cell.
+
+| TREC-COVID row | nDCG@10 | gap to the registered BM25 anchor **0.656** |
+| --- | ---: | ---: |
+| `bm25-engine` — the member row | 0.6188 | **−0.0372** |
+| `bm25-title` | 0.6358 | −0.0202 |
+| **`bm25f` — per-field weights** | **0.6426** | **−0.0134** |
+
+**So field weighting closes about two thirds of TREC-COVID's deviation as well** — −0.0372 to −0.0134 — which is the second
+independent confirmation that the deficit measures settings as much as quality. Report:
+`eval/beir/subsets/bm25f-trec-covid.json`.
+
+**Two caveats stated rather than glossed**: the run records **249 scored queries** where the member report says **50**, yet its
+`bm25-engine` row reproduces the member's **0.6188 exactly** — so the scored set is the same and the field counts something
+different, which I have not explained; and the anchor used here is the registry's `BM25: 0.656`, not the 0.595 quoted in an
+older finding (`published_beir18.py` is the authority and carries several published systems per dataset).
+
 ### Item 1: five of the "un-re-takeable" artefacts were never reports
 
 Classifying every rerank-bearing artefact by whether it carries a `summary` — which is what distinguishes a scored report from
