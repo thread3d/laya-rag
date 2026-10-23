@@ -109,6 +109,9 @@ def main(argv=None) -> int:
                     help="optional bridge-conditioned cache; adds its score as a feature")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--seed", type=int, default=17)
+    ap.add_argument("--hard-negatives", type=int, default=0,
+                    help="train on each query's golds plus this many highest-CE non-gold candidates "
+                         "instead of all of them; 0 keeps every candidate (the recorded behaviour)")
     ap.add_argument("--samples", type=int, default=1000)
     ap.add_argument("--out", default=str(ROOT_BENCH / "ltr"))
     args = ap.parse_args(argv)
@@ -158,6 +161,21 @@ def main(argv=None) -> int:
                 row.append(float(tri[q][i]))
             rows.append(row)
         labels = [1.0 if m else 0.0 for m in matches]
+        if args.hard_negatives and q in train_ids:
+            # Hard negatives are the non-gold candidates nearest the front of the CE ranking: keep every gold and at most
+            # `args.hard_negatives` non-golds, highest CE first. Gold labels already exist for all candidates, so this is a
+            # mask over the arrays below rather than a new join — §P11's last axis.
+            keep: list[int] = []
+            wanted = args.hard_negatives
+            for i in sorted(positions, key=lambda j: -ce[j]):
+                if labels[i] == 1.0:
+                    keep.append(i)
+                elif wanted > 0:
+                    keep.append(i)
+                    wanted -= 1
+            keep.sort()
+            rows = [rows[i] for i in keep]
+            labels = [labels[i] for i in keep]
         if q in train_ids:
             train_rows.extend(rows)
             train_labels.extend(labels)

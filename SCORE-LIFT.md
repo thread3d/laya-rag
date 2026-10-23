@@ -5059,6 +5059,33 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### P11's last axis: negative — restricting training to near-gold negatives collapses the ranker
+
+`--hard-negatives 5` keeps every gold plus the five highest-CE non-golds per query (a mask over the arrays that already
+exist), then retrains. The result is not a small change:
+
+| arm | MAP@10 |
+| --- | ---: |
+| `fused` | 0.2473 |
+| `ce` | 0.2881 |
+| **`ltr` with all candidates** (recorded) | **0.2939** |
+| **`ltr` with 5 hard negatives** | **0.0257** |
+| `blend-0.75` | 0.2975 |
+| `covquota-3-0.7` | 0.3147 |
+
+**0.0257 — an order of magnitude worse, and significantly so** (`ltr vs fused`: −0.2216 [−0.2349, −0.2083]). The mechanism is a
+**distribution shift**: the model is trained on a set where nearly every row is either gold or adjacent to it, then asked at
+test time to rank all 100 candidates, most of which it has never seen the shape of. **The mask taught it a boundary that does
+not exist at inference.**
+
+**So P11 closes**: stage 1 measured and validated, stage 2 **converts on MultiHop with a coverage-quota blend**, **does not
+transfer off-corpus**, and **hard-negative mining as a restriction destroys the ranker**. **Three of the four things P11 was
+asked to try have now been answered, and only one of them positively** — which is the honest shape of a research bet that was
+worth taking and did not pay as hoped.
+
+**What is left is not an axis but a different design**: *weighting* near-gold negatives instead of removing the rest, which
+avoids the shift by keeping the training distribution intact. That is a new hypothesis, not an unfinished experiment.
+
 ### The duplicate is removed, and the axis shrinks to a mask
 
 The redundant selector — and its six tests — are **deleted**, because `gold_matches_for_pool` is the canonical join and a second
