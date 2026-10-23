@@ -84,6 +84,23 @@ Negatives are results here, and these are the ones worth keeping:
    +0.034) is superseded: `tools/compare_more.py` now prefers a full report over a seeded estimate, so
    the lexical control uses the full row.
 
+4. **The two research bets are now answered, and neither paid as hoped.**
+   **P11, the pool bet**: stage 1 is validated (gold-fact coverage **0.8326 → 0.8937**, pool ceiling
+   **0.5955 → 0.6203**), and stage 2 *converts on MultiHop-RAG* — a coverage-quota blend reads **0.3147
+   MAP@10**, significantly above `ce` (**+0.0266 [+0.0230, +0.0303]**) and the learned `ltr`
+   (**+0.0208 [+0.0130, +0.0287]**). But **it does not transfer**: on MuSiQue held-out it is **below
+   `ce`** (0.3984 vs 0.4032), while a plain **`blend-0.75` does transfer** (**+0.0120 [+0.0088,
+   +0.0150]**, n = 2,417) — the arm that generalises does not need the pool. And **hard-negative
+   restriction destroys the ranker**: training on golds plus the five nearest non-golds drops it from
+   **0.2939 to 0.0257** MAP@10, a training/test distribution shift. Reports:
+   `eval/benchmarks/musique/ce-scores-{train,val-full}.json`,
+   `eval/benchmarks/multihop-rag/ltr-hardneg-5.json`; detail in `SCORE-LIFT.md` §P11.
+   **Both `.bin` directions are blocked by the platform, not by choice**: SPLADE-v3 and every
+   doc2query checkpoint on the Hub ship `pytorch_model.bin`, and torch 2.2.2 — the newest macOS
+   x86_64 wheel — is refused by `transformers` 4.57 under CVE-2025-32434. Neither is a tuning
+   question; both would need that guard bypassed, which was declined deliberately. The 864 MB
+   doc2query model is left in `eval/hf-doc2query` in case the platform moves.
+
 **The runs are queued one at a time, and the queue is empty.** Three corpus builds plus a harness
 launched together **crashed this host**; no work was lost (every job resumes), and the rule is now
 enforced by an exclusive lock in 26 long-running tools (`make heavy-status`). All four planned runs
