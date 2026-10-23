@@ -5196,6 +5196,24 @@ rather than mines.
 behaviour**, including the refusal and the never-leak-a-gold property; the wiring into training is the remaining step, and it
 can wait until someone has the mapping.
 
+### Confirmed across the family: no doc2query checkpoint ships safetensors
+
+Before concluding P6b by analogy with P6a, the obvious alternative was checked — **is there a safetensors doc2query model?**
+Neither of the two candidate families has one:
+
+| model | safetensors | `pytorch_model.bin` |
+| --- | --- | --- |
+| `doc2query/msmarco-t5-base-v1` | **none** | yes |
+| `doc2query/all-t5-base-v1` | **none** | yes |
+| `castorini/doc2query-t5-base-msmarco` | **none** | yes (downloaded, refuses to load) |
+
+**So the blocker is not an implementation choice, it is the state of the ecosystem**: every doc2query checkpoint on the Hub that
+matters ships `.bin`, and torch 2.2.2 — the newest macOS x86_64 wheel — is refused by `transformers` 4.57 under CVE-2025-32434.
+
+**That closes P6b on evidence rather than on analogy to P6a**: it is not that the same decision applies, it is that **there is no
+safetensors path to take**, so the decision is the same one because the options are identical. **The 864 MB download is left in
+`eval/hf-doc2query` for the day a safetensors conversion exists or torch moves past 2.2.2 on this platform.**
+
 ### And P6b hits the same CVE guard as P6a — the last task is blocked by the decision already taken
 
 Loading the model fails, and with the identical error that stopped SPLADE-v3:
