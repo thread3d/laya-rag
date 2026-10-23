@@ -5084,7 +5084,12 @@ not consulted. `grep` across `~/.dsh/sessions/**/session.v3.jsonl.zstd` returns 
 ```
 python tools/multihop_rerank_experiment.py --cache eval/benchmarks/multihop-rag/ce-scores-full \
     --out eval/benchmarks/multihop-rag/rerank-experiment-full
-python tools/multihop_rerank_experiment.py --ce-cache …/ce-scores-full.json --out …/rerank-estimator-full
+python tools/multihop_rerank_experiment.py --cache …/ce-scores-full --out …/rerank-estimator-full
+
+(The earliest invocations in the logs spell the cache flag differently — an older name the tool
+no longer declares — and pass the path with its `.json` suffix, which the current parser appends
+itself. Both were corrected before the retake above; `tests/test_docs_tool_flags_exist.py` is what
+caught the first one having been copied into this document.)
 ```
 
 **The tool's docstring says it outright** — *"It reads the cache written by `tools/multihop_ce_cache.py` (no model, no
