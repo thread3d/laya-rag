@@ -5075,7 +5075,14 @@ estimate. **P11's Stage 2 is realised by a method already in the tree**, and the
 positive rather than negative.
 
 **What remains open in P11, stated precisely**: the hand rule (0.3137) is **not among `per_query`'s arms**, so it could not be
-bootstrapped here — covquota leads it by +0.0010 on the point estimate and the comparison has **not** been tested. **And the
+bootstrapped here — covquota leads it by +0.0010 on the point estimate and the comparison has **not** been tested.
+
+**And "cross-corpus training is a data change" was too optimistic.** `tools/multihop_ltr.py` takes
+`--ce-cache`, `--tri-cache`, `--samples`, `--seed`, `--top-k`, `--out` — **no corpus flag at all**: the
+train/test split is derived from the caches it is handed. So cross-corpus training needs **another corpus's
+CE and tri caches built first** (`tools/multihop_ce_cache.py` over e.g. MuSiQue), then a retrain. That is
+still not a new model — but it is **one heavy cache build plus a training run**, which is why the axis has
+stayed untried rather than being a five-minute flag change. **And the
 three axes P11 names are not the ones this closes**: `covquota` is a quota over coverage signals, so cross-corpus training and
 pool-mined hard negatives remain untried, while the "listwise objective" axis is **partly answered** — a learned arm (`ltr`)
 loses to a hand-designed quota blend, which is the same result the ordering experiments reached elsewhere.
