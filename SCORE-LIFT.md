@@ -5076,6 +5076,29 @@ scores once.** `evaluate_rankings` then sees the whole set, which is the only wa
 remaining runtime is corpus load.** Recorded as specified-not-implemented, with the reason stated, rather than shipped as a
 flag that would silently produce subset scores under full-set names.
 
+### Item 3, second cell: TREC-NEWS does **not** improve — the settings effect is not universal
+
+| TREC-NEWS row | nDCG@10 | gap to the anchor **0.398** |
+| --- | ---: | ---: |
+| `bm25-engine` — the member row | 0.3351 | **−0.0629** |
+| `bm25-title` | 0.3339 | −0.0641 |
+| **`bm25f`** | **0.3327** | **−0.0653** |
+
+**Both weighting variants are marginally worse than the flat control**, which is the opposite of FEVER (−0.121 → −0.0242) and
+TREC-COVID (−0.0372 → −0.0134). Report: `eval/beir/subsets/bm25f-trec-news.json`.
+
+**So the deficit is only partly a settings artefact**, and the honest state of the claim is now two-sided:
+
+| cell | flat gap | per-field gap | verdict |
+| --- | ---: | ---: | --- |
+| FEVER | −0.1210 | **−0.0242** | mostly settings |
+| TREC-COVID | −0.0372 | **−0.0134** | mostly settings |
+| **TREC-NEWS** | **−0.0629** | **−0.0653** | **not settings** |
+
+**That is what the control was for**: it converts "the deficit is an upper bound" from a plausible generalisation into a
+**cell-by-cell fact**, and TREC-NEWS is the counter-example that keeps the headline honest — some of its gap is retrieval, and
+a title/field weighting will not close it.
+
 ### And a cell with no titles cannot have a field-weighted control at all
 
 `robust04` failed in the chain with `ValueError: cannot mmap an empty file`, and the cause is the corpus, not the code: **its
