@@ -5059,6 +5059,23 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 4, reassessed: `--shard` buys less than it did, and the design it needs is not a port
+
+The port was specified when the wall clock was dominated by serial corpus-wide rows. That has changed: `--jobs` now pools the
+title row, the control row, the engine row **and** the BM25F scoring, so what `--shard` would add is **cross-*process*
+scaling** — N processes each pooling N workers — and it would pay for it with **N corpus loads** (the one phase `--jobs` cannot
+touch, measured at ~25 minutes on 5.4M documents) and **N index builds**.
+
+**More important, the design cannot be a port of `engine_beir.py`'s flag.** That harness shards because each shard answers a
+disjoint set of queries and its report is over the same membership set; `beir.py`'s report is a *score*, and a sharded score is
+exactly the qrels-dilution trap — a ranking set covering a slice scores every unsampled query as zero. So the correct shape is:
+**each shard ranks its query slice and writes the rankings (not the metrics), and the merge unions the per-query rankings and
+scores once.** `evaluate_rankings` then sees the whole set, which is the only way the number means what it says.
+
+**That is a design with a sidecar artefact and a merge step — not a flag — and its value is now bounded by how much of the
+remaining runtime is corpus load.** Recorded as specified-not-implemented, with the reason stated, rather than shipped as a
+flag that would silently produce subset scores under full-set names.
+
 ### And a cell with no titles cannot have a field-weighted control at all
 
 `robust04` failed in the chain with `ValueError: cannot mmap an empty file`, and the cause is the corpus, not the code: **its
