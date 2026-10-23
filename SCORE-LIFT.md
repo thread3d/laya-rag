@@ -5059,6 +5059,27 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 1: five of the "un-re-takeable" artefacts were never reports
+
+Classifying every rerank-bearing artefact by whether it carries a `summary` — which is what distinguishes a scored report from
+a cache — splits the earlier list in two:
+
+| class | count | members |
+| --- | ---: | --- |
+| **caches / comparison tables** — no `summary`, so never a score to re-take | **5** | `ce-scores`, `ce-scores-full`, `official`, `official-rerank-subset`, `rerank-experiment-retake` |
+| **scored reports** — `summary` present | **28** | 16 of them the P4 family (re-taken), **7** with an unidentified writer |
+
+**So the set that genuinely cannot be re-taken is seven, not six, and the five I had been counting among them were never
+invalidated in the first place** — `ce-scores*` are the CE **caches** the LTR and the estimators read, `official*` are
+comparison tables keyed by configuration, and `rerank-experiment-retake` is the cache my own `multihop_ce_cache.py` run wrote.
+**Nothing was broken in them; they were mis-scoped in the inventory.**
+
+**The seven real ones** — `rerank-bridge`, `rerank-depth20`, `rerank-depth20-thr`, `rerank-estimator-full`,
+`rerank-experiment`, `rerank-experiment-full`, `rerank-qcov` — carry `summary` blocks whose `_settings` match **no tool in the
+tree**: they combine the CE-cache flag set (`model`, `overlap`, `depth`, `rrf_k`, `rerank_model`, `limit_queries`,
+`sample_seed`) with `top_k`, and no tool declares both. **That is the residue item 1 could not close**: the writer is still
+absent, and the corrected count is seven.
+
 ### The weighting variant also fails, and monotonically — which closes the axis properly
 
 The restriction experiment left one variant untried: *weight* the near-gold negatives instead of removing the rest, so the
