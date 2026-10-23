@@ -5071,8 +5071,10 @@ hard negatives, and a listwise objective.
 (new model, or a trained ranker) rather than a flag or a file, which is the property they share and the reason they have
 outlived every session that tried to summarise the backlog — **including this one, three times.**
 
-**What is genuinely unstarted**: **P6b** and **P7**, plus Touché-2020 in the fusion sweep — the three standing items that
-were always "never on the critical path". They are bounded, and **two of the reasons they were deferred have since been
+**What is genuinely unstarted**: **P6b** (doc2query) and **P11** (stage 2 along its three named axes) — the two items that
+need a model added to the stack rather than a flag, a file or a reading. **P6a is closed by decision** (SPLADE-v3 dropped: the
+OpenSearch encoder already pays +0.011/+0.001/−0.002 on the three measured corpora, and the upgrade's only path was bypassing
+the CVE-2025-32434 guard), and **P7 and Touché are closed by reading**. They are bounded, and **two of the reasons they were deferred have since been
 removed**: the Touché corpus build was stopped once for cost, and corpus-wide work is now poolable (`--jobs`, four phases
 verified identical); and the FEVER control showed that a field-weighted row can be produced at 5.4M documents in about forty
 minutes once the phases are pooled. **So they are cheaper today than when they were deferred — worth re-estimating before
