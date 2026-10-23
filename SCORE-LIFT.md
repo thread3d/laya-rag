@@ -5059,6 +5059,17 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### P6b has no prior art here — it is greenfield, and that is the whole cost
+
+A last mechanical check settles what P6b's cost actually is: **`doc2query` appears in this repository only in two research
+notes** (`docs/research/01-chunking-representation-index.md` and its verification), and in **no tool and no report**. So there
+is nothing to re-read, nothing to re-run, and nothing to extend — the task starts with a model download
+(confirmed: the hub cache holds only `bge-*` encoders) and a generation pipeline that does not exist.
+
+**That is why it has survived every session**: it is the one item whose first action is not a file but a dependency. **Both
+remaining tasks are now stated in exactly that form** — P11 is a three-line filter plus a retrain, P6b is a model plus a
+pipeline — and the difference between "unstarted" and "unstartable" is which of those two a successor chooses.
+
 ### But the CE cache does carry identities — as gold passage texts
 
 One more read narrows the blocker rather than restating it: `eval/benchmarks/multihop-rag/ce-scores-full.json` has keys
