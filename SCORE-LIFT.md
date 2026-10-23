@@ -5059,6 +5059,28 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The weighting variant also fails, and monotonically — which closes the axis properly
+
+The restriction experiment left one variant untried: *weight* the near-gold negatives instead of removing the rest, so the
+trained boundary still matches the population it is scored on. `--hard-negative-weight W` duplicates each of the N
+nearest-gold non-golds W-1 extra times and keeps every other row:
+
+| hard-negative weight | `ltr` MAP@10 |
+| ---: | ---: |
+| **0 — every candidate, the recorded baseline** | **0.2939** |
+| 3 | 0.2924 |
+| 8 | 0.2901 |
+| 20 | 0.2780 |
+
+**Monotonically worse as the emphasis grows**, and never better than the baseline. So the failure is not the *distribution
+shift* that destroyed the restriction variant (0.2939 → 0.0257); it is something more basic: **the near-gold negatives carry no
+information this ranker can use** — the two features it has (`ce`, `fused_rank`) already order those candidates correctly, so
+paying more attention to them only distorts the fit.
+
+**That closes P11's last axis with two negatives and no ambiguity**: restriction collapses the ranker, weighting degrades it
+monotonically, and both point the same way — **hard-negative mining is the wrong lever for a two-feature ranker whose features
+already rank.**
+
 ### P11's last axis: negative — restricting training to near-gold negatives collapses the ranker
 
 `--hard-negatives 5` keeps every gold plus the five highest-CE non-golds per query (a mask over the arrays that already

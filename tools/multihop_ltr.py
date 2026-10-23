@@ -109,6 +109,10 @@ def main(argv=None) -> int:
                     help="optional bridge-conditioned cache; adds its score as a feature")
     ap.add_argument("--top-k", type=int, default=10)
     ap.add_argument("--seed", type=int, default=17)
+    ap.add_argument("--hard-negative-weight", type=int, default=0,
+                    help="WEIGHT the --hard-negatives nearest-gold candidates instead of restricting to them: "
+                         "duplicate each one this many extra times, keeping every other row. Restriction was "
+                         "measured to collapse the ranker (0.2939 to 0.0257); this keeps the test distribution.")
     ap.add_argument("--hard-negatives", type=int, default=0,
                     help="train on each query's golds plus this many highest-CE non-gold candidates "
                          "instead of all of them; 0 keeps every candidate (the recorded behaviour)")
@@ -161,7 +165,7 @@ def main(argv=None) -> int:
                 row.append(float(tri[q][i]))
             rows.append(row)
         labels = [1.0 if m else 0.0 for m in matches]
-        if args.hard_negatives and q in train_ids:
+        if args.hard_negatives and not args.hard_negative_weight and q in train_ids:
             # Hard negatives are the non-gold candidates nearest the front of the CE ranking: keep every gold and at most
             # `args.hard_negatives` non-golds, highest CE first. Gold labels already exist for all candidates, so this is a
             # mask over the arrays below rather than a new join — §P11's last axis.
@@ -176,6 +180,20 @@ def main(argv=None) -> int:
             keep.sort()
             rows = [rows[i] for i in keep]
             labels = [labels[i] for i in keep]
+        if args.hard_negatives and args.hard_negative_weight > 0 and q in train_ids:
+            # WEIGHTING rather than restriction. Keep every candidate — so the boundary the model learns matches the
+            # population it is scored on — and duplicate the N nearest-gold non-golds so they pull harder. §P11 measured
+            # the restriction variant collapsing the ranker from 0.2939 to 0.0257 through exactly this distribution shift.
+            hard: list[int] = []
+            wanted = args.hard_negatives
+            for i in sorted(positions, key=lambda j: -ce[j]):
+                if labels[i] == 0.0 and wanted > 0:
+                    hard.append(i)
+                    wanted -= 1
+            extra_rows = [rows[i] for i in hard]
+            for _ in range(args.hard_negative_weight - 1):
+                rows.extend(extra_rows)
+                labels.extend([0.0] * len(extra_rows))
         if q in train_ids:
             train_rows.extend(rows)
             train_labels.extend(labels)
