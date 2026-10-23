@@ -4944,7 +4944,21 @@ two independent writers produce runs that **cannot be merged** without a vocabul
 serially built index and a parallel one are identical** (same postings; same top-k on a probe query), which is the same shape
 as the check that made `--jobs` trustworthy. Artefacts on disk mean the build need not repeat: `fever.bm25f/` **2.6 GB** with
 its **33.5 MB** union DF. `--jobs` (fork-based, **3.25x verified** with identical metrics) already covers the scoring phase and
-is not the answer to the corpus-wide cost. ### And the conversion is a security decision, not a build step
+is not the answer to the corpus-wide cost. ### P6a closed: SPLADE-v3 is dropped, and the sparse channel stays where it is measured
+
+**Decision (2026-10-21, taken by the user): do not convert `naver/splade-v3`. The sparse channel stays at the OpenSearch
+neural-sparse encoder.**
+
+**Why that is the right call rather than avoidance**: the encoder already delivers what P6a was chasing — **+0.0109 on
+arguana, +0.0011 on scifact, −0.0023 on nfcorpus** for the fused row — and the upgrade's only path was **deliberately
+loading a `.bin` checkpoint that the transformers pin blocks to guard CVE-2025-32434**. Trading a known security guard for an
+unmeasured model on a channel that already pays is a bad trade, and "declined after measurement" is a stronger position than
+"untried".
+
+**So P6a is closed, P6b (doc2query) remains unstarted, and the sparse channel's recorded numbers are final for this
+programme** — the three rows above, with the fused row winning two of three.
+
+### And the conversion is a security decision, not a build step
 
 `tools/sparse.py` states the constraint in its own docstring: the OpenSearch encoder "ships `safetensors`", while "the SPLADE
 checkpoints on the Hub ship only `pytorch_model.bin`, and transformers 4.57 refuses to [load them]" under torch 2.2.2, which
