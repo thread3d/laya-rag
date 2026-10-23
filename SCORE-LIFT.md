@@ -5059,6 +5059,28 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### And the tool already had the join — my selector duplicates it
+
+Reading where labels are built ends the investigation with a correction: `main` already computes, for every query,
+
+```python
+pool = list(payload["pool"])
+ce = [float(v) for v in payload["ce"]]                       # the scored candidate list
+matches = gold_matches_for_pool(corpus, pool, cache["golds"][q])   # the gold-vs-pool join
+labels = [1.0 if m else 0.0 for m in matches]
+```
+
+**So the scores are `payload["ce"]` in the same file, and the join is `gold_matches_for_pool` — both already implemented and already
+running.** The selector added this session is a **duplicate** of that join, derived independently, and the four failed prefix
+variants were me rebuilding something the module had solved using a `corpus` argument I did not know it took.
+
+**Which changes the remaining work**: hard negatives are not a join at all — **labels already mark gold versus non-gold for
+all 100 candidates**. "Hard negatives" means *restricting or weighting the negative rows to those near the gold* instead of
+using all of them, i.e. **a mask over `rows`/`labels`**, not a new data structure.
+
+**That is the fourth time on this axis that the answer was already in the file I was editing** — and the first time the
+duplicate was mine, shipped with six tests before the original was found.
+
 ### The join now works: 6,762 negatives, zero gold leaks
 
 With the prefix reversed, the selector runs on the real cache:
