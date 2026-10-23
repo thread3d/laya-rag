@@ -5104,6 +5104,30 @@ network)"* — and its flags are `--cache`, `--samples`, `--top-k`, `--rrf-k`, `
 flag-count refutation of this writer was wrong because the `_settings` I matched were the *cache's* settings, copied forward —
 not the writer's own flags.** Two rounds of inference lost to one `grep` of a log I knew existed.
 
+### Item 3, third cell: dbpedia-entity goes **above** its anchor
+
+| DBPedia-Entity row | nDCG@10 | gap to the anchor **0.313** |
+| --- | ---: | ---: |
+| `bm25-engine` — the member row | 0.3053 | **−0.0077** |
+| `bm25-title` | 0.3151 | **+0.0021** |
+| **`bm25f`** | **0.3274** | **+0.0144** |
+
+**Field weighting does not just close this cell's gap, it inverts it** — the engine row sits marginally below the published
+BM25 and the per-field control sits **1.4 points above it**. Report: `eval/beir/subsets/bm25f-dbpedia-entity.json`.
+
+The picture after three cells is now sharper than "upper bound":
+
+| cell | flat gap | per-field gap | reading |
+| --- | ---: | ---: | --- |
+| FEVER | −0.1210 | **−0.0242** | mostly settings |
+| TREC-COVID | −0.0372 | **−0.0134** | mostly settings |
+| DBPedia-Entity | **−0.0077** | **+0.0144** | **settings overshoot — the anchor is beaten** |
+| **TREC-NEWS** | **−0.0629** | **−0.0653** | **not settings** |
+
+**So the deficit is, in three of four tested cells, a property of the *configuration* rather than the retrieval** — and in one it
+is not. That is a stronger and more useful statement than the single-cell version: it says where to look first (fields) and
+where not to (TREC-NEWS), rather than asserting one direction.
+
 ### Item 1 closed: every row of `rerank-experiment-full` reproduces exactly
 
 Re-running its recorded invocation against the same cache reproduces **all eighteen** arms to four decimals:
