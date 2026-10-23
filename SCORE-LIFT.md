@@ -5059,6 +5059,19 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The duplicate is removed, and the axis shrinks to a mask
+
+The redundant selector — and its six tests — are **deleted**, because `gold_matches_for_pool` is the canonical join and a second
+implementation of it is a liability rather than an asset: two joins that disagree would be the hardest possible bug to find,
+and only one of them is exercised by the tool.
+
+**Suite back to 1,752** (the six tests went with the code they tested), which is the correct direction: **a test that pins a
+duplicate function is six tests' worth of confidence in something that should not exist.**
+
+**So P11's last axis is now, precisely**: in `main`, where `labels = [1.0 if m else 0.0 for m in matches]` marks all 100
+candidates, **restrict or up-weight the negatives nearest the gold** — a mask over existing arrays, using the function that is
+already there. **One mask, one retrain, no new data structures and no new joins.**
+
 ### And the tool already had the join — my selector duplicates it
 
 Reading where labels are built ends the investigation with a correction: `main` already computes, for every query,
