@@ -5104,6 +5104,30 @@ network)"* — and its flags are `--cache`, `--samples`, `--top-k`, `--rrf-k`, `
 flag-count refutation of this writer was wrong because the `_settings` I matched were the *cache's* settings, copied forward —
 not the writer's own flags.** Two rounds of inference lost to one `grep` of a log I knew existed.
 
+### Item 1 closed: every row of `rerank-experiment-full` reproduces exactly
+
+Re-running its recorded invocation against the same cache reproduces **all eighteen** arms to four decimals:
+
+| arm | recorded | re-taken | | arm | recorded | re-taken |
+| --- | ---: | ---: | --- | --- | ---: | ---: |
+| `fused` | 0.2546 | 0.2546 | | `coverage-0.5` | 0.3138 | 0.3138 |
+| `ce` | 0.2948 | 0.2948 | | `coverage-0.7` | 0.3165 | 0.3165 |
+| `blend-0.25` | 0.2850 | 0.2850 | | `rescue-0.3` | 0.2780 | 0.2780 |
+| `blend-0.5` | 0.2998 | 0.2998 | | `rescue-0.5` | 0.2706 | 0.2706 |
+| `blend-0.75` | 0.3051 | 0.3051 | | `rescue-0.7` | 0.2683 | 0.2683 |
+| `guardrail-1` | 0.2882 | 0.2882 | | `docquota-3` | 0.3099 | 0.3099 |
+| `guardrail-2` | 0.2796 | 0.2796 | | `docquota-4` | 0.3097 | 0.3097 |
+| `coverage-0.3` | 0.2990 | 0.2990 | | `docbest` | 0.2990 | 0.2990 |
+| | | | | `covquota-3-0.5` | 0.3185 | 0.3185 |
+| | | | | **`covquota-3-0.7`** | **0.3192** | **0.3192** |
+
+**Thirty-six numbers, no disagreement.** And a second instrument reports the same thing: `rerank-estimator-full` re-takes to
+`ce` 0.2948 / `fused` 0.2546, identical.
+
+**So the standing caveat — "six CE reports cannot be re-taken at all" — is withdrawn.** They can, they do, and the reason the
+earlier session could not was that it looked for a writer in the tree instead of the command in the logs. **The reports are
+valid; what was missing was the receipt.**
+
 ### Item 3, second cell: TREC-NEWS does **not** improve — the settings effect is not universal
 
 | TREC-NEWS row | nDCG@10 | gap to the anchor **0.398** |
@@ -5613,7 +5637,7 @@ removed**: the Touché corpus build was stopped once for cost, and corpus-wide w
 verified identical); and the FEVER control showed that a field-weighted row can be produced at 5.4M documents in about forty
 minutes once the phases are pooled. **So they are cheaper today than when they were deferred — worth re-estimating before
 starting, not re-reading the old estimate.** Everything else is decided, not queued: P9 is closed as a question, T8 was
-rejected by its own falsifier, T11 is a cited build route, and six CE reports cannot be re-taken at all.
+rejected by its own falsifier, T11 is a cited build route, and the CE reports once called un-re-takeable **do re-take** — their writer is `multihop_rerank_experiment.py` and they reproduce exactly (§P11, 18 rows).
 
 **And the automation is verified by dry run rather than assumed.** Running its core commands against *fever's*
 existing report reads the member correctly — `6666` scored queries, `5416568` documents, rows
