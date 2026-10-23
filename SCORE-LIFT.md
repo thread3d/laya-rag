@@ -5059,6 +5059,29 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The cross-corpus cache is built: 8.4 hours, 19,938 queries, and the arms do not transfer cleanly
+
+`eval/benchmarks/musique/ce-scores-train.json` now exists — the **training** cache for the cross-corpus axis, built in **8.4
+hours** (19,938 queries over 84,549 MuSiQue paragraphs, embedding 355 s). Its own summary, **in-sample on the training split**:
+
+| arm | MAP@10 | Hits@10 |
+| --- | ---: | ---: |
+| `fused` | 0.4066 | 0.9375 |
+| `ce` | 0.4312 | 0.9372 |
+| **`blend-0.75`** | **0.4452** | **0.9499** |
+| `coverage-0.7` | 0.3861 | 0.9147 |
+| `covquota-3-0.7` | 0.4234 | 0.9192 |
+
+**The ranking of arms is different on this corpus, and that is the finding.** On MultiHop, `covquota` was the **best** arm
+(0.3147, above `ce`'s 0.2881); here it is **below `ce`** (0.4234 against 0.4312) and well below `blend-0.75`. **So the
+coverage-quota advantage is corpus-specific, not a general improvement** — which is exactly the question the cross-corpus axis
+was built to ask, and the answer arrived before the retrain.
+
+**Two caveats, stated because they decide how far this goes**: these are **in-sample** numbers on the split the cache was
+built for, so they are not a transfer measurement; and the tool's own significance test (`covquota-3-0.7 vs fused`,
+**+0.0169 [+0.0143, +0.0194]**, p=0.0010) is against `fused`, **not** against `ce`. **The transfer test itself needs the
+validation cache**, which is the next build.
+
 ### P11's Stage 2 realised: the coverage-quota arm is significantly better than both baselines
 
 The bootstrap was run over `per_query` (n = 1,128 queries with both arms present, 2,000 resamples, seed 17):
