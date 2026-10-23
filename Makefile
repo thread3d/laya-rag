@@ -84,7 +84,7 @@ TWO_WIKI_ARGS ?=
 GFI_ARGS ?=
 QUANT_ARGS ?= --cache eval/beir/cache/scidocs.bge-small-en-v1.5.cls.npy
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -104,6 +104,7 @@ help:
 	@echo "bench-index-parallel  serial vs threads vs processes on the Laya encoder"
 	@echo "bench-biencoder-parallel  the same for a retrieval-trained bi-encoder"
 	@echo "beir         standard IR metrics on BEIR (nDCG@10, MRR@10, ...)"
+	@echo "beir-merge-rankings  union sharded run sidecars and score the union once"
 	@echo "beir-ablate  sweep fusion weights and rerank depth on BEIR"
 	@echo "beir-atom-channel  does an atomic lexical channel help BEIR fusion?"
 	@echo "beir-coverage  does the coverage selection help BEIR, or only multi-fact corpora?"
@@ -243,6 +244,13 @@ bench-biencoder-parallel:
 # `make beir BEIR_ARGS="--datasets scifact --retrievers bm25"` narrows it.
 beir:
 	OMP_NUM_THREADS=16 $(PY) tools/beir.py $(BEIR_ARGS)
+
+# Union the --dump-rankings sidecars of a sharded run and score the union once against the full qrels.
+# Sharding is only safe this way round: a shard's report is a slice score, and scoring a union that does
+# not cover the qrels counts the rest as zero (see tools/beir_merge_rankings.py).
+BEIR_MERGE_ARGS ?= --dataset scifact --parts
+beir-merge-rankings:
+	$(PY) tools/beir_merge_rankings.py $(BEIR_MERGE_ARGS)
 
 # CQADupStack is twelve sub-collections behind one BEIR name, so it has its own runner: the
 # member's score is the macro-average of the twelve sub-forum scores, which the one-corpus

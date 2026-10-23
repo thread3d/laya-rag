@@ -51,3 +51,14 @@ def test_a_report_is_refused_because_it_has_no_rankings(tmp_path: Path):
         assert "no rankings block" in str(exc)
     else:  # pragma: no cover - the assertion below is the test
         raise AssertionError("a metrics report was accepted as a rankings sidecar")
+
+
+def test_check_mode_needs_no_output_and_reports_coverage(tmp_path: Path, capsys):
+    """The mode to run before committing hours to a sharded sweep: it must not write anything."""
+    a = _sidecar(tmp_path / "a.json", {"q1": ["d1"]})
+    b = _sidecar(tmp_path / "b.json", {"q2": ["d2"]})
+    code = merge.main(["--dataset", "scifact", "--parts", str(a), str(b), "--check"])
+    out = capsys.readouterr().out
+    assert "covers" in out and "qrels queries" in out
+    assert not list(tmp_path.glob("*.json.md"))
+    assert code == 0

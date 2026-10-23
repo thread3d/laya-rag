@@ -47,8 +47,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dataset", required=True, help="BEIR dataset the shards were run over")
     ap.add_argument("--parts", nargs="+", required=True, help="rankings sidecars to union, in order")
     ap.add_argument("--data-root", default=str(beir.ROOT / "eval" / "beir"), help="where corpora live")
-    ap.add_argument("--out", required=True, help="report stem to write")
+    ap.add_argument("--out", help="report stem to write (not needed with --check)")
+    ap.add_argument("--check", action="store_true",
+                    help="report each retriever's coverage of the qrels and exit without scoring; the mode to run "
+                         "before committing hours to a sharded sweep")
     args = ap.parse_args(argv)
+    if not args.check and not args.out:
+        ap.error("--out is required unless --check is given")
 
     dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root), download=False)
     qrels = beir.load_qrels(dataset_dir, split="test")
@@ -56,6 +61,14 @@ def main(argv: list[str] | None = None) -> int:
     if not merged:
         print("no rankings in the parts", file=sys.stderr)
         return 2
+
+    if args.check:
+        for retriever, ranking in merged.items():
+            covered = len(set(qrels) & set(ranking))
+            extra = len(set(ranking) - set(qrels))
+            print(f"  {retriever:14s} covers {covered}/{len(qrels)} qrels queries"
+                  + (f", {extra} ranked ids are not in the qrels" if extra else ""))
+        return 0
 
     results: dict[str, object] = {}
     for retriever, ranking in merged.items():
