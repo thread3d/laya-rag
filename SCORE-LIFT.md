@@ -5059,6 +5059,26 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The mapping was attempted and withdrawn: four prefix variants, zero exclusions
+
+`MultiHopRAG.json`'s `evidence_list` carries **`url` + `fact`**, and a hand probe found **29 of query 0's 100 pool entries
+matching a gold URL** — so the join looked certain. It was not:
+
+| variant | excluded |
+| --- | --- |
+| bare URL prefix | **0** |
+| URL + `'#'` | **0** |
+| fragment-stripped prefix | **0** |
+| fragment-stripped + `'#'` | **0** |
+
+**Each was a patch, not a reading**, and the fourth is where this stops: **the guard still trips**, so no gold can leak into
+training, and the code is unchanged from the committed selector. **The discrepancy is in how query ids map between the two
+files, not in the URLs** — a hand probe on index 0 found 29 matches while the same join inside the function found none, which
+means the ids I looked up were not the ids I compared.
+
+**That is the honest state of P11's last axis**: the selector exists and is safe, the data needed to feed it exists, and the
+join between them is **unresolved** — with four failed variants recorded so a successor does not re-try them in the same order.
+
 ### The selector is written, and it refuses the real cache — which is the useful part
 
 `tools/multihop_ltr.py` now carries `select_hard_negatives(cache, count)`, and running it against
