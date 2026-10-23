@@ -3,6 +3,9 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
+**Version 1.1.1** — the first tagged release; see [`CHANGELOG.md`](CHANGELOG.md) for what it contains and
+what it deliberately does not claim.
+
 Clients meet the engine over a local HTTP service:
 
 ![Architecture: browser, HTTP and MCP clients, and the CLI reach the local Python engine through its three interfaces — an HTTP API on port 8077, an MCP server over stdio or HTTP, and the command line. The engine chunks, embeds and indexes (delete-by-id tombstones, compact reclaims), recalls with dense + BM25 screened by the trust/ACL predicate before fusion and reports the pool's shape, re-ranks and gates answerability with Laya (an optional feature gate, with the bridge-conditioned column opt-in), and returns an evidence bundle with calibrated probabilities, from which an extractive composer emits verbatim spans. Every index mutation is written to a hash-chained audit log. It loads a Laya torch checkpoint, and the caller composes the answer, or not.](docs/architecture.png)
