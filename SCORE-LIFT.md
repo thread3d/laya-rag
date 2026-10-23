@@ -5059,6 +5059,34 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3, fifth cell: climate-fever narrows without closing
+
+| Climate-FEVER row | nDCG@10 | gap to the anchor **0.213** |
+| --- | ---: | ---: |
+| `bm25-engine` — the member row | 0.1610 | **−0.0520** |
+| `bm25-title` | 0.1691 | −0.0439 |
+| **`bm25f`** | **0.1779** | **−0.0351** |
+
+Report: `eval/beir/subsets/bm25f-climate-fever.json`, the largest run in the battery (5.4 M documents, ~2 h with two field
+indexes and a 433-run merge). **Field weighting recovers about a third of this cell's gap** — real, but this one is like
+TREC-NEWS: it does **not** close.
+
+The battery over six cells:
+
+| cell | flat gap | per-field gap | reading |
+| --- | ---: | ---: | --- |
+| FEVER | −0.1210 | −0.0242 | mostly settings |
+| TREC-COVID | −0.0372 | −0.0134 | mostly settings |
+| DBPedia-Entity | −0.0077 | **+0.0144** | anchor beaten |
+| NQ | −0.0172 | **+0.0055** | anchor beaten |
+| TREC-NEWS | −0.0629 | **−0.0653** | not settings |
+| **Climate-FEVER** | −0.0520 | **−0.0351** | **partly settings** |
+
+**Mean flat gap −0.0497, mean per-field gap −0.0197.** So across six measured cells field weighting removes **about 60% of the
+average deviation**, two cells cross above their anchor, two remain meaningfully negative, and one is untouched. **That is the
+most precise statement the evidence supports, and it is not "the deficit is settings" — it is "most of the average deviation is,
+and the residue is unevenly distributed."**
+
 ### Item 4 complete: the producer exists, and both guards fire
 
 `tools/beir.py --shard I/N` now slices the query set, and the whole pipeline is validated end to end **on a real dataset**:
