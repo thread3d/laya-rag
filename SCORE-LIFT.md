@@ -5084,6 +5084,11 @@ CE and tri caches built first** (`tools/multihop_ce_cache.py` over e.g. MuSiQue)
 still not a new model — but it is **one heavy cache build plus a training run**, which is why the axis has
 stayed untried rather than being a five-minute flag change.
 
+**And the tool matters**: `tools/multihop_ce_cache.py` sets `ROOT_BENCH = eval/benchmarks/multihop-rag` — it is
+**hardcoded to MultiHop-RAG** and takes no corpus flag, so it cannot build the MuSiQue cache. That cache came from
+**`tools/musique.py`**, which is what the cross-corpus axis must use. Naming the wrong tool here would have cost a
+session an afternoon before it noticed the hardcoded path.
+
 **And the cache is half-built already**: `eval/benchmarks/musique/` holds `ce-scores-validation.json` and
 `ce-scores-validation-limit.json` — a **validation split**, and the second is a `--limit` subset. So cross-corpus
 training needs the **un-limited** cache over MuSiQue's training split, which is one build rather than two, and
