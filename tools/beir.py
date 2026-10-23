@@ -1442,6 +1442,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                              "only) and hybrid-ensemble (dense models + lexical) rows")
     parser.add_argument("--splade-model", default=None,
                         help="learned-sparse encoder for a splade / hybrid-splade row")
+    parser.add_argument("--dump-rankings", action="store_true",
+                        help="also write each dataset's per-query rankings (query id -> chunk ids) beside the "
+                             "report, so a later run can re-score, merge shards, or inspect retrieval without "
+                             "re-running")
     parser.add_argument("--keep-identical-ids", action="store_true",
                         help="score a retrieved document whose id equals the query id; BEIR "
                              "drops it (ArguAna only), so this makes the row non-comparable")
@@ -1967,6 +1971,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         evalkit.write_json(out.with_suffix(".json"), report)
         print(f"  [{name}] written: {out.with_suffix('.json')} "
               f"({len(report['datasets'])} dataset(s) so far)", flush=True)
+
+        # Optionally keep the rankings themselves. A report holds metrics, which cannot be re-scored or merged;
+        # the rankings can. This is the artefact a sharded run has to exchange, so writing it is the precondition
+        # for any merge step — and it costs one file per dataset.
+        if args.dump_rankings:
+            rankings_path = Path(str(out) + f".{name}.rankings.json")
+            evalkit.write_json(rankings_path, {"dataset": name, "rankings": rankings})
+            print(f"  [{name}] rankings: {rankings_path}", flush=True)
 
     out = Path(args.out)
     evalkit.write_json(out.with_suffix(".json"), report)

@@ -5059,6 +5059,20 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 4, first half landed: `--dump-rankings` writes the exchange artefact
+
+The merge needs rankings, and a report holds only metrics — so the precondition is a rankings sidecar, and it now exists.
+`tools/beir.py --dump-rankings` writes `<out>.<dataset>.rankings.json` as `{dataset, rankings: {retriever: {query id:
+[chunk ids]}}}`.
+
+**Validated on a real run rather than by inspection**: `scifact` reproduces its recorded **0.6762** nDCG@10 and the sidecar
+holds **300 queries** under `bm25-engine`, each with its ranked id list.
+
+**So the shard design now has its first component, and the second is a consumer**: a merge that reads N such sidecars, unions
+them per query, and scores the union once against the full qrels — which is the only shape that avoids the dilution trap
+described above. **What is deliberately still missing is the flag that produces shards**, because a shard's report must not be
+mistaken for a score, and the guard for that belongs with the merge rather than before it.
+
 ### Item 4, reassessed: `--shard` buys less than it did, and the design it needs is not a port
 
 The port was specified when the wall clock was dominated by serial corpus-wide rows. That has changed: `--jobs` now pools the
