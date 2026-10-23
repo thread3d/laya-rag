@@ -798,6 +798,28 @@ recall, so the PQ row is what compression costs, not what the engine loses.
 
 ## Running long jobs: one at a time
 
+### Splitting one long run across processes, safely
+
+`--jobs N` pools the phases inside one process. When that is not enough — a corpus so large that even
+the pooled run is hours — a BEIR sweep can be split across processes, but **only one way round is safe**,
+because `evaluate_rankings` macro-averages over the qrels it is handed: a ranking set that covers one
+shard scores every other query as zero.
+
+```sh
+# each process ranks a disjoint quarter and writes its rankings, not a score
+tools/beir.py --datasets nq --shard 0/4 --dump-rankings --out eval/beir/subsets/nq.shard0
+# … 1/4, 2/4, 3/4 …
+# then one process unions them and scores the union once, against the full qrels
+tools/beir_merge_rankings.py --dataset nq \
+    --parts eval/beir/subsets/nq.shard{0,1,2,3}.nq.rankings.json --out eval/beir/nq
+```
+
+`--shard` **refuses to run without `--dump-rankings`** (a shard's report is a slice score, and only the
+sidecar can be merged back), and the merge **refuses to score a union that does not cover every qrels
+query**. `--check` reports that coverage without writing anything, so the dry run is
+`beir-merge-rankings BEIR_MERGE_ARGS="… --check"`. Verified end to end on scifact: two 150-query shards
+merge to the same **0.6762** nDCG@10 that a single run reads.
+
 **Do not run two corpus-scale jobs on this machine at once.** Three multi-million-document lexical
 builds plus a retrieval harness, launched together, **crashed the host**. Every one was resumable so
 no work was lost, but the crash was avoidable, and this is not a preference: the jobs are I/O- and
