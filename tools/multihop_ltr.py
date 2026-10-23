@@ -102,6 +102,45 @@ def rank_by(scores: Sequence[float]) -> list[int]:
     return sorted(range(len(scores)), key=lambda i: (-float(scores[i]), i))
 
 
+def select_hard_negatives(
+    cache: Mapping[str, Any],
+    count: int,
+    *,
+    gold_key: str = "golds",
+    queries_key: str = "queries",
+    pool_key: str = "pool",
+) -> dict[str, list[str]]:
+    """Per query: the ``count`` highest-ranked non-gold candidates from the CE cache's pool.
+
+    The pool lists a query's candidate identities in retrieval order, so "hard negative" here means "ranked near the
+    gold but not gold" — the cheapest defensible definition, and the one §P11 named. Gold membership is by exact
+    candidate identity; a gold text that is not in the pool contributes nothing, which is a limitation rather than a
+    bug: it means a query can return fewer negatives, never a gold one.
+    """
+    if count < 1:
+        raise ValueError(f"count must be positive, got {count}")
+    golds = cache.get(gold_key) or {}
+    queries = cache.get(queries_key) or {}
+    out: dict[str, list[str]] = {}
+    excluded = 0
+    for qid, block in queries.items():
+        pool = list((block or {}).get(pool_key) or [])
+        gold = set(golds.get(qid) or [])
+        kept = [c for c in pool if c not in gold]
+        excluded += len(pool) - len(kept)
+        out[qid] = kept[:count]
+    # This cache stores `golds` as passage TEXTS and `pool` as `url#chunk` IDENTITIES, so the two never intersect and
+    # every candidate looks non-gold. That failure is silent and would train the ranker to demote correct answers, so it
+    # is caught here rather than measured later: if no candidate anywhere was excluded, the id spaces differ and the
+    # caller must supply gold identities (or a mapping from the gold texts) before mining.
+    if out and excluded == 0:
+        raise ValueError(
+            "no candidate was excluded by gold membership: `golds` and `pool` are in different identity spaces "
+            "(texts vs url#chunk). Pass gold identities, not gold texts."
+        )
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="multihop_ltr.py")
     ap.add_argument("--ce-cache", default=str(ROOT_BENCH / "ce-scores.json"))

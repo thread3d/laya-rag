@@ -5059,6 +5059,26 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The selector is written, and it refuses the real cache — which is the useful part
+
+`tools/multihop_ltr.py` now carries `select_hard_negatives(cache, count)`, and running it against
+`ce-scores-full.json` **raises**:
+
+```
+ValueError: no candidate was excluded by gold membership: `golds` and `pool` are in different identity
+spaces (texts vs url#chunk). Pass gold identities, not gold texts.
+```
+
+**Because they are.** `golds` holds passage *texts*; `pool` holds `url#chunk` *identities*; they never intersect, so a blind
+comparison would call **every** candidate non-gold — including true golds — and **train the ranker to demote correct
+answers, with no metric downstream to reveal it**. That is this session's recurring failure mode, so the function refuses
+rather than mines.
+
+**What that means for P11's last axis**: it is **one mapping away**, not one filter away — the mining needs gold
+*identities*, which is either a chunk-id lookup for the gold texts or a pool-side text field. **Six tests pin the
+behaviour**, including the refusal and the never-leak-a-gold property; the wiring into training is the remaining step, and it
+can wait until someone has the mapping.
+
 ### P6b has no prior art here — it is greenfield, and that is the whole cost
 
 A last mechanical check settles what P6b's cost actually is: **`doc2query` appears in this repository only in two research
