@@ -5059,6 +5059,23 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### But the CE cache does carry identities — as gold passage texts
+
+One more read narrows the blocker rather than restating it: `eval/benchmarks/multihop-rag/ce-scores-full.json` has keys
+`_settings`, `golds`, `queries`, and **`golds` maps each query to its gold passage *texts*** —
+
+```json
+"0": ["Before his fall, Bankman-Fried made himself out to be the Good Boy of crypto — ...", "..."]
+```
+
+**So the identity the tri-cache lacks is recoverable from the CE cache**: a candidate is a hard negative if its text is not
+among the query's `golds` and its CE score sits just below them. **What is missing is the scored candidate list alongside
+those golds**, which lives in the cache's `.jsonl` rather than in this summary.
+
+**So the axis is expressible after all — from two files that both exist**, and the mining is a join between them. That is
+neither "a filter" nor "needs a new cache": it is **a join plus a retrain**, and stating which is the difference between a
+session that starts it and one that rebuilds a cache it already has.
+
 ### Correction: the tri-cache carries no document identities, so mining is not a filter after all
 
 Reading the actual file refutes the sentence above. `tri-scores-real-bridge.json` → `scores` is
