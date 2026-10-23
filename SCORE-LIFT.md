@@ -5126,8 +5126,13 @@ hard negatives, and a listwise objective.
 (new model, or a trained ranker) rather than a flag or a file, which is the property they share and the reason they have
 outlived every session that tried to summarise the backlog — **including this one, three times.**
 
-**What is genuinely unstarted**: **P6b** (doc2query) and **P11** (stage 2 along its three named axes) — the two items that
-need a model added to the stack rather than a flag, a file or a reading. **P6a is closed by decision** (SPLADE-v3 dropped: the
+**What is genuinely unstarted**: **P6b** (doc2query) and **P11** — but P11 is now three quarters answered rather than
+unstarted: its stage 2 **converts** via a coverage-quota blend (**0.3147 MAP@10**, significantly above `ce` by
+**+0.0266 [+0.0230, +0.0303]** and above `ltr` by **+0.0208 [+0.0130, +0.0287]**, paired bootstrap n = 1,128), the
+**listwise axis is partly answered** (a learned `ltr` loses to a hand-designed quota), and what remains is **cross-corpus
+training** (one un-limited cache build on MuSiQue, whose validation cache is already on disk) and **pool-mined hard
+negatives**. The hand rule is above neither arm on record in a testable way: its per-query series is **not on disk**, so that
+comparison is a bootstrap that cannot be run from the reports. **Both survivors therefore need a model or a cache build rather than a flag, a file or a reading.** **P6a is closed by decision** (SPLADE-v3 dropped: the
 OpenSearch encoder already pays +0.011/+0.001/−0.002 on the three measured corpora, and the upgrade's only path was bypassing
 the CVE-2025-32434 guard), and **P7 and Touché are closed by reading**. They are bounded, and **two of the reasons they were deferred have since been
 removed**: the Touché corpus build was stopped once for cost, and corpus-wide work is now poolable (`--jobs`, four phases
