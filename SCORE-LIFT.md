@@ -5082,7 +5082,13 @@ bootstrapped here — covquota leads it by +0.0010 on the point estimate and the
 train/test split is derived from the caches it is handed. So cross-corpus training needs **another corpus's
 CE and tri caches built first** (`tools/multihop_ce_cache.py` over e.g. MuSiQue), then a retrain. That is
 still not a new model — but it is **one heavy cache build plus a training run**, which is why the axis has
-stayed untried rather than being a five-minute flag change. **And the
+stayed untried rather than being a five-minute flag change.
+
+**And the cache is half-built already**: `eval/benchmarks/musique/` holds `ce-scores-validation.json` and
+`ce-scores-validation-limit.json` — a **validation split**, and the second is a `--limit` subset. So cross-corpus
+training needs the **un-limited** cache over MuSiQue's training split, which is one build rather than two, and
+the subset on disk is a screen rather than training data (the catalogue's qrels/subset trap applies to it as
+much as to a score). **And the
 three axes P11 names are not the ones this closes**: `covquota` is a quota over coverage signals, so cross-corpus training and
 pool-mined hard negatives remain untried, while the "listwise objective" axis is **partly answered** — a learned arm (`ltr`)
 loses to a hand-designed quota blend, which is the same result the ordering experiments reached elsewhere.
