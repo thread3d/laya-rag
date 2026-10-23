@@ -5059,6 +5059,27 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### P11's Stage 2 realised: the coverage-quota arm is significantly better than both baselines
+
+The bootstrap was run over `per_query` (n = 1,128 queries with both arms present, 2,000 resamples, seed 17):
+
+| comparison | n | delta MAP@10 | paired 95% CI |
+| --- | ---: | ---: | --- |
+| `covquota` **− `ce`** | 1,128 | **+0.0266** | **[+0.0230, +0.0303]** |
+| `covquota` **− `ltr`** | 1,128 | **+0.0208** | **[+0.0130, +0.0287]** |
+| `covquota` − `fused` | 1,128 | +0.0674 | [+0.0553, +0.0801] |
+
+**All three intervals exclude zero.** So the coverage-quota blend is **significantly better than the cross-encoder
+baseline (+0.0266) and than the logistic-LTR attempt the document records (+0.0208)**, not merely better on the point
+estimate. **P11's Stage 2 is realised by a method already in the tree**, and the honest summary of its first axis is
+positive rather than negative.
+
+**What remains open in P11, stated precisely**: the hand rule (0.3137) is **not among `per_query`'s arms**, so it could not be
+bootstrapped here — covquota leads it by +0.0010 on the point estimate and the comparison has **not** been tested. **And the
+three axes P11 names are not the ones this closes**: `covquota` is a quota over coverage signals, so cross-corpus training and
+pool-mined hard negatives remain untried, while the "listwise objective" axis is **partly answered** — a learned arm (`ltr`)
+loses to a hand-designed quota blend, which is the same result the ordering experiments reached elsewhere.
+
 ### P11's Stage 2 is already measured — and one arm beats the hand rule
 
 P11's description says the conversion "has been attempted once (a logistic/pointwise scorer at 0.2939 MAP@10, **−0.0198
