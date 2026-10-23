@@ -5059,6 +5059,23 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 4 complete: the producer exists, and both guards fire
+
+`tools/beir.py --shard I/N` now slices the query set, and the whole pipeline is validated end to end **on a real dataset**:
+
+| step | result |
+| --- | --- |
+| `--shard 0/2 --dump-rankings` | **150 queries**, exit 0 |
+| `--shard 1/2 --dump-rankings` | **150 queries**, exit 0 |
+| `beir_merge_rankings.py` over both sidecars | **nDCG@10 0.6762 over 300 queries** — identical to the single run |
+
+**And both guards fire**, which is what makes it safe rather than merely working:
+
+- `--shard 0/2` **without** `--dump-rankings` → **exit 2**, *"a shard's report is a slice score, and only the rankings sidecar can be merged back into a dataset score"*;
+- `--shard 5/2` → **exit 2**, *"I must satisfy 0 <= I < N"*.
+
+**So item 4 is finished in the form it had to take**: the producer refuses to make an unmergeable shard, the merge refuses to score an incomplete union, and the two refusals bracket the one defect — the diluted mean — that this repository has paid for four times.
+
 ### Item 4 landed: shards union and score exactly, and a partial union is refused
 
 `tools/beir_merge_rankings.py` is the consumer the sidecar was written for. It takes `--dump-rankings` sidecars (never

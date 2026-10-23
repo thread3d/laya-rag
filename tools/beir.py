@@ -1442,6 +1442,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                              "only) and hybrid-ensemble (dense models + lexical) rows")
     parser.add_argument("--splade-model", default=None,
                         help="learned-sparse encoder for a splade / hybrid-splade row")
+    parser.add_argument("--shard", default=None, metavar="I/N",
+                        help="rank only query slice I of N (0-based). Requires --dump-rankings: a shard's report is "
+                             "not a dataset score, and the sidecar is what makes its work mergeable")
     parser.add_argument("--dump-rankings", action="store_true",
                         help="also write each dataset's per-query rankings (query id -> chunk ids) beside the "
                              "report, so a later run can re-score, merge shards, or inspect retrieval without "
@@ -1585,6 +1588,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             qrels = restrict_qrels(qrels, queries)
             print(f"  SUBSET RUN: {len(queries)} of {total} qrels queries, seed {args.query_seed} "
                   f"-- not comparable to a full-set published figure", flush=True)
+        if args.shard:
+            try:
+                shard_index, shard_count = (int(part) for part in args.shard.split("/"))
+            except ValueError:
+                print(f"--shard wants I/N, got {args.shard!r}", file=sys.stderr)
+                return 2
+            if not 0 <= shard_index < shard_count:
+                print(f"--shard {args.shard}: I must satisfy 0 <= I < N", file=sys.stderr)
+                return 2
+            if shard_count > 1 and not args.dump_rankings:
+                print("--shard needs --dump-rankings: a shard's report is a slice score, and only the rankings "
+                      "sidecar can be merged back into a dataset score", file=sys.stderr)
+                return 2
+            ordered = sorted(queries)
+            queries = {qid: queries[qid] for qid in ordered[shard_index::shard_count]}
+            qrels = restrict_qrels(qrels, queries)
+            print(f"  SHARD {shard_index}/{shard_count}: {len(queries)} queries -- merge the sidecars with "
+                  f"tools/beir_merge_rankings.py; this report is a slice, not a dataset score", flush=True)
         print(f"  {len(corpus)} documents, {len(queries)} scored queries", flush=True)
 
         cache_dir = data_root / "cache"
