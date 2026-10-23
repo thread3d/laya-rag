@@ -5059,6 +5059,25 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### And the arm that *does* generalise is significant: `blend-0.75` beats `ce` off-corpus
+
+The negative above would be incomplete without the same test applied to the arm that won, so it was run — paired bootstrap
+over the held-out cache's `per_query` (n = 2,417, 2,000 resamples, seed 17):
+
+| comparison | n | delta MAP@10 | paired 95% CI |
+| --- | ---: | ---: | --- |
+| **`blend-0.75` − `ce`** | 2,417 | **+0.0120** | **[+0.0088, +0.0150]** |
+| `blend-0.75` − `fused` | 2,417 | +0.0299 | [+0.0242, +0.0358] |
+
+**Both exclude zero.** So the story is not "the pool bet failed and nothing works": **a plain blend of the same signals is
+significantly better than the cross-encoder on a corpus it was not tuned on**, by **+0.0120** with an interval that excludes
+zero. **What failed is the pool-specific arm, not the blending idea** — and the distinction is exactly what a transfer test
+exists to draw.
+
+**The honest reading of P11's whole first axis, then**: blending pays and transfers; the *coverage-quota* form of it does not.
+The remaining axis — pool-mined hard negatives — is the one thing that would change the pool's contribution rather than the
+blend's weights.
+
 ### The cross-corpus axis closes as a **negative**: the coverage-quota advantage does not transfer
 
 The held-out build finished (2,417 MuSiQue validation queries, 55 minutes) and settles the question:
