@@ -1823,7 +1823,11 @@ The update is compatibility-verified end to end: the full offline suite (1764 pa
 `make lint`, `make claim-check` (65 checks), `make consistency-check` (47 sites at 18/18 coverage),
 `make doctor` (the multilingual checkpoint loads, embedding dim 768), the real-weights suite (4
 passed), and an index+query smoke over `vendor/laya/docs` (341 chunks from 37 files) returning
-evidence.
+evidence. A controlled before/after on that same index — the same two questions asked at the previous
+pin and at v0.4.14 — returns identical answerability (0.8747 and 0.5928) and identical relevance per
+passage (largest absolute difference 0.0), so the exercised path is behaviourally unchanged at smoke
+scale; the rerank stage's wall time on this shared host was also unchanged within noise (22.1–22.3 s
+at the previous pin, 22.0–23.9 s here, three runs each).
 
 Measurements quoted in this README and in `docs/findings-*.md` were produced under Laya **0.3.23**;
 the submodule was updated to **0.3.28**, then **0.4.0**, then **0.4.14** afterwards, and each update
