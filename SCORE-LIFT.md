@@ -5059,6 +5059,37 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3: doc2query pays +0.0095 and costs 500 hours at corpus scale
+
+The converted doc2query model generated three expansion terms per document for scifact (5,183 documents, **1,745 s**), the
+expansions were concatenated to each document's text, and the same lexical row was measured on the expanded corpus:
+
+| corpus | `bm25-engine` nDCG@10 | vs base |
+| --- | ---: | ---: |
+| `scifact` (base) | 0.6762 | — |
+| **`scifact-d2q`** (3 expansions/document) | **0.6857** | **+0.0095** |
+
+**So it pays** — the only `.bin`-dependent direction that does: SPLADE-v3-distilbert was neutral (+0.0004), and this is a real
+gain from query-side terms injected into the document side.
+
+**And the cost decides it.** Expansion ran at **3.0 documents/s** on this host, measured across 1,745 seconds:
+
+| corpus | documents | expansion time at 3.0 docs/s |
+| --- | ---: | ---: |
+| scifact | 5,183 | **29 min** (measured) |
+| TREC-COVID | 171,332 | ~16 h |
+| HotpotQA | 5,233,329 | **~20 days** |
+| Climate-FEVER | 5,416,568 | **~21 days** |
+
+**So doc2query is affordable exactly where it matters least**: a 5k-document corpus where +0.0095 is worth 29 minutes, and a
+5.4M-document corpus where the same +0.0095 would cost three weeks. **That is the answer to whether it pays**: yes on quality,
+no on economics at the scale the deficit lives at — and the honest recommendation is that it is worth re-testing only if
+expansion moves to the MPS path or a smaller student model, not by spending three weeks of CPU.
+
+**Item 3 therefore closes with three results, one of them positive**: the converter is delivered and validated on both models;
+the sparse channel pays **+0.0338** but through the encoder already in the tree; and doc2query pays **+0.0095** at a price that
+scales to weeks. **The `.bin` blocker was real, removing it was worth doing, and what it unlocked is only partly worth having.**
+
 ### Item 3: the sparse channel pays — but not with the model the converter unlocked
 
 Two encoders through the same harness on the same corpus (`tools/beir.py --splade-model`, scifact, 5,183 documents):
