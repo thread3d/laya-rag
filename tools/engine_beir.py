@@ -126,6 +126,20 @@ def resolve_index_dir(args: argparse.Namespace) -> Path:
     return Path(args.index_dir) if args.index_dir else index_dir(args)
 
 
+def engine_version() -> str:
+    """The vendored Laya version this run measured, so a bump's effect is readable from the report.
+
+    Without it a report cannot say which engine produced it, and comparing versions means re-running the
+    old one — which is what had to be done by hand for the 0.4.0 to 0.4.14 check.
+    """
+    try:
+        import laya
+
+        return str(getattr(laya, "__version__", "unknown"))
+    except Exception:  # noqa: BLE001 - a missing engine must not break a settings block
+        return "unavailable"
+
+
 def _ingest_settings(args: argparse.Namespace) -> dict[str, Any]:
     """The knobs that shape the index rather than the query, for the index's identity record."""
     return {
@@ -180,7 +194,7 @@ def _build_report(rows: dict, args: argparse.Namespace, qrels: Mapping[str, Any]
     evaluation = evalkit.evaluate_rankings(rankings, qrels, k_values=(10,),
                                            ignore_identical_ids=True)
     return {
-        "_settings": {**vars(args), "index_identity": identity},
+        "_settings": {**vars(args), "index_identity": identity, "laya_version": engine_version()},
         "documents": corpus_size,
         "queries": len(rankings),
         "summary": evaluation["summary"],
@@ -323,7 +337,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run = jobkit.ResumableRun(str(stem) + ".json", fingerprint=fingerprint,
                               shard=(shard_index, shard_count))
     if jobkit.META_KEY not in run:
-        run.record(jobkit.META_KEY, {"_settings": {**vars(args), "index_identity": identity},
+        run.record(jobkit.META_KEY, {"_settings": {**vars(args), "index_identity": identity, "laya_version": engine_version()},
                                      "sparse": config.sparse_enabled})
 
     mine = jobkit.shard_items(list(test_queries), shard_index, shard_count)
@@ -344,7 +358,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if qid != jobkit.META_KEY}
     evaluation = evalkit.evaluate_rankings(rankings, qrels, k_values=(10,), ignore_identical_ids=True)
     payload = {
-        "_settings": {**vars(args), "index_identity": identity},
+        "_settings": {**vars(args), "index_identity": identity, "laya_version": engine_version()},
         "documents": len(corpus),
         "queries": len(rankings),
         "sparse": config.sparse_enabled,

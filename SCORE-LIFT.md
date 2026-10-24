@@ -5059,6 +5059,32 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Laya 0.4.0 → 0.4.14: quality unchanged, about 6% faster
+
+The vendored engine moved from `0362118` (v0.4.0-34) to `f903b49a` (v0.4.14). A bump is compatibility-verified here but **not
+measurement-re-verified**, so the same engine row was run twice — `tools/engine_beir.py --dataset scifact`, fresh index per
+version, identical flags — rather than comparing against a 0.3.23-era record.
+
+| | **0.4.0** | **0.4.14** | delta |
+| --- | ---: | ---: | ---: |
+| nDCG@10 | 0.7277 | **0.7301** | **+0.0024 [−0.0028, +0.0088]** |
+| Recall@10 | 0.8371 | 0.8364 | −0.0007 |
+| MRR@10 | 0.6999 | 0.7038 | +0.0039 |
+| MAP@100 | 0.6868 | 0.6904 | +0.0036 |
+| 300 queries | 666 s | **624 s** | **−6%** |
+| index build (5,183 docs / 9,986 chunks) | 76 s | 78 s | +2 s |
+
+**The honest answer to "do the scores improve" is no**: **+0.0024 nDCG@10 with an interval that crosses zero**, and **only 11 of
+300 queries changed at all** — 289 are identical to the last digit. The point estimate leans up, the other three metrics lean up
+by similar amounts, and none of it is separable from noise at n = 300.
+
+**What did change measurably is speed**: 666 s → 624 s, about **6%** on the same index and queries. The index build did not
+improve (76 → 78 s).
+
+**And the re-run was necessary only because the reports could not answer it.** `tools/engine_beir.py` wrote `_settings` but not
+the engine version, so comparing two versions meant checking the submodule out twice. It now stamps **`laya_version`** into every
+settings block, so the next bump is one run and one read.
+
 ### Item 3: doc2query pays +0.0095 and costs 500 hours at corpus scale
 
 The converted doc2query model generated three expansion terms per document for scifact (5,183 documents, **1,745 s**), the
