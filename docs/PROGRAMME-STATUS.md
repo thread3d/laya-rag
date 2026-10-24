@@ -112,6 +112,12 @@ have now finished, one at a time: **Climate-FEVER → FEVER → HotpotQA → 2Wi
 
 ## Newest results (2026-10-06 pass)
 
+**Settings-matched controls, seven cells (2026-10-21).** A per-field BM25F control against each cell's registered
+anchor moves the mean gap from **−0.0379 to −0.0080** — four fifths of the average deviation was configuration, and
+three of the seven cells now sit at or above their published anchor. Two (TREC-NEWS, Climate-FEVER) still lose ground, and
+**Robust04 cannot be tested at all**: its corpus carries no titles, so there is no second field to weight. That is the
+measurement behind "the 0.6154 deficit is an upper bound", and it is a cell-by-cell fact rather than a generalisation.
+
 - **The owed bridge-conditioned gate column is measured, and it is a negative.** Adding
   `bridge_conditioned` (the query's own top passage as the bridge, max conditioned score over the
   rest) to the twelve-feature answerability gate moves AUC **−0.0023 [−0.0032, −0.0014]** and
