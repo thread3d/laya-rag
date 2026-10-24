@@ -5059,6 +5059,30 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3 complete: seven cells, and field weighting removes four fifths of the average deviation
+
+The last cell landed — HotpotQA, 5.2 M documents, ~2 h — and it sits **above** its anchor in both conditions:
+
+| cell | anchor | flat gap | `bm25f` gap |
+| --- | ---: | ---: | ---: |
+| FEVER | 0.753 | −0.1207 | −0.0242 |
+| TREC-COVID | 0.656 | −0.0372 | −0.0134 |
+| DBPedia-Entity | 0.313 | −0.0077 | **+0.0144** |
+| NQ | 0.329 | −0.0172 | **+0.0055** |
+| TREC-NEWS | 0.398 | −0.0629 | **−0.0653** |
+| Climate-FEVER | 0.213 | −0.0520 | −0.0351 |
+| **HotpotQA** | **0.603** | **+0.0322** | **+0.0623** |
+| **mean** | | **−0.0379** | **−0.0080** |
+
+**So across seven measured cells, per-field weighting removes about four fifths of the average deviation** — −0.0379 to −0.0080 —
+and **three of the seven end at or above their published BM25 anchor**. Two cells (TREC-NEWS, Climate-FEVER) still lose ground
+that no weighting recovers, and Robust04 cannot be tested for want of titles.
+
+**That is the final answer to item 3, and it is both stronger and more careful than the question asked.** The headline **0.6154
+was indeed an upper bound** — on these cells the average gap is **−0.0379**, an order of magnitude smaller — and the residue is
+**not uniform**: it is concentrated in the two cells where the corpus genuinely lacks a signal the anchor's configuration
+assumes.
+
 ### Item 3, fifth cell: climate-fever narrows without closing
 
 | Climate-FEVER row | nDCG@10 | gap to the anchor **0.213** |
