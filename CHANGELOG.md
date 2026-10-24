@@ -6,6 +6,51 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.2.1 — 2026-10-24
+
+Dependency and prose only: no code in this repository changed. The vendored engine moved a minor series
+forward, and two numbers that had drifted out of date were corrected. Behaviour on the path this project
+exercises is unchanged, and the one behavioural edge case that did move is inherited from upstream.
+
+### The vendored Laya pin moves to v0.4.14
+
+`vendor/laya` moves from `0362118` (v0.4.0-34) to `f903b49a` (v0.4.14) — 897 commits and fourteen tagged
+releases (0.4.1 through 0.4.14). The fork's `main` had already merged upstream's 0.4.14 release commit
+(`0a05a450`), so the move was a plain fast-forward over the 40 commits the fork carries of its own: the
+torch-2.2 / macOS-Intel portability patches, the ONNX opset spelling, the `numpy<2` cap in the ONNX extra,
+thread-serialised tokenizer encoding, docs/Pages housekeeping, and the fine-tuning additions.
+
+The surface this project exercises is unchanged. `laya.load` keeps its parameters, `Agent.predict` and
+`predict_batch` keep their signatures, `embed_fn_from_agent` and `cached_embed_fn` still take the same
+arguments, and `src/laya_rag/model.py` remains the only module that touches Laya. What moved on that path is
+performance and robustness: `collate_items` builds its arrays in NumPy rather than torch, the decoding loop
+normalises probabilities in place, the sequence stats report their own option count instead of re-rendering
+the options, routed batches memoise question-schema serialisation, and `cached_embed_fn` now maps non-finite
+embedding values to `0.0` and caches the repaired row rather than refusing the call.
+
+The update was verified rather than assumed. A controlled before/after on one 341-chunk index — the same two
+questions at both pins — returns identical answerability (`0.8747` and `0.5928`), the same passages in the
+same order, and identical relevance per passage, the largest absolute difference being `0.0`. The offline
+suite reports 1764 passed and 5 deselected at both pins, and `make lint`, `make claim-check` (65 checks),
+`make consistency-check` (47 sites at 18 of 18 coverage), `make doctor` (embedding dim 768) and the
+real-weights suite (4 passed) are green.
+
+### Two numbers that had drifted
+
+The live suite count in `README.md` said 1229 tests; it is 1764. `docs/PROGRAMME-STATUS.md` said ~1,700; it
+now says ~1,760. The vendored-submodule section was rewritten for v0.4.14 instead of left describing 0.4.0,
+including the fork's relationship to upstream and what did and did not change.
+
+### Still owed
+
+Compatibility-verified is not measurement-re-verified. Figures in this changelog, the README and
+`docs/findings-*.md` were produced under Laya **0.3.23**; the submodule has since passed through 0.3.28,
+0.4.0 and 0.4.14 with compatibility checks only, so a benchmark should be re-run before any recorded number
+is quoted as reproducible under 0.4.14. Two known limits are unchanged rather than fixed here: MTEB still
+does not complete on this host, and the default index is the 312 MB MTEB corpus, which makes `/v1/stats`
+slow enough that two `make test-gui` checks time out — under the previous pin as well, so that is not a
+regression from this bump.
+
 ## 1.2.0 — 2026-10-24
 
 Measurement-led again: the headline deficit is now known to be mostly configuration, two research bets are closed with
