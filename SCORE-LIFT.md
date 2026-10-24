@@ -5059,6 +5059,30 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3: SPLADE-v3 proper is gated, and the v3 family converts and encodes
+
+Two separate blockers, and only one of them was the format:
+
+- **`naver/splade-v3` is a gated repository** — the download returns *"Access to model naver/splade-v3 is restricted"*. That is
+  an access grant, not a `.bin` problem, and it is **not** something a converter can fix.
+- **`naver/splade-v3-distilbert` is the same family and is not gated**, so it is what the converter was tested against.
+
+**It converts: 106 tensors**, shapes correct for DistilBERT (`distilbert.embeddings.word_embeddings.weight` `(30522, 768)`).
+
+**And it encodes like SPLADE**, which is the check that matters — a converted model that produces dense logits would pass a shape
+test and fail the job:
+
+```
+nonzero terms: 124 of 30522
+top terms: fried 2.82, bank 2.40, sam 2.38, fraud 2.35, conspiracy 2.18, ##man 2.10, convicted 1.96, arrested 1.60
+```
+
+**`arrested` ranks eighth although the passage never says it** — that is term *expansion*, the behaviour that distinguishes a
+SPLADE encoder from a bag of words, and it says the pooled logits survived conversion intact.
+
+**So the format blocker is gone for both models the task named**; what remains for v3 proper is an access request, and what
+remains for both is the measurement.
+
 ### Item 3, first half: the converter works, and the model it produces generates
 
 The restricted unpickler is finished and validated. It parses the ZIP, reads `archive/data.pkl`, and supplies
