@@ -5071,8 +5071,7 @@ version, identical flags — rather than comparing against a 0.3.23-era record.
 | Recall@10 | 0.8371 | 0.8364 | −0.0007 |
 | MRR@10 | 0.6999 | 0.7038 | +0.0039 |
 | MAP@100 | 0.6868 | 0.6904 | +0.0036 |
-| 300 queries | 666 s | **624 s** | **−6%** |
-| index build (5,183 docs / 9,986 chunks) | 76 s | 78 s | +2 s |
+| wall clock | 666 s | 624 s | **not a measurement** (see below) |
 
 **The honest answer to "do the scores improve" is no**: **+0.0024 nDCG@10 with an interval that crosses zero**, and **only 11 of
 300 queries changed at all** — 289 are identical to the last digit. The point estimate leans up, the other three metrics lean up
@@ -5089,9 +5088,15 @@ by similar amounts, and none of it is separable from noise at n = 300.
 **Two datasets, opposite signs, both intervals crossing zero, pooled effect +0.0006 on 623 queries.** That is what a neutral
 change looks like when it is measured twice rather than once.
 
-**And I have to withdraw the speed claim**: 666 s → 624 s on scifact did **not** reproduce — nfcorpus went **630.6 s → 633.6 s**,
-slightly slower. **The 6% "gain" was run-to-run variance on a shared host, not a property of the version**, and reporting it as
-6% was reading one pair of numbers as a trend.
+**And the timing columns are not evidence in either direction.** This host is shared with other users, so **wall clock measures
+everyone's load, not this change**: 666 s → 624 s on scifact and 630.6 s → 633.6 s on nfcorpus is two hosts' worth of contention,
+not a 6% gain and not a 1% loss. **I first reported the 6% and then "withdrew it because the two datasets disagreed" — both were
+wrong**, because the instrument cannot support either reading. A version comparison needs the process's own CPU time, which
+`tools/engine_beir.py` now records as **`cpu_seconds`** alongside `seconds`; even that is comparable only on one machine under one
+cache state, and no such comparison has been run yet.
+
+**The quality answer is unaffected by any of this.** nDCG@10 does not depend on how long the run took; only the timing claim
+was ever at risk.
 
 **And the re-run was necessary only because the reports could not answer it.** `tools/engine_beir.py` wrote `_settings` but not
 the engine version, so comparing two versions meant checking the submodule out twice. It now stamps **`laya_version`** into every

@@ -126,6 +126,17 @@ def resolve_index_dir(args: argparse.Namespace) -> Path:
     return Path(args.index_dir) if args.index_dir else index_dir(args)
 
 
+def _cpu_seconds() -> float:
+    """This process's own user+sys CPU time, in seconds."""
+    import resource
+
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return float(usage.ru_utime + usage.ru_stime)
+
+
+_cpu_at_start = _cpu_seconds()
+
+
 def engine_version() -> str:
     """The vendored Laya version this run measured, so a bump's effect is readable from the report.
 
@@ -362,7 +373,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "documents": len(corpus),
         "queries": len(rankings),
         "sparse": config.sparse_enabled,
+        # Wall clock is NOT a performance signal on this host: it is shared with other users, so a
+        # version comparison by `seconds` measures everyone's load. `cpu_seconds` is the process's own
+        # CPU time, which is what a before/after can use. Both are recorded; only the second is usable
+        # for comparing versions, and neither is comparable across machines.
         "seconds": round(seconds, 1),
+        "cpu_seconds": round(_cpu_seconds() - _cpu_at_start, 1),
         "summary": evaluation["summary"],
         "per_query": evalkit.per_query_metric(evaluation["per_query"], "nDCG@10"),
     }
