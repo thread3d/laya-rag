@@ -98,6 +98,46 @@ def fit_logistic(
     return weights
 
 
+def fit_softmax(
+    features: np.ndarray,
+    labels: np.ndarray,
+    offsets: Sequence[tuple[int, int]],
+    *,
+    iterations: int = 600,
+    learning_rate: float = 0.5,
+    l2: float = 1e-3,
+) -> np.ndarray:
+    """Listwise objective: a softmax over each query's candidate pool, cross-entropy against its gold set.
+
+    The pointwise fit treats every candidate as an independent example, weighted by class so the ~7% of
+    gold candidates are not swamped. A listwise fit never sees a candidate alone — it scores the whole pool
+    and asks that the gold mass be at the top, which is the shape the metric actually grades. The target is
+    uniform over a query's golds; a query with none contributes no gradient.
+    """
+    if not offsets:
+        raise ValueError("listwise needs per-query offsets")
+    weights = np.zeros(features.shape[1], dtype=np.float64)
+    groups = [(features[a:b], labels[a:b]) for a, b in offsets]
+    for _ in range(iterations):
+        gradient = np.zeros_like(weights)
+        used = 0
+        for rows, flags in groups:
+            positives = float(flags.sum())
+            if positives == 0.0:
+                continue
+            logits = rows @ weights
+            logits = logits - logits.max()          # shift, so exp cannot overflow
+            probabilities = np.exp(logits)
+            probabilities /= probabilities.sum()
+            gradient += rows.T @ (probabilities - flags / positives)
+            used += 1
+        if used:
+            gradient /= used
+        gradient += l2 * weights
+        weights -= learning_rate * gradient
+    return weights
+
+
 def rank_by(scores: Sequence[float]) -> list[int]:
     return sorted(range(len(scores)), key=lambda i: (-float(scores[i]), i))
 
@@ -113,6 +153,10 @@ def main(argv=None) -> int:
                     help="WEIGHT the --hard-negatives nearest-gold candidates instead of restricting to them: "
                          "duplicate each one this many extra times, keeping every other row. Restriction was "
                          "measured to collapse the ranker (0.2939 to 0.0257); this keeps the test distribution.")
+    ap.add_argument("--listwise", action="store_true",
+                    help="fit a softmax over each query's whole candidate pool instead of a pointwise logistic; "
+                         "the objective the metric grades, and the variant P11 left untested after restriction "
+                         "collapsed the ranker and weighting degraded it")
     ap.add_argument("--hard-negatives", type=int, default=0,
                     help="train on each query's golds plus this many highest-CE non-gold candidates "
                          "instead of all of them; 0 keeps every candidate (the recorded behaviour)")
@@ -141,6 +185,7 @@ def main(argv=None) -> int:
         feature_names = ["ce", "fused_rank"]
     train_rows: list[list[float]] = []
     train_labels: list[float] = []
+    train_offsets: list[tuple[int, int]] = []
     test_rows: list[list[float]] = []
     test_labels: list[float] = []
     test_offset: dict[str, int] = {}
@@ -195,6 +240,7 @@ def main(argv=None) -> int:
                 rows.extend(extra_rows)
                 labels.extend([0.0] * len(extra_rows))
         if q in train_ids:
+            train_offsets.append((len(train_rows), len(train_rows) + len(rows)))
             train_rows.extend(rows)
             train_labels.extend(labels)
         else:
@@ -213,7 +259,8 @@ def main(argv=None) -> int:
     train_y = np.asarray(train_labels, dtype=np.float64)
     test_x_raw = np.asarray(test_rows, dtype=np.float64)
     train_x, test_x = standardize(train_x, test_x_raw)
-    weights = fit_logistic(train_x, train_y)
+    weights = (fit_softmax(train_x, train_y, train_offsets) if args.listwise
+               else fit_logistic(train_x, train_y))
     print(f"fitted on {len(train_y)} candidates from {len(train_ids)} queries; "
           f"weights: " + ", ".join(f"{n}={w:+.3f}" for n, w in zip(feature_names, weights)))
 

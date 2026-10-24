@@ -5059,6 +5059,33 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The listwise objective: the least bad training variant, and still not significant
+
+`--listwise` fits a **softmax over each query's whole candidate pool** with cross-entropy against its gold set — the objective the
+metric actually grades, and the variant left untouched after restriction collapsed the ranker and weighting degraded it.
+
+| training variant | `ltr` MAP@10 | vs the pointwise baseline |
+| --- | ---: | --- |
+| restriction to 5 non-golds | **0.0257** | collapse |
+| weighting them 3× / 8× / 20× | 0.2924 / 0.2901 / **0.2780** | monotone degradation |
+| **listwise over the full pool** | **0.2955** | **+0.0016 [−0.0017, +0.0052]** |
+
+**So listwise is the only variant that does not hurt — and it does not help either.** The paired bootstrap over 1,128 queries
+puts the gain from 0.2939 to 0.2955 **inside the noise band** (the interval crosses zero), and against the hand rule it is
+**significantly worse**:
+
+| comparison | delta | 95% CI |
+| --- | ---: | --- |
+| listwise − pointwise `ltr` | +0.0016 | **[−0.0017, +0.0052]** — not significant |
+| listwise − `blend-0.75` | −0.0020 | [−0.0062, +0.0026] — not significant |
+| **listwise − `covquota-3-0.7`** | **−0.0191** | **[−0.0259, −0.0126]** — **significantly worse** |
+
+**That closes P11's last axis in all three forms.** Restriction collapses it, weighting degrades it monotonically, and the
+listwise objective — the one that should have been the fair test — is statistically indistinguishable from pointwise and still
+loses to a hand-tuned coverage quota by nearly two points. **The conclusion is not "the training was wrong"; it is that the
+two-feature ranker has nothing left to learn**: `ce` and `fused_rank` already encode the order, and no objective extracts more
+from them than a quota does.
+
 ### The two residues fail for opposite reasons, and one metric would have hidden it
 
 Reading the metrics already in the control reports — no new run — separates the two cells that field weighting does not rescue.
