@@ -5059,6 +5059,33 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3: the safe converter is the right design and is not finished
+
+The `.bin` directions cannot be unblocked by calling `torch.load(weights_only=True)` from my own code: **the vulnerability is in
+`torch.load` itself**, so a different caller is the same unsafe path. The correct approach is a **restricted unpickler** — never
+call `torch.load`, parse the ZIP directly, and allow only the callables a tensor rebuild needs.
+
+I wrote that converter and it does the safe part: it opens the archive, finds `archive/data.pkl`, and a `find_class` allowlist
+rejects anything that is not `collections.OrderedDict`, `torch._utils._rebuild_tensor_v2`, or a typed storage — an
+`os.system` gadget raises instead of executing.
+
+**And I did not finish it.** It gets through the globals and then fails reconstructing storages under torch 2.2.2, whose
+`FloatStorage` is now a `TypedStorage` whose `__setstate__` path differs from the one this archive was written for:
+
+```
+AttributeError: 'torch.storage.UntypedStorage' object has no attribute 'dtype'
+```
+
+**So I deleted the tool rather than ship one that errors**, and the honest state of item 3 is: **the design is sound, the
+allowlist works, and the storage-reconstruction step needs an implementation that reads torch 2.2's typed-storage format
+correctly.** That is a focused piece of work — the pickle disassembly is already done (`collections.OrderedDict`,
+`torch._utils._rebuild_tensor_v2`, `torch.FloatStorage`, blobs at `archive/data/<key>`) — and it is the *only* route that does
+not trade a security guard for a model.
+
+**What this does not change**: SPLADE-v3 and doc2query remain unmeasured, and the earlier finding stands that no doc2query
+checkpoint on the Hub ships safetensors. The 864 MB download stays in `eval/hf-doc2query` for the session that finishes the
+converter.
+
 ### The listwise objective: the least bad training variant, and still not significant
 
 `--listwise` fits a **softmax over each query's whole candidate pool** with cross-entropy against its gold set — the objective the
