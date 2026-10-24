@@ -5117,6 +5117,35 @@ inside that noise.
 and cancels in the difference. **The version conclusion is unchanged — neutral, opposite signs by dataset — but the reason is now
 "the effect is smaller than the instrument's session-to-session drift", not "the interval happened to cross zero".**
 
+### The clean comparison: 0.4.14 is **exactly** quality-equivalent to 0.4.0
+
+With document identity anchored to the corpus (previous section), the version comparison was re-run from scratch — both datasets,
+both pins, stable ids:
+
+| dataset | 0.4.14 nDCG@10 | 0.4.0 nDCG@10 | delta |
+| --- | ---: | ---: | ---: |
+| scifact | 0.7266 | 0.7266 | **+0.000000** |
+| nfcorpus | 0.3369 | 0.3369 | **+0.000000** |
+
+**Not "neutral within noise" — identical to four decimals on both corpora.** The bump changes nothing about ranking quality, which
+is what a drop-in engine upgrade should look like.
+
+**And the speed claim falls with it.** CPU time, the instrument that replaced wall clock, now disagrees in sign:
+
+| dataset | 0.4.14 cpu s | 0.4.0 cpu s | ratio |
+| --- | ---: | ---: | ---: |
+| scifact | 4286.1 | 4161.5 | **1.030** |
+| nfcorpus | 4265.7 | 4358.1 | **0.979** |
+| *(earlier pair)* scifact | 4167.9 | 4222.3 | *0.987* |
+| *(earlier pair)* nfcorpus | 4368.5 | 4402.5 | *0.992* |
+
+**CPU time varies about ±3% run to run with either sign**, so the "~1% cheaper" reading from the first pair was noise as well.
+**The honest timing statement is that no comparison on this host can resolve a difference this small** — wall clock is contaminated
+by other users by a factor of ten, and CPU time has its own ±3% jitter (shared caches, thread scheduling).
+
+**So the bump is a pure drop-in: identical quality, no measurable speed change.** Three claims died on the way there — the 6%
+speedup, its "host variance" withdrawal, and the 1% CPU gain — and each death was a different instrument lying in a different way.
+
 ### Found, fixed and verified: the scifact "drift" was a path-derived document id
 
 The 0.005 session-to-session variation is **not nondeterminism**. It is this:
