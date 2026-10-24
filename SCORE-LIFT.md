@@ -5059,6 +5059,39 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### The two residues fail for opposite reasons, and one metric would have hidden it
+
+Reading the metrics already in the control reports — no new run — separates the two cells that field weighting does not rescue.
+The key column is **positive gold documents per query**, which I first computed wrongly by counting score-0 qrels rows (274.6 for
+TREC-NEWS, an arithmetic impossibility against a `recall@100` of 0.4512); counting only positives gives 53.4 and makes the
+numbers consistent.
+
+| cell | gold/query | `recall@100` (ceiling `100/gold`) | achieved | `MRR@10` | `nDCG@10`/`nDCG@100` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| **TREC-NEWS** | 53.4 | **1.000** | **0.4512** | **0.7373** | 0.850 |
+| **Climate-FEVER** | 3.0 | **1.000** | **0.4389** | **0.2362** | **0.747** |
+| NQ | 1.2 | 1.000 | 0.7907 | 0.2903 | 0.841 |
+| HotpotQA | 2.0 | 1.000 | 0.8044 | 0.8405 | 0.955 |
+| DBPedia-Entity | 38.2 | 1.000 | 0.4791 | 0.6438 | 0.846 |
+| **TREC-COVID** | **493.5** | **0.203** | 0.1212 | 0.8683 | 1.375 |
+
+**So the two residues are different failures:**
+
+- **TREC-NEWS is recall-bound with a favourable ranking.** It has 53 gold documents per query, finds only **45%** of them in the
+  top 100, yet its **first** relevant document is usually at rank 1–2 (`MRR@10` **0.7373**). More weighting cannot help: the
+  documents are not being *found*, and the ones that are, are already placed well.
+- **Climate-FEVER is retrieval-bound on a sparse target.** Three gold documents per query, **44%** recalled at 100, and `MRR@10`
+  **0.2362** — roughly rank four. Both the finding *and* the placement are weak, which is what a claim-verification corpus with
+  three supporting passages looks like under a lexical-only retriever.
+
+**And one metric would have hidden it**: `recall@100` is capped at `100/gold`, so **TREC-COVID's 0.1212 is 60% of its achievable
+0.203**, while NQ's 0.79 is 79% of 1.0. Reading recall across cells without the ceiling makes the dense cells look catastrophically
+worse than they are — the same class of error as comparing nDCG@10 across corpora with different gold densities.
+
+**What this says about the intervention**, not just the measurement: TREC-NEWS wants **recall** (a dense or expansion channel);
+Climate-FEVER wants **ranking** as well (a reranker over its own retrieved set). Neither is a field-weighting problem, which is
+exactly why the seventh-cell battery left them as residue rather than closing them.
+
 ### Item 3 complete: seven cells, and field weighting removes four fifths of the average deviation
 
 The last cell landed — HotpotQA, 5.2 M documents, ~2 h — and it sits **above** its anchor in both conditions:
