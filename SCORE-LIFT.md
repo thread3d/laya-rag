@@ -5078,8 +5078,20 @@ version, identical flags — rather than comparing against a 0.3.23-era record.
 300 queries changed at all** — 289 are identical to the last digit. The point estimate leans up, the other three metrics lean up
 by similar amounts, and none of it is separable from noise at n = 300.
 
-**What did change measurably is speed**: 666 s → 624 s, about **6%** on the same index and queries. The index build did not
-improve (76 → 78 s).
+**The second dataset reverses the sign**, which is what makes the answer firm rather than scifact-deep:
+
+| dataset | delta nDCG@10 (0.4.14 − 0.4.0) | 95% CI | queries moved |
+| --- | ---: | --- | ---: |
+| scifact | **+0.0024** | [−0.0028, +0.0088] | 11 of 300 |
+| **nfcorpus** | **−0.0011** | [−0.0041, +0.0016] | 41 of 323 |
+| **pooled (623 queries)** | **+0.0006** | — | — |
+
+**Two datasets, opposite signs, both intervals crossing zero, pooled effect +0.0006 on 623 queries.** That is what a neutral
+change looks like when it is measured twice rather than once.
+
+**And I have to withdraw the speed claim**: 666 s → 624 s on scifact did **not** reproduce — nfcorpus went **630.6 s → 633.6 s**,
+slightly slower. **The 6% "gain" was run-to-run variance on a shared host, not a property of the version**, and reporting it as
+6% was reading one pair of numbers as a trend.
 
 **And the re-run was necessary only because the reports could not answer it.** `tools/engine_beir.py` wrote `_settings` but not
 the engine version, so comparing two versions meant checking the submodule out twice. It now stamps **`laya_version`** into every
