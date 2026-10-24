@@ -3,8 +3,8 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.1.1** — the first tagged release; see [`CHANGELOG.md`](CHANGELOG.md) for what it contains and
-what it deliberately does not claim.
+**Version 1.2.0** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
 
