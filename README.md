@@ -558,7 +558,7 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (1229 tests)
+make test          # Python suite, offline, deterministic (1764 tests)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 make test-mcp      # the MCP server suite (skips without the [mcp] extra)
@@ -1709,7 +1709,7 @@ laya-rag/
 ├── models/                Laya checkpoints (gitignored)
 ├── indexes/               persisted indexes (gitignored)
 ├── eval/                  generated evaluation reports and caches (gitignored)
-└── vendor/                submodule: laya (pinned v0.4.0)
+└── vendor/                submodule: laya (pinned v0.4.14)
 ```
 
 ## Known limits
@@ -1791,28 +1791,46 @@ budget at the default thresholds.
 
 ## The vendored submodule
 
-The Laya checkout lives under `vendor/` and is pinned as a git submodule at **v0.4.0**
-(`0362118`, `github.com/thread3d/laya`), the newest upstream release. The fork's `main` carries its
-own portability patches on top of upstream, so the update merges the `v0.4.0` tag into that branch
-rather than moving to a bare upstream commit. The venv installs the checkout editable, so `import
-laya` resolves to the pinned checkout. It was originally at `laya/`, but a top-level `laya/`
-directory shadows the installed `laya` Python package for any process started from the repository
-root, so `import laya` resolved to the checkout folder. Moving it under `vendor/` removed the
-collision. The Python package for this project is `laya_rag`, which does not collide.
+The Laya checkout lives under `vendor/` and is pinned as a git submodule at **v0.4.14**
+(`f903b49a`, `github.com/thread3d/laya`), the newest upstream release — 897 commits and fourteen
+tagged releases (0.4.1 through 0.4.14) past the previous pin (`0362118`, v0.4.0-34). The pin is the
+fork's `main` at its merge of upstream's 0.4.14 release commit (`0a05a450`). The fork's `main`
+carries 40 commits of its own on top of upstream: the portability patches that keep this tree running
+on the host's pinned torch 2.2.2 and macOS-Intel MPS stack (the device-aware autocast predicate, the
+transformers-5 RoPE handling, the ONNX opset spelling), the `numpy<2` cap in the ONNX extra, the
+thread-serialised tokenizer encoding, docs/Pages housekeeping, and the fine-tuning additions. So the
+update merges the `v0.4.14` tag into that branch rather than moving to a bare upstream commit. The
+venv installs the checkout editable, so `import laya` resolves to the pinned checkout. It was
+originally at `laya/`, but a top-level `laya/` directory shadows the installed `laya` Python package
+for any process started from the repository root, so `import laya` resolved to the checkout folder.
+Moving it under `vendor/` removed the collision. The Python package for this project is `laya_rag`,
+which does not collide.
 
-Laya 0.4.0 makes a **breaking** change to `Router(default=...)`, which now falls back to the
-`multilingual` checkpoint for text whose language detection abstains (was `english`). This project
-does not use `Router`: it loads a checkpoint with `laya.load` and calls `Agent.predict` /
-`predict_batch` directly (`src/laya_rag/model.py` is the only module that touches Laya's API), so the
-change is outside the surface the engine exercises. The update also carries everything between
-0.3.28 and 0.4.0, so it is compatibility-verified end to end: the full offline suite (1513 passed),
-`make doctor` (the multilingual checkpoint loads, embedding dim 768), and an index+query smoke over
-`vendor/laya/docs` returning evidence.
+The surface this engine exercises is unchanged between 0.4.0 and 0.4.14: `laya.load` keeps its
+parameters, `Agent.predict` / `predict_batch` keep their signatures, and `embed_fn_from_agent` /
+`cached_embed_fn` still take the same arguments. `load` only widened its return annotation to include
+`ONNXAgent`, which this project does not use. `src/laya_rag/model.py` remains the only module that
+touches Laya's API, so the 0.4.0 **breaking** change to `Router(default=...)` — which falls back to
+the `multilingual` checkpoint for text whose language detection abstains (was `english`) — is still
+outside the surface the engine exercises, because this project never instantiates `Router`. What did
+change on the exercised path is performance and robustness, not semantics: `collate_items` builds its
+arrays in NumPy rather than torch, the decoding loop normalises probabilities in place, the sequence
+stats report their own option count instead of re-rendering the options, routed batches memoise
+question-schema serialisation, and `cached_embed_fn` now maps non-finite embedding values to `0.0`
+and caches the repaired row rather than refusing it.
+
+The update is compatibility-verified end to end: the full offline suite (1764 passed, 5 deselected),
+`make lint`, `make claim-check` (65 checks), `make consistency-check` (47 sites at 18/18 coverage),
+`make doctor` (the multilingual checkpoint loads, embedding dim 768), the real-weights suite (4
+passed), and an index+query smoke over `vendor/laya/docs` (341 chunks from 37 files) returning
+evidence.
 
 Measurements quoted in this README and in `docs/findings-*.md` were produced under Laya **0.3.23**;
-the submodule was updated to **0.3.28** and then to **0.4.0** afterwards, and each update is
-compatibility-verified but **not** measurement-re-verified, so a decision-path change could move a
-number. Re-run a benchmark before treating a recorded figure as reproducible under 0.4.0.
+the submodule was updated to **0.3.28**, then **0.4.0**, then **0.4.14** afterwards, and each update
+is compatibility-verified but **not** measurement-re-verified, so a decision-path change could move a
+number. Re-run a benchmark before treating a recorded figure as reproducible under 0.4.14. The
+`pyproject.toml` floor stays `laya>=0.3.23` — the API used here exists at that version and 0.4.14
+satisfies it — so the pin, not the floor, records what this tree was verified against.
 
 ## License
 
