@@ -5059,6 +5059,26 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3: the sparse channel pays — but not with the model the converter unlocked
+
+Two encoders through the same harness on the same corpus (`tools/beir.py --splade-model`, scifact, 5,183 documents):
+
+| encoder | `splade` nDCG@10 | vs `bm25-engine` **0.6762** | encode time |
+| --- | ---: | ---: | ---: |
+| **`opensearch-neural-sparse-encoding-v1`** (already in use) | **0.7100** | **+0.0338** | 23.2 s |
+| **`splade-v3-distilbert`** (converted from `.bin` here) | 0.6766 | **+0.0004** | 8.4 s |
+
+**So the sparse channel pays on this corpus — by +0.0338 — and it is the encoder already in the tree that pays.** The converted
+SPLADE is **neutral**: +0.0004, and three times faster, which is the only thing it wins.
+
+**That is the fourth `.bin`-adjacent assumption this session has had to reject.** The format was a real blocker and removing it
+was worth doing — the converter is reusable, tested, and safe — but **the model it unlocked does not beat what was already
+there**, and the honest summary is that the blocker was hiding a *neutral* result rather than a valuable one.
+
+**Two caveats, stated because they bound the conclusion**: this is `splade-v3-distilbert`, **not `splade-v3` proper**, which is
+gated and may be stronger; and it is **one corpus**, whereas the earlier encoder comparison covered three. Report:
+`eval/beir/subsets/splade-{v3distil,opensearch}-scifact.json`.
+
 ### Item 3: SPLADE-v3 proper is gated, and the v3 family converts and encodes
 
 Two separate blockers, and only one of them was the format:
