@@ -5088,6 +5088,35 @@ by similar amounts, and none of it is separable from noise at n = 300.
 **Two datasets, opposite signs, both intervals crossing zero, pooled effect +0.0006 on 623 queries.** That is what a neutral
 change looks like when it is measured twice rather than once.
 
+**Re-measured in CPU time, with each row run twice.** `cpu_seconds` is the process's own user+sys time, so it survives other
+users' load:
+
+| dataset | 0.4.0 cpu s | 0.4.14 cpu s | ratio |
+| --- | ---: | ---: | ---: |
+| scifact | 4222.3 | **4167.9** | **0.987** |
+| nfcorpus | 4402.5 | **4368.5** | **0.992** |
+
+**So 0.4.14 is about 1% cheaper in CPU time, in the same direction on both datasets** — a small, consistent effect that wall
+clock could not have shown (its ratios were 0.90 and 0.88, i.e. contaminated by contention by a factor of ten).
+
+**And repeating each row exposed a much more important limit**: scifact's absolute score is **not** reproducible across sessions.
+
+| dataset | version | run A | run B | spread |
+| --- | --- | ---: | ---: | ---: |
+| scifact | 0.4.14 | 0.7301 | 0.7251 | **0.0050** |
+| scifact | 0.4.0 | 0.7277 | 0.7222 | **0.0055** |
+| nfcorpus | 0.4.14 | 0.3356 | 0.3354 | 0.0002 |
+| nfcorpus | 0.4.0 | 0.3367 | 0.3369 | 0.0002 |
+
+**scifact's run-to-run spread (0.005) is twice the version effect this task set out to measure**, while nfcorpus repeats to
+0.0002. Any scifact comparison at the 0.005 level — including my own earlier "+0.0024, interval crosses zero" — is measured
+inside that noise.
+
+**What survives is the paired difference**, which is stable across repeats: scifact **+0.0024** then **+0.0029**; nfcorpus
+**−0.0011** then **−0.0015**. Each repeat runs the two versions back to back, so a time-varying factor hits both runs of a pair
+and cancels in the difference. **The version conclusion is unchanged — neutral, opposite signs by dataset — but the reason is now
+"the effect is smaller than the instrument's session-to-session drift", not "the interval happened to cross zero".**
+
 **And the timing columns are not evidence in either direction.** This host is shared with other users, so **wall clock measures
 everyone's load, not this change**: 666 s → 624 s on scifact and 630.6 s → 633.6 s on nfcorpus is two hosts' worth of contention,
 not a 6% gain and not a 1% loss. **I first reported the 6% and then "withdrew it because the two datasets disagreed" — both were
