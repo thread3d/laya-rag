@@ -221,7 +221,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     shard_index, shard_count = jobkit.parse_shard(args.shard)
     out = Path(args.out)
     index_path = resolve_index_dir(args)
-    docs_dir = out / "docs" / args.dataset
+    # NOT under `out`. `_doc_id` is sha256 of the document's full path, and the documents here are one
+    # file per corpus document, so anchoring them to `--out` makes a chunk's identity depend on where the
+    # report happens to be written. Chunk ids settle ties (RRF rank sums tie often), so two runs of the
+    # same corpus into different output directories scored 0.7251 and 0.7301 — a 0.005 "drift" that was
+    # entirely path-derived. Anchored to the data root instead, so identity is stable across runs; two
+    # runs into the same paths already produced a bit-identical index and 300/300 identical queries.
+    docs_dir = Path(args.data_root) / "engine-docs" / args.dataset
 
     dataset_dir = beir.ensure_dataset(args.dataset, Path(args.data_root), download=False)
     corpus = beir.load_corpus(dataset_dir, include_titles=True)

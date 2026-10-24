@@ -5117,6 +5117,41 @@ inside that noise.
 and cancels in the difference. **The version conclusion is unchanged — neutral, opposite signs by dataset — but the reason is now
 "the effect is smaller than the instrument's session-to-session drift", not "the interval happened to cross zero".**
 
+### Found, fixed and verified: the scifact "drift" was a path-derived document id
+
+The 0.005 session-to-session variation is **not nondeterminism**. It is this:
+
+```python
+def _doc_id(path: Path) -> str:
+    return hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
+```
+
+**The document id is a hash of the document's full path**, and `engine_beir.py` wrote those documents under `--out`
+(`out / "docs" / dataset`). So every run into a different output directory gave the same corpus **different ids**, and
+**chunk ids settle ties** — RRF sums of reciprocal ranks tie often — so 11 of 300 queries flipped.
+
+**Three checks, in order:**
+
+| test | result |
+| --- | --- |
+| two builds, **different** out dirs, same version | `vectors.npy` **bit-identical**, `index.json`/`lexical.json` differ, ids permuted; scores 0.7301 vs 0.7251 |
+| two runs, **same** out dirs | index hash identical; **300/300 queries identical, max diff 0.00e+00** |
+| two runs, **different** out dirs, after the fix | **0.7266 vs 0.7266, 300/300 identical** |
+
+**The fix**: documents are anchored to `--data-root` (`eval/beir/engine-docs/<dataset>`) instead of `--out`, so identity is a
+property of the corpus rather than of where the report was written. Embeddings were never the problem — `vectors.npy` hashed the
+same in every build, which is what eliminated the model as a suspect.
+
+**And this makes my earlier conclusion wrong in an important way**: I called it "an absolute score can drift between sessions on
+the same version" and advised comparing paired. **It was not drift; it was a defect in the harness's identity scheme**, and now
+that it is fixed, two runs into different directories agree exactly. The paired-design advice remains sound but is no longer
+load-bearing.
+
+**It also puts the version comparison itself in question**: those runs used a **different `--out` per version**, so the id
+difference was confounded with the version. The nfcorpus repeat (0.0002) suggests its ranking is insensitive to ids, and scifact's
+signs were consistent within a pair, so the *neutral* verdict is unlikely to flip — **but a clean comparison under the fix would
+settle it, and none has been run yet.**
+
 **And the timing columns are not evidence in either direction.** This host is shared with other users, so **wall clock measures
 everyone's load, not this change**: 666 s → 624 s on scifact and 630.6 s → 633.6 s on nfcorpus is two hosts' worth of contention,
 not a 6% gain and not a 1% loss. **I first reported the 6% and then "withdrew it because the two datasets disagreed" — both were
