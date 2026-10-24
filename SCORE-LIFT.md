@@ -5059,6 +5059,29 @@ produced a report that *looks* like a P7 measurement and contains none.
 would read as evidence. **P7 stays unstarted**, and its first step is now known: find how `lexical_selector.py` builds its
 passage rows and reuse that, rather than passing a name to the harness.
 
+### Item 3, first half: the converter works, and the model it produces generates
+
+The restricted unpickler is finished and validated. It parses the ZIP, reads `archive/data.pkl`, and supplies
+`BINPERSID` tuples — `("storage", "FloatStorage", "<key>", "cpu", numel)` — to `persistent_load`, which builds a
+**TypedStorage** from the blob (torch 2.2's `_rebuild_tensor_v2` requires `.dtype` and `._untyped_storage`, which is what
+broke the first two attempts). `find_class` allows only `OrderedDict`, the two `_rebuild_*` callables, `Tensor`, `Size` and the
+typed storage classes; **anything else raises instead of executing**.
+
+**It converts `castorini/doc2query-t5-base-msmarco`: 260 tensors, shapes intact** (`shared.weight` `(32128, 768)`,
+`encoder.block.0…SelfAttention.q.weight` `(768, 768)`).
+
+**And the converted model is not merely well-formed — it generates.** The model that `transformers` refuses to load from
+`.bin` now loads from the safetensors and answers the sentence it was tested on before:
+
+> *"Sam Bankman-Fried was convicted of seven counts of fraud and conspiracy."* → **"who was convicted of fraud and
+> conspiracy"**
+
+That is the check that distinguishes a conversion from a plausible one, and it is the reason to reject "the tensors have the
+right shapes" as sufficient evidence.
+
+**Four tests pin the safety property**, including that a pickle naming `os.system` is refused rather than executed — a converter
+that works on good input and executes on bad input would be worse than none.
+
 ### Item 3: the safe converter is the right design and is not finished
 
 The `.bin` directions cannot be unblocked by calling `torch.load(weights_only=True)` from my own code: **the vulnerability is in
