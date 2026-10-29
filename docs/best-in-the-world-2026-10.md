@@ -301,8 +301,10 @@ Four numbers defend it, and each is partly in hand:
    the gate was not fitted on, and report abstention precision and recall *separately*, since
    over-abstention is the failure mode this architecture is most exposed to.
 2. **Attribution that is a measurement** — citation clean **1.0000** today, deterministically checked. The
-   claim is not "we cite better than an LLM"; it is "our citation number is not an LLM judgement", which
-   TREC's own 0.44-manual-versus-0.95-auto-grader split makes valuable `[web]`.
+   claim is not "we cite better than an LLM"; it is "our citation number is not an LLM judgement". TREC
+   2025 is the evidence: its best manually-assessed support row is **0.8435 precision / 0.8098 recall**
+   and its best RAG run **0.7792 / 0.7635**, while a GPT-OSS-120B auto-grader scoring the *same* runs
+   inflates them by **+0.11 to +0.15** `[web]`.
 3. **Completeness of a non-generated answer** — answer nugget recall **0.1906** with the pool's **0.7438**
    as the stated ceiling. The claim is that the ratio is *known*, not that it is high.
 4. **Cost per point of quality** — to be measured properly; today rerank dominates at ~0.6–0.8
@@ -410,7 +412,11 @@ Package what already exists as **one named protocol with one command and one rep
 2. **Evidence-side abstention** — ROC-AUC, AURC, risk–coverage on `null_query` plus an independent
    unanswerable set, against two baselines (the shipped scalar and a BM25-score threshold).
 3. **Joint score** — evidence-MAP@10 × (1 − false-accept rate), so abstention cannot be bought with
-   blanket refusals. This is RGB's two-sided negative-rejection idea moved to the evidence layer.
+   blanket refusals. This is RGB's two-sided negative-rejection idea moved to the evidence layer, and
+   it is **not optional**: TREC 2025's own support table is led by a `no-llm-refined` run at **0.84
+   support precision with a strict-vital score of 0.06** `[web]`. A system that says little scores best
+   on an attribution-precision column, and an engine whose whole selling point is abstention is
+   exactly that system unless the joint score is published beside it.
 4. **Cost** — seconds, peak RSS, index bytes, and joules per query on CPU. Nobody publishes the last one.
 
 In parallel, produce the artefacts for **LongEmbed** (a hybrid against a 0.9153 leader that BM25 reaches
@@ -475,6 +481,11 @@ The 2026 evidence strengthens the existing ledger and adds three closures of its
   <model>` column if it is ever run, not in this one.
 - **Do not build a vision path or a knowledge graph.** ViDoRe/MIEB are out of reach for a text-only
   system, and the graph's measured gain is a conditioning signal this engine already has without it.
+- **Do not answer the architecture question with a longer context window.** "Just stuff the corpus" is
+  not a substitute for retrieval in 2026: NoLiMa drops GPT-4o from 99.3% to **69.7%** by 32K tokens,
+  with eleven of thirteen models below half their short-context baseline, and Gemini 3.1 Pro reads
+  **84.9% at 128K against 26.3% at 1M** on MRCR v2 (vendor-reported) `[web]`. Retrieval is not
+  nostalgia; it is the cheaper path to the same evidence.
 - Everything in [`RESEARCH.md`](../RESEARCH.md) §2 still stands.
 
 ---
