@@ -77,6 +77,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                     help="drop documents below this relevance before quoting")
     ap.add_argument("--index-dir", default=None,
                     help="reuse an existing engine index instead of deriving one from --out")
+    ap.add_argument(
+        "--honour-answerability", action="store_true",
+        help="abstain when the decision layer said the corpus cannot answer, instead of emitting a "
+             "faithful answer to it — the product-path lever measured at 17 of 20 unanswerable queries "
+             "answered. Off by default because every recorded row predates it, and recorded either way.",
+    )
     ap.add_argument("--zero-thresholds", action="store_true",
                     help="zero the relevance and answerability gates, so the row is comparable "
                          "to the retrieval-only runs rather than to the shipped engine")
@@ -223,6 +229,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         # That happened on the first attempt at this comparison, and the identical arms were the
         # only signal.
         extract_coverage=os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", ""),
+        # Same reason as the objective above: honouring the verdict changes which rows abstain, so a
+        # resume that flipped it would mix two arms under one fingerprint.
+        honour_answerability=bool(args.honour_answerability),
         embed_model=args.embed_model or "engine-default",
         sparse=args.sparse,
         rerank_model=args.rerank_model,
@@ -305,6 +314,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 # hash: a reader cannot tell from `947d10ba…` whether they are looking at the shipped
                 # order or the measured one. Fifth instance of this class in the programme.
                 "extract_coverage": os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", ""),
+                "honour_answerability": bool(args.honour_answerability),
             },
             "queries": queries,
         })
@@ -322,6 +332,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_sentences=args.max_sentences,
             min_score=args.min_score,
             include_evidence=True,
+            honour_answerability=args.honour_answerability,
             top_k=args.top_k,
             retrieve_k=args.retrieve_k,
             # The retrieval rows ask for the whole chunk: the default truncates a passage at
@@ -343,6 +354,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "index_dir": str(index_dir),
             "index_identity": identity,
             "extract_coverage": os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", ""),
+            "honour_answerability": bool(args.honour_answerability),
         },
         "documents": len(raw),
         "queries": len(mine_rows),

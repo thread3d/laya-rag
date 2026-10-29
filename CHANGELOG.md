@@ -6,6 +6,28 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.4 — 2026-10-29
+
+The answerability lever reaches the harness that measures it — flag, fingerprint and both settings
+records.
+
+### `--honour-answerability` on `tools/engine_extractive.py`
+
+Round 47's defect fix added the engine-side option, deliberately default-off because every recorded
+extractive row predates it. That left the lever **unmeasurable through the harness**: the row that would
+show its product-level effect had no way to turn it on, and nothing would record that it had been turned on.
+
+Now `make engine-extractive ENGINE_EXTRACTIVE_ARGS="--honour-answerability"` runs the row with the flag, and
+the flag travels with it into three places:
+
+- the **resume fingerprint**, for the reason the composer's objective does: a configuration that changes
+  which rows abstain must not be mixed under one fingerprint. This repository has already reported two arms
+  identical to four decimals from exactly that omission.
+- **both settings records** — the META record and the final report — because a fingerprint is a hash and
+  the rule is that *a configuration variable that changes what a number means has to appear in the artefact*.
+
+Three assertions in one test cover the three places, so a future refactor cannot quietly drop one of them.
+
 ## 1.9.3 — 2026-10-29
 
 A run that looked stalled was a slow query — and the tail it exposed belongs in the cost envelope.

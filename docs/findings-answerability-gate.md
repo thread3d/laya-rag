@@ -155,7 +155,11 @@ cannot answer, reporting the verdict beside the abstention instead of contradict
 `False`**, and that is not timidity: every recorded extractive row — including the full-set row running
 while this was written — was measured with the old behaviour, and changing a default under a running row is
 the provenance failure this repository catalogues five times. The next full-set row should be run with the
-flag on, and the difference reported as the lever's product-level effect.
+flag on, and the difference reported as the lever's product-level effect —
+`make engine-extractive ENGINE_EXTRACTIVE_ARGS="--honour-answerability"`. The harness carries the flag in
+its **resume fingerprint and both settings records**, for the reason the composer's objective does: a
+configuration that changes which rows abstain must not be mixed under one fingerprint, which is the failure
+that once reported two identical arms to four decimals.
 
 ## Still owed
 

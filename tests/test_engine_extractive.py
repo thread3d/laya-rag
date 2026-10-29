@@ -178,3 +178,19 @@ def test_a_row_records_the_composer_objective_it_ran_under():
     assert source.count('"extract_coverage": os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", "")') == 2, (
         "both the META record and the final report must carry the composer objective"
     )
+
+
+def test_the_answerability_lever_is_in_the_fingerprint_and_the_record():
+    """A configuration that changes which rows abstain must reach both, or a resume mixes two arms.
+
+    This is the same rule the composer's objective follows, and the programme has paid for it once already:
+    a fingerprint that ignored `LAYA_RAG_EXTRACT_COVERAGE` reported two identical arms to four decimals.
+    """
+    import inspect
+
+    source = inspect.getsource(__import__("engine_extractive"))
+    assert 'honour_answerability=bool(args.honour_answerability)' in source, "not in the fingerprint"
+    assert source.count('"honour_answerability": bool(args.honour_answerability)') == 2, (
+        "both the META record and the final report must carry it"
+    )
+    assert "honour_answerability=args.honour_answerability" in source, "not passed to query_extractive"
