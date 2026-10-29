@@ -541,6 +541,19 @@ shorter state, fewer candidates — not from doing the same work in a narrower d
 A MIRACL subset through the engine beside lexical and dense controls, with the result stated even if it
 is poor. A CPU-only multilingual retrieval row appears in no table this pass found `[web]`.
 
+**Outcome (the question underneath was asked; the collection is priced out).** R7 asked for a MIRACL
+collection. The smallest one with a published leaderboard row — Swahili, 106,000 documents — is roughly
+**28 hours** of embedding for one language at this host's measured rate, so the collection was priced and
+declined rather than truncated into a smaller number; this repository has already quarantined a
+40,000-document TREC-COVID subsample that read 0.3062 against the full collection's 0.6188. What was
+measured instead is the question that made R7 urgent: **"multilingual" is a property of the checkpoint,
+not of the retrieval.** With the shipped lexical channel, five languages against the same English index
+score en 2/3, de 1/3, fr 1/3, es 0/3, ja 1/3 — all of it acronym leakage — and **forcing the dense
+channel on drops every non-English language to 0/3** while English is unchanged, so the encoder is not
+cross-lingual for retrieval even though it reads the text. The README's "handles non-English text" claim
+was true of the checkpoint and was corrected to say so
+([`findings-multilingual-scope.md`](findings-multilingual-scope.md)).
+
 ### R8 — Own a submittable artefact (weeks–months, `[model]`)
 
 Finish the ensemble distillation and submit the *engine* through `SearchProtocol`, or the encoder to

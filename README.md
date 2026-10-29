@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.3.8** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.3.9** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -533,8 +533,18 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `MCP_ALLOWED_HOSTS` | unset | extra allowed `Host` values when the MCP HTTP transport binds beyond loopback |
 
 The default checkpoint is `multilingual` (322M parameters, 768-dim embeddings): it matches the
-English checkpoint's accuracy on the measured queries while being roughly twice as fast, and it
-handles non-English text and long documents. Set `CHECKPOINT=laya` for an English-only corpus.
+English checkpoint's accuracy on the measured queries while being roughly twice as fast, reads
+non-English text, and handles long documents. Set `CHECKPOINT=laya` for an English-only corpus.
+
+**Multilingual is a property of the checkpoint, not of the retrieval.** The shipped recall channel is
+lexical, so a non-English query reaches an English corpus only through tokens that survive translation —
+proper nouns, acronyms, numbers. Measured on this repository's own index with the same three questions in
+five languages: English 2/3, German 1/3, French 1/3, Spanish 0/3, Japanese 1/3, all of it acronym leakage
+(`nDCG@10`, `BEIR`, `SciFact`). Forcing the dense channel on (`DENSE_WEIGHT=1`) drops every non-English
+language to **0/3** while English is unchanged, so the encoder is not cross-lingual for retrieval even
+though it reads the text. A retrieval-trained multilingual bi-encoder through `EMBED_MODEL` is the route,
+and it needs its own per-language measurement first — see
+[`docs/findings-multilingual-scope.md`](docs/findings-multilingual-scope.md).
 
 Composition defaults to a local Ollama and the model `ornith-1.5:35b`, so once that model is pulled
 the engine needs no configuration at all:

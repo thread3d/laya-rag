@@ -6,6 +6,37 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.9 — 2026-10-29
+
+A capability claim corrected, and a collection priced rather than truncated.
+
+### "Multilingual" is a property of the checkpoint, not of the retrieval
+
+The README said the default checkpoint "handles non-English text". Nothing had tested what that means
+for retrieval, and the engine's shipped recall channel is lexical. Measured on this repository's own
+index — the same three questions in five languages, targets being the documents that answer the English
+versions:
+
+| configuration | en | de | fr | es | ja |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| shipped (lexical, `DENSE_WEIGHT=0`) | 2/3 | **1/3** | **1/3** | 0/3 | **1/3** |
+| dense forced on (`DENSE_WEIGHT=1`) | 2/3 | 0/3 | 0/3 | 0/3 | 0/3 |
+
+Every non-English match is acronym leakage — `nDCG@10`, `BEIR`, `SciFact` survive translation and BM25
+matches them. **Forcing the dense channel on takes every non-English language to zero** while English is
+unchanged: the multilingual encoder reads the text but is not cross-lingual for retrieval, which is one
+specific fact further than its measured nDCG@10 of 0.014 on SciFact. Three questions per language is a
+probe, not a measurement; the README claim was corrected rather than the probe dressed up.
+
+### R7's collection is priced, not approximated
+
+The smallest MIRACL collection with a published leaderboard row — Swahili — is 106,000 documents, about
+**28 hours** of embedding for one language at this host's measured 7.9 chunks/s. That is a hardware limit,
+and truncating it would repeat the mistake this repository quarantined once already (a 40,000-document
+TREC-COVID subsample read 0.3062 against the full collection's 0.6188). The next step is cheap and named:
+a retrieval-trained multilingual bi-encoder through `EMBED_MODEL`, then this same five-language probe as
+the falsifier before any 28-hour run is worth its wall clock.
+
 ## 1.3.8 — 2026-10-29
 
 R5's cheaper half answered: the pointwise reranker generation moved, by +0.031 MAP@10 over the model
