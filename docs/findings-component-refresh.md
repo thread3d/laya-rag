@@ -11,14 +11,18 @@ Before any new encoder is scored, the harness has to reproduce a row that is alr
 host, with a different ML stack — otherwise a "gain" could be the stack. SciFact, all four retrievers,
 `eval/beir/r1-scifact-control.json`:
 
-| retriever | this run | `RANKINGS.md` recorded | Δ |
+| retriever | this run | recorded | Δ |
 | --- | ---: | ---: | ---: |
 | `bm25` (published settings) | **0.6539** | 0.654 | 0.000 |
 | `bm25-engine` (stemmed) | **0.6762** | 0.676 | 0.000 |
 | `biencoder` (`bge-small`) | **0.7200** | 0.720 | 0.000 |
 | `hybrid-biencoder` | **0.7320** | 0.732 | 0.000 |
 
-All four match at the precision the project prints. The stack differs from the one that produced the
+All four match at the precision the project prints, and the NFCorpus control reproduces its rows too
+— 0.3042 against 0.304, 0.3244 against 0.324, 0.3391 against 0.339, and a hybrid of 0.3633 against
+the **0.364** the README's fusion paragraph quotes. The 0.367 and 0.741 hybrids in `RANKINGS.md`'s
+standing table are a later configuration, not this one: matching the README pair exactly is what
+establishes that this is the historical pipeline, and it is the pair a new encoder has to beat. The stack differs from the one that produced the
 originals (torch 2.15 CPU, `sentence-transformers` 4.1, numpy 2.5 against a pinned 2.2.2 / numpy 1.x
 environment), the corpus was downloaded fresh, and the numbers did not move — which is the property
 that makes the next row comparable rather than merely higher. It took 183 s to embed 5,183 documents
