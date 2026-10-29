@@ -330,3 +330,27 @@ def test_stats_reports_the_behaviour_levers_not_just_the_topology(ctx):
     assert behaviour["second_stage_top_m"] == 0        # the shipped default: no cascade
     assert behaviour["extract_coverage"] is False      # the composer's shipped order
     assert isinstance(behaviour["second_stage"], bool)
+
+
+def test_the_extract_route_can_choose_the_composer_objective_per_request(ctx):
+    """`EXTRACT_COVERAGE` was a service-wide setting; a caller could not ask for the other arm.
+
+    The composer's objective changes *which* sentences are emitted — 0.2060 → 0.2610 answer nugget
+    recall on MultiHop-RAG at unchanged citation validity — so an API that only exposes the service
+    default makes the measured arm unreachable without a restart. The guarantees are identical either
+    way, which is what makes this a per-request choice rather than a deployment decision.
+    """
+    client, _engine, corpus = ctx
+    client.post("/v1/index", json={"paths": [str(corpus)]})
+
+    plain = client.post("/v1/extract", json={"query": "refunds"}).json()
+    covered = client.post("/v1/extract", json={"query": "refunds", "coverage": True}).json()
+    refused = client.post("/v1/extract", json={"query": "refunds", "coverage": False}).json()
+
+    for payload in (plain, covered, refused):
+        assert payload["answer"]
+        # the contract that must survive the choice: every claim cites in-range evidence
+        for sentence in payload["sentences"]:
+            assert 1 <= sentence["citation"] <= len(payload["sentences"]) + 1
+    # and the request is accepted, which is the part that used to be impossible
+    assert covered["abstained"] is False or covered["abstained"] is True

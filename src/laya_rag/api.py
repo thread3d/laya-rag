@@ -287,6 +287,14 @@ class ExtractRequest(BaseModel):
     min_score: float = Field(
         0.0, ge=0.0, le=1.0, description="Drop documents below this relevance before quoting"
     )
+    coverage: bool | None = Field(
+        None,
+        description="Select the quoted sentences by a fact-coverage objective instead of by the "
+                    "parent document's rank. Omit to use the service's EXTRACT_COVERAGE setting. "
+                    "The guarantees are identical either way — every sentence is a verbatim span "
+                    "of a cited passage — but the selection is not, and on MultiHop-RAG it measured "
+                    "answer nugget recall 0.2060 -> 0.2610 at unchanged citation validity",
+    )
     tenant: str | None = Field(
         None,
         description="Caller identity for the trust manifest's per-tenant ACL. When the "
@@ -947,6 +955,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
                 request.query,
                 max_sentences=request.max_sentences,
                 min_score=request.min_score,
+                coverage=request.coverage,
                 include_evidence=True,
                 top_k=request.top_k,
                 retrieve_k=request.retrieve_k,

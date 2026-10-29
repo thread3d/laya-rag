@@ -1485,6 +1485,7 @@ class RagEngine:
         max_sentences: int = 5,
         min_score: float = 0.0,
         include_evidence: bool = False,
+        coverage: bool | None = None,
         **query_kwargs: Any,
     ) -> dict[str, Any]:
         """Query, then emit only verbatim evidence sentences, each with its citation.
@@ -1509,7 +1510,7 @@ class RagEngine:
             query=query,
             max_sentences=max_sentences,
             min_score=min_score,
-            coverage=self.config.extract_coverage,
+            coverage=self.config.extract_coverage if coverage is None else bool(coverage),
         )
         if include_evidence:
             payload = result.as_dict()

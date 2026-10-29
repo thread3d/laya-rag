@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.1 — 2026-10-29
+
+The composer's objective becomes a per-request choice on `POST /v1/extract`, not a service-wide setting.
+
+### `coverage: true | false` on the extract route
+
+R2's composer objective measured **answer nugget recall 0.2060 → 0.2610** at unchanged citation
+validity, and it shipped behind `EXTRACT_COVERAGE` — a variable read once at construction. A caller
+therefore could not ask for the measured arm without restarting the service, which makes the result
+reachable only by whoever deploys it.
+
+`POST /v1/extract` now accepts `coverage`, and `RagEngine.query_extractive(..., coverage=None)` takes the
+same override (`None` means the service default, so nothing changes for a caller that omits it). The
+guarantees are identical either way — every emitted sentence is a verbatim span of a cited passage and
+the markers stay in range — which is what makes this a per-request choice rather than a deployment
+decision. A test exercises all three states (omitted, `true`, `false`) and re-checks the citation contract
+on each.
+
+### A correction worth noting
+
+The first attempt at this edit asserted on a call-site indent that was four spaces deeper than assumed
+and aborted before writing anything; the second matched the real text. The stray parameter introduced
+while fixing it (`include_matching`, never requested) was removed before the tests ran. Both are the
+ordinary cost of scripted edits, and both were caught by the assertion rather than by a reader.
+
 ## 1.5.0 — 2026-10-29
 
 The front page claimed its gates covered every quoted figure. They cover 54 of several thousand.

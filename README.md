@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.5.0** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.5.1** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -499,7 +499,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `RERANK_COVERAGE_MIN_DOCS` | `0` | seed the coverage pass with the best candidate of this many distinct documents; `3` adds +0.0027 MAP@10 over coverage alone but costs −0.0106 Hits@4, so it is a MAP-priority option. Both figures are **suspended** with the row above — same broken ordering path |
 | `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
 | `CLAIM_MAX` | `25` | claims adjudicated per answer, so one long answer cannot run unbounded |
-| `EXTRACT_COVERAGE` | `false` | select the extractive answer's sentences by a **fact-coverage objective** (numbers, dates, acronyms and proper nouns it has not used yet, plus new content, plus the sentence's inherited relevance, with a redundancy guard) instead of by the parent document's rank. The shipped order is what the recorded end-to-end row was measured with — answer nugget recall **0.1906** against a pool carrying **0.7438** — so this is opt-in: it changes which sentences are emitted, never the guarantees, and a marker may then appear out of numerical order in the answer (the numbers are not renumbered, because they have to keep meaning the same document in the prompt and in the verifier) |
+| `EXTRACT_COVERAGE` | `false` | select the extractive answer's sentences by a **fact-coverage objective** (numbers, dates, acronyms and proper nouns it has not used yet, plus new content, plus the sentence's inherited relevance, with a redundancy guard) instead of by the parent document's rank. The shipped order is what the recorded end-to-end row was measured with — answer nugget recall **0.1906** against a pool carrying **0.7438** — so this is opt-in: it changes which sentences are emitted, never the guarantees, and a marker may then appear out of numerical order in the answer (the numbers are not renumbered, because they have to keep meaning the same document in the prompt and in the verifier) The same choice is available **per request** on `POST /v1/extract` as `coverage: true|false` (omit for the service default), so a caller can ask for the other arm without restarting |
 | `RELEVANCE_THRESHOLD` | `0.5` | minimum Laya P(relevant) to keep a passage |
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
 | `ANSWERABILITY_GATE_PATH` | unset | persisted feature-based answerability gate (see `tools/answerability_train.py`); unset uses Laya's own scalar decision. Fitted on MultiHop-RAG's own unanswerable records it halves the false-accept rate **and** raises the true-accept rate at the same threshold — 30.7% against 69.3% of unanswerable queries answered, 76.7% against 72.0% of answerable ones — with ECE 0.052 against the scalar's 0.283. It is opt-in because it is fitted to a corpus: a gate trained on news questions is a different instrument on a code corpus, and `make gate-transfer` is how that is measured rather than assumed |
@@ -571,7 +571,7 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (1855 collected, 5 of them real-weights)
+make test          # Python suite, offline, deterministic (1856 collected, 5 of them real-weights)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 make test-mcp      # the MCP server suite (skips without the [mcp] extra)
