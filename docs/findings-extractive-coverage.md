@@ -211,6 +211,28 @@ finding's headline changes shape rather than merely its digits.
 
 **Cost.** ~12 min of index reuse plus one pass over 2,255 queries; the coverage arm is the same order.
 
+### (c) Coverage *per character* — the remedy the confound suggests, registered
+
+**What it is.** The objective maximises facts covered, with no cost for length. A fact-dense sentence is often a
+long one, which is how the arm ended up emitting 2.1× the text. The obvious fix is to make the objective
+*efficiency-aware*: greedily pick the sentence with the best **new facts per character** rather than the most new
+facts, at the same five-sentence budget.
+
+**Prediction.** At the same `max_sentences=5`, coverage-per-character keeps **at least 80% of the nugget-recall gain**
+(≥ +0.044 of the +0.0549) while bringing mean answer length to **within 20% of the shipped arm's** (~710 characters
+against 593.6). It is a prediction about a *pareto* move: most of the coverage, most of the brevity.
+
+**Falsifier.** If it keeps **less than half** the gain (under +0.027), the fact-dense sentences are the long ones for
+a structural reason — facts live in long sentences — and "coverage bought with length" is not a fixable artefact but a
+property of the corpus. If it keeps the gain *without* shortening the answers, then a five-sentence budget is not
+length-controlling at all and the whole arm needs a character budget instead.
+
+**Cost.** A one-line change to the selection key plus the same 150-query rows (~12 min per arm).
+
+**Not run now, and deliberately**: the queued coverage arm is measuring the *shipped* objective, and changing the key
+before it runs would make prediction (a) a measurement of a different algorithm than the 150-query delta. The arm
+goes first, then this.
+
 ### (b) The sentence budget — is five sentences the next constraint?
 
 **What it is.** R2's falsifier already established that selection is **a** binding constraint rather than

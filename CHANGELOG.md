@@ -6,6 +6,32 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.5.3 — 2026-10-30
+
+The length confound's **remedy** is registered before its run — a fix, not just a caveat.
+
+### (c) Coverage per character
+
+The objective maximises facts covered with no cost for length, which is how it emitted 2.1× the text. The obvious fix
+is to make it efficiency-aware: greedily pick the sentence with the best **new facts per character** rather than the
+most new facts, at the same five-sentence budget.
+
+- **Prediction.** At `max_sentences=5`, coverage-per-character keeps **≥80% of the gain** (≥ +0.044 of +0.0549) while
+  bringing mean length to **within 20% of the shipped arm's** (~710 characters against 593.6). A *pareto* move: most
+  of the coverage, most of the brevity.
+- **Falsifier A.** Under half the gain (+0.027) means fact-dense sentences are the long ones for a structural reason —
+  facts live in long sentences — and "coverage bought with length" is a property of the corpus, not a fixable
+  artefact.
+- **Falsifier B.** Keeping the gain *without* shortening the answers means a five-sentence budget does not control
+  length at all, and the arm needs a character budget instead.
+
+**Not run now, deliberately**: the queued coverage arm is measuring the *shipped* objective, and changing the
+selection key before it runs would turn prediction (a) into a measurement of a different algorithm than the
+150-query delta. The arm goes first, then this.
+
+A finding that ends in a caveat has done half its job; the other half is a registered experiment that could remove
+the caveat, or establish that it cannot be removed.
+
 ## 2.5.2 — 2026-10-30
 
 The failures ledger gains its eighteenth class — **a gain bought with output volume** — and it is the one that
