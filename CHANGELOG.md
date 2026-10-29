@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.3.1 — 2026-10-30
+
+The citation audit becomes a test, because every published row depends on what `clean` means.
+
+### `tests/test_citation_semantics.py`
+
+`test_verify.py` tests the two layers granularly. What was **not** tested is the semantics as a whole — which is
+what a reader of this repository's tables needs and what a future change is most likely to break. The eight-case
+table from the audit is now a table-driven test, with expectations for **both** layers.
+
+Two failure modes it catches, and both would silently invalidate recorded numbers:
+
+| change | consequence |
+| --- | --- |
+| make `clean` **stricter** (fold the content layer in) | every published `citation_clean_all 1.0000` becomes a claim about a different property, and the rows are not re-measurable on demand |
+| make it **looser** (miss a quote, accept an out-of-range citation) | the engine's central guarantee weakens without a single number moving |
+
+Two further assertions pin the parts that could be quietly dropped: that the advisory layer **actually fires** (a
+check that never fires is not a check, however advisory), and that a **polarity flip is outside what these checks
+can see** — stated as a limit in a test rather than left to be discovered, so nobody reads a passing verdict as a
+semantic guarantee.
+
+The table is the audit recorded in the finding, so document and code cannot drift apart.
+
 ## 2.3.0 — 2026-10-30
 
 The most-quoted number in the programme audited: **"cite-clean 1.0000" certifies structure, not truth.**
