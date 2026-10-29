@@ -434,6 +434,15 @@ its treatment to two decimals. Nothing there is a transfer result in either dire
 about the sample; the labelled negatives the claim needs are MultiHop-RAG's 301 `null_query` records plus
 MTRAG-UN's, an order of magnitude more ([`findings-abstention-transfer.md`](findings-abstention-transfer.md)).
 
+**Outcome (the negatives were built and the gate does carry signal).** `tools/gate_dataset.py` turned the
+benchmark into 601 labelled rows — all 301 `null_query` records, which its own retrieval metric excludes,
+plus 300 sampled answerable ones — and on a held-out half the twelve-feature gate reads **AUC 0.8159,
+risk@80 0.4042**, against the shipped scalar's **0.5208 / 0.5000**. That is one of R3's two arms answered:
+the *features* carry answerability on real negatives. It is not the transfer result: the gate is fitted
+on half of these rows and scored on the other half, so it generalises across queries, not across
+corpora. MTRAG-UN remains the sample that would settle that
+([`findings-evidence-protocol.md`](findings-evidence-protocol.md)).
+
 ### R4 — Publish the evidence-layer protocol, and take two leaderboard placements (weeks, `[web]`)
 
 Package what already exists as **one named protocol with one command and one report**, on four axes:
@@ -456,6 +465,17 @@ single-configuration row), and prepare a **TREC RAG 2027 Retrieval** run.
 
 **Falsifier:** if an external reviewer cannot reproduce the four-axis report from a fresh clone in under
 an hour, it is a tool and not a protocol, and the claim reduces to the leaderboard placements.
+
+**Outcome (landed and run, with the strongest number the programme has produced).** `make
+evidence-protocol` prints the four axes from the artefacts the programme already produces, naming the
+file and field behind every number and printing **not measured** with the producing command for every
+absent axis — tested, because a protocol gameable by omission is worse than none. Its first run put six
+numbers on one page: evidence MAP@10 0.3128 with citation validity 1.0000 and answer nugget recall
+0.2060; the gate at held-out **AUC 0.8159 / risk@80 0.4042** against the shipped scalar's **0.5208 /
+0.5000**; and — the reason it exists — at its deployed threshold the shipped system would answer
+**69.3%** of the benchmark's unanswerable queries on the held-out half and **72.1%** over all 301. Cost
+is the one axis still unattributed for this index
+([`findings-evidence-protocol.md`](findings-evidence-protocol.md)).
 
 ### R5 — Test the listwise reranker the licence question previously blocked (weeks, `[model]`)
 

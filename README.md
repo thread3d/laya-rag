@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.3.3** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.3.4** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -648,6 +648,9 @@ make leakage-audit             # dilution signature and empty held-out blocks, a
 make generator-free-iteration  # does entity-probe expansion raise gold coverage? (no model)
 make quantization-probe        # what int8/fp16/PQ cost on the shipped encoder's own vectors
 make mteb-eval                 # MTEB v2 SearchProtocol conformance over the engine itself
+make gate-dataset              # labelled answerability rows from the benchmark's own null_queries
+make gate-transfer             # does the answerability gate travel between corpora? (with a control)
+make evidence-protocol         # the four-axis evidence-layer report; absent axes are named, not zeroed
 ```
 
 Four retrievers run over the same corpus, qrels, evaluator and top-k, so the difference between

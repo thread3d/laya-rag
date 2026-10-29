@@ -6,6 +6,52 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.4 — 2026-10-29
+
+The evidence-layer protocol, run. One report over four axes, and the number it produced on its first
+run is the strongest thing this repository has measured about its own abstention.
+
+### `make evidence-protocol`: four axes, one command, absence named rather than zeroed
+
+`tools/evidence_protocol.py` reads the artefacts the programme already produces and prints evidence
+quality, evidence-side abstention, the joint quality × (1 − false-accept) score, and cost — every
+number naming its file and field, and every axis whose artefact is missing printed as **not measured**
+with the command that would produce it. That last property is tested: a protocol gameable by omission
+is worse than no protocol. No generator, judge model or API key is in any path.
+
+It also gained `tools/gate_dataset.py` and `make gate-dataset`, which build the labelled rows —
+**every** `null_query` record plus a seeded sample of answerable ones — and `make gate-transfer` for
+the cross-corpus question.
+
+### The first run: the gate carries answerability, and production does not
+
+601 rows from MultiHop-RAG (all **301 `null_query`** records — the benchmark's own negative class,
+which its retrieval metric excludes — plus 300 sampled answerable), held out half:
+
+| scorer | n | AUC | risk@80 | AURC |
+| --- | ---: | ---: | ---: | ---: |
+| 12-feature gate | 300 | **0.8159** | **0.4042** | **0.2603** |
+| shipped scalar | 300 | 0.5208 | 0.5000 | 0.4878 |
+
+At its **deployed** threshold the shipped scalar would answer **69.3%** of the benchmark's
+unanswerable queries on the held-out half, and **72.1%** over all 301 (mean scalar 0.627, median 0.731).
+The relevance gate does part of the work — 25 of the 301 never reached the answerability decision
+because the evidence set was emptied first — and of the 276 that did reach it, **78.6%** were called
+answerable.
+
+The gate's 0.8159 is essentially the in-domain 0.8146 measured on the older 300-query protocol, which
+is the useful part: the features are not an artefact of that protocol. What it is *not* is a transfer
+result — the gate is fitted on half of these rows and scored on the other half, so it generalises
+across queries, not across corpora.
+
+### Still owed
+
+- A cross-corpus negative set (MTRAG-UN's 97 unanswerable + 78 underspecified turns), which is what
+  turns "generalises across queries" into "travels".
+- A deployment-prevalence weighting, so `risk@80` and the joint score can be read at a base rate.
+- Shipping the fitted gate: these numbers are an argument for making the twelve-feature gate the
+  default when an artefact is present, rather than an opt-in.
+
 ## 1.3.3 — 2026-10-29
 
 The extractive objective measured on the benchmark, the gate dataset builder that gives R3 its
