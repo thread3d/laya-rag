@@ -395,14 +395,18 @@ sentences, under the existing verbatim + citation constraints. Keep today's beha
 **Falsifier:** no rise of ≥0.10 at unchanged citation validity on the full row ⇒ selection is not the
 binding constraint and G2 closes.
 
-**Outcome (landed, measured locally).** The objective exists as `coverage=True` /
-`LAYA_RAG_EXTRACT_COVERAGE=1`: submodular fact coverage (new numbers/dates/acronyms, new content,
-inherited relevance, Jaccard ≥ 0.7 redundancy guard) under identical guarantees. On the real corpus
-two of three queries go from one document and a handful of facts to two or three documents and **3.5×
-to 7×** the fact tokens; the objective's own first version failed its own test by re-admitting a
-near-duplicate, which is the failure it exists to remove. Off by default so every recorded row stays
-reproducible. The published row's number does not move until the full 2,255-query run, which needs the
-MultiHop-RAG download — so the finding claims a mechanism, not an effect size
+**Outcome (measured on the benchmark; the prediction was twice too optimistic).** The objective
+landed as `coverage=True` / `LAYA_RAG_EXTRACT_COVERAGE=1` — submodular fact coverage under identical
+guarantees — and then the row was run: MultiHop-RAG's corpus built into the engine's own index (4,592
+chunks, the figure every other row here was measured on), 150 answerable queries, gates zeroed.
+**Answer nugget recall 0.2060 → 0.2610**, paired **+0.0549 [+0.0240, +0.0841] at p=0.0005**, 107 queries
+improved and 37 worse, citation validity unchanged at 1.0000, and both arms emitting exactly 5.00
+sentences per answer — so the gain is selection, not volume.
+
+That is half the pre-registered bar of 0.10, so the falsifier **fires**: selection is *a* binding
+constraint, not *the* one, and the prediction of 0.35–0.50 was wrong by about a factor of two. The
+remaining gap to the pool's 0.7438 is most plausibly the five-sentence budget, which is the next
+experiment rather than an assumption
 ([`findings-extractive-coverage.md`](findings-extractive-coverage.md)).
 
 ### R3 — Make abstention portable, and grade it on the records everyone else drops (1–2 weeks, `[offline]` `[data]`)

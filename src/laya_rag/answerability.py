@@ -187,6 +187,40 @@ def _query_term_coverage(query: str, evidence: str) -> float:
     return len(terms & present) / len(terms)
 
 
+class PassageView:
+    """The attribute shape :func:`extract_features` reads, from a dict *or* a passage object.
+
+    `extract_features` is already dual-shape (`_field` reads a mapping by key and anything else by
+    attribute), so this is not a correctness fix — it exists so a *tool* can hand that function a
+    known shape without depending on the defensiveness of a function it does not own, and so a
+    future tightening of `extract_features` has exactly one adapter to update. The failure it does
+    remove is the one this repository has paid for once in another form: a harness read JSON
+    passages with `getattr`, every passage became empty, and two experiment arms came out identical
+    to four decimals. A typed boundary is cheaper than trusting a defensive read.
+    """
+
+    __slots__ = ("text", "relevance", "recall_score", "path", "chunk_id")
+
+    def __init__(self, passage: Any) -> None:
+        if isinstance(passage, Mapping):
+            self.text = str(passage.get("text") or "")
+            self.relevance = float(passage.get("relevance") or 0.0)
+            self.recall_score = float(passage.get("recall_score") or 0.0)
+            self.path = passage.get("path")
+            self.chunk_id = passage.get("chunk_id")
+        else:
+            self.text = str(getattr(passage, "text", "") or "")
+            self.relevance = float(getattr(passage, "relevance", 0.0) or 0.0)
+            self.recall_score = float(getattr(passage, "recall_score", 0.0) or 0.0)
+            self.path = getattr(passage, "path", None)
+            self.chunk_id = getattr(passage, "chunk_id", None)
+
+
+def passage_view(passage: Any) -> PassageView:
+    """Adapt a passage dict or object for :func:`extract_features`."""
+    return passage if isinstance(passage, PassageView) else PassageView(passage)
+
+
 def extract_features(
     query: str,
     passages: Sequence[Any],

@@ -6,6 +6,59 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.3 — 2026-10-29
+
+The extractive objective measured on the benchmark, the gate dataset builder that gives R3 its
+negative class, and a resume-fingerprint fix that two identical experiment arms exposed.
+
+### The coverage objective: **0.2060 → 0.2610** answer nugget recall, p=0.0005
+
+MultiHop-RAG's corpus built into the engine's own index (**4,592 chunks**, the figure every other row
+in this repository was measured on), 150 answerable queries, gates zeroed:
+
+| arm | answer nugget recall | sentences per answer | citation clean |
+| --- | ---: | ---: | ---: |
+| rank order (shipped) | **0.2060** | 5.00 | **1.0000** |
+| coverage objective | **0.2610** | 5.00 | **1.0000** |
+| paired delta | **+0.0549** [+0.0240, +0.0841], p=0.0005 | | |
+
+107 queries improved, 37 worse, 6 unchanged. Both arms emitted exactly 5.00 sentences per answer, so
+the gain is selection and not volume — a check that had to be made, because the claim counts differ
+(653 against 727) and made the first read look like a length effect.
+
+**The prediction was wrong by about a factor of two, and the falsifier fires.** R2 pre-registered
+0.35–0.50 and a 0.10 bar; the measured rise is 0.055. So the objective is real and significant, and
+selection is *a* binding constraint rather than *the* one. The remaining gap to the pool's 0.7438 is
+most plausibly the five-sentence budget — the next experiment, not an assumption.
+
+### `tools/gate_dataset.py`: R3's negative class, at a size that can decide
+
+MultiHop-RAG ships 301 `null_query` records whose gold answer is "Insufficient information", which its
+own retrieval metric excludes. This tool runs each query through the engine and writes a feature row
+per query — every null kept, the answerable records sampled — so the gate's transfer question can be
+asked on ~300 real negatives instead of the 19 the documentation pilot had. Resumable through
+`jobkit`, one row per query, fsynced. `laya_rag.answerability.passage_view` is the typed adapter the
+tools share; `extract_features` is already dual-shape, so the adapter is a boundary, not a fix, and the
+test says so rather than inventing a failure it prevents.
+
+### Two identical arms, twice, and the fingerprint that let it happen
+
+The first attempt at the comparison set `EXTRACT_COVERAGE=1`, which does nothing: this repository's
+variables carry the `LAYA_RAG_` prefix. Both arms therefore composed identically — 0.2060, 653 claims,
+both — and the identical numbers were the only signal. It is the third time this session that an arm
+matching its control to four decimals meant a bug rather than a null.
+
+`tools/engine_extractive.py` now puts `LAYA_RAG_EXTRACT_COVERAGE` into its **resume fingerprint**: the
+composer's objective is a configuration of the row, so a resumed run that differs only there used to
+skip every completed row and report the other arm's numbers.
+
+### Still owed
+
+- The 400-query and full 2,255-query rows (150 is a subset; the direction and significance are
+  established, the absolute level is not the published one).
+- The `max_sentences` sweep, where the remaining 0.2610 → 0.7438 gap most plausibly lives.
+- The R3 run itself on the 301 nulls, now that the dataset builder exists.
+
 ## 1.3.2 — 2026-10-29
 
 The abstention-transfer protocol, and the second dataset's verdict on the 2026 encoder. One new tool,

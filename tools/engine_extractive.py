@@ -217,6 +217,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     fingerprint = jobkit.config_fingerprint(
         tool="engine_extractive",
+        # The composer's objective is a *configuration* of this row, not a detail: two arms that
+        # differ only by `LAYA_RAG_EXTRACT_COVERAGE` produce the same query set, so without this
+        # a resumed run silently reuses the other arm's rows and reports two identical numbers.
+        # That happened on the first attempt at this comparison, and the identical arms were the
+        # only signal.
+        extract_coverage=os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", ""),
         embed_model=args.embed_model or "engine-default",
         sparse=args.sparse,
         rerank_model=args.rerank_model,
