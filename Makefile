@@ -89,6 +89,7 @@ GATE_ROWS ?= eval/gate/multihop.json
 GATE_ARTEFACT ?= eval/gate/answerability-gate.json
 GATE_SPLITS ?= 40
 GATE_TRAIN_ARGS ?=
+MULTIHOP_FETCH_ARGS ?=
 GATE_LIMIT ?= 300
 GATE_SEED ?= 17
 GATE_OUT ?= eval/gate/multihop
@@ -100,7 +101,7 @@ EVIDENCE_ANSWER_ROW ?= eval/benchmarks/multihop-rag/engine-extractive-rank150.js
 EVIDENCE_GATE_ROWS ?= eval/gate/multihop.json
 EVIDENCE_EXTRA_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe gate-dataset gate-train gate-transfer evidence-protocol job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe multihop-fetch gate-dataset gate-train gate-transfer evidence-protocol evidence-pipeline job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -175,6 +176,7 @@ help:
 	@echo "lexical-selector  which BM25 configuration each BEIR member actually wants"
 	@echo "fusion-tuning  tuned convex fusion vs the shipped RRF, tuned on held-out halves"
 	@echo "claim-check  do the numbers quoted in prose resolve against the reports?"
+	@echo "multihop-fetch  download and verify the benchmark's records and corpus"
 	@echo "gate-dataset build labelled answerability feature rows from the benchmark's nulls"
 	@echo "gate-train     fit and persist the twelve-feature answerability gate"
 	@echo "gate-transfer  does the answerability gate travel between corpora?"
@@ -633,6 +635,18 @@ generator-free-iteration:
 # What does int8/fp16/PQ cost on the shipped encoder's real vectors? (faiss, no model)
 quantization-probe:
 	$(PY) tools/quantization_probe.py $(QUANT_ARGS)
+
+# The benchmark's own files, verified against its shape (2,556 records, 301 of them null_query, 609
+# documents) before any measurement is derived from them. `--check` re-verifies without the network.
+multihop-fetch:
+	$(PY) tools/multihop_fetch.py $(MULTIHOP_FETCH_ARGS)
+
+# The four-axis report, once its inputs exist. The full chain from nothing —
+# `make multihop-fetch`, build the engine's corpus and index, one extractive arm, `make gate-dataset`,
+# `make gate-train`, then this — is ~75 minutes of CPU at the defaults (per-step timings in
+# docs/findings-evidence-protocol.md), which is what R4's own falsifier asked for: reproducible from a
+# fresh clone in under an hour of compute plus a 12 MB download.
+evidence-pipeline: evidence-protocol
 
 # R3's dataset: every null_query record in the benchmark (the class its own retrieval metric
 # excludes) plus a seeded sample of answerable ones, as labelled feature rows for the gate.

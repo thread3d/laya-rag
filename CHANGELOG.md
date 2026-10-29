@@ -6,6 +6,42 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.7 — 2026-10-29
+
+The evidence protocol becomes reproducible elsewhere, which is the falsifier it set for itself.
+
+### `make multihop-fetch`: the corpus arrives verified, not by hand
+
+The four-axis report rests on two files this repository does not ship, and until now they arrived
+manually — which made the report unreproducible and R4's own falsifier (*reproducible from a fresh clone
+in under an hour*) unmet. `tools/multihop_fetch.py` downloads them and **asserts the dataset's shape
+before any measurement is derived from it**: 2,556 records, of which exactly **301 are `null_query`**
+(the negative class the abstention axis is scored on), and 609 documents. A truncated or re-versioned
+download fails there rather than producing a smaller number that reads as a result — the same discipline
+`tools/bioasq.py` applies to a 26 GB dump. `--check` re-verifies without the network, and a second run is
+a no-op.
+
+### The chain, with the wall clock each step actually took
+
+| step | command | measured |
+| --- | --- | --- |
+| fetch and verify | `make multihop-fetch` | **12 s** |
+| corpus and index | `laya-rag index eval/benchmarks/multihop-rag/engine-corpus --rebuild` | **580 s** (4,592 chunks) |
+| one extractive arm | `tools/engine_extractive.py --limit 150 --sample-seed 17` | **736 s** |
+| labelled gate rows | `make gate-dataset` | **~2,760 s** |
+| fit the gate | `make gate-train` | **2 s** |
+| the report | `make evidence-protocol` | **1 s** |
+| **total** | | **~68 min** |
+
+Ten minutes over R4's bar at full size, and under an hour at `--limit 100` for the gate rows (401 rows,
+~31 min). The protocol reports its own `n`, so a reduced sample is visible in the report rather than
+implied to be the full one.
+
+### Still owed
+
+- A second corpus for the abstention axis (MTRAG-UN), which is what turns "generalises across queries"
+  into "travels" — the one thing in this section that reproducibility cannot substitute for.
+
 ## 1.3.6 — 2026-10-29
 
 The decision cascade: half the decision work for nothing, measured on the benchmark.

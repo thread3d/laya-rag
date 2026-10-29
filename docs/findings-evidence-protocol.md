@@ -92,6 +92,39 @@ index. The envelope was measured on the docs corpus in R0 (6.71 s wall / 96.3 s 
 threads, CPU-only) and that number is in `findings-cost-envelope.md`; the axis exists so that the
 omission is visible, which it now is.
 
+## Reproducing it elsewhere — the falsifier this document set itself
+
+R4's own falsifier was: *if an external reviewer cannot reproduce the four-axis report from a fresh clone
+in under an hour, it is a tool and not a protocol.* Two files were missing from that path — the
+benchmark's records and its 609-document corpus both arrived by hand — so the report was not
+reproducible at all. `make multihop-fetch` closes that, and it **asserts the dataset's shape before any
+measurement is derived from it**: 2,556 records, of which exactly **301 are `null_query`**, and 609
+documents. A truncated or re-versioned download fails there rather than producing a smaller number that
+reads as a result — the discipline `tools/bioasq.py` applies to a 26 GB dump. `--check` re-verifies an
+existing copy without touching the network.
+
+The chain, with the wall-clock each step actually took on this host at the defaults:
+
+| step | command | measured |
+| --- | --- | --- |
+| 1. fetch and verify | `make multihop-fetch` | **12 s** (12 MB) |
+| 2. build the engine's corpus and index | `laya-rag index eval/benchmarks/multihop-rag/engine-corpus --rebuild` | **580 s** (609 documents → 4,592 chunks) |
+| 3. one extractive arm | `tools/engine_extractive.py --limit 150 --sample-seed 17` | **736 s** |
+| 4. labelled gate rows | `make gate-dataset` (601 rows) | **~2,760 s** |
+| 5. fit the gate | `make gate-train` | **2 s** |
+| 6. the report | `make evidence-protocol` | **1 s** |
+| | **total** | **~68 min** |
+
+So the chain is **~68 minutes** at full size — ten minutes over the bar R4 set — and it lands **under an
+hour** at `--limit 100` for step 4 (401 rows, ~31 min). Either way the number is stated rather than
+asserted, and the protocol reports its own `n` so a reduced sample is visible in the report rather than
+implied to be the full one.
+
+What a second host would still have to supply: the Laya checkpoints (2.3 GB, `vendor/laya/setup_laya.sh`),
+and the willingness to spend the hour. Nothing else in the chain is machine-specific — the corpus is
+downloaded and verified, the index is rebuilt from it, and every number in the report names the artefact
+it came from.
+
 ## What is owed
 
 - A cross-corpus negative set (MTRAG-UN), which turns "generalises across queries" into "travels".
