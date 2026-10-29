@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.8 — 2026-10-29
+
+Tool paths written in prose are now checked — and the check found two of this round's own mistakes.
+
+### `tests/test_docs_tool_paths_exist.py`
+
+`test_docs_links_exist.py` checks markdown *links*; it does not see a backticked `tools/….py` in a
+sentence, and those are how every findings document names the tool that produced its number. Of the
+**96 distinct tool paths** the documentation names, **nine pointed at nothing**:
+
+- **two introduced by this round, in the document written three rounds ago** — `distil_verify.py` for
+  `distill_verify.py` (a dropped letter) and `distill.py` for the tool that is actually
+  `finetune.py --teacher-models`. Both corrected.
+- **seven declared planned** in the documents that name them: `generation-placement.md` heads its sketch
+  "planned adapters only" and "planned, does NOT exist yet", and `SCORE-LIFT.md` names `tools/judge.py`
+  under "**Specification.**". They are listed by name rather than skipped by a heuristic, which is the
+  convention `test_docs_make_targets_exist.py` already sets for `PROPOSED_REFERENCES` — a checker that
+  infers intent from prose is a checker nobody can trust.
+
+A perturbation test drives both directions: a fabricated path is caught, and a declared-planned path is
+exempt. A third test asserts the extraction still finds more than thirty paths, so a broken regex cannot
+let the check pass vacuously.
+
+**The lesson is the one this repository keeps paying for**: a path in prose is a claim, and nothing was
+checking it. The two that were wrong were written by the tool that is supposed to be careful about
+exactly this — which is why the fix is a test rather than another careful reading.
+
 ## 1.4.7 — 2026-10-29
 
 The version becomes one value, checked in all five places it is written.

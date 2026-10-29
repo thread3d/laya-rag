@@ -58,10 +58,11 @@ submit* — and it stays a scoring criterion. The gate answers "believable", not
 
 ## What is still owed, and it is the hard half
 
-The artefact itself. `tools/distill.py` distils a three-model ensemble into one 33M encoder and measured
-**+0.0120 on NFCorpus** (about 29% of the ensemble's +0.0413); `tools/package_model.py` exports the
-result, `tools/distil_verify.py` checks the export is faithful to its source **exactly** (max |Δ| 0 over
-three probes), and this gate checks the shipped thing is believable. What has never been run is the
+The artefact itself. `tools/finetune.py --teacher-models` distils a three-model ensemble into one 33M
+encoder and measured **+0.0120 on NFCorpus** (about 29% of the ensemble's +0.0413);
+`tools/package_model.py` exports the result, `tools/distill_verify.py` checks the export is faithful to
+its source **exactly** (max |Δ| 0 over three probes), and this gate checks the shipped thing is
+believable. What has never been run is the
 distillation across the five measured datasets, which is the run that would decide whether an MTEB
 submission is worth making. That is a training job, not a measurement job, and it is the one item in
 R0–R8 this host cannot finish quickly.
