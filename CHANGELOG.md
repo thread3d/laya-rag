@@ -6,6 +6,27 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.6.2 — 2026-10-29
+
+`BENCHMARKS.md` — the page that says what may and may not be claimed — now carries the October levers.
+
+### Four additions, each with its limit, and one removal
+
+`BENCHMARKS.md` opens its claim section with what *can* be claimed and follows it with what cannot. The
+four levers the October round measured belong in exactly that structure, so each now appears with the
+boundary that travels with it:
+
+| added | allows | does not |
+| --- | --- | --- |
+| the 12-feature answerability gate, shipped | refusing what the corpus cannot answer, provably: held-out **AUC 0.8377**, false accepts more than halved while true accepts *rise* | transfer across corpora — halves of one benchmark, balanced by construction |
+| the composer objective | **0.2060 → 0.2610** nugget recall at unchanged citation validity, significant | the gap to the pool's 0.7438; selection is *a* constraint, not *the* one |
+| the reranker generation | **+0.031 MAP@10** over the 2024 model, +0.058 over none | anything on BEIR, where a pointwise ranker loses; ArguAna is being measured |
+| the decision cascade | **43% less decision CPU at identical quality** here | generality — free because the first stage is strong here |
+
+The round also **removed** a claim, and that is recorded on the same page: `docs/index.md` said
+`make claim-check` "resolves every quoted figure", and it resolves 54 against 8,370 decimal figures in the
+tracked prose. A page about what may be claimed is the right place to note a claim that was withdrawn.
+
 ## 1.6.1 — 2026-10-29
 
 The CI workflow's `make` invocations become a checked contract.

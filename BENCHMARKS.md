@@ -267,6 +267,22 @@ dense. Both configurations are kept and drawn side by side: the `bge-small` row 
 higher-scoring alternative. Detail and the judge trade-off:
 [`docs/findings-encoder-adaptation.md`](docs/findings-encoder-adaptation.md).
 
+### What October added to this section
+
+The four levers the October round measured belong here, because each one changes what may be claimed —
+and each carries its limit:
+
+| added | what it allows | what it does not |
+| --- | --- | --- |
+| the **12-feature answerability gate**, shipped as an artefact | "we refuse what the corpus cannot answer, and we can prove it": held-out **AUC 0.8377** on the benchmark's own 301 `null_query` records, more than halving the false-accept rate at the same threshold while *raising* the true-accept rate | transfer across corpora — it is fitted on halves of one benchmark, and the classes are balanced by construction |
+| the **composer objective** (`EXTRACT_COVERAGE`) | answer nugget recall **0.2060 → 0.2610** at unchanged citation validity, significant | the remaining gap to the pool's 0.7438 — selection is *a* constraint, not *the* one |
+| the **reranker generation** (`bge-reranker-v2-m3`) | **+0.031 MAP@10** over the 2024 model on the same pool, and +0.058 over no reranker | anything on BEIR, where a pointwise ranker loses; and ArguAna, where it is being measured |
+| the **decision cascade** (`SECOND_STAGE_TOP_M`) | **43% less decision CPU at identical quality** on this corpus | generality — it is free because the first stage's ordering is strong here, and per corpus by construction |
+
+The one claim the round **removed** is worth stating too: `docs/index.md` said `make claim-check`
+"resolves every quoted figure", and it resolves 54 of them against 8,370 decimal figures in the tracked
+prose. The front page now says so.
+
 **Cannot be claimed.** There is no end-to-end **ranking**: the first `engine + <generator>` row
 exists only as a **pilot** — 12 answerable plus 8 `null_query` records through the engine at its
 shipped defaults with the local `ornith-1.5:35b`, where **EM 0.000 sits beside a 0.667
