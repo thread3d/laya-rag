@@ -105,7 +105,10 @@ Two of these deserve emphasis because they invert the usual intuition:
 ### 1.3 The trap in comparing this repository's numbers to the board
 
 There are three denominators in the wild and a 2026 reviewer will notice if they are mixed: MTEB's BEIR
-board is **15** tasks, the BEIR paper is **13**, and this repository's macro is **18**. On the
+board is **15** tasks, the BEIR paper is **13**, and this repository's macro is **18**. The 13-versus-15
+gap has now been measured rather than assumed: scoring the same models on the 13-task subset moves them
+**+1.7 to +2.2 points** (Qwen3-Embedding-0.6B reads 0.5760 there against 0.5552 over 15) `[web]`, which is
+larger than most of the differences anyone would want to claim between systems. On the
 official board (2026-10-29), BM25 scores **0.3984**, `bge-large-en-v1.5` **0.5434**, Qwen3-Embedding-0.6B
 **0.5552**, and NV-Embed-v2 **0.6321** over BEIR-15 `[web]`. The repository's **0.4799** is a
 *best-per-dataset macro over 18* datasets, not a BEIR-15 or BEIR-13 mean, and its own comparison row
@@ -353,6 +356,14 @@ not the system* `[repo]` — over the five measured datasets with:
   are 0.188B and 0.593B);
 - the shipped hybrid + RRF fusion on top, unchanged.
 
+**Prerequisites, found by doing it (both now fixed).** The harness could not have measured a 2026
+decoder-class encoder *correctly*: it pooled `cls` or `mean` only, so Qwen3-Embedding — trained on the
+last token — would have been embedded under a pooling it was never trained for, which does not raise and
+reads as a negative about the model; and `--query-instruction` applied one hardcoded bge sentence to every
+family, where Qwen3 wants an `Instruct:`/`Query:` pair and e5 a bare token. Both now delegate to the
+engine's verified family table (`pool_hidden`, `family_query_prefix`), with bge unchanged so no recorded
+row moves. A component refresh starts by checking that the harness can express the component.
+
 **Prediction:** fused nDCG@10 ≥ **+0.03** over the current 0.452 single-config mean, and the dense channel
 re-earning a non-zero `DENSE_WEIGHT` on at least three of five datasets. The arithmetic behind the
 prediction: on MTEB's official board Qwen3-Embedding-0.6B reads **0.5552** against `bge-large`'s 0.5434
@@ -430,6 +441,11 @@ on cached scores and measure the calibration loss honestly.
 **Falsifier:** if the student's calibration degrades more than its ranking, the asset is the
 *calibration* — ship the cascade and stop.
 
+**One option is already closed by measurement**: quantising the model will not help. At RAG scale int8
+is lossless but **not faster** than fp32, fp16 is **36% slower**, and the whole quantisation literature
+buys bytes rather than time `[web]`. The compute axis has to come from *doing less work* — a cascade, a
+shorter state, fewer candidates — not from doing the same work in a narrower dtype.
+
 ### R7 — Measure one multilingual collection (days, `[data]`)
 
 A MIRACL subset through the engine beside lexical and dense controls, with the result stated even if it
@@ -453,7 +469,10 @@ The 2026 evidence strengthens the existing ledger and adds three closures of its
   TREC's own 0.44-versus-0.95 gap is the evidence `[web]`.
 - **Do not chase the agentic-retrieval premium without owning a generator.** It is the largest
   documented gain in the field (≈+0.35 nDCG@30 over BM25 on TREC 2025's retrieval task) and it is paid in
-  generator calls `[web]`.
+  generator calls `[web]`. The same applies to **query-side expansion**, which is 2–7× larger than
+  document expansion (+4.8% to +9.5% relative over SPLADE-v3 on three corpora against doc2query's
+  +0.01–0.05 absolute) and is paid per query by a generator `[web]`; it belongs in the `engine +
+  <model>` column if it is ever run, not in this one.
 - **Do not build a vision path or a knowledge graph.** ViDoRe/MIEB are out of reach for a text-only
   system, and the graph's measured gain is a conditioning signal this engine already has without it.
 - Everything in [`RESEARCH.md`](../RESEARCH.md) §2 still stands.

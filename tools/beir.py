@@ -552,6 +552,24 @@ class LayaEmbedder:
         return self.embed(texts, fixed_length=fixed_length)
 
 
+def pool_hidden(hidden: Any, attention_mask: Any, pooling: str, torch: Any) -> Any:
+    """Pool a batch of token states: ``cls``, ``mean``, or ``last`` (the last *real* token).
+
+    ``last`` exists because the decoder-style encoders (Qwen3-Embedding, gte, e5-mistral) are
+    trained on the final token, and the harness pooled CLS or mean only — so measuring one of them
+    produced a number under a pooling it was never trained for. That does not raise; it scores
+    worse and reads as a negative about the model. Batches pad on the right, so the last real token
+    is at ``sum(mask) - 1``, not at ``-1``, which would read a pad embedding.
+    """
+    if pooling == "cls":
+        return hidden[:, 0]
+    if pooling == "last":
+        lengths = attention_mask.sum(dim=1).clamp(min=1) - 1
+        return hidden[torch.arange(hidden.shape[0]), lengths]
+    mask = attention_mask.unsqueeze(-1).to(hidden.dtype)
+    return (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+
+
 class BiEncoder:
     """A retrieval-trained bi-encoder, for the comparison Laya's README invites.
 
@@ -562,6 +580,10 @@ class BiEncoder:
     carries the pooling setting so the embedding cache cannot mix the two.
     """
 
+    #: bge's instruction, and the historical default for `--query-instruction`. A family the engine
+    #: table knows gets *its own* line instead (Qwen3's `Instruct:`/`Query:` pair, e5's bare token):
+    #: applying bge's to a model trained on another is the third silent mismatch, after pooling and
+    #: the passage prefix. bge itself is not in that table, so every row measured so far is unchanged.
     QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
     def __init__(
@@ -581,11 +603,16 @@ class BiEncoder:
         if pooling == "auto":
             # A local directory carries its own pooling; a name heuristic cannot tell that
             # eval/distill-nfcorpus-model is BGE-derived and would silently mean-pool it.
-            from laya_rag.model import saved_pooling
+            from laya_rag.model import family_pooling, saved_pooling
 
-            pooling = saved_pooling(model_id) or ("cls" if "bge" in model_id.lower() else "mean")
-        if pooling not in {"cls", "mean"}:
-            raise ValueError(f"pooling must be cls, mean or auto, got {pooling!r}")
+            # Delegate the name heuristic to the engine rather than repeating it here: `model.py`
+            # carries the family table (bge/mxbai CLS, qwen3-embedding last-token, e5 mean) and each
+            # entry in it was verified by loading the model, not read off a card. Two copies of that
+            # table would be two answers, and the failure is silent — a mean-pooled Qwen3 encoder
+            # loads, runs and scores worse than it should.
+            pooling = saved_pooling(model_id) or family_pooling(model_id)
+        if pooling not in {"cls", "mean", "last"}:
+            raise ValueError(f"pooling must be cls, mean, last or auto, got {pooling!r}")
 
         self.torch = torch
         self.device = device
@@ -593,6 +620,9 @@ class BiEncoder:
         self.max_length = max_length
         self.pooling = pooling
         self.query_instruction = query_instruction
+        from laya_rag.model import family_query_prefix
+
+        self.query_prefix = family_query_prefix(model_id) or self.QUERY_PREFIX
         self.model_id = model_id
         # Documents never take the query instruction, so the embedding cache is keyed by
         # model and pooling only — the instruction setting is a query-side choice.
@@ -623,11 +653,7 @@ class BiEncoder:
             ).to(self.device)
             with self.torch.no_grad():
                 hidden = self.model(**encoded).last_hidden_state
-            if self.pooling == "cls":
-                pooled = hidden[:, 0]
-            else:
-                mask = encoded["attention_mask"].unsqueeze(-1).to(hidden.dtype)
-                pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+            pooled = pool_hidden(hidden, encoded["attention_mask"], self.pooling, self.torch)
             pooled = self.torch.nn.functional.normalize(pooled, p=2, dim=1)
             out.append(pooled.cpu().numpy().astype(np.float32))
         return np.vstack(out) if out else np.zeros((0, 0), dtype=np.float32)
@@ -635,7 +661,9 @@ class BiEncoder:
     def embed_queries(self, texts: Sequence[str], fixed_length: bool = False) -> np.ndarray:
         if not self.query_instruction:
             return self.embed(texts, fixed_length=fixed_length)
-        return self.embed([self.QUERY_PREFIX + text for text in texts], fixed_length=fixed_length)
+        return self.embed(
+            [self.query_prefix + text for text in texts], fixed_length=fixed_length
+        )
 
 
 class CrossEncoder:

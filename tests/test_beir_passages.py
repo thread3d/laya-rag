@@ -118,3 +118,52 @@ def test_the_sum_arm_reads_deeper_than_max():
     short = beir.passage_rankings(corpus, {"q": "alpha"}, 1, passage_chars=200,
                                   aggregate="sum")["q"]
     assert short == ["d"]
+
+
+# ── last-token pooling: the decoder-family encoders ──────────────────────
+
+def test_last_token_pooling_takes_the_last_real_token_not_the_last_position():
+    """Right-padded batches put a pad embedding at position -1; pooling it is a silent zero.
+
+    Qwen3-Embedding and the gte/e5-mistral family are trained on the final token (EOS). The
+    harness pooled CLS or mean only, so every such model would have been measured under a pooling
+    it was not trained for — which does not raise, it just scores worse and reads as a negative.
+    """
+    import torch
+
+    hidden = torch.tensor([[[1.0, 0.0], [2.0, 0.0], [99.0, 0.0], [99.0, 0.0]]])
+    mask = torch.tensor([[1, 1, 0, 0]])
+    pooled = beir.pool_hidden(hidden, mask, "last", torch)
+    assert pooled.tolist() == [[2.0, 0.0]]
+    # The other two still do what they say, so the new branch did not disturb them.
+    assert beir.pool_hidden(hidden, mask, "cls", torch).tolist() == [[1.0, 0.0]]
+    assert beir.pool_hidden(hidden, mask, "mean", torch).tolist() == [[1.5, 0.0]]
+
+
+def test_the_harness_rejects_a_pooling_it_cannot_do():
+    with pytest.raises(ValueError, match="pooling must be"):
+        beir.BiEncoder(model_id="BAAI/bge-small-en-v1.5", pooling="max")
+
+
+def test_auto_pooling_delegates_to_the_engine_family_table():
+    """One table, not two: `model.py`'s entries were verified by loading each model."""
+    from laya_rag.model import family_pooling
+
+    assert family_pooling("Qwen/Qwen3-Embedding-0.6B") == "last"
+    assert family_pooling("BAAI/bge-small-en-v1.5") == "cls"
+
+
+def test_a_family_prefix_beats_the_historical_default_and_bge_keeps_it():
+    """Qwen3 wants an `Instruct:`/`Query:` pair, e5 a bare token, bge a sentence.
+
+    The harness carried one hardcoded string for every `--query-instruction` run. Applying bge's
+    line to a model trained on another is the third silent mismatch (after pooling and the passage
+    prefix): it runs, and scores below the model's own protocol. bge itself is not in the engine
+    table, so every row measured so far is unchanged — which is the property this checks.
+    """
+    from laya_rag.model import family_query_prefix
+
+    assert family_query_prefix("BAAI/bge-small-en-v1.5") == ""
+    assert family_query_prefix("Qwen/Qwen3-Embedding-0.6B").startswith("Instruct:")
+    assert family_query_prefix("intfloat/e5-base-v2") == "query: "
+    assert beir.BiEncoder.QUERY_PREFIX.startswith("Represent this sentence")

@@ -297,6 +297,16 @@ _FAMILY_QUERY_PREFIX: tuple[tuple[str, str], ...] = (
 )
 
 
+def family_query_prefix(model_id: str) -> str:
+    """Public name for the per-family query line; the benchmarking tools apply it too.
+
+    Every family wants a different one — bge's sentence, e5's bare token, Qwen3's `Instruct:`/
+    `Query:` pair — and applying one family's to another is a silent mismatch of the same shape as
+    the wrong pooling. Two tables would be two answers.
+    """
+    return _family_query_prefix(model_id)
+
+
 def _family_query_prefix(model_id: str) -> str:
     """The query-side prefix for a known family, or ``""`` — never another family's."""
     lowered = (model_id or "").lower()
@@ -313,6 +323,16 @@ def _family_prefixes(model_id: str) -> tuple[str, str]:
         if needle in lowered:
             return prefixes
     return ("", "")
+
+
+def family_pooling(model_id: str) -> str:
+    """Public name for the family table: the benchmarking tools resolve pooling the same way.
+
+    `tools/beir.py` used to carry its own "CLS if the name contains bge, else mean" heuristic, which
+    silently mean-pools every decoder-style encoder (Qwen3-Embedding is trained on the last token).
+    One table, one answer.
+    """
+    return _family_pooling(model_id)
 
 
 def _family_pooling(model_id: str) -> str:
