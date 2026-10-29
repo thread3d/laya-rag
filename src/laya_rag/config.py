@@ -478,6 +478,12 @@ class EngineConfig:
     # sample. Claims are short, so a smaller pool is the better default here even
     # though the query path uses the wider one.
     claim_retrieve_k: int = field(default_factory=lambda: _env_int("CLAIM_RETRIEVE_K", 10))
+    #: Select the extractive answer's sentences by a fact-coverage objective rather than by the
+    #: parent document's rank. Off by default: the rank-ordered output is what every recorded
+    #: end-to-end row was measured with (`findings-extractive-row.md`: answer nugget recall 0.1906
+    #: against a pool carrying 0.7438), so turning it on changes a published number and has to be
+    #: measured rather than assumed. The verbatim-span and citation guarantees are identical.
+    extract_coverage: bool = field(default_factory=lambda: _env_bool("EXTRACT_COVERAGE", False))
     claim_max: int = field(default_factory=lambda: _env_int("CLAIM_MAX", 25))
     #: How confident the local NLI pass must be before a claim the relevance gate never reached
     #: is called `supported` or `contradicted` rather than `no_coverage`. Only consulted when

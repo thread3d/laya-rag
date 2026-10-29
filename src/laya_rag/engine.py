@@ -1492,7 +1492,11 @@ class RagEngine:
 
         result = self.query(query, **query_kwargs)
         composed = compose_extractive(
-            result.passages, query=query, max_sentences=max_sentences, min_score=min_score
+            result.passages,
+            query=query,
+            max_sentences=max_sentences,
+            min_score=min_score,
+            coverage=self.config.extract_coverage,
         )
         if include_evidence:
             payload = result.as_dict()

@@ -387,6 +387,16 @@ sentences, under the existing verbatim + citation constraints. Keep today's beha
 **Falsifier:** no rise of ≥0.10 at unchanged citation validity on the full row ⇒ selection is not the
 binding constraint and G2 closes.
 
+**Outcome (landed, measured locally).** The objective exists as `coverage=True` /
+`LAYA_RAG_EXTRACT_COVERAGE=1`: submodular fact coverage (new numbers/dates/acronyms, new content,
+inherited relevance, Jaccard ≥ 0.7 redundancy guard) under identical guarantees. On the real corpus
+two of three queries go from one document and a handful of facts to two or three documents and **3.5×
+to 7×** the fact tokens; the objective's own first version failed its own test by re-admitting a
+near-duplicate, which is the failure it exists to remove. Off by default so every recorded row stays
+reproducible. The published row's number does not move until the full 2,255-query run, which needs the
+MultiHop-RAG download — so the finding claims a mechanism, not an effect size
+([`findings-extractive-coverage.md`](findings-extractive-coverage.md)).
+
 ### R3 — Make abstention portable, and grade it on the records everyone else drops (1–2 weeks, `[offline]` `[data]`)
 
 Two arms, both cheap: (a) a **shape-only gate** — the three model-free evidence-shape features — trained

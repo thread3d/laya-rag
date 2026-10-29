@@ -6,6 +6,60 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.1 — 2026-10-29
+
+An objective for the extractive answer, and the second dataset's verdict on the 2026 encoder. Both
+opt-in or measurement-only; retrieval behaviour is unchanged at the defaults.
+
+### `EXTRACT_COVERAGE`: the extractive answer now has an objective
+
+`compose_extractive` selected sentences by their **parent document's rank** and stopped at five. Its
+measured row is half perfect and half costly: citation clean **1.0000** (0 of 9,806 sentences uncited)
+against answer nugget recall **0.1906** where the pooled evidence carries **0.7438** — three quarters
+of the facts never reach the answer.
+
+`EXTRACT_COVERAGE=1` (or `compose_extractive(..., coverage=True)`) selects by submodular fact coverage
+over the same candidates: new numbers/dates/ordinals/acronyms/proper nouns, new content at a quarter
+weight, the sentence's inherited relevance at half weight, and a Jaccard ≥ 0.7 redundancy guard so
+near-duplicates cannot fill the budget. Query terms are deliberately not the unit — every candidate
+was retrieved for the query, so they all contain its terms. The guarantees are identical: verbatim
+spans, in-range markers pointing at the document they quote, abstention when nothing qualifies.
+
+The objective's own first version failed its own test — a near-duplicate differing by one word was
+selected, and five of those carry one fact, which is precisely the failure the objective exists to
+remove. The guard and the case are now a test.
+
+Measured on the real corpus and real weights, five-sentence budget: two of three queries go from one
+document and 4 and 1 fact tokens to three and two documents and **14 and 7** — 3.5× and 7×. Off by
+default, so every recorded end-to-end row stays reproducible, and the published 0.1906 does not move
+until the full 2,255-query run. See
+[`docs/findings-extractive-coverage.md`](docs/findings-extractive-coverage.md).
+
+### The BEIR harness can now measure a 2026 encoder, and the first two datasets say it does not pay
+
+`tools/beir.py` pooled `cls`/`mean` only and applied one hardcoded bge instruction to every family, so
+a Qwen3-class encoder would have been measured under a pooling and a prompt it was never trained for —
+neither raises, both read as a negative about the model. `last` pooling and per-family query prefixes
+now delegate to the engine's verified table, and `--query-instruction-text` sets an explicit line.
+
+SciFact, 300 queries, with both controls reproducing the recorded rows to the printed precision:
+
+| encoder and instruction | dense nDCG@10 | hybrid | index time |
+| --- | ---: | ---: | ---: |
+| `bge-small` (2023, 33M) | **0.7200** | 0.7320 | **183 s** |
+| Qwen3-0.6B, no instruction | 0.6825 | 0.7316 | 3,810 s |
+| Qwen3-0.6B, generic instruction | 0.7023 | 0.7352 | cached |
+| Qwen3-0.6B, SciFact instruction | 0.7012 | **0.7389** | cached |
+
+On dense retrieval the 2026 model loses to the 2023 one by 0.018–0.038; the best fused row is +0.007,
+inside the repository's own MDE band on 300 queries, for 21× the indexing.
+
+### Still owed
+
+- The full 2,255-query extractive row, which is what turns R2's mechanism into a number.
+- R1's third and fourth datasets (NFCorpus is running; ArguAna next) before the encoder refresh is
+  either adopted or moved to the do-not-retry ledger.
+
 ## 1.3.0 — 2026-10-29
 
 The cost axis gets an instrument, and the number it returns is not the one the README quotes. Two

@@ -222,3 +222,84 @@ def test_extract_parser_collects_the_options():
     assert args.max_sentences == 2
     assert args.tenant == "acme"
     assert args.json is True
+
+
+# ── the coverage objective: select by fact, not by parent rank ────────────
+
+_TOPICAL = {
+    "path": "a.md",
+    "relevance": 0.95,
+    "chunk_id": "a1",
+    "text": (
+        "This section explains the general approach to the topic in broad terms. "
+        "It discusses the background and motivation at length without giving a figure."
+    ),
+}
+_FACTUAL = {
+    "path": "b.md",
+    "relevance": 0.70,
+    "chunk_id": "b1",
+    "text": (
+        "The measured nDCG@10 was 0.7417 in 2023, against 0.7264 before the change. "
+        "The improvement of 0.0153 was significant at p=0.023."
+    ),
+}
+
+
+def _digits(sentences):
+    return sum(sum(char.isdigit() for char in sentence.text) for sentence in sentences)
+
+
+def test_a_rank_ordered_composer_prefers_the_best_document_and_its_facts_are_incidental():
+    """The shipped behaviour, pinned: it is what every recorded end-to-end row was measured with."""
+    answer = compose_extractive([_TOPICAL, _FACTUAL], query="What nDCG@10 was measured?",
+                                max_sentences=2)
+    assert [s.path for s in answer.sentences] == ["a.md", "a.md"]
+    assert _digits(answer.sentences) == 0
+
+
+def test_the_coverage_objective_reaches_the_facts_the_rank_order_never_shows():
+    """Answer nugget recall is 0.1906 against a pool carrying 0.7438 — three quarters of the facts
+    in the evidence never reach the answer. The shipped selection has no objective, so it emits the
+    best document's first sentences; the objective emits the sentence with the facts in it."""
+    answer = compose_extractive([_TOPICAL, _FACTUAL], query="What nDCG@10 was measured?",
+                                max_sentences=2, coverage=True)
+    assert answer.sentences[0].path == "b.md"
+    assert _digits(answer.sentences) >= 6
+    assert _digits(answer.sentences) > _digits(
+        compose_extractive([_TOPICAL, _FACTUAL], query="What nDCG@10 was measured?",
+                           max_sentences=2).sentences
+    )
+
+
+def test_the_objective_keeps_every_guarantee_the_shipped_path_has():
+    """A different selection is not licence for a different contract."""
+    passages = [_TOPICAL, _FACTUAL]
+    answer = compose_extractive(passages, query="What nDCG@10 was measured?", max_sentences=5,
+                                coverage=True)
+    for sentence in answer.sentences:
+        # verbatim, in one of the passages
+        assert any(sentence.text in str(p["text"]) for p in passages)
+        # in-range marker, and pointing at the document it quotes
+        assert 1 <= sentence.citation <= len(passages)
+        assert passages[sentence.citation - 1]["path"] == sentence.path
+
+
+def test_the_objective_abstains_when_nothing_qualifies():
+    assert compose_extractive([], coverage=True).abstained is True
+    blocked = dict(_FACTUAL)
+    empty = compose_extractive([blocked], min_score=0.99, coverage=True)
+    assert empty.abstained is True
+
+
+def test_duplicate_sentences_cannot_fill_the_budget_under_the_objective():
+    """Near-duplicates are the reason a five-sentence extract can carry one fact."""
+    repeated = {
+        "path": "c.md",
+        "relevance": 0.9,
+        "chunk_id": "c1",
+        "text": "The figure was 42 percent. The figure was 42 percent again.",
+    }
+    answer = compose_extractive([repeated], query="What was the figure?", max_sentences=3,
+                                coverage=True)
+    assert len(answer.sentences) == 1

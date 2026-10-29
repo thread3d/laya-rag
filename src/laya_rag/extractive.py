@@ -125,12 +125,110 @@ class ExtractiveAnswer:
         }
 
 
+#: Tokens that carry a fact rather than a topic: a number, a date, a percentage, an acronym, a
+#: proper noun. Not an entity linker and not a model — the same "programmatic nugget" idea
+#: `tools/nugget_recall.py` scores against, at the sentence rather than the fact level.
+_NUGGET = re.compile(
+    r"(?:\b\d[\d,.]*(?:%|st|nd|rd|th|s|px|kg|km|gb|mb|x)?\b)"      # numbers, ordinals, units
+    r"|(?:\b[A-Z][A-Za-z0-9&+.-]*[A-Z0-9][A-Za-z0-9&+.-]*\b)"       # Capitalised / ACRONYM
+    r"|(?:[%$€£])"                                                 # bare symbols
+)
+
+
+def _fact_terms(text: str) -> set[str]:
+    """The fact-bearing tokens of a sentence, lowercased so a repeat counts once."""
+    return {match.group(0).lower() for match in _NUGGET.finditer(text)}
+
+
+def _content_terms(text: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]{3,}", text.lower())}
+
+
+#: Two sentences sharing this much of their content vocabulary are the same sentence for the
+#: purpose of an answer. Without the guard the novelty term is permissive enough that a
+#: near-duplicate differing by one word ("...42 percent." / "...42 percent again.") is selected,
+#: and five such sentences carry one fact between them — which is the failure the objective
+#: exists to remove, reproduced by the objective itself.
+_DUPLICATE_JACCARD = 0.7
+
+
+def _jaccard(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    return len(left & right) / len(left | right)
+
+
+def _select_by_coverage(
+    candidates: Sequence[ExtractedSentence],
+    budget: int,
+) -> list[ExtractedSentence]:
+    """Greedy max-coverage over *facts*, not over the parent document's rank.
+
+    The shipped order is "the sentences of the best-ranked document, in document order", which
+    measures answer nugget recall **0.1906** against a pool carrying **0.7438** of the same gold
+    content (`docs/findings-extractive-row.md`) — three quarters of the evidence's facts never
+    reach the answer. The selection has no objective of its own, so the sentence it keeps is the
+    first one in the first passage rather than the one carrying the fact.
+
+    The objective is submodular greedy coverage over the same candidate sentences, under the same
+    verbatim and citation constraints, scored on what a gold nugget actually is:
+
+    * **new facts** — numbers, dates, acronyms and proper nouns not yet used. A sentence about the
+      right subject with no number in it cannot answer a question about a number;
+    * **new content** — remaining content terms, so near-duplicate sentences of one passage cannot
+      fill a five-sentence budget;
+    * **parent relevance** — the retrieval score the sentence inherits, as a tie-break so a
+      fact-dense sentence from an irrelevant document does not outrank a fact-dense relevant one.
+
+    Query terms are deliberately *not* the coverage unit: every candidate comes from a passage
+    retrieved for the query, so all of them contain its terms, and covering them again measures
+    nothing. An earlier probe of this file's selection did exactly that and showed the shipped
+    order covering 0–5 query terms where greedy coverage over the same candidates covered 2–7
+    (`.scratch/extractive-probe.json`) — that was a symptom, not the target.
+    """
+    selected: list[ExtractedSentence] = []
+    covered_facts: set[str] = set()
+    covered_terms: set[str] = set()
+    chosen: set[str] = set()
+    remaining = list(candidates)
+    while remaining and len(selected) < budget:
+        best: ExtractedSentence | None = None
+        best_value = float("-inf")
+        for sentence in remaining:
+            key = _normalise(sentence.text)
+            if key in chosen:
+                continue
+            facts = _fact_terms(sentence.text)
+            terms = _content_terms(sentence.text)
+            if any(
+                _jaccard(terms, _content_terms(other.text)) >= _DUPLICATE_JACCARD
+                for other in selected
+            ):
+                continue  # the same sentence carrying the same facts
+            value = (
+                len(facts - covered_facts)
+                + 0.25 * len(terms - covered_terms)
+                + 0.5 * sentence.score
+            )
+            if value > best_value:
+                best, best_value = sentence, value
+        if best is None:  # every remaining candidate is a duplicate
+            break
+        chosen.add(_normalise(best.text))
+        covered_facts |= _fact_terms(best.text)
+        covered_terms |= _content_terms(best.text)
+        selected.append(best)
+        remaining = [s for s in remaining if _normalise(s.text) != _normalise(best.text)]
+    return selected
+
+
 def compose_extractive(
     passages: Sequence[Mapping[str, Any]],
     *,
     query: str | None = None,
     max_sentences: int = 5,
     min_score: float = 0.0,
+    coverage: bool = False,
 ) -> ExtractiveAnswer:
     """Emit up to ``max_sentences`` verbatim sentences, best-scored first, each cited.
 
@@ -140,6 +238,17 @@ def compose_extractive(
     so ``[n]`` means the same thing here, in the prompt, and in `verify_citations`; the marker
     is emitted *before* the sentence it supports, for the reason given where the answer is
     assembled below.
+
+    ``coverage`` selects by a submodular fact-coverage objective instead of by the parent
+    document's rank (see :func:`_select_by_coverage`). It is opt-in because the shipped order is
+    what every recorded end-to-end row was measured with; the guarantees — verbatim span, in-range
+    citation, abstention when nothing qualifies — are identical either way.
+
+    One visible difference: markers can then appear out of numerical order in the answer, because
+    a fact-dense sentence from the second document may be selected first. The numbers are **not**
+    renumbered, because ``[n]`` has to keep meaning the same document here, in the composed prompt
+    and in `verify_citations`; a renumbering would make the answer's citations agree with
+    themselves and disagree with the evidence list they are checked against.
     """
     if max_sentences < 1:
         raise ValueError("max_sentences must be positive")
@@ -182,17 +291,24 @@ def compose_extractive(
                 )
             )
 
-    candidates.sort(key=lambda sentence: -sentence.score)
-    seen: set[str] = set()
-    kept: list[ExtractedSentence] = []
-    for sentence in candidates:
-        key = _normalise(sentence.text)
-        if key in seen:
-            continue
-        seen.add(key)
-        kept.append(sentence)
-        if len(kept) >= max_sentences:
-            break
+    if coverage:
+        # An objective of its own, opt-in: the shipped order is what every recorded row was
+        # measured with, and `findings-extractive-row.md` quotes it. Selecting by coverage changes
+        # *which* sentences are emitted, never the guarantees — every sentence is still a verbatim
+        # span of a cited passage, and the abstention path is untouched.
+        kept = _select_by_coverage(candidates, max_sentences)
+    else:
+        candidates.sort(key=lambda sentence: -sentence.score)
+        seen: set[str] = set()
+        kept = []
+        for sentence in candidates:
+            key = _normalise(sentence.text)
+            if key in seen:
+                continue
+            seen.add(key)
+            kept.append(sentence)
+            if len(kept) >= max_sentences:
+                break
 
     if not kept:
         return ExtractiveAnswer(answer=ABSTENTION, abstained=True, considered=len(candidates))

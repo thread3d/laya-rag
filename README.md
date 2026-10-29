@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.3.0** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.3.1** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -498,6 +498,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `RERANK_COVERAGE_MIN_DOCS` | `0` | seed the coverage pass with the best candidate of this many distinct documents; `3` adds +0.0027 MAP@10 over coverage alone but costs −0.0106 Hits@4, so it is a MAP-priority option. Both figures are **suspended** with the row above — same broken ordering path |
 | `CLAIM_RETRIEVE_K` | `10` | candidates per claim when adjudicating; narrower than `RETRIEVE_K` because cost is linear in claims × candidates |
 | `CLAIM_MAX` | `25` | claims adjudicated per answer, so one long answer cannot run unbounded |
+| `EXTRACT_COVERAGE` | `false` | select the extractive answer's sentences by a **fact-coverage objective** (numbers, dates, acronyms and proper nouns it has not used yet, plus new content, plus the sentence's inherited relevance, with a redundancy guard) instead of by the parent document's rank. The shipped order is what the recorded end-to-end row was measured with — answer nugget recall **0.1906** against a pool carrying **0.7438** — so this is opt-in: it changes which sentences are emitted, never the guarantees, and a marker may then appear out of numerical order in the answer (the numbers are not renumbered, because they have to keep meaning the same document in the prompt and in the verifier) |
 | `RELEVANCE_THRESHOLD` | `0.5` | minimum Laya P(relevant) to keep a passage |
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
 | `ANSWERABILITY_GATE_PATH` | unset | persisted feature-based answerability gate (see `tools/answerability_train.py`); unset uses Laya's own scalar decision |
