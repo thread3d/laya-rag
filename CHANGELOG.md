@@ -6,6 +6,43 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.1 — 2026-10-29
+
+The abstention number a user actually experiences: **85% of questions the corpus cannot answer get a
+quoted answer** — and the composer's objective is invisible there, which is the architecture working.
+
+### Product-level, not gate-level
+
+Every abstention figure in this programme so far has been a **gate** number: what the decision layer says
+if asked. The product question is different, and nobody had measured it. Twenty of the benchmark's own
+`null_query` records through `query_extractive` at shipped defaults:
+
+| | abstained | answered anyway | mean sentences |
+| --- | ---: | ---: | ---: |
+| shipped defaults, extractive route | **15%** | **85%** | 4.25 |
+
+**17 of 20 unanswerable questions get a quoted answer**, 4.25 verbatim sentences each, not one empty
+response. Consistent with the 78.6% the scalar gate reports at its deployed threshold — and the more damning
+form of the same fact, because it is the one a user meets: the citations are faithful, the sentences are
+real, and the question had no answer in the corpus.
+
+Caveats stated in the finding: **n=20**, and the fitted gate artefact is not configured here, so this is the
+*shipped scalar* default rather than the gate's behaviour — which is the point.
+
+### The objective does not leak into abstention, which is the architecture working
+
+The same twenty queries ran under both composer objectives, because R2 changed selection and nothing had
+checked whether that reaches the abstention decision:
+
+| arm | abstention | mean sentences |
+| --- | ---: | ---: |
+| rank order (shipped) | 0.15 | 4.25 |
+| coverage objective | 0.15 | 4.25 |
+
+Identical. Abstention is decided upstream of selection, so a selection objective cannot move it. A lever
+that raises answer coverage on answerable questions **without** making the system more willing to answer
+unanswerable ones is exactly the property R2 needed and had not verified.
+
 ## 1.9.0 — 2026-10-29
 
 R5's listwise arm: the blocker was checked rather than assumed, and it has moved. The arm is built,

@@ -89,6 +89,42 @@ describe any particular prevalence** — a corpus with 2% unanswerable questions
 operating point for the same probabilities. And the gate is trained on news questions; a
 documentation corpus or a code corpus is exactly the domain shift the transfer tool exists to measure.
 
+## The product-level number: on the extractive route, the engine answers 85% of what it cannot answer
+
+Every abstention number in this document so far has been a **gate** number — what the decision layer would
+say if you asked it. The product question is different: if a user asks this engine something the corpus
+cannot answer, does it quote them something?
+
+Twenty of the benchmark's own `null_query` records, through `query_extractive` at shipped defaults:
+
+| | abstained | answered anyway | mean sentences |
+| --- | ---: | ---: | ---: |
+| shipped defaults, extractive route | **15%** | **85%** | 4.25 |
+
+**17 of 20 unanswerable questions get a quoted answer**, with 4.25 verbatim sentences and not one empty
+response. That is consistent with the 78.6% the scalar gate reports at its deployed threshold, and it is the
+more damning statement of the same fact because it is the one a user experiences: the citations are
+faithful, the sentences are real, and the question was not answerable.
+
+Two caveats, both real: **n=20**, and the answerability gate artefact is not configured in this run, so this
+is the *shipped scalar* behaviour rather than the fitted gate's. That is the point — it is the default a user
+gets.
+
+### And the composer's objective is invisible here, which is the desired behaviour
+
+The same twenty queries were run under both composer objectives, because R2 changed selection and nobody had
+checked whether that reaches the abstention decision:
+
+| arm | abstention | mean sentences | empty answers |
+| --- | ---: | ---: | ---: |
+| rank order (shipped) | 0.15 | 4.25 | 0 |
+| coverage objective | 0.15 | 4.25 | 0 |
+
+**Identical.** Abstention is decided upstream by the answerability gate, before selection runs, so a
+selection objective cannot move it. That is the correct architecture, and it is now measured rather than
+inferred: a lever that improves answer coverage on answerable questions without making the system more
+willing to answer unanswerable ones.
+
 ## Still owed
 
 - **Default it, deliberately.** The gate is opt-in (`ANSWERABILITY_GATE_PATH`). The numbers above
