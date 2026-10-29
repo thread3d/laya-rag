@@ -223,7 +223,7 @@ The literature says this is the right axis to invest in: AbstentionBench found r
 *retrieval-only* answerability predictor with a held-out AUC. That absence is both the gap and the
 opportunity.
 
-### G4 — Cost is unmeasured and concentrated
+### G4 — Cost is unmeasured and concentrated, and the headline latency is an accelerated number
 
 `[measure]` `.scratch/cost-probe.json`: at 16–32 torch threads the decision pass costs **0.59–0.83 s per
 candidate**, linear in `RETRIEVE_K`, while retrieval costs 0.03 s. One configuration (4 threads, 40
@@ -233,9 +233,16 @@ way about Laya 0.4.14: *wall clock is not a performance signal on a shared host*
 records `cpu_seconds` for exactly that reason; the query path does not, so the cost axis is currently
 unmeasurable even for the system that discovered the problem.
 
-The field has started asking: BrowseComp-Plus reports calibration error and search calls beside accuracy
-`[web]`; nobody publishes joules per query. A CPU-only system can own that column — after the instrument
-exists.
+There is a second, larger problem with the same root. The README's headline — *"the engine auto-selects
+MPS and answers a query in 2–5 s end to end"* — is an **accelerated** number from an Intel Mac. The same
+query on this CPU-only host, no accelerator, no GPU, takes **12–24 s**. Any claim phrased as "CPU-only"
+must therefore report the accelerator-disabled envelope as the primary number and the accelerated one as
+a footnote, or the first review comment will be that the envelope measured was not the envelope claimed.
+That re-measurement is cheap and nothing in this repository currently does it.
+
+The field has started asking for the rest of the axis: BrowseComp-Plus reports calibration error and
+search calls beside accuracy `[web]`; nobody publishes joules per query. A CPU-only system can own that
+column — after the instrument exists.
 
 ### G5 — There is no ranked artefact
 
@@ -284,9 +291,11 @@ Stated so it can be falsified, in the form the field would accept:
 
 Four numbers defend it, and each is partly in hand:
 
-1. **Abstention that transfers** — target: held-out AUC and risk@80 on a corpus the gate was *not* fitted
-   on. Today: 0.51 out of domain (scalar), 0.83 in domain (feature gate). No public comparator exists,
-   which is why the measurement, not just the number, is the contribution.
+1. **Abstention that transfers** — and it must be stated as three numbers, not one, because a reviewer
+   will find the gap otherwise: **0.8146 in domain / 0.767 [0.671, 0.827] with a whole question type held
+   out / 0.509 [0.463, 0.555] out of domain** `[repo]`. Target: raise the out-of-domain arm on a corpus
+   the gate was not fitted on, and report abstention precision and recall *separately*, since
+   over-abstention is the failure mode this architecture is most exposed to.
 2. **Attribution that is a measurement** — citation clean **1.0000** today, deterministically checked. The
    claim is not "we cite better than an LLM"; it is "our citation number is not an LLM judgement", which
    TREC's own 0.44-manual-versus-0.95-auto-grader split makes valuable `[web]`.
@@ -300,12 +309,30 @@ Four numbers defend it, and each is partly in hand:
    of the cost axis is nearly free and the *compute* side — the decision forward pass — is where every
    remaining second is.
 
+One claim the programme should **retire** rather than defend: *"our retrieval quality predicts answer
+quality."* It does not, in general. The UDCG and eRAG lines of work show retrieval metrics correlating
+with end-to-end answer accuracy at only **0.55–0.70** Spearman at best — visibly worse for nDCG `[web]` —
+so "best retrieval" is not "best RAG", and the honest framing is the one above: an evidence instrument
+scored at the evidence layer, not a predictor of someone else's generator.
+
 ---
 
 ## 5. The programme, ranked
 
 Ranked by expected value per unit cost, each with the falsifier that closes it. Tags: `[offline]` runs on
 this host today · `[data]` needs a download · `[model]` needs a model · `[web]` needs a submission.
+
+### R0 — Instrument the CPU-only envelope (hours, `[offline]`)
+
+Two things, both small. Add `cpu_seconds` and `candidates_scored` to `QueryResult` timings and record them
+in every engine report beside wall clock; and re-measure the headline latency with the accelerator
+**disabled** (`DEVICE=cpu`), so the "2–5 s on MPS" claim and the CPU-only claim are separate sentences.
+Without this, G4 cannot be measured on a shared host and every future cost claim inherits the 253.9 s
+artefact — and the claim the project most wants to make ("no accelerator") is the one currently quoted
+from an accelerated run.
+
+**Falsifier:** if CPU-seconds per candidate still varies by more than ±5% across repeats at fixed depth,
+the host is not a valid instrument; say so and defer the cost axis rather than publish a jitter number.
 
 ### R1 — Refresh the components, under this repository's own protocol (days, `[model]` `[offline]`)
 
@@ -350,7 +377,9 @@ shuffled-corpus control — evaluated on the corpus held out.
 Then evaluate on **MultiHop-RAG's 301 `null_query` records** (which the benchmark's own retrieval metric
 excludes) and the **MTRAG-UN** unanswerable/underspecified subsets.
 
-**Prediction:** out-of-domain AUC **0.51 → 0.70+**, risk@80 below the scalar's 0.49.
+**Prediction:** out-of-domain AUC **0.51 → 0.70+**, risk@80 below the scalar's 0.49, reported as a three-way
+split (in domain / question type held out / corpus held out) with abstention precision and recall stated
+separately.
 **Falsifier:** mined negatives failing to beat in-corpus-only training on the held-out corpus ⇒ the
 failure is a feature problem, not a data problem, and the honest output is a stated negative.
 
@@ -441,15 +470,18 @@ The 2026 evidence strengthens the existing ledger and adds three closures of its
 
 ## 7. A 90-day sequence to a claim someone else can check
 
-1. **Weeks 1–2** — R1 (component refresh) and R2 (composer objective). Both offline, both measured against
+1. **Week 1** — R0 (instrument the CPU-only envelope). Nothing else in this list can be reported honestly
+   until the accelerator-disabled numbers exist.
+2. **Weeks 1–2** — R1 (component refresh) and R2 (composer objective). Both offline, both measured against
    rows that already exist, and R2 is the only item here that can move a *published* number this month.
-2. **Weeks 3–5** — R3 (portable abstention). The flagship scientific claim: it converts "AUC 0.815 in
-   domain" into a transferable statement or an honest negative, on the axis the field started grading.
-3. **Weeks 6–8** — R4 (protocol + two placements) and R5 (listwise, if a licence-clean candidate
+3. **Weeks 3–5** — R3 (portable abstention). The flagship scientific claim: it converts "AUC 0.815 in
+   domain" into a three-way transferable statement or an honest negative, on the axis the field started
+   grading.
+4. **Weeks 6–8** — R4 (protocol + two placements) and R5 (listwise, if a licence-clean candidate
    reproduces). The first external artefacts.
-4. **Weeks 9–12** — R6 (cascade/distillation) and R7 (one multilingual collection). Cost and breadth,
+5. **Weeks 9–12** — R6 (cascade/distillation) and R7 (one multilingual collection). Cost and breadth,
    which turn "good numbers on one host" into "a system with an envelope".
-5. **R8 runs in parallel** if and only if the distillation reproduces; it has the longest tail.
+6. **R8 runs in parallel** if and only if the distillation reproduces; it has the longest tail.
 
 Each step publishes its own `findings-*.md`, positive or negative. That is the actual competitive
 advantage: the [`measurement-failures`](findings-measurement-failures.md) record and the do-not-retry
