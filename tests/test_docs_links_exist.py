@@ -21,6 +21,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -82,3 +84,25 @@ def test_no_tracked_document_has_a_broken_relative_link():
         "these links resolve nowhere:\n  "
         + "\n  ".join(f"{path}: {target}" for path, target in sorted(set(offenders)))
     )
+
+
+def test_the_reproduce_page_names_a_command_for_every_findings_document_it_claims():
+    """A reproduce page is only worth having if its rows point at things that exist.
+
+    Every findings document linked from `docs/REPRODUCING.md` must exist (the link checker covers that),
+    and every `make` target it tells a reader to run must be one the Makefile defines. The second half is
+    the part that rots: a renamed target turns "re-derive it yourself" into "hunt for the new name".
+    """
+    import re
+
+    root = Path(__file__).resolve().parents[1]
+    page = root / "docs" / "REPRODUCING.md"
+    if not page.is_file():
+        pytest.skip("no reproduce page on this checkout")
+    text = page.read_text(encoding="utf-8")
+    makefile = (root / "Makefile").read_text(encoding="utf-8")
+    available = set(re.search(r"^\.PHONY: (.*)$", makefile, re.MULTILINE).group(1).split())
+    invoked = set(re.findall(r"\bmake\s+([a-z][a-z0-9-]+)", text))
+    assert invoked, "the reproduce page tells nobody to run anything"
+    missing = sorted(invoked - available)
+    assert not missing, f"docs/REPRODUCING.md names targets that do not exist: {missing}"

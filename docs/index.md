@@ -22,6 +22,7 @@ Install it and run a first query with the README's [Setup](../README.md#setup) a
 |---|---|
 | install it, index a corpus, read the configuration table | [README](../README.md) |
 | see every result the measurement programme produced, wins and negatives alike | [Findings index](FINDINGS.md) |
+| **re-derive any number yourself**, with the command, its runtime and what it writes | [Reproducing a result](REPRODUCING.md) |
 | compare the engine with published retrieval systems | [Comparisons across systems](COMPARISONS.md) |
 | pick the work up: what landed, what was refuted, what is left and what it costs | [Programme status](PROGRAMME-STATUS.md) |
 | ask what "best RAG system in the world" would take, and which of it this can win | [The best in the world, October 2026](best-in-the-world-2026-10.md) |

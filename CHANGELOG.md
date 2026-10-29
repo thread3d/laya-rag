@@ -6,6 +6,32 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.8.1 — 2026-10-29
+
+`docs/REPRODUCING.md`: every number this project quotes, with the command that produces it.
+
+### The page that makes "reproducible" a property rather than a habit
+
+The programme's whole claim on a reader's trust is that its figures can be re-derived. Nothing said how.
+The new page is a table of the eight measurements — what each answers, the commands, the artefacts it
+writes, its **recorded** runtime on this host, and the findings document that interprets it — from
+`make cost-report` (~10 min) through `make evidence-pipeline` (~68 min from a fresh clone) to the full
+retrieval row (~2 h for 2,255 queries).
+
+It also states the four things that make a re-run comparable: the **index identity** hash, the **query
+sample seed**, the **configuration block** each report prints, and the two gates. And it states what
+reproduction does *not* give you: every measurement here is single-host and single-run, the intervals are
+bootstrapped over queries rather than machines, and a number reproduced on a different corpus is a
+**different measurement**, not a confirmation — which is the answerability gate's own first limit.
+
+Two structural points are spelled out on the page because they are what makes the model work rather than
+merely describe it: artefacts live under the gitignored `eval/`, so prose can always be traced to a file
+that is regenerated instead of trusted; and the heavy-job lock plus per-run checkpointing mean an
+interrupted measurement resumes rather than restarts.
+
+A test requires every `make` target the page names to exist, since a renamed target turns "re-derive it
+yourself" into "hunt for the new name".
+
 ## 1.8.0 — 2026-10-29
 
 The assessment's closing section said none of its predictions had been measured. Eight rounds later, most
