@@ -1486,6 +1486,7 @@ class RagEngine:
         min_score: float = 0.0,
         include_evidence: bool = False,
         coverage: bool | None = None,
+        honour_answerability: bool = False,
         **query_kwargs: Any,
     ) -> dict[str, Any]:
         """Query, then emit only verbatim evidence sentences, each with its citation.
@@ -1512,6 +1513,16 @@ class RagEngine:
             min_score=min_score,
             coverage=self.config.extract_coverage if coverage is None else bool(coverage),
         )
+        # The decision layer's verdict and the composer's are two different questions: *can the corpus
+        # answer this* (answerability) and *is there a quotable span* (composition). This path honours only
+        # the second, so it can return a faithful, well-cited answer to a question the engine has already
+        # judged unanswerable — measured at 17 of 20 on the benchmark's own negative class. Opt-in rather
+        # than default because every recorded extractive row was measured with the old behaviour, and a
+        # default changed under a running row is the provenance failure this repository catalogues.
+        if honour_answerability and not result.answerable:
+            from .extractive import ABSTENTION, ExtractiveAnswer
+
+            composed = ExtractiveAnswer(answer=ABSTENTION, abstained=True, considered=composed.considered)
         if include_evidence:
             payload = result.as_dict()
             payload.update(

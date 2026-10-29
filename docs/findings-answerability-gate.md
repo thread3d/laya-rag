@@ -125,6 +125,38 @@ selection objective cannot move it. That is the correct architecture, and it is 
 inferred: a lever that improves answer coverage on answerable questions without making the system more
 willing to answer unanswerable ones.
 
+## The defect that measurement found: the extractive path ignored the verdict
+
+Configuring the fitted gate on the same twenty `null_query` records moved **mean answerability from 0.637
+to 0.218** — a large, correct drop — and left the composer emitting **the same 4.25 sentences with the same
+15% abstention rate**:
+
+| arm | mean `P(answerable)` | abstention | mean sentences |
+| --- | ---: | ---: | ---: |
+| shipped scalar | **0.637** | 0.15 | 4.25 |
+| fitted gate configured | **0.218** | 0.15 | 4.25 |
+
+The verdict moved and the answer did not. Reading `RagEngine.query_extractive` explains it: the method calls
+`self.query(...)`, which computes `answerable` through the gate, and then hands `result.passages` to
+`compose_extractive`, which knows only whether a quotable span exists. **`result.answerable` was never
+consulted.** The decision layer's question — *can this corpus answer the question* — and the composer's —
+*is there a faithful sentence to quote* — are different, and the answer path answered the first with the
+second. That is why the product-level number (85% answered) is worse than the gate's own (78.6% called
+answerable): some of the 85% were questions the engine had already judged unanswerable.
+
+**These twenty records are part of the gate's own fit data**, so this is in-sample. What it establishes is
+that the lever reaches the decision layer, and that the product path did not consume it — not how good the
+gate is.
+
+### The fix, deliberately opt-in
+
+`query_extractive(..., honour_answerability=True)` now abstains when the decision layer said the corpus
+cannot answer, reporting the verdict beside the abstention instead of contradicting it. **The default is
+`False`**, and that is not timidity: every recorded extractive row — including the full-set row running
+while this was written — was measured with the old behaviour, and changing a default under a running row is
+the provenance failure this repository catalogues five times. The next full-set row should be run with the
+flag on, and the difference reported as the lever's product-level effect.
+
 ## Still owed
 
 - **Default it, deliberately.** The gate is opt-in (`ANSWERABILITY_GATE_PATH`). The numbers above

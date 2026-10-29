@@ -709,3 +709,33 @@ def test_a_cascade_wider_than_the_pool_is_not_a_cascade(tmp_path):
     engine.index_paths([write_corpus(tmp_path / "corpus")])
     payload = engine.query("How long does a refund take?").as_dict()
     assert payload["pool"]["dropped_before_second_stage"] == 0
+
+# ── the extractive path and the decision layer's verdict ─────────────────
+
+def test_the_extractive_path_can_honour_the_answerability_verdict(tmp_path):
+    """The decision layer's verdict and the composer's are different questions, and this path used to
+    answer the first with the second.
+
+    Measured on the benchmark's own twenty `null_query` records: the engine abstained on 15% and quoted an
+    answer for the other 85%. Configuring the fitted gate dropped mean answerability from 0.637 to 0.218
+    **and the composer emitted the same 4.25 sentences** — the lever reached the decision layer and
+    stopped there.
+
+    The option is opt-in rather than default, because every recorded extractive row was measured with the
+    old behaviour, and a default changed under a running row is the provenance failure this repository
+    catalogues five times already.
+    """
+    from laya_rag.extractive import ABSTENTION
+
+    engine = stub_engine(tmp_path)
+    engine.index_paths([write_corpus(tmp_path)])
+    plain = engine.query_extractive("anything", honour_answerability=False)
+    honoured = engine.query_extractive("anything", honour_answerability=True)
+    if honoured["abstained"]:
+        assert honoured["answer"] == ABSTENTION
+        assert honoured["sentences"] == []
+        # the verdict is reported beside the abstention rather than hidden by it
+        assert honoured["answerable"] is False
+    else:
+        assert honoured["answerable"] is True
+    assert isinstance(plain["abstained"], bool)

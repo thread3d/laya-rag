@@ -6,6 +6,40 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.2 — 2026-10-29
+
+A product defect found by measuring the gate instead of the decision layer: **the extractive path never
+consulted the answerability verdict.**
+
+### The verdict moved and the answer did not
+
+Configuring the fitted gate on the twenty `null_query` records moved **mean answerability from 0.637 to
+0.218** — a large, correct drop — and left the composer emitting **the same 4.25 sentences at the same 15%
+abstention rate**:
+
+| arm | mean `P(answerable)` | abstention | mean sentences |
+| --- | ---: | ---: | ---: |
+| shipped scalar | **0.637** | 0.15 | 4.25 |
+| fitted gate configured | **0.218** | 0.15 | 4.25 |
+
+`RagEngine.query_extractive` calls `self.query(...)`, which computes `answerable` through the gate, and then
+hands the passages to `compose_extractive`, which knows only whether a quotable span exists. **`answerable`
+was never consulted.** The decision layer's question — *can this corpus answer it* — and the composer's —
+*is there a faithful sentence to quote* — are different, and the answer path answered the first with the
+second. That is why the product-level number (85% answered) is worse than the gate's own (78.6% called
+answerable): some of the 85% were questions the engine had already judged unanswerable.
+
+### The fix, deliberately opt-in
+
+`query_extractive(..., honour_answerability=True)` abstains when the decision layer said the corpus cannot
+answer, reporting the verdict beside the abstention instead of contradicting it. **The default is `False`**,
+and that is not timidity: every recorded extractive row — including the full-set row running while this was
+written — was measured with the old behaviour, and changing a default under a running row is the provenance
+failure this repository catalogues five times. The next full-set row runs with the flag on.
+
+A test covers both branches, and the finding states that these twenty records are part of the gate's own
+fit data, so the number is in-sample and establishes where the lever reaches rather than how good it is.
+
 ## 1.9.1 — 2026-10-29
 
 The abstention number a user actually experiences: **85% of questions the corpus cannot answer get a
