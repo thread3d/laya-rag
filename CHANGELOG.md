@@ -6,6 +6,32 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.6.3 — 2026-10-29
+
+The cascade's interaction with the gate, measured: aggregate-stable, per-query unstable.
+
+### Two levers measured alone, then paired
+
+R6 measured `SECOND_STAGE_TOP_M` on retrieval quality; R3 measured the answerability gate at
+`retrieve_k=20`. Nobody had asked what the gate concludes when it only sees ten candidates — and the
+gate's features include pool-shape signals that a truncated pool necessarily changes. Twenty answerable
+MultiHop-RAG queries, both depths, paired:
+
+| `SECOND_STAGE_TOP_M` | answerable rate | mean `P(answerable)` | mean kept |
+| --- | ---: | ---: | ---: |
+| 20 (all) | 0.55 | 0.5099 | 3.85 |
+| 10 | 0.55 | 0.5009 | 3.30 |
+| 5 | 0.65 | 0.5000 | 2.50 |
+
+In aggregate the gate is nearly indifferent — the mean probability shifts by **−0.009** and the
+answerable rate is unchanged at ten. **Per query it is not**: the verdict flips for **4 of 20** queries,
+in both directions, which is exactly why the aggregate looks unmoved.
+
+For a system whose product is *honest abstention*, "the same number of questions refused" is not the same
+claim as "the same questions refused", and only the first survives a change of `M`. Twenty queries is a
+probe rather than an effect size, and the finding says so; the M=5 row's *rise* to 0.65 is recorded as
+something a tuner should not be surprised by rather than as a result.
+
 ## 1.6.2 — 2026-10-29
 
 `BENCHMARKS.md` — the page that says what may and may not be claimed — now carries the October levers.

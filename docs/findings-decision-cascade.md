@@ -59,6 +59,37 @@ A row measured under a cascade has to be identifiable as one, so the pool report
 with `candidates` the sum. A measurement that cannot say which configuration produced it is the failure
 the resume fingerprint exists to prevent, in a different place.
 
+## The interaction nobody had measured: the gate sees a different pool
+
+R6 measured the cascade on *retrieval quality*. R3 measured the answerability gate at `retrieve_k=20`.
+Nobody had measured the gate's verdict when it only sees ten candidates — and the gate's own feature set
+includes pool-shape signals (`passage_count`, `coverage_spread`, `pairwise_redundancy`) that a truncated
+pool necessarily changes.
+
+Twenty answerable MultiHop-RAG queries, both depths, same index, paired:
+
+| `SECOND_STAGE_TOP_M` | answerable rate | mean `P(answerable)` | mean kept | considered |
+| --- | ---: | ---: | ---: | ---: |
+| 20 (all) | 0.55 | 0.5099 | 3.85 | 20.0 |
+| 10 | 0.55 | 0.5009 | 3.30 | 10.0 |
+| 5 | 0.65 | 0.5000 | 2.50 | 5.0 |
+
+**In aggregate the gate is nearly indifferent to the cascade** — the mean probability shifts by −0.009
+and the answerable rate is unchanged at ten. **Per query it is not**: the verdict flips for **4 of 20**
+queries between M=20 and M=10, in both directions, which is why the aggregate looks unmoved.
+
+That distinction matters more than it first appears. For a system whose product is *honest abstention*,
+"the same number of questions are refused" is not the same claim as "the same questions are refused", and
+only the first survives a change of `M`. A deployment that tunes the cascade for CPU must expect the
+refusal set to move — and should measure it on its own corpus, because twenty queries is a probe and the
+flips here are not an effect size.
+
+**What the M=5 row suggests, and does not show.** The answerable rate *rises* to 0.65 with five
+candidates. With a smaller pool the gate is more permissive, which is plausible (fewer, higher-ranked
+passages look more sufficient) and is also what a small sample looks like. It is recorded because it is
+the opposite of what a "cascade makes the gate stricter" intuition would predict, and because the next
+person to tune `M` should not be surprised by it.
+
 ## Still owed
 
 - The same curve on a corpus whose first stage is weak (MuSiQue, Touché), where the prediction is that

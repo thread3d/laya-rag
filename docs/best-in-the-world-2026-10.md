@@ -529,7 +529,7 @@ four decimals** (MAP@10 0.3128, Hits@10 0.9067, nugget recall 0.2060, citation c
 **43% less CPU** (99.2 s → 56.1 s per query); M=5 costs 0.023 MAP@10. The distillation stages are not
 attempted yet, and the reason is now sharper: the *cascade* already takes a large bite, and quantising
 the model was closed by measurement (int8 is lossless but not faster)
-([`findings-decision-cascade.md`](findings-decision-cascade.md)).
+([`findings-decision-cascade.md`](findings-decision-cascade.md)). **Its interaction with the gate was measured afterwards**: aggregate-stable (mean probability −0.009, answerable rate unchanged at M=10) but **not decision-preserving per query** — 4 of 20 verdicts flip — so a deployment tuning `M` for CPU must expect its refusal set to move.
 
 **One option is already closed by measurement**: quantising the model will not help. At RAG scale int8
 is lossless but **not faster** than fp32, fp16 is **36% slower**, and the whole quantisation literature
