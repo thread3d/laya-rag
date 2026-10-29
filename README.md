@@ -664,7 +664,10 @@ make multihop-fetch            # download and verify the benchmark's records and
 make gate-dataset              # labelled answerability rows from the benchmark's own null_queries
 make gate-train                # fit and persist the twelve-feature answerability gate
 make gate-transfer             # does the answerability gate travel between corpora? (with a control)
-make evidence-protocol         # the four-axis evidence-layer report; absent axes are named, not zeroed
+make multihop-row              # the engine's row for the benchmark's retrieval table (refuses a subset)
+make evidence-protocol         # the five-axis evidence-layer report; absent axes are named, not zeroed
+make evidence-pipeline         # that report, once its inputs exist, end to end
+make submission-check          # is an exported encoder believable enough to submit? (loads, unit, pinned)
 ```
 
 Four retrievers run over the same corpus, qrels, evaluator and top-k, so the difference between
