@@ -6,6 +6,39 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.0 — 2026-10-29
+
+The front page claimed its gates covered every quoted figure. They cover 54 of several thousand.
+
+### A process claim corrected, and its count now checked
+
+`docs/index.md` said, under the heading "Two rules that make the pages readable":
+
+> `make claim-check` resolves **every quoted figure** against the report that produced it.
+
+`claim_check` registers **54** claims. The tracked prose contains **8,370** decimal figures. The sentence
+was false by two orders of magnitude — and it is the failure this repository catalogues as class 13, *a
+correct number, over-generalised*, applied to a statement about its own machinery, printed on the page a
+reader lands on.
+
+It now states the registered count, says plainly that the great majority of figures are covered by
+neither gate, and points at the measurement-failures ledger as the record of what care alone has cost
+here. `tests/test_docs_claim_coverage.py` keeps the stated count equal to the number of checks that exist
+(so the sentence cannot drift back into flattery) and forbids the phrase "every quoted figure" from
+returning. It deliberately does *not* bound the total number of figures, which moves whenever a document
+is edited.
+
+### What this says about the audit layer
+
+Eight contracts were added over the last eight rounds and six found something. Every failure was in a
+surface that *describes* the work — a settings block, a provenance ledger, a configuration table, an
+index, a help screen, a version string, a tool path — and the one that was clean was clean because 91
+rows had been maintained by hand.
+
+This one is the sharpest, because the overstated claim was about the checking itself. A project's
+credibility rests on the accuracy of what it says about its own method, and that assertion had never been
+counted against the machinery it described.
+
 ## 1.4.9 — 2026-10-29
 
 `make help` now lists every target that exists — fifteen were invisible.

@@ -35,10 +35,14 @@ Install it and run a first query with the README's [Setup](../README.md#setup) a
 
 ## Two rules that make the pages readable
 
-Numbers in these pages are pinned rather than typed: `make claim-check` resolves every quoted figure
-against the report that produced it, and `make consistency-check` catches two documents disagreeing
-about the same quantity. Where a number matters, the generated artifact under `eval/` is the source of
-truth, and a page that has drifted from it is a bug in the page.
+Numbers here are pinned **where it matters, and not everywhere**. `make claim-check` resolves **54**
+registered figures against the report that produced them, and `make consistency-check` pins documents to
+each other at registered sites and computes the BEIR coverage count from disk. The tracked prose contains
+several thousand decimal figures in total, so the great majority are covered by neither gate: a number no
+checker reaches is a claim on the author's care, and
+[`findings-measurement-failures.md`](findings-measurement-failures.md) is the record of what care alone
+has cost here. Where a number *is* registered, the generated artifact under `eval/` is the source of
+truth, and a page that drifts from it is a bug in the page.
 
 Anything this repository has not measured is labelled unmeasured, and text produced by an external
 generator is labelled `engine + <model>`.
