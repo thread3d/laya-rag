@@ -325,6 +325,31 @@ the other direction: a published comparison whose source reports are gone.
 rather than silently relied on. The rule the ledger has been circling for seventeen entries: **a number needs a
 home that can be regenerated, and prose is not one.**
 
+## 18. A gain bought with output volume
+
+**Looks like:** a controlled comparison. Same corpus, same metric, same budget, a paired interval that excludes
+zero.
+
+**Instance.** The extractive composer's objective improved answer nugget recall **0.2060 → 0.2610** — paired,
+bootstrap, p=0.0005 — and the finding offered *"both arms emitted 5.00 sentences"* as its control. Five sentences is
+not a length control: the coverage arm's answers were **1282.6 characters against 593.6**, 2.1× the text, longer on
+149 of 150 queries. A recall metric computed over an answer is directly sensitive to how much answer there is, so the
+delta was partly **volume**, and per thousand characters the shipped arm was the *more* efficient one — 15.07
+nuggets found against 8.84.
+
+**The tell is that the metric's denominator is the output, not the input.** Retrieval metrics are bounded by the
+corpus; generation and extraction metrics are bounded by what the system chose to emit, and that choice is a lever
+the comparison is supposed to hold fixed.
+
+**Now:** every arm records answer length beside its recall, and the finding states the gain as *"much more text
+containing somewhat more facts"* rather than "finds more facts". The same lens cleared the four arms it did not
+indict — the cross-encoder rows emit **fewer** characters while finding more facts — which is what makes it a
+finding about one objective rather than about the harness.
+
+**The general rule, in the form a reviewer can apply:** when comparing two systems on a metric computed over their
+*output*, report output size beside it, and compute the metric per unit of output as well. A per-unit view that
+agrees with the absolute view is evidence; one that disagrees is the finding.
+
 ## What they cost, counted rather than remembered
 
 `git rev-list --count` over the session's span: **133 commits.** The per-class figures below are
@@ -346,6 +371,11 @@ The two classes at the top are **34% of the session's commits**, and both are of
 number that looked right and was not. That is the argument for the checks in one line — not that the
 failures were embarrassing, but that **two of them cost a third of the work**, and each was caught by
 re-deriving it from a direction nobody had used the first time.
+
+**Class 18 closed the night**, and it is the one that generalises furthest: fifteen of the eighteen are about
+numbers that were wrong, and three — 16, 17 and 18 — are about numbers that were *right* and told a story their
+denominator did not support. The distinction matters because the second kind cannot be caught by re-deriving the
+number; it has to be caught by asking **what the number is a ratio of**.
 
 Classes **15–17 arrived in one night**, and together they say something the first fourteen did not: the last four
 were found **without changing a single metric**. Nothing was mis-measured in the ordinary sense — the evaluator was

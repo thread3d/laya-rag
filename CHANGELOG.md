@@ -6,6 +6,35 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.5.2 — 2026-10-30
+
+The failures ledger gains its eighteenth class — **a gain bought with output volume** — and it is the one that
+generalises furthest.
+
+### The class
+
+A comparison can be controlled on corpus, metric, budget and seed, report a paired interval excluding zero, and
+still be measuring **volume**: the composer's `+0.055` nugget recall came with **2.1× the text** (593.6 → 1282.6
+characters, longer on 149 of 150 queries) while the finding offered *"both arms emitted 5.00 sentences"* as its
+control.
+
+The tell: **the metric's denominator is the output, not the input.** Retrieval metrics are bounded by the corpus;
+extraction and generation metrics are bounded by what the system chose to emit — and that choice is precisely what
+the comparison is supposed to hold fixed.
+
+The rule, in a form a reviewer can apply:
+
+> When comparing two systems on a metric computed over their **output**, report output size beside it and compute the
+> metric **per unit of output** as well. A per-unit view that agrees with the absolute view is evidence; one that
+> disagrees is the finding.
+
+### And the ledger now separates its two halves
+
+Fifteen of the eighteen classes are numbers that were **wrong**. Three — 16, 17 and 18 — are numbers that were
+**right** and told a story their denominator did not support. That distinction matters because the second kind
+cannot be caught by re-deriving the number; it has to be caught by asking *what the number is a ratio of*. The
+ledger says so, which is the most useful thing eighteen entries can do at the end of a night.
+
 ## 2.5.1 — 2026-10-30
 
 The length lens applied across every measured arm: it **strengthens** R5's claim and localises the confound to
