@@ -126,6 +126,21 @@ are what stops the next pass from re-trying them.
 
 ## Method notes worth carrying forward
 
+- **Wall clock at 8% resolution is enough for a cascade and useless for a micro-benchmark — and the
+  instrument had to be fixed before either could be said.** The query path recorded wall clock only,
+  while the measurement tools had recorded `cpu_seconds` since the Laya 0.4.14 pass; so a result could
+  not say how much work a query was, and the latency the project publishes ("2–5 s") is an **MPS**
+  number from an Intel Mac, not the CPU-only envelope the claim rests on. Both now travel with every
+  result, along with the **resolved** device (`DEVICE=auto` is a request; the answer is read back off
+  the module). Measured at `LAYA_RAG_DEVICE=cpu`, 16 torch threads, `RETRIEVE_K=20`: **6.71 s median
+  wall, 96.3 s median CPU per query** — and the CPU figure is a *thread-sum*, comparable only at a
+  fixed thread count, which is why `torch_threads` is recorded beside it. The pre-registered falsifier
+  (±5% across repeats) fired at 8.1%, so the cost axis is published as medians with their spread
+  rather than as a point estimate; and the same probe read 15.83 s for this configuration while two
+  research agents were fetching pages and 6.71 s after they stopped — a 2.4× swing from co-tenancy
+  alone, which is the fourth time this repository has watched `seconds` invent a speed difference.
+  [findings-cost-envelope.md](findings-cost-envelope.md)
+
 - **A result off by an order of magnitude is a bug signal, not a finding — and here it was mine.**
   HotpotQA read nDCG@10 0.0516 against a published 0.603, and nine other corpora agreed within 0.02 on
   the same path. Rather than publish a twelve-fold gap, I diagnosed it: the gold documents ranked #1 and

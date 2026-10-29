@@ -84,3 +84,23 @@ def test_args_default_to_the_shipped_default_index():
     args = cost.parse_args([])
     assert args.index_dir.endswith("engine-default")
     assert args.queries == 60 and args.warmup == 3
+
+
+def test_cpu_time_is_summarized_with_the_same_statistics_as_wall_clock():
+    """The cost axis is read from CPU time, so it needs the same p95 machinery wall clock gets.
+
+    Wall clock on a shared host is the measurement that made this repository withdraw three speed
+    claims; a report that carried only wall clock would reproduce exactly that failure.
+    """
+    cpu = cost.summarize_latency([2.0, 4.0, 6.0])
+    assert cpu["mean"] == pytest.approx(4.0)
+    assert cpu["median"] == pytest.approx(4.0)
+    # rank = 0.95 x (3-1) = 1.9, so between 4.0 and 6.0: 4.0 + 0.9 x 2.0.
+    assert cpu["p95"] == pytest.approx(5.8)
+    # three queries, twelve CPU-seconds spent: one query per four seconds of CPU.
+    assert cpu["queries_per_second"] == pytest.approx(0.25)
+
+
+def test_a_zero_cpu_total_does_not_divide_by_zero():
+    """A stub model can report exact zeros; the throughput column must survive it."""
+    assert cost.summarize_latency([0.0, 0.0])["queries_per_second"] == 0.0

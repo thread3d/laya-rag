@@ -119,12 +119,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     for question in questions[: args.warmup]:
         engine.query(question, top_k=args.top_k)
 
+    # Both clocks per query. Wall clock is what a caller waits and is contaminated by whatever
+    # else the host is doing (this repository has withdrawn three speed claims that died on it);
+    # CPU time is the work the process actually did, summed over threads, and it is the number the
+    # cost axis is read from. `process_time` around the call, not the engine's own timings, so the
+    # measurement does not depend on the instrument being measured.
     seconds: list[float] = []
+    cpu_seconds: list[float] = []
+    device = "unknown"
     started = time.perf_counter()
     for question in questions[args.warmup :]:
         query_started = time.perf_counter()
-        engine.query(question, top_k=args.top_k)
+        cpu_started = time.process_time()
+        result = engine.query(question, top_k=args.top_k)
+        cpu_seconds.append(time.process_time() - cpu_started)
         seconds.append(time.perf_counter() - query_started)
+        device = getattr(result, "device", None) or device
     wall = time.perf_counter() - started
 
     on_disk = index_bytes(index_dir)
@@ -139,21 +149,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         "timed_queries": len(seconds),
         "wall_seconds": round(wall, 2),
         "latency_seconds": summarize_latency(seconds),
+        "cpu_seconds": summarize_latency(cpu_seconds),
+        # The envelope this row was measured in. `cpu` is the claim the project makes; anything
+        # else is an accelerated run and must be labelled as one wherever the row is quoted.
+        "device": device,
+        "torch_threads": config.torch_threads,
         "settings": {
             "embed_model": config.embed_model or "engine-default",
             "dense_weight": config.resolved_dense_weight,
             "top_k": args.top_k,
             "warmup": args.warmup,
             "chunk_chars": config.chunk_chars,
+            "configured_device": config.device,
         },
     }
     out = Path(args.out)
     evalkit.write_json(Path(str(out) + ".json"), report)
     latency = report["latency_seconds"]
-    print(f"{report['label']}: {latency.get('mean')}s mean, {latency.get('p95')}s p95, "
+    cpu = report["cpu_seconds"]
+    print(f"{report['label']} on {device}: {latency.get('mean')}s mean wall, "
+          f"{cpu.get('mean')}s mean CPU ({cpu.get('p95')}s p95), "
           f"{latency.get('queries_per_second')} q/s, peak RSS "
           f"{report['peak_rss_bytes'] / 2**20:.0f} MiB, index {on_disk / 2**20:.1f} MiB "
           f"({report['bytes_per_chunk']} B/chunk)")
+    if device not in ("cpu", "unknown"):
+        print(f"  note: measured on {device!r}, not cpu — this row is an accelerated one")
     print("wrote", str(out) + ".json")
     return 0
 

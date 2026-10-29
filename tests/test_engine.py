@@ -610,3 +610,54 @@ def test_a_default_query_result_has_no_pool():
     result = QueryResult(query="anything at all")
     assert result.pool == {}
     assert "pool" not in result.as_dict()
+
+
+# ── the cost axis is measured, not inferred ──────────────────────────────
+
+def test_a_query_reports_cpu_time_per_stage_and_the_device(tmp_path):
+    """Wall clock alone cannot carry the cost claim: on a shared host it inverts signs.
+
+    The repository learned this measuring Laya 0.4.14 — three speed claims were withdrawn because
+    `seconds` was measuring everyone's load — and adopted CPU time in `tools/engine_beir.py`. The
+    query path did not record it, so a result could not say how much work a query was.
+    """
+    config = make_config(tmp_path, dense_weight=1.0, retrieve_k=6)
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    payload = engine.query("How long does a refund take?").as_dict()
+
+    timings = payload["timings"]
+    for key in ("retrieval_cpu_seconds", "rerank_cpu_seconds", "total_cpu_seconds"):
+        assert timings[key] >= 0.0
+    # The stages are parts of one whole; CPU time is additive in a way wall clock is not.
+    assert timings["total_cpu_seconds"] == pytest.approx(
+        timings["retrieval_cpu_seconds"] + timings["rerank_cpu_seconds"], abs=5e-4
+    )
+    # And the result names the hardware. A stub model has no device, so this falls back to the
+    # configured request rather than inventing one.
+    assert payload["device"] == config.device
+
+
+def test_the_device_reported_is_the_resolved_one_not_the_request(tmp_path):
+    """`DEVICE=auto` is a request; a CPU-only claim needs the answer, not the request."""
+    class Resolved(StubModel):
+        device = "cuda:0"
+
+    engine = RagEngine(make_config(tmp_path, dense_weight=1.0), model=Resolved())
+    assert engine.device == "cuda:0"
+
+
+def test_an_empty_index_still_reports_its_clocks(tmp_path):
+    """The early return is a result too: a caller timing it must not meet a missing key.
+
+    An index that exists and holds nothing is the reachable form of this path — no index at all
+    raises `IndexNotBuiltError` from the property before any clock is read.
+    """
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    engine = RagEngine(make_config(tmp_path), model=StubModel())
+    engine.index_paths([empty])
+    payload = engine.query("anything at all").as_dict()
+    assert payload["note"] and "empty" in payload["note"]
+    assert payload["timings"]["total_cpu_seconds"] >= 0.0
+    assert payload["device"]

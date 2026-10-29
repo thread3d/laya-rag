@@ -225,20 +225,21 @@ opportunity.
 
 ### G4 — Cost is unmeasured and concentrated, and the headline latency is an accelerated number
 
-`[measure]` `.scratch/cost-probe.json`: at 16–32 torch threads the decision pass costs **0.59–0.83 s per
-candidate**, linear in `RETRIEVE_K`, while retrieval costs 0.03 s. One configuration (4 threads, 40
-candidates) read **253.9 s** against 23.6 s at 32 threads — a 10.8× gap for a 2× thread difference. That
-is not thread scaling; it is host contention, and it is the same lesson this repository learned the hard
-way about Laya 0.4.14: *wall clock is not a performance signal on a shared host*. `tools/engine_beir.py`
-records `cpu_seconds` for exactly that reason; the query path does not, so the cost axis is currently
-unmeasurable even for the system that discovered the problem.
+`[measure]` `docs/findings-cost-envelope.md`, taken after R0 landed the instrument: with the device
+refused (`LAYA_RAG_DEVICE=cpu`), 16 torch threads and `RETRIEVE_K=20`, a query costs **6.71 s median wall
+and 96.3 s median CPU** — the decision pass is **5.29 s of CPU per candidate** against 0.03 s for
+retrieval, so the second stage is more than 99% of the work. CPU time is a thread-sum and comparable only
+at a fixed thread count, which is recorded beside it. The pre-registered falsifier (±5% across repeats)
+fired at **8.1%**, and the same configuration read **15.83 s** while two other processes were busy and
+**6.71 s** once they stopped: a 2.4× swing from co-tenancy alone, which is the fourth time this
+repository has watched `seconds` invent a speed difference.
 
 There is a second, larger problem with the same root. The README's headline — *"the engine auto-selects
 MPS and answers a query in 2–5 s end to end"* — is an **accelerated** number from an Intel Mac. The same
-query on this CPU-only host, no accelerator, no GPU, takes **12–24 s**. Any claim phrased as "CPU-only"
-must therefore report the accelerator-disabled envelope as the primary number and the accelerated one as
-a footnote, or the first review comment will be that the envelope measured was not the envelope claimed.
-That re-measurement is cheap and nothing in this repository currently does it.
+engine with the accelerator refused is the 6.71 s median above. Any claim phrased as "CPU-only" must
+report the accelerator-disabled envelope as the primary number and the accelerated one as a footnote, or
+the first review comment will be that the envelope measured was not the envelope claimed. R0 has now done
+that measurement and landed the fields that make it repeatable.
 
 The field has started asking for the rest of the axis: BrowseComp-Plus reports calibration error and
 search calls beside accuracy `[web]`; nobody publishes joules per query. A CPU-only system can own that
@@ -333,6 +334,12 @@ from an accelerated run.
 
 **Falsifier:** if CPU-seconds per candidate still varies by more than ±5% across repeats at fixed depth,
 the host is not a valid instrument; say so and defer the cost axis rather than publish a jitter number.
+
+**Outcome (done).** The instrument landed and the falsifier **fired at 8.1%**, so the cost axis is
+published as medians with their observed spread rather than as point estimates — enough resolution to
+compare a `RETRIEVE_K=10` cascade against `RETRIEVE_K=40`, nothing like enough for a 3% variant. The
+measurement, its two clock definitions and the co-tenancy warning are in
+[`findings-cost-envelope.md`](findings-cost-envelope.md).
 
 ### R1 — Refresh the components, under this repository's own protocol (days, `[model]` `[offline]`)
 

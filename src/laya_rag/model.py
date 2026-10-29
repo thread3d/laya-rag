@@ -205,10 +205,30 @@ class LayaModel:
         )
 
     # -- introspection ---------------------------------------------------
+    @property
+    def device(self) -> str:
+        """The device the checkpoint's parameters are actually on.
+
+        `DEVICE=auto` is a request; the loader decides. This reads the decision module back and
+        answers with what happened, because a query result that says "CPU-only" has to be true:
+        the engine's headline latency was measured with an accelerator, and a cost claim has to
+        name the hardware that produced it. `"unknown"` before the first load, and if Laya moves
+        its module, rather than a guess.
+        """
+        agent = self._agent
+        if agent is None:
+            return "unknown"
+        for holder in (getattr(agent, "model", None), getattr(agent, "backend_object", None)):
+            try:
+                return str(next(holder.parameters()).device)
+            except Exception:  # noqa: BLE001 - any shape change means "cannot say"
+                continue
+        return "unknown"
+
     def info(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "checkpoint": self.config.checkpoint,
-            "device": self.config.device,
+            "device": self.device if self._agent is not None else self.config.device,
             "loaded": self._agent is not None,
             "models_dir": str(self.config.models_dir),
             "max_len": self.config.max_len,
@@ -409,6 +429,11 @@ class BiEncoderModel:
             self._device = device
             self._dim = int(self._encoder.config.hidden_size)
             return self
+
+    @property
+    def device(self) -> str:
+        """The device the encoder was loaded onto (the resolved value, not ``auto``)."""
+        return self._device if self._encoder is not None else "unknown"
 
     def _encode(self, texts: Sequence[str]) -> np.ndarray:
         self.ensure_loaded()

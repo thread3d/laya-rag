@@ -98,9 +98,20 @@ class Passage(BaseModel):
 
 
 class Timings(BaseModel):
+    """Wall clock and CPU time per stage.
+
+    ``*_seconds`` is what a caller waited; ``*_cpu_seconds`` is what the process actually spent,
+    summed over every thread. The cost axis is read from the second pair: a shared host
+    contaminates the first badly enough to invert signs (this repository has withdrawn three
+    speed claims on exactly that), while CPU time is the work the query really did.
+    """
+
     retrieval_seconds: float
     rerank_seconds: float
     total_seconds: float
+    retrieval_cpu_seconds: float = 0.0
+    rerank_cpu_seconds: float = 0.0
+    total_cpu_seconds: float = 0.0
 
 
 class QueryResponse(BaseModel):
@@ -119,6 +130,10 @@ class QueryResponse(BaseModel):
     trust_filtered: int
     acl_filtered: int
     checkpoint: str
+    device: str = Field(
+        default="",
+        description="The device the decision model actually ran on; `cpu` makes this a CPU-only result",
+    )
     timings: Timings
     usage: dict[str, Any]
     note: str | None = None

@@ -116,8 +116,15 @@ class QueryResult:
     retrieval_seconds: float = 0.0
     rerank_seconds: float = 0.0
     total_seconds: float = 0.0
+    #: CPU time per stage, summed over every thread the process ran. The cost axis is read from
+    #: these rather than the wall clock above, because a shared host contaminates the latter.
+    retrieval_cpu_seconds: float = 0.0
+    rerank_cpu_seconds: float = 0.0
+    total_cpu_seconds: float = 0.0
     usage: dict[str, Any] = field(default_factory=dict)
     checkpoint: str = ""
+    #: The device the decision model actually ran on — ``cpu`` makes a result a CPU-only claim.
+    device: str = ""
     note: str | None = None
     #: The retrieval pool's shape: how deep the search went and what each channel contributed.
     #: Gold *completeness* needs qrels and is instrumented in `tools/multihop_diagnostics.py`;
@@ -136,10 +143,14 @@ class QueryResult:
             "trust_filtered": self.trust_filtered,
             "acl_filtered": self.acl_filtered,
             "checkpoint": self.checkpoint,
+            "device": self.device,
             "timings": {
                 "retrieval_seconds": round(self.retrieval_seconds, 4),
                 "rerank_seconds": round(self.rerank_seconds, 4),
                 "total_seconds": round(self.total_seconds, 4),
+                "retrieval_cpu_seconds": round(self.retrieval_cpu_seconds, 4),
+                "rerank_cpu_seconds": round(self.rerank_cpu_seconds, 4),
+                "total_cpu_seconds": round(self.total_cpu_seconds, 4),
             },
             "usage": self.usage,
         }
@@ -511,6 +522,19 @@ class RagEngine:
         if self.config.resolved_lexical_backend == "eager":
             return (self.config.index_dir / EAGER_LEXICAL_FILE).is_file()
         return (self.config.index_dir / LEXICAL_FILE).is_file()
+
+    @property
+    def device(self) -> str:
+        """The device the decision model runs on, as a query's result should report it.
+
+        "auto" is a *request*, not an answer: the loader chooses. A result that claims to be
+        CPU-only has to say what actually happened, so the model is asked first and the
+        configured value is only the fallback (a stub model in a test, or a load that failed).
+        """
+        resolved = getattr(self.model, "device", None)
+        if isinstance(resolved, str) and resolved:
+            return resolved
+        return self.config.device or "unknown"
 
     @property
     def lexical(self) -> Any | None:
@@ -1139,13 +1163,21 @@ class RagEngine:
         if not query or not query.strip():
             raise ValueError("query must be a non-empty string")
         started = time.perf_counter()
+        # Wall clock says how long a caller waited; CPU time says how much work was done. On a
+        # shared host the first is contaminated by other tenants (the repository learned this
+        # measuring Laya 0.4.14: three speed claims died on it), so both are recorded and the
+        # cost axis is read from the second. `process_time` sums every thread this process runs,
+        # which is what torch's intra-op pool actually consumes.
+        cpu_started = time.process_time()
         index = self.index
         if not len(index):
             return QueryResult(
                 query=query,
                 checkpoint=self.config.checkpoint,
+                device=self.device,
                 note="the index is empty; index some documents first",
                 total_seconds=time.perf_counter() - started,
+                total_cpu_seconds=time.process_time() - cpu_started,
             )
 
         candidate_k = retrieve_k or self.config.retrieve_k
@@ -1280,7 +1312,9 @@ class RagEngine:
             "and will miss exact-term matches; re-index to rebuild it"
         )
 
+        retrieval_cpu_seconds = time.process_time() - cpu_started
         rerank_started = time.perf_counter()
+        rerank_cpu_started = time.process_time()
         # A configured cross-encoder replaces Laya's relevance scores for ordering and
         # filtering; `rerank` still runs the answerability gate on the kept passages.
         cross_scores = None
@@ -1397,6 +1431,7 @@ class RagEngine:
             bridge_feature=self.config.gate_bridge_feature,
         )
         rerank_seconds = time.perf_counter() - rerank_started
+        rerank_cpu_seconds = time.process_time() - rerank_cpu_started
 
         return QueryResult(
             query=query,
@@ -1412,8 +1447,12 @@ class RagEngine:
             retrieval_seconds=retrieval_seconds,
             rerank_seconds=rerank_seconds,
             total_seconds=time.perf_counter() - started,
+            retrieval_cpu_seconds=retrieval_cpu_seconds,
+            rerank_cpu_seconds=rerank_cpu_seconds,
+            total_cpu_seconds=retrieval_cpu_seconds + rerank_cpu_seconds,
             usage=reranked.usage,
             checkpoint=self.config.checkpoint,
+            device=self.device,
             note=None if lexical is not None or not len(index) else degraded,
             pool={
                 "requested": candidate_k,

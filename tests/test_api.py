@@ -55,6 +55,11 @@ def test_index_then_query_round_trip(ctx):
     assert body["passages"]
     assert "refunds.md" in body["passages"][0]["path"]
     assert body["timings"]["total_seconds"] >= 0
+    # The cost axis is published, not just measured: a client reading a CPU-only result has to be
+    # able to tell what it cost and on what hardware it ran.
+    assert body["timings"]["total_cpu_seconds"] >= 0
+    assert body["timings"]["rerank_cpu_seconds"] >= 0
+    assert body["device"]
 
 
 def test_index_reports_nothing_found_for_unreadable_paths(ctx, tmp_path):

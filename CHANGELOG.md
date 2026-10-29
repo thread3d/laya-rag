@@ -6,6 +6,52 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.0 — 2026-10-29
+
+The cost axis gets an instrument, and the number it returns is not the one the README quotes. Two
+additive fields on the query result and its HTTP model; no retrieval behaviour changes.
+
+### `cpu_seconds` and `device` travel with every result
+
+`QueryResult.timings` and the HTTP `Timings` model now carry `retrieval_cpu_seconds`,
+`rerank_cpu_seconds` and `total_cpu_seconds` beside the wall clock, and `QueryResponse` carries
+`device`. Wall clock says how long a caller waited; CPU time says how much work was done. On a
+shared host the first is contaminated by other tenants — this repository has withdrawn three speed
+claims on exactly that — so the cost axis is read from the second. `process_time()` sums every
+thread the process ran, which is what torch's intra-op pool consumes; it is therefore comparable
+only at a fixed thread count, which `tools/cost_report.py` now records beside it.
+
+`device` is the device the decision model **actually** ran on, not the one that was requested:
+`DEVICE=auto` is a request and the loader decides, so `LayaModel.device` reads the resolved module
+back and `BiEncoderModel.device` returns what it loaded with. A result that says `cpu` can support a
+CPU-only claim; a result that says `auto` cannot.
+
+`tools/cost_report.py` reports both clocks, the thread count, the resolved device, and prints an
+explicit note when a row was taken on an accelerator.
+
+### The CPU-only envelope, measured
+
+With the accelerator refused (`LAYA_RAG_DEVICE=cpu`), 16 torch threads, `RETRIEVE_K=20`, on the
+345-chunk corpus and the multilingual checkpoint: **6.71 s median wall, 96.3 s median CPU per
+query**, and **5.29 s of CPU per candidate** against 0.03 s for retrieval — the decision pass is
+over 99% of the work. The README's "2–5 s" is the same engine on MPS; the CPU-only envelope is the
+one the project's own claim rests on, and it is now measured rather than assumed.
+
+The measurement's own falsifier was pre-registered (±5% across repeats at fixed depth) and it
+**fired**: per-query repeat spreads ran 0.5%–8.1%, three of five above the bar. So the cost axis is
+published as medians with the observed spread, not as point estimates. The same configuration also
+read **15.83 s** while two unrelated processes were fetching web pages and **6.71 s** after they
+stopped — a 2.4× swing from co-tenancy alone. See
+[`docs/findings-cost-envelope.md`](docs/findings-cost-envelope.md).
+
+### Still owed
+
+- R1–R8 of [`docs/best-in-the-world-2026-10.md`](docs/best-in-the-world-2026-10.md) are unstarted;
+  R0's outcome changes R6's target (the cascade has a clean 99% to attack) and leaves the rest
+  unchanged.
+- The figures in this repository were produced under Laya 0.3.23 and remain compatibility-checked,
+  not measurement-re-verified, under 0.4.14.
+
 ## 1.2.2 — 2026-10-29
 
 Correctness and gate repair. No retrieval behaviour changes: every number in this repository stands.
