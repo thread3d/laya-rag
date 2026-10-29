@@ -23,6 +23,8 @@ CONTEXT_PREFIX_ARGS ?=
 BRIGHT_ARGS ?=
 MULTIHOP_ARGS ?=
 COVERAGE_ARGS ?=
+GATE_GROUP_BY ?= question_type
+GATE_ROWS_GROUPED ?= $(GATE_ROWS)
 GATE_ARGS ?=
 RECALIBRATE_ARGS ?=
 ROUTING_ARGS ?=
@@ -710,9 +712,20 @@ gate-dataset:
 # LAYA_RAG_ANSWERABILITY_GATE_PATH at the `.gate` file to make it the engine's decision; on
 # MultiHop-RAG's own null_query class it halves the false-accept rate and raises the true-accept
 # rate at the same threshold (docs/findings-answerability-gate.md).
+# Two regimes, because one of them is the honest one: random halves reuse queries of the same question
+# type on both sides, which the trainer's own docstring calls "the weakest transfer test". The grouped
+# run holds out a whole question type instead and is reported beside it — on this benchmark the ordering
+# survives (0.8377 -> 0.7909) and the calibration does not (ECE 0.0521 -> 0.1361). Running both by default
+# means the stronger number cannot be missed by forgetting a flag.
 gate-train:
 	$(PY) tools/answerability_train.py --features $(GATE_ROWS) --out $(GATE_ARTEFACT) \
 		--splits $(GATE_SPLITS) $(GATE_TRAIN_ARGS)
+	@if [ -n "$(GATE_GROUP_BY)" ]; then \
+		$(PY) tools/answerability_train.py --features $(GATE_ROWS_GROUPED) \
+			--out $(basename $(GATE_ARTEFACT))-grouped --group-by $(GATE_GROUP_BY) $(GATE_TRAIN_ARGS); \
+	else \
+		echo "gate-train: no GATE_GROUP_BY set, so only the random-half regime was measured"; \
+	fi
 
 # Does the answerability gate travel between corpora? Reports in-domain, held-out and a
 # shuffled-label control, with risk@80 beside each AUC.

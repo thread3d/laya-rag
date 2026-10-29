@@ -59,27 +59,32 @@ def select(
     limit: int | None = None,
     sample_seed: int | None = None,
     include_nulls: bool = True,
-) -> list[tuple[str, int]]:
-    """``(query, label)`` pairs: every null_query, plus a seeded sample of answerable ones.
+) -> list[tuple[str, int, str]]:
+    """``(query, label, question_type)`` triples: every null_query, plus a seeded sample of answerables.
 
     The nulls are **not** sampled, because there are only 301 of them and they are the class the
     gate is missing; sampling them would throw away the very thing being measured. The positives are
     sampled, so the two classes end up comparable in size rather than 7:1.
     """
-    nulls = [
-        (str(record["query"]), 0)
-        for record in records
-        if include_nulls and is_null_query(record)
-    ]
-    answerable = [(str(record["query"]), 1) for record in records if not is_null_query(record)]
+    def pair(record: dict[str, Any], label: int) -> tuple[str, int, str]:
+        return (str(record["query"]), label, str(record.get("question_type") or "").strip())
+
+    nulls = [pair(record, 0) for record in records if include_nulls and is_null_query(record)]
+    answerable = [pair(record, 1) for record in records if not is_null_query(record)]
     if limit is not None and limit >= 0 and len(answerable) > limit:
         rng = random.Random(sample_seed) if sample_seed is not None else random
         answerable = rng.sample(answerable, limit)
     return nulls + answerable
 
 
-def row_for(engine: Any, query: str, label: int) -> dict[str, Any]:
-    """One query through the engine, as a feature row."""
+def row_for(engine: Any, query: str, label: int, question_type: str = "") -> dict[str, Any]:
+    """One query through the engine, as a feature row.
+
+    ``question_type`` is carried because it is the **grouping key for the only real transfer test**: splitting
+    at random reuses queries of the same type on both sides, so a gate can learn that type's idiosyncrasies and
+    look better than it is. Recording the key is what lets `--group-by` hold a whole type out — and a row that
+    does not carry it can only be evaluated in the weak regime.
+    """
     from laya_rag.answerability import FEATURE_NAMES, extract_features, passage_view
 
     result = engine.query(query, retrieve_k=20)
@@ -87,6 +92,7 @@ def row_for(engine: Any, query: str, label: int) -> dict[str, Any]:
     return {
         "query": query,
         "label": int(label),
+        "question_type": str(question_type or ""),
         "features": {name: float(value) for name, value in zip(FEATURE_NAMES, vector)},
         "answerability": result.answerability,
         "answerable_verdict": result.answerable,
@@ -144,12 +150,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         nulls=not args.no_nulls,
     )
     run = jobkit.ResumableRun(str(stem) + ".json", fingerprint=fingerprint)
-    todo = run.pending(rows, key=lambda pair: pair[0])
-    print(f"{len(rows)} rows ({sum(1 for _, l in rows if l == 0)} null_query), "
+    todo = run.pending(rows, key=lambda triple: triple[0])
+    print(f"{len(rows)} rows ({sum(1 for _, label, _ in rows if label == 0)} null_query), "
           f"{len(todo)} to do ({len(run)} checkpointed)", flush=True)
 
-    for query, label in todo:
-        run.record(query, row_for(engine, query, label))
+    for query, label, question_type in todo:
+        run.record(query, row_for(engine, query, label, question_type))
         if len(run) % 25 == 0:
             print(f"  {len(run)}/{len(rows)}", flush=True)
 

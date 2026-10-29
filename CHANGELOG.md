@@ -6,6 +6,27 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.4.2 — 2026-10-30
+
+The honest transfer regime becomes what `make gate-train` produces, not something you must remember to ask for.
+
+### Three changes, one purpose
+
+**`make gate-train` runs both regimes.** Random halves first (the published figure), then the grouped run — and if
+`GATE_GROUP_BY` is empty it prints *"no GATE_GROUP_BY set, so only the random-half regime was measured"* rather
+than quietly reporting the weaker one. A capability that exists but is not wired is capability nobody has, which is
+the same lesson as the fifteen invisible `make` targets.
+
+**`gate_dataset.py` now records `question_type` on every row.** It is the grouping key, so a dataset that omits it
+can *only* be scored in the weak regime — the field is not metadata, it is what makes the stronger measurement
+possible. Threaded through `select()` as a `(query, label, question_type)` triple.
+
+**And the artefact name is no longer `answerability-gate.json-grouped`** — `$(basename …)` puts it beside the
+original, where `make gate-train`'s own output convention says things live.
+
+Rows measured before today do not carry the key; the grouped report in `eval/gate/` was produced by joining it back
+from the benchmark by query text, which is exactly the work the dataset tool now does for free.
+
 ## 2.4.1 — 2026-10-30
 
 The grouped transfer figures reach all three pages that quote the gate, and a test keeps them there.

@@ -34,7 +34,7 @@ def test_null_query_records_are_the_negative_class():
 def test_every_null_is_kept_and_only_the_positives_are_sampled():
     """There are 301 nulls; sampling them would discard the class being measured."""
     rows = gd.select(_records(1000, 301), limit=100, sample_seed=17)
-    labels = [label for _query, label in rows]
+    labels = [label for _query, label, _kind in rows]
     assert labels.count(0) == 301
     assert labels.count(1) == 100
     # the nulls come first and are untouched
@@ -42,8 +42,8 @@ def test_every_null_is_kept_and_only_the_positives_are_sampled():
 
 
 def test_the_sample_is_reproducible_and_actually_samples():
-    first = [q for q, label in gd.select(_records(500, 5), limit=50, sample_seed=17) if label == 1]
-    second = [q for q, label in gd.select(_records(500, 5), limit=50, sample_seed=17) if label == 1]
+    first = [row[0] for row in gd.select(_records(500, 5), limit=50, sample_seed=17) if row[1] == 1]
+    second = [row[0] for row in gd.select(_records(500, 5), limit=50, sample_seed=17) if row[1] == 1]
     assert first == second
     assert len(first) == 50 and len(set(first)) == 50
     assert first != [f"a{i}" for i in range(50)]
@@ -51,12 +51,12 @@ def test_the_sample_is_reproducible_and_actually_samples():
 
 def test_a_limit_above_the_available_positives_does_not_pad():
     rows = gd.select(_records(5, 3), limit=100, sample_seed=17)
-    assert sum(1 for _q, label in rows if label == 1) == 5
+    assert sum(1 for row in rows if row[1] == 1) == 5
 
 
 def test_nulls_can_be_excluded_deliberately():
     rows = gd.select(_records(10, 4), limit=5, sample_seed=17, include_nulls=False)
-    assert all(label == 1 for _q, label in rows)
+    assert all(row[1] == 1 for row in rows)
 
 
 def test_the_adapter_reads_a_dict_and_an_object_identically():
@@ -92,3 +92,34 @@ def test_the_adapter_and_a_raw_dict_produce_the_same_features():
 def test_a_mapping_missing_optional_fields_is_not_an_error():
     view = PassageView({"text": "only text here"})
     assert view.relevance == 0.0 and view.path is None
+
+
+def test_rows_carry_the_grouping_key_for_the_only_real_transfer_test():
+    """`question_type` is the grouping key, so a row that lacks it can only be scored in the weak regime.
+
+    Random halves reuse queries of the same type on both sides — the trainer's docstring calls that "the
+    weakest transfer test". Carrying the key on the row is what lets `--group-by` hold a whole type out, and
+    the recorded numbers differ a great deal between the two regimes (AUC 0.8377 → 0.7909, ECE 0.0521 →
+    0.1361 on this benchmark), so a dataset that dropped the field would silently reduce every future gate to
+    the weaker measurement.
+    """
+    rows = gd.select(_records(4, 2), limit=None, sample_seed=17, include_nulls=True)
+    assert len(rows[0]) == 3, "select() must yield (query, label, question_type)"
+    kinds = {row[2] for row in rows}
+    assert kinds == {"null_query", "inference_query"}
+
+    class _Engine:
+        def query(self, query, retrieve_k=20):  # noqa: ANN001, ANN202 - the shape `row_for` needs
+            class _Result:
+                passages: list = []
+                answerability = 0.5
+                answerable = True
+                kept = 0
+                considered = 0
+                device = "cpu"
+                total_cpu_seconds = 0.0
+
+            return _Result()
+
+    row = gd.row_for(_Engine(), "q", 1, "comparison_query")
+    assert row["question_type"] == "comparison_query"
