@@ -6,6 +6,26 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.6.1 — 2026-10-29
+
+The CI workflow's `make` invocations become a checked contract.
+
+### `tests/test_ci_workflow_targets.py`
+
+`test_docs_make_targets_exist.py` holds the *documentation* to "documented means runnable". The workflow
+is the other place a `make` invocation lives, and a renamed target there fails only on the next push —
+after the change that renamed it has been committed, and after it has been trusted. A CI step that cannot
+run is the same defect as a documented command that cannot run, one step further from the reader.
+
+The check reads the workflow text (the commands live inside `run: |` block scalars, which a parser would
+hand back unchanged) and asserts every `make <target>` names one the Makefile defines. It matches inside
+comments too, deliberately: a workflow comment naming a command nothing defines misleads by the same
+mechanism, and there are few enough of them that the noise a stricter scan avoids does not arise.
+
+It found nothing — the workflow's nine invocations (`lint`, `test`, `test-mcp`, `claim-check`,
+`consistency-check`, and the commands its comments name) are all real — which is worth recording as a
+clean sweep beside the eight contracts that were not.
+
 ## 1.6.0 — 2026-10-29
 
 CI installs the MCP extra and runs its suite — and doing so found two of this round's own tests that
