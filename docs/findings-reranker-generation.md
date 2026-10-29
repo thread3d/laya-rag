@@ -132,3 +132,45 @@ That is **−0.293** against the recorded −0.318 at depth 100, and the first s
 was measured at — which is the precondition for comparing a different ranker at this depth. The 568M arm
 is running at the same depth and on the same subset; its number lands in the next commit, because a
 prediction and its measurement should not arrive in the same edit.
+
+---
+
+## The ArguAna answer: prediction confirmed, magnitude two-thirds recovered
+
+The prediction above was registered before the run. The measurement, on the same seeded 400-query
+subset and the same depth as the instrument check:
+
+| arm | nDCG@10 | nDCG@100 | MAP@100 | MRR@10 | seconds |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `hybrid-biencoder` (first stage) | **0.5664** | 0.8475 | 0.4843 | 0.3960 | 11.9 |
+| + `bge-reranker-base` (2024, 278M) | 0.2736 | 0.4950 | 0.2274 | 0.2064 | 1,900 |
+| + `bge-reranker-v2-m3` (2026, 568M) | **0.4722** | 0.7175 | 0.4101 | 0.3960 | 6,007 |
+
+Paired over the 400 matched queries, bootstrapped:
+
+| comparison | Δ nDCG@10 | 95% interval |
+| --- | ---: | --- |
+| first stage **−** v2-m3 | **+0.0942** | [+0.0530, +0.1335] |
+| first stage − 2024 model | +0.2928 | [+0.2522, +0.3328] |
+| v2-m3 **−** 2024 model | **+0.1986** | [+0.1566, +0.2407] |
+
+**The prediction holds.** It said v2-m3 would land *below* the no-CE hybrid, point estimate 0.35–0.50;
+it landed at **0.4722**, inside the band. The falsifier — v2-m3 beating the first stage by any margin —
+did not fire: the 2026 model still loses, on 290 of 400 queries.
+
+**And the magnitude moved far more than the sign did.** Capacity recovers **two thirds** of the damage
+(−0.293 → −0.094) without reversing it. That makes the repository's standing negative precise rather than
+wrong: it was never "a pointwise ranker cannot represent opposition", it is **"a pointwise ranker pays for
+opposition in proportion to how little it knows"**, and 568M of parameters buys back 0.199 of the 0.293 —
+at **3.2× the compute** and while still losing to the first stage it was given.
+
+That is the difference between a mechanism story and a mechanism *measurement*, and it is why the
+unregistered sentence at the top of this document had to be tested rather than left as reasoning. The
+mechanism survived; the quantitative claim I would have made from it did not.
+
+### What this does not license
+
+It does not license "use a bigger reranker and the ArguAna problem goes away": the trend across two model
+sizes is suggestive and two points are not a trend. It does not license a claim about *listwise* models
+either — none was run (see the section above on why), and the opposition argument predicts a listwise
+ranker would behave differently, which remains untested rather than assumed.

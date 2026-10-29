@@ -6,6 +6,49 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.7.0 — 2026-10-29
+
+The ArguAna prediction held — and the magnitude, not the sign, is what moved. Plus the cascade's second
+interaction: it costs the composer a little of everything.
+
+### ArguAna: the registered prediction, confirmed inside its band
+
+Pre-registered three commits before the run: *v2-m3 lands **below** the no-CE hybrid's 0.568, point
+estimate **0.35–0.50**; falsifier — if it beats the first stage by any margin, the collapse is a capacity
+artefact and R5's mechanism claim is wrong.* Measured at depth 50 on the seeded 400-query subset:
+
+| arm | nDCG@10 | seconds |
+| --- | ---: | ---: |
+| `hybrid-biencoder` (first stage) | **0.5664** | 11.9 |
+| + `bge-reranker-base` (2024, 278M) | 0.2736 | 1,900 |
+| + `bge-reranker-v2-m3` (2026, 568M) | **0.4722** | 6,007 |
+
+Paired over the 400 matched queries: first stage **−** v2-m3 **+0.0942 [+0.0530, +0.1335]**; first stage −
+2024 model +0.2928 [+0.2522, +0.3328]; **v2-m3 − 2024 model +0.1986 [+0.1566, +0.2407]**. The 2026 model
+still loses, on 290 of 400 queries.
+
+**The prediction landed at 0.4722, inside the 0.35–0.50 band, and the falsifier did not fire.** Capacity
+recovers **two thirds** of the opposition damage (−0.293 → −0.094) without reversing the sign, at 3.2× the
+compute. That makes the repository's standing negative precise rather than wrong: it was never "a
+pointwise ranker cannot represent opposition" but **"a pointwise ranker pays for opposition in proportion
+to how little it knows"**.
+
+### The cascade at the composer: free for the ranker, not for the answer
+
+Same twenty queries, three depths, both composer objectives, every answer through the verifier:
+
+| `M` | arm | abstention | nugget recall | citation-clean |
+| --- | --- | ---: | ---: | ---: |
+| 20 | rank / coverage | 0.20 / 0.20 | 0.2005 / **0.2232** | 0.80 |
+| 10 | rank / coverage | 0.25 / 0.25 | 0.1862 / **0.2097** | 0.75 |
+| 5 | rank / coverage | 0.30 / 0.30 | 0.1834 / **0.2013** | 0.70 |
+
+The composer's advantage **survives the cascade** at every depth (+0.023, +0.024, +0.018), so R2's lever is
+not an artefact of having twenty candidates. But the cascade is not free here: nugget recall falls, and
+abstention rises because an abstention emits the fixed no-answer sentence that the checker counts as an
+uncited claim. **R6's "identical quality" is a claim about retrieval metrics**; one stage later it costs a
+little of everything.
+
 ## 1.6.3 — 2026-10-29
 
 The cascade's interaction with the gate, measured: aggregate-stable, per-query unstable.

@@ -84,6 +84,38 @@ only the first survives a change of `M`. A deployment that tunes the cascade for
 refusal set to move — and should measure it on its own corpus, because twenty queries is a probe and the
 flips here are not an effect size.
 
+### The composer's companion measurement: the cascade costs coverage too
+
+The cascade truncates the pool the *composer* draws from, so it can remove candidate sentences before
+selection ever runs — which would quietly erode the very metric R2 added an objective to improve. Same
+twenty answerable queries, three depths, both composer objectives, every answer through the shipped
+verifier:
+
+| `SECOND_STAGE_TOP_M` | arm | abstention rate | answer nugget recall | citation-clean |
+| --- | --- | ---: | ---: | ---: |
+| 20 (all) | rank order | 0.20 | **0.2005** | 0.80 |
+| 20 (all) | coverage | 0.20 | **0.2232** | 0.80 |
+| 10 | rank order | 0.25 | 0.1862 | 0.75 |
+| 10 | coverage | 0.25 | 0.2097 | 0.75 |
+| 5 | rank order | 0.30 | 0.1834 | 0.70 |
+| 5 | coverage | 0.30 | 0.2013 | 0.70 |
+
+Three things are visible, and only the first is comfortable:
+
+1. **The composer's advantage survives the cascade** — coverage beats rank order at every depth, by
+   +0.023, +0.024 and +0.018. The R2 lever is not an artefact of having twenty candidates.
+2. **The cascade is not free for the composer.** Nugget recall falls 0.2005 → 0.1862 → 0.1834 (rank arm),
+   abstention rises 0.20 → 0.25 → 0.30, and citation-clean falls 0.80 → 0.75 → 0.70 — because an abstention
+   emits the fixed no-answer sentence, which the project's own checker counts as an uncited claim. R6's
+   "identical quality" claim is a claim about **retrieval metrics**, and at the composer it costs a
+   little of everything.
+3. **So `SECOND_STAGE_TOP_M` is free for the ranker and slightly expensive for the answer.** That is the
+   honest form of the R6 finding: 43% less decision CPU, at a cost that shows up one stage later and is
+   roughly 0.015 nugget recall at M=10 on twenty queries.
+
+Twenty queries is a probe, as above. But the *direction* is consistent across three depths and both
+composer objectives, which is what a probe can establish.
+
 **What the M=5 row suggests, and does not show.** The answerable rate *rises* to 0.65 with five
 candidates. With a smaller pool the gate is more permissive, which is plausible (fewer, higher-ranked
 passages look more sufficient) and is also what a small sample looks like. It is recorded because it is
