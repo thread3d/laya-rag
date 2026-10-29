@@ -66,20 +66,54 @@ canonical programme. The general rule this establishes: **anything that adds a r
 tree has to regenerate the documents that quote it in the same commit.** That is exactly what the gate
 exists to enforce, and it is worth knowing before the first 2026 row lands.
 
-## 4. What is running now, and what would settle it
+## 4. The first dataset says the 2026 encoder does not pay — on dense, it loses
 
-The second half is the row itself: Qwen3-Embedding-0.6B (Apache-2.0, `last` pooling, its own query
-instruction) over the same SciFact protocol, scored by `tools/beir.py` and then — because a replica is
-not the system — by `tools/engine_beir.py`. It embeds at roughly a twentieth of `bge-small`'s rate, so
-5,183 documents is about an hour of CPU per run, and both halves are single heavy jobs by this
-repository's rule that only one runs at a time.
+Qwen3-Embedding-0.6B (Apache-2.0, 596M, `last` pooling via the new mode, 300 SciFact queries, same
+corpus, same protocol, same harness). The instruction is a variable in its own right — three wordings
+spread the relevant/irrelevant separation 7× on this repository's own measurement — so it was swept:
 
-The prediction and its falsifier are in the assessment (R1): fused nDCG@10 **≥ +0.03** over the 0.452
-single-config mean, and the dense channel re-earning a non-zero weight on at least three of five
-datasets; falsified if the fused row does not beat lexical-only by ≥0.02 on ≥3 of 5 at matched
-chunking. The arithmetic it rests on: Qwen3-Embedding-0.6B reads **0.5552** on MTEB's BEIR-15 board
-against `bge-large`'s 0.5434 and BM25's 0.3984, and discounting this repository's best-per-dataset
-inflation leaves +0.03 to +0.05 from the encoder alone.
+| encoder and instruction | dense nDCG@10 | hybrid (dense + BM25, RRF) | index time for 5,183 docs |
+| --- | ---: | ---: | ---: |
+| `bge-small` (2023, **33M**), CLS | **0.7200** | 0.7320 | **183 s** |
+| Qwen3-0.6B, no instruction | 0.6825 | 0.7316 | 3,810 s |
+| Qwen3-0.6B, generic web-search instruction | 0.7023 | 0.7352 | cached |
+| Qwen3-0.6B, SciFact claim/evidence instruction | 0.7012 | **0.7389** | cached |
+
+Three things follow, and the first is the one that matters.
+
+1. **On dense retrieval the 2026 model loses to the 2023 one, by 0.018 to 0.038.** It is not a small
+   loss and it is not a fluke of one instruction: the best of the three wordings is still 0.018 below a
+   33M model from 2023 that this repository already had. On the corpus where `bge-small` is strongest
+   and the 2026 model's 15-task average is not, the average does not carry.
+2. **The fused row is where it wins, barely**: +0.0069 with the SciFact instruction, +0.0032 generic,
+   +0.0001 with none. SciFact carries 300 queries, so the repository's own minimum-detectable-effect
+   guidance (≈0.008–0.011 at 2,255 queries, and larger on a smaller set) puts all three inside noise.
+3. **It costs 21× the indexing**: 3,810 s against 183 s for 5,183 documents — 1.36 docs/s against 28.
+   At BEIR's larger corpora that is not a CPU-hour problem, it is a CPU-week problem: 5.4M documents
+   is roughly 46 days at this rate.
+
+So **R1's prediction (+0.03 on the five-dataset mean) is not supported on the first dataset measured**,
+and the honest statement is that swapping the encoder alone did not pay here. What that does *not* yet
+establish is that it never pays: SciFact is one corpus, the repository's rule is that a claim about the
+system needs several with paired intervals, and this model's documented strength is across a
+heterogeneous 15-task set rather than a single scientific-claim corpus. NFCorpus is running now, and a
+negative there too would move "refresh the encoder" from the top of the programme to the do-not-retry
+ledger — which is why it is worth two datasets and not one.
+
+A harness bug found by the sweep, worth recording because of its shape: the first
+`--query-instruction-text` run printed a row **byte-identical** to the no-instruction baseline, because
+the flag set the text but did not enable the instruction. An arm that matches its control exactly is a
+bug signal, not a result — this repository recorded the same lesson when a harness read JSON passages
+with `getattr` and both arms came out equal to four decimals. The flag now implies enabling it, and a
+test pins the implication.
+
+## 5. What would settle it
+
+Two more datasets (NFCorpus is running, ArguAna next), paired bootstrap over queries rather than a
+point-estimate comparison, and then — because a replica is not the system — the same encoder through
+`tools/engine_beir.py`, which measures the engine's own chunking rather than the harness's. The
+falsifier stands as written: fused nDCG@10 ≥ +0.03 over the 0.452 single-config mean, and the dense
+channel re-earning a non-zero weight on at least three of five datasets.
 
 ## What this does not claim
 

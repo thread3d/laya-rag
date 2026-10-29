@@ -167,3 +167,41 @@ def test_a_family_prefix_beats_the_historical_default_and_bge_keeps_it():
     assert family_query_prefix("Qwen/Qwen3-Embedding-0.6B").startswith("Instruct:")
     assert family_query_prefix("intfloat/e5-base-v2") == "query: "
     assert beir.BiEncoder.QUERY_PREFIX.startswith("Represent this sentence")
+
+
+def test_an_explicit_instruction_overrides_the_family_default():
+    """The model is instruction-sensitive, so the benchmark has to be able to set the line.
+
+    Three instructions spread the separation between relevant and irrelevant 7x on this
+    repository's own measurement (`docs/findings-rerank-instruction.md`), and a 2026 encoder is
+    documented with its own wording. Scoring it under another family's line measures the wording.
+    """
+    import inspect
+
+    signature = inspect.signature(beir.BiEncoder.__init__)
+    assert "instruction_text" in signature.parameters
+    # The precedence rule, exercised without loading a model: explicit text, then the family
+    # default, then the historical bge string.
+    from laya_rag.model import family_query_prefix
+
+    def resolved(model_id: str, explicit: str) -> str:
+        return explicit or (family_query_prefix(model_id) or beir.BiEncoder.QUERY_PREFIX)
+
+    assert resolved("Qwen/Qwen3-Embedding-0.6B", "Given a claim, find evidence: ").startswith("Given")
+    assert resolved("Qwen/Qwen3-Embedding-0.6B", "").startswith("Instruct:")
+    assert resolved("BAAI/bge-small-en-v1.5", "") == beir.BiEncoder.QUERY_PREFIX
+
+
+def test_an_explicit_instruction_implies_enabling_it():
+    """`--query-instruction-text` without `--query-instruction` used to apply nothing.
+
+    The run then printed a row byte-identical to the no-instruction baseline, which reads as "the
+    instruction did not help" rather than "the instruction was never applied" — the same
+    identical-arm bug signal this repository recorded when a harness read JSON passages with
+    `getattr` and both arms came out equal to four decimals.
+    """
+    import inspect
+    import re
+
+    source = inspect.getsource(beir.BiEncoder.__init__)
+    assert re.search(r"query_instruction\s*=\s*query_instruction or bool\(instruction_text\)", source)

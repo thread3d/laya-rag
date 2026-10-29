@@ -593,6 +593,7 @@ class BiEncoder:
         batch_size: int = 32,
         max_length: int = 512,
         pooling: str = "auto",
+        instruction_text: str = "",
         query_instruction: bool = False,
     ) -> None:
         import torch
@@ -619,10 +620,19 @@ class BiEncoder:
         self.batch_size = batch_size
         self.max_length = max_length
         self.pooling = pooling
-        self.query_instruction = query_instruction
+        # An explicit line *implies* enabling it: passing `--query-instruction-text` without
+        # `--query-instruction` used to apply nothing at all and print a row identical to the
+        # no-instruction run, which reads as "the instruction did not help" rather than "the
+        # instruction was never applied".
+        self.query_instruction = query_instruction or bool(instruction_text)
         from laya_rag.model import family_query_prefix
 
-        self.query_prefix = family_query_prefix(model_id) or self.QUERY_PREFIX
+        # An explicit line wins over the family default: the benchmark cannot score a 2026 encoder
+        # fairly until the wording *it* is documented with has been tried, and this repository has
+        # already measured a 7x spread across three instructions on one model.
+        self.query_prefix = instruction_text or (
+            family_query_prefix(model_id) or self.QUERY_PREFIX
+        )
         self.model_id = model_id
         # Documents never take the query instruction, so the embedding cache is keyed by
         # model and pooling only — the instruction setting is a query-side choice.
@@ -1461,6 +1471,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="index document text only, excluding the title field")
     parser.add_argument("--dense-text-only", action="store_true",
                         help="embed document text without the title, while BM25 keeps title+text")
+    parser.add_argument("--query-instruction-text", default="",
+                        help="an explicit query-side instruction, used with (and overriding) "
+                             "the family default from --query-instruction. The model is "
+                             "instruction-sensitive — three lines spread the separation between "
+                             "relevant and irrelevant 7x on this repository's own measurement — so "
+                             "a 2026 encoder is not fairly scored until its own line is tried")
     parser.add_argument("--query-instruction", action="store_true",
                         help="apply the bi-encoder's retrieval instruction to queries")
     parser.add_argument("--ensemble-model", default=None,
@@ -1535,6 +1551,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"    loading the bi-encoder {model_id}", flush=True)
             biencoders[model_id] = BiEncoder(
                 model_id, device=args.device, query_instruction=args.query_instruction,
+                instruction_text=args.query_instruction_text,
                 pooling=args.biencoder_pooling,
             )
         return biencoders[model_id]
@@ -1859,6 +1876,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for model_id in extra_models:
                     extra = BiEncoder(
                         model_id, device=args.device, query_instruction=args.query_instruction,
+                instruction_text=args.query_instruction_text,
                         pooling=args.biencoder_pooling,
                     )
                     extra_vectors = cached_embed(
