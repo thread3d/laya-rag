@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.4.5** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.4.6** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -518,6 +518,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `IDEMPOTENCY_TTL_S` | `86400` | how long a completed `Idempotency-Key` response is replayed |
 | `GZIP` | `true` | compress JSON responses (the stream media types are excluded) |
 | `SCHEMA_PUBLIC` | `true` | serve `/openapi.json`, `/docs` and `/redoc` without auth; set false to hide them |
+| — | — | `GET /v1/stats` also returns a **`behaviour`** block: `second_stage`, `second_stage_top_m`, `extract_coverage`, `fusion_mode`, `fusion_k`, `dense_weight`, `rerank_order`, `rerank_coverage_lambda`, `recall_dedup_threshold`, `recall_coverage_lambda` and `answerability_gate_configured`. It says *how the engine is configured*, not just what is loaded, so a number quoted from this service can name the configuration that produced it |
 | `WARMUP` | `true` | load the checkpoint during service startup instead of on the first request |
 | `COMPOSE_BASE_URL` | Ollama's `http://localhost:11434/v1` | endpoint used to compose an answer |
 | `COMPOSE_MODEL` | `ornith-1.5:35b` | model that writes the composed answer; set to `none` (or `off` / `disabled`) to turn composition off |
@@ -570,7 +571,7 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (1844 collected, 5 of them real-weights)
+make test          # Python suite, offline, deterministic (1845 collected, 5 of them real-weights)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 make test-mcp      # the MCP server suite (skips without the [mcp] extra)

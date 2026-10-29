@@ -1932,6 +1932,26 @@ class RagEngine:
             "model": self.model.info() if hasattr(self.model, "info") else {"model": type(self.model).__name__},
             "embedder": self.embedder.info() if hasattr(self.embedder, "info") else {"embedder": type(self.embedder).__name__},
             "reranker": self.cross_encoder.info() if self.cross_encoder is not None else {"kind": "laya decisions"},
+            # The levers that change *behaviour* rather than performance, reported together so a row
+            # measured against this service can say which configuration produced it. They are the
+            # settings whose values the October round changed or added, and a service that hides them
+            # makes its own numbers unattributable — the provenance failure this repository has now
+            # recorded four of.
+            "behaviour": {
+                "second_stage": self.config.second_stage,
+                "second_stage_top_m": self.config.second_stage_top_m,
+                "extract_coverage": self.config.extract_coverage,
+                "fusion_mode": self.config.fusion_mode,
+                "fusion_k": self.config.fusion_k,
+                "dense_weight": self.config.resolved_dense_weight,
+                "rerank_order": self.config.resolved_rerank_order,
+                "rerank_coverage_lambda": self.config.resolved_rerank_coverage_lambda,
+                "recall_dedup_threshold": self.config.recall_dedup_threshold,
+                "recall_coverage_lambda": self.config.recall_coverage_lambda,
+                "answerability_gate_configured": bool(
+                    (self.config.answerability_gate_path or "").strip()
+                ),
+            },
             "index_dir": str(self.config.index_dir),
             "index_backend": self.config.resolved_index_backend,
             "index_present": self.has_index(),

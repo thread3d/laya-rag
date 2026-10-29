@@ -305,3 +305,28 @@ def test_invalid_cursor_is_a_400_problem(ctx):
     response = client.get("/v1/documents", params={"cursor": "not-base64!!"})
     assert response.status_code == 400
     assert response.json()["code"] == "invalid_cursor"
+
+
+def test_stats_reports_the_behaviour_levers_not_just_the_topology(ctx):
+    """`/v1/stats` used to say *what* is loaded, never *how it is configured*.
+
+    The October round added levers that change behaviour — the second-stage cascade, the composer's
+    objective, the fusion rule — and a service that does not report them makes its own numbers
+    unattributable. The failure this guards against has four recorded instances in this repository: a
+    measurement whose configuration block names something other than what ran.
+    """
+    client, _engine, _corpus = ctx
+    behaviour = client.get("/v1/stats").json()["behaviour"]
+    for key in (
+        "second_stage",
+        "second_stage_top_m",
+        "extract_coverage",
+        "fusion_mode",
+        "dense_weight",
+        "rerank_order",
+        "answerability_gate_configured",
+    ):
+        assert key in behaviour, f"stats does not report {key}"
+    assert behaviour["second_stage_top_m"] == 0        # the shipped default: no cascade
+    assert behaviour["extract_coverage"] is False      # the composer's shipped order
+    assert isinstance(behaviour["second_stage"], bool)

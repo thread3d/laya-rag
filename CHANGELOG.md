@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.6 — 2026-10-29
+
+`/v1/stats` says how the engine is configured, not just what is loaded.
+
+### A `behaviour` block on the stats payload
+
+The October round added levers that change *behaviour* rather than performance — the second-stage
+cascade, the composer's objective, the fusion rule, the recall-side selectors — and the service reported
+none of them. A number quoted from a running service therefore could not name the configuration that
+produced it, which is the provenance failure this repository has now recorded four instances of (a cache
+keyed by a basename, a baseline read from the wrong column, a resume fingerprint missing the variable
+under test, a settings block naming a derived path).
+
+`GET /v1/stats` now carries:
+
+```
+second_stage, second_stage_top_m, extract_coverage, fusion_mode, fusion_k, dense_weight,
+rerank_order, rerank_coverage_lambda, recall_dedup_threshold, recall_coverage_lambda,
+answerability_gate_configured
+```
+
+The values are the *resolved* ones (`dense_weight` is what `auto` came to, not the word "auto"), for the
+same reason `QueryResult.device` is the resolved device. One test pins the block's presence and the
+shipped defaults, so a lever cannot be added without appearing here.
+
 ## 1.4.5 — 2026-10-29
 
 Every findings document is now reachable from the index that claims to list them all — and one was not.
