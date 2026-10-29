@@ -232,3 +232,9 @@ and a number that looks like a good one were one line apart, and neither would h
 
 The full 400-query, depth-50 run is queued behind the heavy-job lock. Its licence is recorded beside its
 number wherever it is quoted.
+
+**Its cost, projected from measurement rather than guessed.** The re-smoke after a cache fix — two queries at
+depth 10 — took **16.4 s**, which is ~8 s per query at that depth. Depth 50 is five times the candidates in
+one pass, so the queue's expectation is **~40 s per query at eight threads, roughly 1.5–2 h for 400 queries
+on 24**. If it comes in far outside that, the likely cause is a slow tail rather than a wrong measurement —
+the same 10× spread the cost envelope's finding records on this benchmark.

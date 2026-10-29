@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.9 — 2026-10-29
+
+The listwise path re-verified after the cache fix, and its cost projected from that measurement before the
+real run starts.
+
+### Re-smoke, because the fix touched the path the run depends on
+
+The cache change was the only thing standing between a queued 400-query run and a corpus embedding nobody
+could reuse, and the function it touches — `first_stage()`, which builds the pool with the harness's own
+functions — has no unit test (its pure parts do; the `beir.py` call chain does not). So it was re-smoked:
+**two queries at depth 10, 16.4 s, nDCG@10 1.0**, and the cache landed where it was told to —
+
+```
+eval/r1/listwise-dense-cache.meta.json  {'chunk': 0, 'count': 8674, 'model': 'BAAI/bge-small-en-v1.5'}
+```
+
+8,674 vectors, the whole ArguAna corpus, recorded with the model that produced them.
+
+### The projection, written before the run
+
+At ~8 s per query on depth 10, depth 50 is five times the candidates in one pass, so the queued run's
+expectation is **~40 s per query at eight threads and 1.5–2 h for 400 on 24**. If it lands far outside that,
+the finding says in advance where to look: the 10× latency tail the cost envelope records on this benchmark,
+not a wrong measurement.
+
+A cost estimate recorded before the run is a prediction; recorded after, it is an excuse.
+
 ## 1.9.8 — 2026-10-29
 
 The listwise tool cached its corpus embedding in `/tmp` — found by reading it, not by running it.
