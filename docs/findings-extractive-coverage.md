@@ -150,6 +150,46 @@ same verifier the end-to-end row uses. That is the property that had to hold: a 
 only acceptable if the guarantees survive it, and they do under the real checkpoint rather than only under
 the stub.
 
+## Registered before the runs: the two composer measurements still owed
+
+The lock is held by the full-set retrieval row, so these are registered now and measured when it frees. A
+prediction written after the run is a description; these are written while the answer is unknown.
+
+### (a) The full-set composer row — does +0.055 hold at 2,255 queries?
+
+**What it is.** The `0.2060 → 0.2610` delta above comes from a **150-query** subset. The full answerable set
+is 2,255 queries, and the full-set *shipped-default* row is already running.
+
+**Prediction.** The paired delta lands between **+0.03 and +0.08** — that is, within ±0.025 of the 150-query
+estimate — with both arms' cite-clean rates at 1.0000.
+
+**Falsifier.** If the delta falls **below +0.02**, the 150-query subset was unrepresentative and every number
+in the table above has to be re-stated as a subset result with its own interval. If it **exceeds +0.09**,
+the subset understated it and the same re-statement is owed in the other direction. Either way the
+finding's headline changes shape rather than merely its digits.
+
+**Cost.** ~12 min of index reuse plus one pass over 2,255 queries; the coverage arm is the same order.
+
+### (b) The sentence budget — is five sentences the next constraint?
+
+**What it is.** R2's falsifier already established that selection is **a** binding constraint rather than
+*the* one: changing the objective recovers 0.055 of the 0.538 gap to the pool's 0.7438. The obvious
+remaining constraint is the budget itself — `max_sentences` defaults to **5**.
+
+**Prediction.** Sweeping 5 → 8 → 10 raises answer nugget recall monotonically but with sharply diminishing
+returns: **8 sentences buys under +0.04 over 5**, and by 10 the marginal gain is under +0.01 per sentence.
+Cite-clean stays at 1.0000 throughout, because every sentence is still a verbatim span.
+
+**Falsifier.** If 8 sentences buys **more than +0.08**, the budget is *the* dominant constraint and R2's
+conclusion — that selection is one of several — is wrong; the composer should ship a larger budget and the
+finding must say the objective was the smaller lever. If cite-clean drops below 1.0000 at any budget, the
+guarantee that makes this engine quotable would be budget-dependent, which would be the more serious
+result of the two.
+
+**Cost.** Three arms × 150 queries ≈ 40 min at the measured 736 s/150.
+
+Both are registered with the measurement that would overturn them, and neither has been run.
+
 ## Still owed
 
 - The 400-query and full 2,255-query rows: 150 queries is a subset, and the published row's 0.1906 is

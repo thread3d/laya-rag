@@ -6,6 +6,32 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.7.2 — 2026-10-29
+
+The two remaining composer measurements are registered before they run, while the answer is unknown.
+
+### Written now, not after
+
+The heavy-job lock is held by the full-set retrieval row, so the composer's two open questions cannot be
+measured this hour. They are therefore **registered**, which is the only thing that makes them
+predictions rather than descriptions:
+
+**(a) The full-set composer row.** The `0.2060 → 0.2610` delta rests on a 150-query subset. Predicted on
+the full 2,255: **+0.03 to +0.08**, i.e. within ±0.025 of the subset estimate, cite-clean 1.0000 in both
+arms. *Falsifier:* below +0.02 makes the 150-query table a subset result that has to be re-stated with its
+own interval; above +0.09 does the same in the other direction.
+
+**(b) The sentence budget.** Five sentences is the obvious remaining constraint once selection is known to
+be only one of several. Predicted: 5 → 8 → 10 raises nugget recall monotonically with sharply diminishing
+returns — **8 sentences buys under +0.04**, and by 10 the marginal gain is under +0.01 per sentence, with
+cite-clean at 1.0000 throughout. *Falsifier:* if 8 sentences buys **more than +0.08**, the budget is the
+dominant constraint and R2's conclusion is wrong; if cite-clean drops below 1.0000 at any budget, the
+guarantee that makes this engine quotable would be budget-dependent, which would be the more serious of the
+two results.
+
+Both carry their cost estimate and both are indexed from `docs/FINDINGS.md`, so neither can be quietly
+dropped.
+
 ## 1.7.1 — 2026-10-29
 
 The ArguAna verdict reaches the three places that carry R5, and the cascade's interactions reach the
