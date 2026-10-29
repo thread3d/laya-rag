@@ -57,6 +57,20 @@ And at the point a deployment actually uses — the decision threshold — on th
 before this — "abstention at the gate's rate is 28.7% on answerable MultiHop queries", "the scalar is at
 chance out of domain" — described the system the gate replaces.
 
+### The same result through the engine, not from the features
+
+The numbers above are computed from recorded feature rows. The shipped path is different code — the
+gate is consulted inside `rerank` — so it was checked end to end on the real checkpoint and the real
+index, eight `null_query` records and eight answerable ones through `engine.query`:
+
+| artefact | null_query records answered | answerable records answered |
+| --- | ---: | ---: |
+| none (shipped scalar) | **4 / 8** | 6 / 8 |
+| `eval/gate/answerability-gate.json.gate` | **0 / 8** | **7 / 8** |
+
+Eight of each is a demonstration, not an estimate — the estimate is the table above — but it is the
+demonstration that the artefact is actually in the decision path rather than merely loadable.
+
 ## What this does and does not establish
 
 **Established.** The feature set decides answerability on real negatives where the production scalar
