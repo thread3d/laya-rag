@@ -6,6 +6,40 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.0.0 — 2026-10-29
+
+The status page carries the round's **queue** — the durable state a fresh agent needs at round 55 of a
+long programme.
+
+### What the page said, and what it left out
+
+`docs/PROGRAMME-STATUS.md` has a section called *"What is left, and what it costs"*, which is a long
+**historical** backlog — the BEIR-18 coverage story, the research bets, the blocked `.bin` checkpoints. It
+ended with *"the queue is empty"*, which was true of that backlog and false of this round: five measurements
+were running, queued, or owed, and a fresh agent reading the page would have started something heavy beside
+one of them.
+
+It now has a subsection listing them, with state, cost and what each closes:
+
+| measurement | state |
+| --- | --- |
+| full-set rank row, 2,255 queries | **running** |
+| listwise arm (`jina-reranker-v3`) | **queued** on the lock |
+| full-set coverage arm | **queued**, behind the listwise arm |
+| `--honour-answerability` full-set arm | not queued; waits for the three above |
+| sentence-budget sweep | not queued |
+| cross-corpus abstention sample (MTRAG-UN) | **blocked**: needs the dataset |
+| R8's training run | **blocked**: a corpus-scale distillation |
+
+With it, the reason the queue is safe to leave unattended: each job waits on `eval/.heavy-job.lock` itself
+rather than on a process-name pattern, because a script that greps for a job's name matches its own command
+line and waits forever — `make heavy-wait` is the supported queueing form.
+
+And the reason two of the three queued arms exist at all is stated there too: they settle **registered**
+predictions, and each runs with the configuration its prediction was registered against. The coverage arm
+deliberately does **not** use `--honour-answerability`, because changing two things at once would make its
+delta unattributable.
+
 ## 1.9.9 — 2026-10-29
 
 The listwise path re-verified after the cache fix, and its cost projected from that measurement before the

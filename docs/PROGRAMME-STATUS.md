@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `1.9.9` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `2.0.0` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -158,6 +158,29 @@ Negatives are results here, and these are the ones worth keeping:
 launched together **crashed this host**; no work was lost (every job resumes), and the rule is now
 enforced by an exclusive lock in 26 long-running tools (`make heavy-status`). All four planned runs
 have now finished, one at a time: **Climate-FEVER → FEVER → HotpotQA → 2WikiMultiHopQA**.
+
+### The October round's queue, which is *not* empty
+
+The list above is the historical backlog. The round's own measurements are a **queue enforced by the same
+lock**, and a fresh agent should read this before starting anything heavy:
+
+| measurement | state | cost | closes |
+| --- | --- | --- | --- |
+| full-set **rank** row, 2,255 queries | **running** (875 scored at 23:48) | ~2 h | R4b: the placement row stops being a subset |
+| **listwise** arm, `jina-reranker-v3`, 400 queries at depth 50 | **queued** on the lock | ~1.5–2 h projected from a measured 8 s/query at depth 10 | R5's named, previously blocked, arm |
+| full-set **coverage** arm | **queued** on the lock, behind the listwise arm | ~2 h | prediction (a): does the composer's +0.055 hold at 2,255 queries |
+| **`--honour-answerability`** full-set arm | not queued — waits for the three above | ~2 h | the product-level effect of the abstention lever found in this round |
+| **sentence-budget** sweep (5 → 8 → 10) | not queued | ~40 min | prediction (b): is the budget the dominant constraint |
+| **cross-corpus abstention** sample (MTRAG-UN) | **blocked**: needs the dataset (97 unanswerable + 78 underspecified) | download + ~30 min | R3's transfer claim |
+| **R8's training run** | **blocked**: a corpus-scale distillation this host cannot finish quickly | hours–days | the submittable artefact |
+
+Each queued job waits on `eval/.heavy-job.lock` itself rather than on a process-name pattern, because a
+script that greps for a job's name matches its own command line and waits forever. `make heavy-wait` is the
+supported way to queue a shell behind one.
+
+**Two of the three queued arms exist so that a *registered* prediction can be settled**, and each runs with
+the configuration its prediction was registered against — the coverage arm deliberately does **not** use
+`--honour-answerability`, because changing two things at once would make its delta unattributable.
 
 ## Newest results (2026-10-06 pass)
 
