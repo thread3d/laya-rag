@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `2.5.3` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `2.5.4` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -166,17 +166,31 @@ lock**, and a fresh agent should read this before starting anything heavy:
 
 | measurement | state | cost | closes |
 | --- | --- | --- | --- |
-| full-set **rank** row, 2,255 queries | **running** (875 scored at 23:48) | ~2 h | R4b: the placement row stops being a subset |
+| full-set **rank** row, 2,255 queries | **running** (1,550 scored at 00:45) | ~2 h | R4b: the placement row stops being a subset |
 | **listwise** arm, `jina-reranker-v3`, 400 queries at depth 50 | **queued** on the lock | ~1.5–2 h projected from a measured 8 s/query at depth 10 | R5's named, previously blocked, arm |
 | full-set **coverage** arm | **queued** on the lock, behind the listwise arm | ~2 h | prediction (a): does the composer's +0.055 hold at 2,255 queries |
 | **`--honour-answerability`** full-set arm | not queued — waits for the three above | ~2 h | the product-level effect of the abstention lever found in this round |
 | **sentence-budget** sweep (5 → 8 → 10) | not queued | ~40 min | prediction (b): is the budget the dominant constraint |
+| **coverage-per-character** selection | not queued, and **must not** jump the queue | ~12 min per arm | prediction (c): the remedy for the length confound — but it changes the algorithm prediction (a) is measuring, so it goes after the coverage arm |
 | **cross-corpus abstention** sample (MTRAG-UN) | **blocked**: needs the dataset (97 unanswerable + 78 underspecified) | download + ~30 min | R3's transfer claim |
 | **R8's training run** | **blocked**: a corpus-scale distillation this host cannot finish quickly | hours–days | the submittable artefact |
 
 Each queued job waits on `eval/.heavy-job.lock` itself rather than on a process-name pattern, because a
 script that greps for a job's name matches its own command line and waits forever. `make heavy-wait` is the
 supported way to queue a shell behind one.
+
+### What the queue has already settled
+
+Two items left the queue by being measured rather than run:
+
+| question | answer |
+| --- | --- |
+| does the gate survive **transfer**, or only random splits | **ordering yes, calibration no**: held out by question type, AUC **0.8377 → 0.7909** but **ECE 0.0521 → 0.1361**, with a 0.18 spread between types |
+| is the composer's +0.055 bought with **verbosity** | **yes**: 2.1× the text, and per thousand characters the shipped arm is the more efficient one (15.07 against 8.84) |
+
+Both are recorded with their falsifiers and both are quoted on the claim pages. The third night-time finding — that
+`citation_clean` certifies **structure** and not truth — is a semantics correction rather than a measurement, and it
+is pinned by a table-driven test so the two layers cannot be quietly redefined.
 
 **Two of the three queued arms exist so that a *registered* prediction can be settled**, and each runs with
 the configuration its prediction was registered against — the coverage arm deliberately does **not** use

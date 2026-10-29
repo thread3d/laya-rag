@@ -6,6 +6,35 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.5.4 — 2026-10-30
+
+The status page's queue brought current, and — more usefully — what the queue has *already settled*.
+
+### The queue row that mattered most
+
+| measurement | state |
+| --- | --- |
+| full-set rank row | **running**, 1,550 of 2,255 at 00:45 |
+| listwise arm | **queued** on the lock |
+| full-set coverage arm | **queued** behind it |
+| `--honour-answerability` arm | not queued |
+| sentence-budget sweep | not queued |
+| **coverage-per-character** selection | not queued, and **must not jump the queue** — it changes the algorithm prediction (a) is measuring |
+
+That last row is the one that reads like a warning rather than a plan, and it is: a fix registered six rounds after
+a measurement started can silently turn the measurement into a test of something else.
+
+### And a section for the items that left the queue by being *measured*
+
+| question | answer |
+| --- | --- |
+| does the gate survive **transfer**, or only random splits | **ordering yes, calibration no** — type hold-out: AUC **0.8377 → 0.7909**, **ECE 0.0521 → 0.1361**, 0.18 spread between types |
+| is the composer's +0.055 bought with **verbosity** | **yes** — 2.1× the text, and per thousand characters the shipped arm is the more efficient (15.07 against 8.84) |
+| what does `citation_clean` certify | **structure, not truth** — pinned by a table-driven test so the two layers cannot be quietly redefined |
+
+A queue document that only lists what is pending ages into a wish list. Listing what it has **settled** makes it a
+record of decisions instead.
+
 ## 2.5.3 — 2026-10-30
 
 The length confound's **remedy** is registered before its run — a fix, not just a caveat.
