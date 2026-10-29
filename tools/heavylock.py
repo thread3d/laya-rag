@@ -15,6 +15,7 @@ stale lock to clean up — the exact failure mode this is for.
     heavy_job_guard("beir.py")        # exits 2 with a message if another heavy job holds it
 
     .venv/bin/python tools/heavylock.py --status
+    .venv/bin/python tools/heavylock.py --wait      # queue behind whatever is running
     LAYA_RAG_ALLOW_CONCURRENT=1 ...   # deliberate override, e.g. for a tiny read-only probe
 """
 from __future__ import annotations
@@ -27,7 +28,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOCK = ROOT / "eval" / ".heavy-job.lock"
@@ -146,11 +147,55 @@ def heavy_job_guard(name: str, *, path: Path | None = None) -> HeavyJobLock:
     return lock
 
 
+def wait_for_free(
+    path: Path | None = None,
+    *,
+    timeout: float | None = None,
+    poll: float = 30.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
+    """Block until the heavy-job lock is free, then release it and return ``True``.
+
+    Queuing behind a long job was previously done by polling for the *process name* — and a script that
+    does that matches its own command line, so it waits forever. Waiting on the lock itself cannot have
+    that failure: it asks the same question the job asks when it starts.
+
+    ``False`` means the timeout expired with the lock still held. Nothing is held on return in either
+    case, so the caller's own ``heavy_job_guard`` is the one that acquires it — which keeps the
+    holder's name and pid honest.
+    """
+    target = Path(path or DEFAULT_LOCK)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    while True:
+        probe = HeavyJobLock("wait", path=target)
+        try:
+            probe.acquire()
+        except HeavyJobInProgress:
+            if timeout is not None and time.monotonic() - started >= timeout:
+                return False
+            sleep(poll)
+            continue
+        probe.release()
+        return True
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="heavylock.py")
     ap.add_argument("--status", action="store_true", help="report whether a heavy job is running")
+    ap.add_argument("--wait", action="store_true",
+                    help="block until the lock is free (releasing it immediately), then exit 0; "
+                         "a shell can queue behind a long job with `heavylock.py --wait && ...`")
+    ap.add_argument("--timeout", type=float, default=None, help="give up after this many seconds")
+    ap.add_argument("--poll", type=float, default=30.0, help="seconds between attempts")
     ap.add_argument("--path", default=str(DEFAULT_LOCK))
     args = ap.parse_args(argv)
+    if args.wait:
+        if wait_for_free(args.path, timeout=args.timeout, poll=args.poll):
+            print("the lock is free")
+            return 0
+        print("error: the lock is still held after the timeout", file=sys.stderr)
+        return 1
     if not args.status:
         ap.print_help()
         return 0

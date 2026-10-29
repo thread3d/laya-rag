@@ -89,6 +89,7 @@ GATE_ROWS ?= eval/gate/multihop.json
 GATE_ARTEFACT ?= eval/gate/answerability-gate.json
 GATE_SPLITS ?= 40
 GATE_TRAIN_ARGS ?=
+HEAVY_POLL ?= 30
 MULTIHOP_ROW_REPORT ?= eval/benchmarks/multihop-rag/engine-extractive-full.json
 MULTIHOP_ROW_LABEL ?= ours: the engine, shipped defaults
 MULTIHOP_ROW_ARGS ?=
@@ -106,7 +107,7 @@ EVIDENCE_ANSWER_ROW ?= eval/benchmarks/multihop-rag/engine-extractive-rank150.js
 EVIDENCE_GATE_ROWS ?= eval/gate/multihop.json
 EVIDENCE_EXTRA_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe multihop-fetch multihop-row gate-dataset gate-train gate-transfer evidence-protocol evidence-pipeline submission-check job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe multihop-fetch multihop-row heavy-wait gate-dataset gate-train gate-transfer evidence-protocol evidence-pipeline submission-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -192,6 +193,7 @@ help:
 	@echo "channel-coverage  BEIR per-member channel map and the SCORE-LIFT deficit arithmetic"
 	@echo "job-status   every resumable job's manifest: running, complete, or half-finished"
 	@echo "heavy-status is a heavyweight job running? (they run one at a time)"
+	@echo "heavy-wait   block until no heavyweight job is running, then exit 0"
 	@echo "audit-verify verify the hash-chained audit log of index mutations"
 	@echo "mteb-eval    MTEB v2 SearchProtocol conformance — scores the engine, not an encoder"
 	@echo "calibration-report  reliability, ECE, Brier and risk-coverage of the answerability decision"
@@ -712,6 +714,13 @@ evidence-protocol:
 		--answer-row $(EVIDENCE_ANSWER_ROW) \
 		--gate-rows $(EVIDENCE_GATE_ROWS) \
 		$(EVIDENCE_EXTRA_ARGS)
+
+# Block until no heavyweight job is running, then exit 0 — so a shell can queue behind one:
+#   make heavy-wait && make <long-job>
+# It waits on the lock itself rather than on a process-name pattern, because a script that greps for a
+# job's name matches its own command line and waits forever.
+heavy-wait:
+	$(PY) tools/heavylock.py --wait --poll $(HEAVY_POLL)
 
 # What resumable work is in flight? Reads the `<stem>.manifest.json` sidecars jobkit writes.
 job-status:

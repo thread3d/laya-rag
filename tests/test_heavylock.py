@@ -100,3 +100,42 @@ def test_status_command_reports_busy_and_free(tmp_path, capsys):
         assert "job.py" in capsys.readouterr().out
     finally:
         lock.release()
+
+
+# ── queuing behind a long job ─────────────────────────────────────────────
+
+def test_waiting_returns_immediately_when_the_lock_is_free(tmp_path):
+    """`--wait` asks the lock, not a process name — which is why it cannot match itself."""
+    assert hl.wait_for_free(tmp_path / "lock", timeout=1, sleep=lambda _s: None) is True
+
+
+def test_waiting_times_out_when_someone_holds_it(tmp_path):
+    from heavylock import HeavyJobLock
+
+    path = tmp_path / "lock"
+    holder = HeavyJobLock("beir.py", path=path)
+    holder.acquire()
+    try:
+        assert hl.wait_for_free(path, timeout=0.2, sleep=lambda _s: None) is False
+    finally:
+        holder.release()
+    assert hl.wait_for_free(path, timeout=1, sleep=lambda _s: None) is True
+
+
+def test_waiting_holds_nothing_on_return(tmp_path):
+    """The caller's own guard must be the one that acquires, so the holder's name and pid stay honest."""
+    path = tmp_path / "lock"
+    assert hl.wait_for_free(path, timeout=1, sleep=lambda _s: None) is True
+    assert hl.is_busy(path) is False
+
+
+def test_the_wait_cli_exits_non_zero_when_the_timeout_expires(tmp_path):
+    from heavylock import HeavyJobLock
+
+    path = tmp_path / "lock"
+    holder = HeavyJobLock("beir.py", path=path)
+    holder.acquire()
+    try:
+        assert hl.main(["--wait", "--timeout", "0.1", "--poll", "0.01", "--path", str(path)]) == 1
+    finally:
+        holder.release()

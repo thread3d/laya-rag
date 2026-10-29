@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.8 — 2026-10-29
+
+`heavylock.py --wait`: queue behind a long job by asking the lock, not by grepping for its name.
+
+### The trap this closes
+
+The first version of the queued full-set launcher waited with `while pgrep -f "beir[.]py"; do sleep 30;
+done`. A shell whose own command line contains that pattern matches it, so the loop waits forever even
+after the job exits — the same self-match that had already killed two `pkill` calls in this session. It
+is not a mistake a careful reading catches reliably; it is a mistake that *asking a better question*
+removes.
+
+`tools/heavylock.py --wait` asks the lock itself — the same question a heavy job asks when it starts:
+
+```sh
+make heavy-wait HEAVY_POLL=5 && make <long-job>
+```
+
+`wait_for_free()` acquires, releases and returns, so **nothing is held on return** and the caller's own
+`heavy_job_guard` is the one that acquires — which keeps the holder's name and pid honest.
+`--timeout` gives up with exit 1; `--poll` sets the interval.
+
+Four tests: free-lock returns immediately, a held lock times out, nothing is left held on return, and
+the CLI exits non-zero on timeout. The `sleep` is injectable, so the suite runs in 0.4 s rather than
+sleeping for real — an earlier version took 30 s because the CLI used the default poll interval, which
+was its own small lesson.
+
 ## 1.5.7 — 2026-10-29
 
 The configuration axis checked on a non-default arm — and the full-set leaderboard row queued behind the
