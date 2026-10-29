@@ -511,6 +511,15 @@ on cached scores and measure the calibration loss honestly.
 **Falsifier:** if the student's calibration degrades more than its ranking, the asset is the
 *calibration* — ship the cascade and stop.
 
+**Outcome (the cascade is measured, and half the depth is free).** The first of the three stages —
+truncating what the decision stage sees — was implemented (`LAYA_RAG_SECOND_STAGE_TOP_M`) and measured
+before any distillation was attempted. On MultiHop-RAG at **M=10 every quality metric is identical to
+four decimals** (MAP@10 0.3128, Hits@10 0.9067, nugget recall 0.2060, citation clean 1.0000) for
+**43% less CPU** (99.2 s → 56.1 s per query); M=5 costs 0.023 MAP@10. The distillation stages are not
+attempted yet, and the reason is now sharper: the *cascade* already takes a large bite, and quantising
+the model was closed by measurement (int8 is lossless but not faster)
+([`findings-decision-cascade.md`](findings-decision-cascade.md)).
+
 **One option is already closed by measurement**: quantising the model will not help. At RAG scale int8
 is lossless but **not faster** than fp32, fp16 is **36% slower**, and the whole quantisation literature
 buys bytes rather than time `[web]`. The compute axis has to come from *doing less work* — a cascade, a

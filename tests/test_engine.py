@@ -661,3 +661,51 @@ def test_an_empty_index_still_reports_its_clocks(tmp_path):
     assert payload["note"] and "empty" in payload["note"]
     assert payload["timings"]["total_cpu_seconds"] >= 0.0
     assert payload["device"]
+
+
+# ── the cascade: the decision model scores only the top M ────────────────
+
+def test_the_cascade_scores_only_the_first_m_candidates(tmp_path):
+    """The cost axis moves only if the expensive pass sees fewer candidates.
+
+    The decision pass is ~99% of query CPU and linear in candidates, so `SECOND_STAGE_TOP_M` is the
+    one knob that moves it by a multiple. What it must not do is pretend: the pool reports how many
+    were scored and how many were dropped *before* the second stage, so a row measured under a
+    cascade can say so.
+    """
+    # A corpus with more chunks than M, so the truncation actually happens: `write_corpus`'s three
+    # documents fuse to fewer candidates than any useful M.
+    config = make_config(tmp_path, dense_weight=1.0, retrieve_k=8, rerank_k=4,
+                         relevance_threshold=0.0, second_stage_top_m=3)
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([_long_document_corpus(tmp_path)])
+    payload = engine.query("refund policy details and processing times").as_dict()
+
+    assert payload["considered"] == 3                      # scored
+    assert payload["pool"]["scored"] == 3
+    assert payload["pool"]["dropped_before_second_stage"] >= 1
+    assert payload["pool"]["candidates"] == payload["pool"]["scored"] + payload["pool"][
+        "dropped_before_second_stage"
+    ]
+
+
+def test_the_default_cascade_of_zero_keeps_every_candidate(tmp_path):
+    config = make_config(tmp_path, dense_weight=1.0, retrieve_k=8, rerank_k=4,
+                         relevance_threshold=0.0)
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    payload = engine.query("How long does a refund take?").as_dict()
+
+    assert config.second_stage_top_m == 0
+    assert payload["pool"]["dropped_before_second_stage"] == 0
+    assert payload["pool"]["scored"] == payload["pool"]["candidates"]
+
+
+def test_a_cascade_wider_than_the_pool_is_not_a_cascade(tmp_path):
+    """M above the pool size must be a no-op, not a silent truncation of something else."""
+    config = make_config(tmp_path, dense_weight=1.0, retrieve_k=4, rerank_k=2,
+                         relevance_threshold=0.0, second_stage_top_m=99)
+    engine = RagEngine(config, model=StubModel())
+    engine.index_paths([write_corpus(tmp_path / "corpus")])
+    payload = engine.query("How long does a refund take?").as_dict()
+    assert payload["pool"]["dropped_before_second_stage"] == 0

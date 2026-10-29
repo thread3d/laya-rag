@@ -6,6 +6,43 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.6 — 2026-10-29
+
+The decision cascade: half the decision work for nothing, measured on the benchmark.
+
+### `SECOND_STAGE_TOP_M`: 43% less CPU at identical quality
+
+R0 established that the decision pass is **99.8% of query CPU** — 5.29 s of CPU per candidate against
+0.03 s for retrieval — and linear in the number of candidates. `LAYA_RAG_SECOND_STAGE_TOP_M` truncates
+the fused candidate list before the cross-encoder and the decision model see it.
+
+MultiHop-RAG, 150 answerable queries at seed 17, gates zeroed; quality from
+`tools/engine_extractive.py`, cost from the engine's own `total_cpu_seconds` over 6 fixed queries at 24
+threads, CPU-only:
+
+| `SECOND_STAGE_TOP_M` | scored | CPU per query | ratio | MAP@10 | Hits@10 | nugget recall | citation |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `0` (all) | 20.0 | **99.2 s** | 1.000 | **0.3128** | 0.9067 | 0.2060 | 1.0000 |
+| `10` | 10.0 | **56.1 s** | **0.566** | **0.3128** | 0.9067 | 0.2060 | 1.0000 |
+| `5` | 5.0 | **33.5 s** | 0.337 | 0.2900 | 0.7867 | 0.2027 | 1.0000 |
+
+**M = 10 is free**: every quality metric identical to four decimals for 43% less CPU. On this corpus
+the decision model's work on candidates 11–20 is entirely wasted, because the first stage's ordering
+already puts everything that survives the gate in the top ten. **M = 5 costs 0.023 MAP@10**, and its
+Hits@10 drop is structural — five candidates cap a metric that asks about the top ten — so MAP@10 is the
+honest comparator.
+
+It stays off by default. The setting encodes a *quality* claim — that what the first stage ranked below
+M was not going to be kept — which is false exactly where the ordering is weak, and this repository has
+already measured a channel whose contribution reverses between corpora. The pool now reports `scored`
+and `dropped_before_second_stage`, so a row measured under a cascade can say so.
+
+### Still owed
+
+- The same curve on a corpus whose first stage is weak (MuSiQue, Touché) — the falsifier, not yet run.
+- An adaptive cascade that scores until the gate's decision is stable, rather than a fixed depth.
+- The distillation stages of R6, and composition with the cross-encoder path.
+
 ## 1.3.5 — 2026-10-29
 
 The fitted answerability gate ships, and the deployment trade is not a trade: at the same threshold it

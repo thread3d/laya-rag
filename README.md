@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.3.5** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.3.6** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -486,6 +486,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `RERANK_THRESHOLD` | `0.0` | minimum score a substituted cross-encoder must reach to be kept; `RELEVANCE_THRESHOLD` is calibrated for Laya and cut ~89% of the CE pool, so the second stage keeps its pool (`0.0`) and lets the ordering decide — worth +0.0801 MAP@10 and +0.30 Hits@10 versus sharing the Laya cut. **Not suspended by the ordering defect** (P4 of SCORE-LIFT.md): a threshold *filters* — `above` is built from the cross-encoder's scores *before* anything is ordered — and the defect only re-sorted after that point, so this row's difference is attributable to the filtering it is about |
 | `RERANK_ORDER` | `auto` | `auto` orders by the scorer when `RERANK_MODEL` is set and keeps recall order otherwise; or force `recall` / `relevance` |
 | `RERANK_BLEND` | `1.0` | how far a supplied second stage may move the first-stage order, in `[0, 1]`; `1.0` replaces it (historical), below it is fused so the second stage nudges rather than overrides |
+| `SECOND_STAGE_TOP_M` | `0` | cascade the decision pass: score only the first M fused candidates, `0` keeps every one. The decision pass is ~99.8% of query CPU and linear in candidates, and on MultiHop-RAG **M=10 is free** — MAP@10 0.3128, Hits@10 0.9067, nugget recall 0.2060 and citation validity 1.0000 all identical to the untruncated row, for **43% less CPU** (99.2 s → 56.1 s per query); M=5 costs 0.023 MAP@10. A corpus-specific setting by construction: the claim is that the first stage's ordering is good enough that positions 11+ never survive, which is false wherever the ordering is weak. The pool reports `scored` and `dropped_before_second_stage` so a row measured under a cascade can say so |
 | `SECOND_STAGE` | `true` | whether the decision model runs at all. `false` returns the first stage's own order with no model in the path — the configuration a *retrieval* benchmark is meant to score, and the only way to measure the fusion rule without a 322M-parameter forward per candidate. With it off the answerability verdict is reported as **not measured** rather than guessed |
 | `RERANK_INSTRUCTION` | *(empty)* | the instruction line a **generative** reranker is asked with; empty uses the model's own default. The model is instruction-sensitive — three instructions spread the relevant/irrelevant separation **7×** — so a listwise result holds only for the line it was scored with |
 | `EMBED_PASSAGE_PREFIX` | *(empty)* | prefix prepended to every **document** before embedding. Some families are trained with one on each side (`intfloat/e5-*`: `query: ` and `passage: `), and applying only the query half leaves the two sides in different spaces. Read **without stripping**, because the trailing space is part of the prefix; `BiEncoderModel` warns when a family that needs prefixes has none |

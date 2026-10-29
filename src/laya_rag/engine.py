@@ -1313,6 +1313,17 @@ class RagEngine:
         )
 
         retrieval_cpu_seconds = time.process_time() - cpu_started
+        # Cascade: the decision model scores only the first `SECOND_STAGE_TOP_M` fused candidates.
+        # It is the one knob that moves the cost axis by a multiple — the decision pass is ~99% of
+        # query CPU and linear in candidates — and the price is a *quality* claim: that whatever the
+        # first stage ranked below M was not going to be kept. That claim is corpus-specific (this
+        # repository already found the dense channel's contribution reverses between corpora), so it
+        # is opt-in and measured, never a default.
+        dropped_before_second_stage = 0
+        top_m = self.config.second_stage_top_m
+        if top_m > 0 and len(candidates) > top_m:
+            dropped_before_second_stage = len(candidates) - top_m
+            candidates = candidates[:top_m]
         rerank_started = time.perf_counter()
         rerank_cpu_started = time.process_time()
         # A configured cross-encoder replaces Laya's relevance scores for ordering and
@@ -1461,7 +1472,9 @@ class RagEngine:
                 "dense": len(dense_hits),
                 "lexical": len(lexical_hits),
                 "sparse": len(sparse_hits),
-                "candidates": len(candidates),
+                "candidates": len(candidates) + dropped_before_second_stage,
+                "scored": len(candidates),
+                "dropped_before_second_stage": dropped_before_second_stage,
             },
         )
 

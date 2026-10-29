@@ -484,6 +484,15 @@ class EngineConfig:
     #: against a pool carrying 0.7438), so turning it on changes a published number and has to be
     #: measured rather than assumed. The verbatim-span and citation guarantees are identical.
     extract_coverage: bool = field(default_factory=lambda: _env_bool("EXTRACT_COVERAGE", False))
+    #: Cascade the decision pass: score only the first M fused candidates with the decision model,
+    #: instead of all of them. `0` keeps every candidate (the historical behaviour). The decision
+    #: pass is ~99% of query CPU (`findings-cost-envelope.md`: 5.29 s of CPU per candidate against
+    #: 0.03 s for retrieval), so this is the one knob that moves the cost axis by a multiple rather
+    #: than a percent — and the passages it never scores are ones the first stage already ranked
+    #: below `M`, which is a *quality* claim that has to be measured per corpus, not assumed.
+    second_stage_top_m: int = field(
+        default_factory=lambda: _env_int("SECOND_STAGE_TOP_M", 0)
+    )
     claim_max: int = field(default_factory=lambda: _env_int("CLAIM_MAX", 25))
     #: How confident the local NLI pass must be before a claim the relevance gate never reached
     #: is called `supported` or `contradicted` rather than `no_coverage`. Only consulted when
