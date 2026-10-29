@@ -51,6 +51,31 @@ goes** — now with the 2026 reranker having closed most of the `MRR@10` gap (0.
 measured 736 s per 150 queries; it is the one remaining measurement R4 needs, and it is a scheduling
 problem rather than a design one.
 
+## A mid-flight check, because a two-hour run should not be trusted only at the end
+
+The full-set row writes a resumable shard, so its first **135** rows can be summarised while it
+runs. That is worth doing: a measurement that turns out to have used the wrong index, or to be emitting
+empty answers, should be caught at 6% rather than at 100%.
+
+| metric | 150-query subset (recorded) | first 135 of the full set |
+| --- | ---: | ---: |
+| answer nugget recall | 0.2060 | **0.1981** |
+| citation-clean, all queries | 1.0000 | **1.0000** |
+| abstention rate | 0.0000 | **0.0000** |
+| Hits@10 | 0.9067 | 0.9333 |
+| Hits@4 | 0.7400 | 0.8000 |
+| MAP@10 | 0.3128 | 0.3278 |
+| MRR@10 | 0.6152 | 0.6436 |
+
+The run is healthy on the properties that would betray a misconfiguration — no empty answers, every
+answer citation-clean at 5.00 sentences, no abstentions on an answerable-only set — and its quality tracks
+the subset it was previewed on, a little better on every retrieval column.
+
+**This is not a result.** It is 6% of the set, read before the run finished, on the arm whose number was
+never in question. The registered prediction in
+[`findings-extractive-coverage.md`](findings-extractive-coverage.md) is about the **delta between the two
+composer objectives** on the full set, and this check says nothing about it: only one arm is running.
+
 ## Why the anchors are quoted rather than merged into one sorted column
 
 Three caveats travel with the row, and the tool prints all three:

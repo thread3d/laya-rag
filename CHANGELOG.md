@@ -6,6 +6,34 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.8.3 — 2026-10-29
+
+The two-hour full-set row is checked at 6% rather than trusted only at the end.
+
+### A mid-flight check, and what it is not
+
+The full-set retrieval row writes a resumable shard, so its first **134** rows can be summarised while it
+runs. A measurement that turned out to have used the wrong index — or to be emitting empty answers —
+should be caught at 6% rather than at 100%, which is the whole reason to look.
+
+| metric | 150-query subset (recorded) | first 134 of the full set |
+| --- | ---: | ---: |
+| answer nugget recall | 0.2060 | **0.1987** |
+| citation-clean, all queries | 1.0000 | **1.0000** |
+| abstention rate | 0.0000 | **0.0000** |
+| Hits@10 | 0.9067 | 0.9328 |
+| Hits@4 | 0.7400 | 0.7985 |
+| MAP@10 | 0.3128 | 0.3265 |
+| MRR@10 | 0.6152 | 0.6410 |
+
+Healthy on every property that would betray a misconfiguration — no empty answers, every answer
+citation-clean at 5.00 sentences, no abstentions on an answerable-only set — and tracking the subset it was
+previewed on, a little better on every retrieval column.
+
+**The finding says plainly that this is not a result.** It is 6% of the set, read before the run finished,
+on the arm whose number was never in question. The registered prediction concerns the **delta between the
+two composer objectives**, and one arm is running.
+
 ## 1.8.2 — 2026-10-29
 
 The evidence protocol's cost axis wires itself to the report the pipeline writes.
