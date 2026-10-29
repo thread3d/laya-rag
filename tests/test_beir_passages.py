@@ -129,7 +129,9 @@ def test_last_token_pooling_takes_the_last_real_token_not_the_last_position():
     harness pooled CLS or mean only, so every such model would have been measured under a pooling
     it was not trained for — which does not raise, it just scores worse and reads as a negative.
     """
-    import torch
+    # The CI job installs the engine's dependencies without torch (the offline suite runs against a
+    # stub), so a test that needs torch has to skip rather than fail there.
+    torch = pytest.importorskip("torch", reason="the pooling arithmetic is exercised on torch tensors")
 
     hidden = torch.tensor([[[1.0, 0.0], [2.0, 0.0], [99.0, 0.0], [99.0, 0.0]]])
     mask = torch.tensor([[1, 1, 0, 0]])
@@ -141,6 +143,7 @@ def test_last_token_pooling_takes_the_last_real_token_not_the_last_position():
 
 
 def test_the_harness_rejects_a_pooling_it_cannot_do():
+    pytest.importorskip("torch", reason="constructing the encoder imports torch")
     with pytest.raises(ValueError, match="pooling must be"):
         beir.BiEncoder(model_id="BAAI/bge-small-en-v1.5", pooling="max")
 

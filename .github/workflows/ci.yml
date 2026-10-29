@@ -73,7 +73,12 @@ jobs:
             "pydantic>=2.0" \
             "pytest>=8.0" \
             "httpx>=0.27" \
-            "ruff>=0.6"
+            "ruff>=0.6" \
+            "mcp>=2.3"
+          # `mcp` is the `[mcp]` extra, and it is installed here rather than left out because the MCP
+          # server is 1,000 lines behind a surface that otherwise has no coverage at all: without the
+          # SDK its 21 tests skip, and `make test-mcp` — the target that exists for them — is never
+          # invoked by anything but the author.
 
       # `PY=python` and `RUFF=ruff` point the Makefile at the interpreter this job installed,
       # rather than at the `.venv` that `make setup` would create. Keeping the commands in the
@@ -84,6 +89,11 @@ jobs:
 
       - name: Offline suite
         run: make test PY=python
+
+      # The MCP suite is already inside `make test` when the SDK is importable; this step names it so a
+      # failure points at the server rather than at the suite.
+      - name: MCP server suite
+        run: make test-mcp PY=python
 
       # Both gates skip cleanly when their gitignored artefacts are absent, so on a fresh
       # checkout they pass by having nothing to pin. They are here to keep the invocation

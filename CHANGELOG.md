@@ -6,6 +6,32 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.6.0 — 2026-10-29
+
+CI installs the MCP extra and runs its suite — and doing so found two of this round's own tests that
+would have broken CI on its first run.
+
+### The MCP server was 1,000 lines with no coverage in CI
+
+`mcp_server.py` is an optional surface behind the `[mcp]` extra, and the CI job installed the engine's
+dependencies *without* it. So its **21 tests skipped on every run**, and `make test-mcp` — the target that
+exists for them — was invoked by nothing but the author. The job now installs `mcp>=2.3` and runs
+`make test-mcp` as a named step, so a failure points at the server rather than at the suite. Verified in a
+venv installed exactly as CI installs it: **21 passed**.
+
+### Two of my own tests would have failed there
+
+Running the suite in that configuration — rather than in the development environment, which has torch —
+found two tests added five rounds ago that need torch:
+
+- the last-token pooling arithmetic test builds `torch.tensor`s directly;
+- the pooling-argument test constructs `beir.BiEncoder`, whose constructor imports torch.
+
+Both now `importorskip("torch")` with the reason, so they run where torch exists and skip where it does
+not — the same guard the `.bin`-converter test already had. **The lesson is the one CI exists for**: a
+suite that passes on the machine where everything is installed says nothing about the machine that
+installs only what `pyproject.toml` declares.
+
 ## 1.5.9 — 2026-10-29
 
 The README's Known limits carries the October round's limits, and the long-jobs section documents
