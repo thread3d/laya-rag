@@ -272,7 +272,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     from laya_rag.engine import RagEngine
 
     docs_dir = ROOT_BENCH / "engine-corpus"
-    doc_ids = write_corpus({a["url"]: a["title"] + " " + a["body"] for a in raw}, docs_dir)
+    doc_text = {a["url"]: a["title"] + " " + a["body"] for a in raw}
+    doc_ids = write_corpus(doc_text, docs_dir)
     items_by_index = {i: x for i, x in items}
     queries = {str(i): x["query"] for i, x in items}
 
@@ -336,7 +337,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         # `official_metrics` call away — and without it the two rows answer different questions in the same
         # metric's clothes. See `docs/findings-multihop-placement.md`.
         ranking = ranking_from_passages(result.passages, doc_ids)
-        doc_metrics, _ = official_metrics([ranking[: args.top_k]], [gold_facts(item)])
+        # `official_metrics` matches gold *facts* by normalised substring, so it has to be handed document
+        # **text** — a list of ids scores zero on every query, silently, which is how the first version of
+        # this line was written. The inconsistency between two probes caught it before any run used it.
+        doc_texts = [doc_text.get(doc_id, "") for doc_id in ranking[: args.top_k]]
+        doc_metrics, _ = official_metrics([doc_texts], [gold_facts(item)])
         run.record(key, {
             "metrics": metrics,
             "doc_metrics": doc_metrics,

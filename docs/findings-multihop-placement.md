@@ -131,6 +131,34 @@ Two consequences, and they point in opposite directions for how the project shou
 signs the direction and it does not estimate the magnitude — for that, the queued coverage arm's `doc_*` fields
 over 2,255 queries.
 
+### A probe that contradicted itself found a silent zero in shipped code
+
+The direction probe above used the engine's own scoring helper. A follow-up probe — written to test how the
+pool *width* affects the document-level row — inlined the metric call instead, and passed `ranking`, which is a
+list of **document ids**, to `official_metrics`, which matches gold facts by normalised substring. A URL never
+contains a gold sentence, so it read:
+
+| top_k | chunk Hits@10 | doc Hits@10 | distinct documents |
+| ---: | ---: | ---: | ---: |
+| 5 | 0.750 | **0.000** | 2.38 |
+| 10 | 0.875 | **0.000** | 3.50 |
+| 20 | 0.875 | **0.000** | 5.00 |
+
+Two probes, same engine, same queries, `doc_Hits@10` of 0.875 and 0.000 — which is the whole value of writing
+both. The second probe was wrong, and **the mistake it made was in `tools/engine_multihop.py` too**: the
+document-level line I added an hour earlier passed `ranking` rather than the documents' text, so every future
+run would have recorded `doc_Hits@10 = 0.0`, `doc_MAP@10 = 0.0` and nothing would have failed. A column of
+zeros that reads like a catastrophic retrieval result.
+
+It is fixed and pinned by a test, and the fix is one line: build the text map the corpus writer already builds,
+and hand the metric `doc_text.get(doc_id, "")`.
+
+**What the probe did establish, despite its bug.** The chunk-level columns are computed from text and are
+unaffected: widening the pool from five to ten chunks moves chunk Hits@10 **0.750 → 0.875** and raises the mean
+distinct documents from **2.38 to 3.50**; at twenty it reaches **5.00**. So the engine's five-chunk answer
+really does cover about two and a half documents, and a document-quota setting is the obvious lever if the
+document-level row is to be compared at ten. That is a measurement to make, not a change to make on a probe.
+
 ### The document-level row comes from the coverage arm, and that is valid
 
 The rank arm running now writes the old schema — it started before the field existed — so its document-level

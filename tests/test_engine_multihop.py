@@ -158,3 +158,24 @@ def test_args_default_to_the_benchmark_metric_and_unsharded():
     assert args.top_k == 10
     assert args.shard == "0/1" and args.merge == 0 and args.fresh is False
     assert args.embed_model is None
+
+
+def test_the_document_level_metric_is_handed_text_not_ids():
+    """`official_metrics` matches gold *facts* by substring, so a list of ids scores zero silently.
+
+    The first version of the document-level line passed `ranking` (URLs) instead of the documents' text. Every
+    query would have read `doc_Hits@10 = 0.0` and nothing would have failed — the report would simply have
+    carried a column of zeros that looked like a catastrophic retrieval result. It was caught by two probes
+    disagreeing (one used the engine's scoring helper, the other inlined the call), which is the cheapest
+    available detector for this class and the reason both are worth writing.
+    """
+    import inspect
+
+    source = inspect.getsource(__import__("engine_multihop"))
+    assert "doc_text = {a[\"url\"]: a[\"title\"] + \" \" + a[\"body\"] for a in raw}" in source, (
+        "the corpus text map must exist"
+    )
+    assert 'doc_texts = [doc_text.get(doc_id, "") for doc_id in ranking[: args.top_k]]' in source, (
+        "the metric must be handed text, not ids"
+    )
+    assert "official_metrics([doc_texts], [gold_facts(item)])" in source

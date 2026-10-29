@@ -6,6 +6,45 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.1.5 — 2026-10-30
+
+Two probes disagreed, and the disagreement was a **silent zero in shipped code**.
+
+### The bug
+
+The direction probe used the engine's scoring helper. A follow-up probe — written to ask how pool *width*
+affects the document-level row — inlined the metric call and passed `ranking`, a list of **document ids**, to
+`official_metrics`, which matches gold facts by substring. A URL never contains a gold sentence:
+
+| top_k | chunk Hits@10 | doc Hits@10 |
+| ---: | ---: | ---: |
+| 5 | 0.750 | **0.000** |
+| 10 | 0.875 | **0.000** |
+| 20 | 0.875 | **0.000** |
+
+Two probes, same engine, same queries: `doc_Hits@10` of **0.875** and **0.000**. That is the whole value of
+writing both. The second probe was wrong — and **the mistake it made was in `tools/engine_multihop.py` too**:
+the document-level line added an hour earlier passed `ranking` rather than the documents' text, so every future
+run would have recorded zeros in both document columns and **nothing would have failed**. A column of zeros that
+reads like a catastrophic retrieval result.
+
+Fixed in one line — build the text map the corpus writer already builds — and pinned by a test.
+
+### What the probe established despite its bug
+
+The chunk-level columns come from text and are unaffected. Widening the pool moves them, and moves the document
+count:
+
+| top_k | chunk Hits@10 | mean distinct documents |
+| ---: | ---: | ---: |
+| 5 | 0.750 | 2.38 |
+| 10 | **0.875** | 3.50 |
+| 20 | 0.875 | **5.00** |
+
+So five returned chunks really do cover about two and a half documents, and a **document quota** is the obvious
+lever if the document-level row is to be compared at ten. Recorded as a measurement to make, not a change to
+make on a probe.
+
 ## 2.1.4 — 2026-10-30
 
 The chunk-versus-document direction is measured, and it runs in the **cautious** direction rather than the
