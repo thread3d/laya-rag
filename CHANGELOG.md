@@ -6,6 +6,47 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.4.0 — 2026-10-30
+
+The gate's **transfer** number, measured: the ordering survives, the **calibration does not**.
+
+### The regime that had never been run
+
+`0.8377` comes from random stratified halves, and the trainer's own docstring names that for what it is —
+*"the weakest transfer test: the gate can learn that type's idiosyncrasies"* — while `--group-by` exists to hold
+out a whole answerable group instead. The grouped mode was written, documented, and **never run on the shipped
+rows**.
+
+Run now, joining `question_type` back onto the 601 rows by query text:
+
+| metric | random halves (published) | **by question type** |
+| --- | ---: | ---: |
+| gate AUC | 0.8377 | **0.7909** |
+| balanced accuracy | 0.7546 | **0.7213** |
+| **ECE** | **0.0521** | **0.1361** |
+| risk@80 | 0.4043 | 0.4243 |
+
+**The ranking claim stands under a regime it was not tuned on. The calibration claim does not**: ECE more than
+doubles, and calibration is exactly what the shipped gate is advertised for — the deployment argument is that its
+probabilities can be thresholded, which is worth much less at 0.136.
+
+### And the folds disagree
+
+| held-out type | gate AUC |
+| --- | ---: |
+| `temporal_query` | **0.9117** |
+| `inference_query` | 0.7325 |
+| `comparison_query` | 0.7285 |
+
+A 0.18 spread. The aggregate is an average over three different instruments, and a deployment heavy in comparison
+questions should read 0.73.
+
+### Stated as what it is
+
+**Transfer across question types, not across corpora.** The corpus-level question — a gate fitted on news answering
+questions about code — remains open and is what the MTRAG-UN sample would settle. This is the strongest transfer
+test *available in this dataset*, which is not the same as the strongest one imaginable.
+
 ## 2.3.1 — 2026-10-30
 
 The citation audit becomes a test, because every published row depends on what `clean` means.

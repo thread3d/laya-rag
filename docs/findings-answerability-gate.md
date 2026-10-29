@@ -161,6 +161,52 @@ its **resume fingerprint and both settings records**, for the reason the compose
 configuration that changes which rows abstain must not be mixed under one fingerprint, which is the failure
 that once reported two identical arms to four decimals.
 
+## Held out by question type: the number the headline should have been
+
+The `0.8377` above comes from `--splits` random stratified halves, and the trainer's own docstring names that
+regime for what it is: *"A random stratified half reuses queries of the same question type on both sides, which is
+the weakest transfer test: the gate can learn that type's idiosyncrasies. This holds out an entire answerable group
+instead."* The grouped mode existed; **it had never been run on the shipped rows.**
+
+It has now. The benchmark's four `question_type`s are held out whole — three answerable types, with the negatives
+distributed round-robin so every fold keeps both classes:
+
+| metric | random halves (the recorded headline) | **by question type** |
+| --- | ---: | ---: |
+| gate AUC | 0.8377 | **0.7909** |
+| balanced accuracy | 0.7546 | **0.7213** |
+| **ECE** | **0.0521** | **0.1361** |
+| risk@80 | 0.4043 | 0.4243 |
+| risk@90 | 0.4541 | 0.4679 |
+
+**The ranking survives; the calibration does not.** AUC falls by 0.047 and stays far above the scalar's 0.5002 —
+the gate carries answerability signal that is not merely a memorised question-type signature. But **ECE more than
+doubles**, and calibration is precisely what the shipped gate is advertised for: the deployment argument is that
+its probabilities can be thresholded, which is worth much less at 0.136 than at 0.052.
+
+### And the folds disagree with each other
+
+| held-out type | gate AUC | n |
+| --- | ---: | ---: |
+| `temporal_query` | **0.9117** | 177 |
+| `inference_query` | 0.7325 | 218 |
+| `comparison_query` | 0.7285 | 206 |
+
+A 0.18 spread. The aggregate 0.7909 is an average over three quite different instruments, and a deployment whose
+traffic is mostly comparison questions should read the 0.73, not the 0.79. That heterogeneity was invisible in
+every number this document previously quoted.
+
+### What this changes, and what it does not
+
+- The gate's **ordering** claim stands, and now stands under a regime it was not tuned on.
+- The gate's **calibration** claim is much weaker than published: 0.1361, not 0.0521.
+- **This is transfer across question types, not across corpora.** The corpus-level question — a gate fitted on news
+  answering questions about code — remains open and is what the MTRAG-UN sample would settle. Do not read this as
+  the cross-corpus result.
+
+`eval/gate/multihop-grouped.json` is the 601 rows with `question_type` joined back from the benchmark by query
+text; the grouped report and its persisted `.gate` artefact sit beside it.
+
 ## Still owed
 
 - **Default it, deliberately.** The gate is opt-in (`ANSWERABILITY_GATE_PATH`). The numbers above
