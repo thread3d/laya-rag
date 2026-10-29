@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 2.0.0** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 2.0.1** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -571,7 +571,7 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (1884 collected, 5 of them real-weights)
+make test          # Python suite, offline, deterministic (1886 collected, 5 of them real-weights)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 make test-mcp      # the MCP server suite (skips without the [mcp] extra)

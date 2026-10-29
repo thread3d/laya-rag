@@ -6,6 +6,28 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.0.1 — 2026-10-29
+
+The objective's own rule is now a test: a prediction without a falsifier is caught.
+
+### `tests/test_predictions_have_falsifiers.py`
+
+The programme's charter says *every prediction is recorded with the measurement that would falsify it*. That
+is a claim about a **documentation practice**, and every other claim in this repository is checked rather than
+asserted — so it is now checked. A finding that registers a prediction without a falsifier is a prediction
+that cannot lose.
+
+The audit came back clean: **9 prediction blocks across the findings documents and 4 in the assessment, all
+with a falsifier**. The test enforces it going forward, and is deliberately loose about layout (paragraph,
+table cell or bolded run-in all count) and strict about presence.
+
+**Perturbed before trusted**: appending a bare `**Prediction:**` paragraph to the composer finding fails it
+with the file and line number; restored.
+
+Its own threshold was corrected once — the first version expected ten predictions and found nine, and the
+fix was to set the guard to the real count rather than to write a tenth prediction to satisfy a test. **A
+threshold that gets met by adding content is not a threshold.**
+
 ## 2.0.0 — 2026-10-29
 
 The status page carries the round's **queue** — the durable state a fresh agent needs at round 55 of a
