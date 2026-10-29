@@ -6,6 +6,25 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.1.7 — 2026-10-30
+
+A quota and a wider pool are not interchangeable, and the finding now says which arm can reach which.
+
+### The distinction, from reading the call site
+
+`engine.py` applies `rerank_coverage_min_docs` inside `if cross_scores is not None` — so:
+
+- **without a cross-encoder** (the arm running now) the quota is **unreachable**, and the only lever is a wider
+  pool: the probe measured five chunks → **2.38** documents, ten → **3.50**, twenty → **5.00**;
+- **with a cross-encoder** the quota applies — and a second thing happens automatically, which is worth stating
+  beside every CE row this repository has published: `resolved_rerank_coverage_lambda` returns **0.7** whenever
+  a reranker is configured, so those rows are **coverage-reordered as well as cross-encoded**. *"A cross-encoder
+  rerank"* is not what they are.
+
+A finding that said "a quota or a wider pool" without that distinction would send a reader to a setting their arm
+cannot use, which is the same failure as a documented flag that does nothing. A test now pins both halves — the
+`if cross_scores is not None` guard in the code and the corresponding sentences in the finding.
+
 ## 2.1.6 — 2026-10-30
 
 A caution written **before** the number lands, and an artefact-loss case found while writing it.

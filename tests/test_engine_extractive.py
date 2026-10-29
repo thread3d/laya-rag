@@ -223,3 +223,19 @@ def test_the_corpus_map_is_the_text_the_engine_indexed():
     text = module.corpus_text()
     assert len(text) == 609, f"expected the benchmark's 609 documents, got {len(text)}"
     assert all(value.strip() for value in text.values()), "a document with no text"
+
+
+def test_the_placement_finding_states_which_lever_each_arm_has():
+    """A quota and a wider pool are not interchangeable, and the finding must say so per arm.
+
+    `rerank_coverage_min_docs` is applied inside `if cross_scores is not None`, so the extractive row — which
+    has no cross-encoder by default — cannot reach it; the only lever there is a wider pool. And with a
+    cross-encoder, `resolved_rerank_coverage_lambda` auto-selects 0.7, so every CE row measured here is
+    coverage-reordered as well as cross-encoded. A finding that said "a quota or a wider pool" without that
+    distinction would send a reader to a setting their arm cannot use.
+    """
+    engine_source = (Path(__file__).resolve().parents[1] / "src" / "laya_rag" / "engine.py").read_text()
+    assert "if cross_scores is not None and lambda_ > 0.0 and candidates:" in engine_source
+    finding = (Path(__file__).resolve().parents[1] / "docs" / "findings-multihop-placement.md").read_text()
+    assert "Without a cross-encoder" in finding
+    assert "resolved_rerank_coverage_lambda` returns **0.7**" in finding

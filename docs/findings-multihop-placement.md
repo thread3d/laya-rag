@@ -167,9 +167,18 @@ The queued coverage arm runs at the shipped `top_k`, which is **five chunks** �
 documents**. Its `doc_*` fields will therefore compare "gold fact among the top 2.4 documents" against published
 rows scored over **ten**. That is *more* comparable than the chunk row and it is still not the fair comparison.
 
-Making it fair needs a wider pool or a document quota. The engine has one — `RERANK_COVERAGE_MIN_DOCS`, the
-first *N* selections forced to distinct documents — and it is **off by default** for a measured reason recorded
-in `config.py`: on a full-protocol (2,255-query) run it moved MAP@10 **0.3165 → 0.3192** (+0.0027, p=0.037)
+Making it fair needs either a wider pool or a document quota, and **which one is available depends on the arm**,
+which is worth being precise about because the two are not interchangeable:
+
+- **Without a cross-encoder** — the arm running now — the quota is unreachable: `engine.py` applies
+  `rerank_coverage_min_docs` inside `if cross_scores is not None`, so the only lever is a wider pool. The probe
+  above measured what that buys: five chunks → 2.38 documents, ten → 3.50, twenty → 5.00.
+- **With a cross-encoder** the quota applies, and a second thing happens automatically:
+  `resolved_rerank_coverage_lambda` returns **0.7** whenever a reranker is configured, so every CE row this
+  repository has measured is *coverage-reordered as well as cross-encoded*. That is worth stating beside those
+  rows, because "a cross-encoder rerank" is not what they are.
+
+The quota is **off by default** for a measured reason recorded in `config.py`: on a full-protocol (2,255-query) run it moved MAP@10 **0.3165 → 0.3192** (+0.0027, p=0.037)
 while dropping Hits@4 **0.7694 → 0.7588** (−0.0106). A real trade, which is why it is not a default.
 
 **That full-protocol measurement is also an artefact-loss case worth naming**: its reports are not on disk, so a
