@@ -6,6 +6,43 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.8.0 — 2026-10-29
+
+The assessment's closing section said none of its predictions had been measured. Eight rounds later, most
+have — and the outcome table replaces the stale sentence.
+
+### A statement about the document's own status, left standing
+
+`docs/best-in-the-world-2026-10.md` ends with a section headed *what this document does not claim*, whose
+last bullet read:
+
+> Every prediction in §5 is a hypothesis with a stated falsifier … **None has been measured.**
+
+That was true when written and false by the time the round finished. Left stale, it **under**-claims in a
+way that misrepresents the work — it says nothing was measured when six items have been — and it sits in
+the one section a skeptical reader consults first.
+
+It is now an outcome table, item by item:
+
+| item | outcome |
+| --- | --- |
+| **R0** decision share | **falsified** — 99.8% of cost is the decision pass; the falsifier fired at an 8.1% spread |
+| **R1** encoder refresh | partly — routing, not a swap |
+| **R2** composer objective | **falsified in magnitude** — 0.0489 of 0.5404 recovered, not 0.25 |
+| **R3** portable abstention | confirmed — AUC 0.8377, 30.7% vs 69.3% false accepts *and* 76.7% vs 72.0% true accepts |
+| **R4** evidence protocol | shipped, now five axes; the placement row refuses a subset |
+| **R5** reranker generation | confirmed; the ArguAna prediction **held inside its band** |
+| **R6** decision cost | confirmed at the small end — 43% free, with interaction costs |
+| **R7** multilingual | **the claim was withdrawn** — 28 h per collection, README corrected |
+| **R8** submittable artefact | half — the gate ships, the training run is the gap |
+
+**Two falsified, one withdrawn, four confirmed, one half done.** The text ends by saying what is worth
+re-reading: the falsifications, because both came from asking a question the mechanism story had made look
+already answered.
+
+A test now forbids the stale sentence from returning and requires the table to keep recording all four
+outcome kinds.
+
 ## 1.7.2 — 2026-10-29
 
 The two remaining composer measurements are registered before they run, while the answer is unknown.

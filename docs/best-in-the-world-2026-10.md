@@ -663,5 +663,20 @@ asking for exactly that.
 - **This document proposes no answer-quality claim.** A system that does not generate text cannot be
   ranked on the leaderboards that score generated text; the `engine + <model>` labelling rule is the
   correct response to that, not an obstacle to be worked around.
-- Every prediction in §5 is a hypothesis with a stated falsifier, in the form
-  [`RESEARCH.md`](../RESEARCH.md) established. None has been measured.
+- Every prediction in §5 was a hypothesis with a stated falsifier, in the form
+  [`RESEARCH.md`](../RESEARCH.md) established. **When this document was written, none had been
+  measured.** They have been now, and the outcome is not a clean sweep in either direction:
+
+| item | prediction | what the measurement said |
+| --- | --- | --- |
+| **R0** decision share | batching would put the decision at 30–40% of CPU | **falsified** — 99.8% of the cost is the decision pass itself; the falsifier fired at an 8.1% spread, and the honest conclusion was that no batching exists to harvest |
+| **R1** encoder refresh | a 0.6B encoder would move BEIR | **partly** — dense −0.018 on SciFact, +0.024 on NFCorpus, fused +0.007/+0.006 at 15–21× the indexing cost: the choice is routing, not a swap |
+| **R2** composer objective | the objective recovers ~0.25 of the gap | **falsified in magnitude** — it recovered 0.0489 of 0.5404. Selection is *a* binding constraint, not *the* one |
+| **R3** portable abstention | a feature gate beats the shipped scalar | **confirmed** — held-out AUC 0.8377, false accepts 30.7% against 69.3% *and* true accepts 76.7% against 72.0%. Transfer across corpora still unmeasured |
+| **R4** evidence protocol | four axes, absent ones named | **shipped, and now five** — the fifth says which configuration produced the numbers. The placement half produced a row the tool refuses to place until the full set runs |
+| **R5** reranker generation | the pointwise generation moved | **confirmed** — +0.0313 MAP@10 on the same pool (p=0.0089). The ArguAna prediction, registered before its run, **held inside its band** (0.4722 against 0.35–0.50) and its falsifier did not fire |
+| **R6** decision cost | 3–10× fewer decision seconds at ≤0.005 MAP@10 | **confirmed at the small end** — 43% less CPU at identical retrieval quality. Its interactions are not free: 4 of 20 gate verdicts flip, and the composer loses 0.0043 nugget recall |
+| **R7** multilingual | one non-Latin collection is measurable here | **the claim was wrong** — 28 h projected per collection on this host, and the README's stronger claim was false as documented. Corrected in place |
+| **R8** submittable artefact | distil, verify, submit | **half** — the submission *gate* ships and passes; the training run that would produce a winning artefact is the one item this host cannot finish quickly |
+
+Two predictions were falsified, one claim was withdrawn, four were confirmed, and one item is half done. **The falsifications are the ones worth re-reading**: R0's and R2's both came from asking a question the mechanism story had made look answered, and both changed the programme's direction rather than merely its numbers.

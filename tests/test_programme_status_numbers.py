@@ -125,3 +125,20 @@ def test_the_page_says_the_falsifier_did_not_fire_and_the_arm_is_still_untested(
     text = STATUS.read_text(encoding="utf-8")
     assert "falsifier did not fire" in text
     assert "The listwise arm is still untested" in text
+
+
+def test_the_assessment_no_longer_says_none_of_its_predictions_were_measured():
+    """The closing section said "None has been measured" — true when written, false eight rounds later.
+
+    That sentence is in the section headed "what this document does not claim", so leaving it stale
+    under-claims in a way that misrepresents the work: it says nothing was measured when six items have
+    been. The replacement is an outcome table, and this test keeps both halves of it true.
+    """
+    assessment = ROOT / "docs" / "best-in-the-world-2026-10.md"
+    text = assessment.read_text(encoding="utf-8")
+    assert "None has been measured" not in text
+    assert "**When this document was written, none had been\n  measured.**" in text
+    for item in ("falsified", "confirmed", "withdrawn", "half done"):
+        assert item in text, f"the outcome table no longer records that an item was {item}"
+    # and the two falsifications the table calls out by name
+    assert "R0" in text and "R2" in text
