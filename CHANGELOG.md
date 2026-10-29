@@ -6,6 +6,27 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.7 — 2026-10-29
+
+The version becomes one value, checked in all five places it is written.
+
+### `tests/test_version_is_one_value.py`
+
+`docs/PROGRAMME-STATUS.md` says it plainly: *"The version is what `laya_rag.__version__` reports and what
+the HTTP API publishes in its OpenAPI schema, so a client can tell which engine it is talking to."* That
+holds only while five copies agree — `pyproject.toml`, `__init__.py`, `README.md`,
+`docs/PROGRAMME-STATUS.md` and the newest `CHANGELOG.md` heading — and this round bumped all five by hand
+fourteen times.
+
+The test reads all five, requires one distinct value, requires the changelog's headings to be in
+descending version order (so "newest heading" really is the current release), and checks the
+client-facing consequence directly: `create_app().openapi()["info"]["version"] == laya_rag.__version__`.
+A divergence is not cosmetic — a service answering `/openapi.json` with one version while its changelog
+claims another cannot be matched to the release notes describing its behaviour.
+
+Perturbed before trusted: setting the README to 1.4.7 alone fails the test and names the file that
+disagrees; the file was restored.
+
 ## 1.4.6 — 2026-10-29
 
 `/v1/stats` says how the engine is configured, not just what is loaded.
