@@ -178,3 +178,23 @@ def test_the_findings_index_quotes_the_numbers_its_rows_are_about():
         if printed not in text:
             missing.append(f"{label}: {printed} (from {Path(report).name}:{dotted})")
     assert not missing, "docs/FINDINGS.md no longer quotes:\n  " + "\n  ".join(missing)
+
+
+def test_the_grouped_transfer_numbers_are_quoted_where_the_gate_is():
+    """The published AUC came from random halves; the grouped run is the honest transfer figure.
+
+    Three claim-bearing pages quote the gate — the status table, the claim boundary and the README's known
+    limits — and all three said `0.8377` alone. The grouped regime (hold out a whole question type, which the
+    trainer's own docstring calls the only real transfer test) reads 0.7909 with ECE more than doubled, so a page
+    quoting only the random-half figure is quoting the weaker regime as though it were the only one.
+    """
+    report = ROOT / "eval" / "gate" / "answerability-gate-grouped"
+    if not report.is_file():
+        pytest.skip("no grouped gate report on this checkout")
+    held = json.loads(report.read_text(encoding="utf-8"))["held_out"]
+    auc = f"{held['gate_auc']['mean']:.4f}"
+    ece = f"{held['gate_ece']['mean']:.4f}"
+    for page in (STATUS, ROOT / "BENCHMARKS.md", ROOT / "README.md"):
+        text = page.read_text(encoding="utf-8")
+        assert auc in text, f"{page.name} does not quote the grouped AUC {auc}"
+        assert ece in text, f"{page.name} does not quote the grouped ECE {ece}"

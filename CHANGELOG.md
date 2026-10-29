@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.4.1 — 2026-10-30
+
+The grouped transfer figures reach all three pages that quote the gate, and a test keeps them there.
+
+### The drift the propagation closes
+
+Three claim-bearing pages quoted the gate — the status table, the claim boundary, and the README's known limits —
+and all three said **0.8377** alone. That figure is the *random-half* regime, which the trainer's own docstring
+calls the weakest transfer test. A page quoting only it presents the weaker regime as though it were the only one.
+
+All three now carry the pair:
+
+| page | now says |
+| --- | --- |
+| `PROGRAMME-STATUS.md` R3 | AUC **0.8377 → 0.7909**, accuracy 0.7546 → 0.7213, **ECE 0.0521 → 0.1361**, 0.18 spread between types |
+| `BENCHMARKS.md` claim table | ordering survives under type hold-out; calibration does not |
+| `README.md` Known limits | the ordering survives, **the calibration does not**, and the corpus question is still open |
+
+A test now reads the grouped report and requires both the AUC and the ECE on all three pages — so the next page
+edited to quote the gate has to quote the honest pair.
+
+### What stays open, stated in each of them
+
+**Cross-corpus transfer** — a gate fitted on news answering questions about code — is untouched by this. Holding
+out a question type is the strongest transfer test *available in this dataset*, not the strongest imaginable, and
+the three pages say so rather than letting the improvement in rigour imply more than it did.
+
 ## 2.4.0 — 2026-10-30
 
 The gate's **transfer** number, measured: the ordering survives, the **calibration does not**.

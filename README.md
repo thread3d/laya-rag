@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 2.4.0** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 2.4.1** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -1834,12 +1834,14 @@ budget at the default thresholds.
 Four levers were added or measured in October, and every one of them carries a limit that a reader has
 to know before quoting its number:
 
-- **The answerability gate transfers across queries, not across corpora.** On the benchmark's own 301
-  `null_query` records it reads AUC **0.8377** and more than halves the false-accept rate at the same
-  threshold — but it is fitted on halves of *one* benchmark, the classes are balanced by construction,
-  and the questions are news. A corpus with 2% unanswerable questions, or a code corpus, is exactly the
-  domain shift `make gate-transfer` exists to measure and the MTRAG-UN sample is the one that would
-  settle it ([`docs/findings-answerability-gate.md`](docs/findings-answerability-gate.md)).
+- **The answerability gate transfers across question types better than its calibration suggests.** On the
+  benchmark's own 301 `null_query` records it reads AUC **0.8377** at random halves — and **0.7909** when a
+  whole question type is held out, the regime the trainer's own docstring calls the only real transfer test.
+  The ordering survives; the **calibration does not** (ECE **0.0521 → 0.1361**), and the fold AUCs spread
+  0.18 between types (`temporal` 0.9117, `inference` 0.7325, `comparison` 0.7285). It is still fitted on
+  *one* benchmark with classes balanced by construction and news questions; a corpus with 2% unanswerable
+  questions, or a code corpus, is exactly the shift `make gate-transfer` exists to measure and the MTRAG-UN
+  sample is what would settle it ([`docs/findings-answerability-gate.md`](docs/findings-answerability-gate.md)).
 - **The composer's objective is worth +0.055, not the +0.25 the gap suggested.** Answer nugget recall
   moves 0.2060 → 0.2610 at unchanged citation validity, which is significant and is half the
   pre-registered bar: selection is *a* binding constraint, not *the* one, and the five-sentence budget is

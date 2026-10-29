@@ -274,7 +274,7 @@ and each carries its limit:
 
 | added | what it allows | what it does not |
 | --- | --- | --- |
-| the **12-feature answerability gate**, shipped as an artefact | "we refuse what the corpus cannot answer, and we can prove it": held-out **AUC 0.8377** on the benchmark's own 301 `null_query` records, more than halving the false-accept rate at the same threshold while *raising* the true-accept rate | transfer across corpora — it is fitted on halves of one benchmark, and the classes are balanced by construction |
+| the **12-feature answerability gate**, shipped as an artefact | "we refuse what the corpus cannot answer, and we can prove it": held-out **AUC 0.8377** on the benchmark's own 301 `null_query` records, more than halving the false-accept rate at the same threshold while *raising* the true-accept rate | transfer across **corpora** — it is fitted on one benchmark, and the classes are balanced by construction. Held out by *question type* instead of at random, the ordering survives (**AUC 0.8377 → 0.7909**) and the calibration does not (**ECE 0.0521 → 0.1361**) |
 | the **composer objective** (`EXTRACT_COVERAGE`) | answer nugget recall **0.2060 → 0.2610** at unchanged citation validity, significant | the remaining gap to the pool's 0.7438 — selection is *a* constraint, not *the* one |
 | the **reranker generation** (`bge-reranker-v2-m3`) | **+0.031 MAP@10** over the 2024 model on the same pool, and +0.058 over no reranker | anything on BEIR, where a pointwise ranker loses; and ArguAna, where it is being measured |
 | the **decision cascade** (`SECOND_STAGE_TOP_M`) | **43% less decision CPU at identical quality** on this corpus | generality — it is free because the first stage's ordering is strong here, and per corpus by construction |
