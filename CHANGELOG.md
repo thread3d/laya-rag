@@ -6,6 +6,29 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.7 — 2026-10-29
+
+The dated market digest records what happened when its own listwise row was acted on.
+
+### An addendum, not a rewrite
+
+`docs/research/09-retrieval-market-2026-10.md` reads *"a 0.6B listwise model matches a 4B cross-encoder
+(61.85 vs 61.16) — parameter efficiency of listwise ranking is real"*. Acting on that row turned out to be a
+different question from reading it, so the digest now says so, dated:
+
+> **Addendum, 2026-10-29.** `jinaai/jina-reranker-v3` loads and runs here — 596M, `AutoModel` with
+> `trust_remote_code`, `rerank(query=…, documents=[…])` scoring a whole list in one pass. Its licence is
+> **CC-BY-NC-4.0**, so it can be measured as a research instrument and cannot be shipped inside the engine's
+> dependency path; the Apache-2.0 alternative is 2.5B with a generative interface. **The market fact and the
+> deployable fact are therefore different.**
+
+That distinction is exactly what the digest exists to keep — it already carries a *shippable?* column on its
+embedding table for the same reason — and it is the difference between a quality-per-parameter result and a
+procurement recommendation. The measurement the addendum enabled is registered in the findings document, so
+the note points forward rather than closing the question.
+
+Dated digests get append-only notes; rewriting one to look prescient would defeat the reason they are dated.
+
 ## 1.9.6 — 2026-10-29
 
 The second half of registered prediction (a) is queued, not merely owed.

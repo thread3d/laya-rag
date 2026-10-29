@@ -265,6 +265,17 @@ jina's paper evaluates every reranker on **the same top-100 list from one first 
 
 1. **A 0.6B listwise model matches a 4B cross-encoder** (61.85 vs 61.16). Parameter efficiency of listwise
    ranking is real.
+
+   **Addendum, 2026-10-29, when this was acted on.** Reading the row was not the same as being able to use
+   it, so it was checked directly: `jinaai/jina-reranker-v3` loads and runs here — 596M parameters,
+   `AutoModel` with `trust_remote_code`, and a `rerank(query=…, documents=[…])` that scores a whole candidate
+   list in one pass — which is the interface the pointwise models this programme had measured do not have.
+   Its licence is **CC-BY-NC-4.0**, so it can be measured as a research instrument and cannot be shipped
+   inside the engine's dependency path; the Apache-2.0 alternative, `bge-reranker-v2-gemma`, is 2.5B with a
+   generative interface. **The market fact and the deployable fact are therefore different**, which is the
+   distinction this digest exists to keep: a 0.6B listwise model that a commercial deployment cannot use is a
+   quality-per-parameter result, not a procurement recommendation. The measurement it enabled is registered in
+   [`../findings-reranker-generation.md`](../findings-reranker-generation.md).
 2. **Small cross-encoders are nearly worthless on a strong first stage** (+0.5 to +0.7 nDCG@10 for
    bge-reranker-v2-m3 / Qwen3-Reranker-0.6B). This reproduces Laya's finding that cross-encoders "helped weak
    first stages but lost to strong bi-encoders" — with a number on it.
