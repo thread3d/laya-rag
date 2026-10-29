@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 2.4.3** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 2.5.0** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -1842,10 +1842,12 @@ to know before quoting its number:
   *one* benchmark with classes balanced by construction and news questions; a corpus with 2% unanswerable
   questions, or a code corpus, is exactly the shift `make gate-transfer` exists to measure and the MTRAG-UN
   sample is what would settle it ([`docs/findings-answerability-gate.md`](docs/findings-answerability-gate.md)).
-- **The composer's objective is worth +0.055, not the +0.25 the gap suggested.** Answer nugget recall
-  moves 0.2060 → 0.2610 at unchanged citation validity, which is significant and is half the
-  pre-registered bar: selection is *a* binding constraint, not *the* one, and the five-sentence budget is
-  the next constraint to test ([`docs/findings-extractive-coverage.md`](docs/findings-extractive-coverage.md)).
+- **The composer's objective is worth +0.055, not the +0.25 the gap suggested — and it buys it with length.**
+  Answer nugget recall moves 0.2060 → 0.2610 at unchanged citation validity, which is significant and is half
+  the pre-registered bar: selection is *a* binding constraint, not *the* one. But its answers are **2.1×
+  longer** (593.6 → 1282.6 characters at the same sentence count), so per thousand characters the shipped
+  ordering is the *more* efficient one — 15.07 against 8.84 nuggets found. A length-matched comparison has not
+  been run, and the five-sentence budget is the next constraint to test ([`docs/findings-extractive-coverage.md`](docs/findings-extractive-coverage.md)).
 - **The cascade is free on *this* corpus.** `SECOND_STAGE_TOP_M=10` halves the decision CPU at identical
   quality on MultiHop-RAG because the first stage's ordering is strong there. Where it is weak —
   Touché, FRAMES-shaped ensembles — the truncation removes exactly the candidates the decision model

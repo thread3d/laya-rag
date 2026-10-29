@@ -6,6 +6,38 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.5.0 — 2026-10-30
+
+R2's headline delta has a confound nobody had checked: **the two arms do not emit the same amount of text.**
+
+### Five sentences is not a length control
+
+Both arms emit five sentences — and the finding said so, as its control. The stored answers say the control was
+insufficient:
+
+| arm | mean chars | mean sentences | nugget recall | **nuggets per 1k chars** |
+| --- | ---: | ---: | ---: | ---: |
+| rank order (shipped) | 593.6 | 4.65 | 0.2060 | **15.07** |
+| coverage objective | **1282.6** | 4.73 | **0.2610** | **8.84** |
+
+149 of 150 coverage answers are longer, by **+689 characters on average**. The objective selects fact-dense
+sentences, and fact-dense sentences are long ones — which is what it is for, and also exactly what a recall metric
+is most sensitive to: more text contains more nuggets by construction.
+
+### The honest form of +0.055
+
+Not *"the composer finds more facts"* but **"the composer quotes much more text and finds somewhat more facts in
+it"**. Per thousand characters the coverage arm is *less* efficient — 8.84 against 15.07 — so the objective trades
+verbosity for absolute coverage. Whether that is a good trade depends on how long an acceptable answer is, and the
+recall delta does not settle it.
+
+The paired interval **+0.0549 [+0.0240, +0.0841]** is unchanged: the coverage arm really does contain more of the
+gold facts. What was missing was the cost. **A length-matched comparison has not been run** — same-sentence-count is
+not it; per-character normalisation or a fixed character budget would be.
+
+`EXTRACT_COVERAGE` stays off by default, which is now better justified rather than less: the shipped behaviour emits
+answers half the length for two-thirds of the absolute coverage. All three claim-bearing pages say so.
+
 ## 2.4.3 — 2026-10-30
 
 The content layer measured on real output: it **cannot fail here**, and that is worth knowing before the field is

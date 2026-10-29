@@ -150,6 +150,40 @@ same verifier the end-to-end row uses. That is the property that had to hold: a 
 only acceptable if the guarantees survive it, and they do under the real checkpoint rather than only under
 the stub.
 
+## The control that was missing: the arms do not emit the same *amount* of text
+
+Both arms emit five sentences, and the table above says so. **Five sentences is not a length control**, and the
+stored answers show why:
+
+| arm | mean chars | median | mean sentences | nugget recall | **nuggets found per 1k chars** |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| rank order (shipped) | 593.6 | 546.5 | 4.65 | 0.2060 | **15.07** |
+| coverage objective | **1282.6** | 1287.5 | 4.73 | **0.2610** | **8.84** |
+
+149 of 150 coverage answers are longer, by an average of **+689 characters**. The objective selects fact-dense
+sentences, and fact-dense sentences are long ones — which is exactly what it is for, and also exactly the confound a
+recall metric is most sensitive to: **more text contains more nuggets by construction**, the same mechanism as the
+advisory content layer's inability to fail.
+
+**So the honest form of the +0.055 is not "the composer finds more facts" but "the composer quotes much more text,
+and finds somewhat more facts in it".** Per thousand characters the coverage arm is **less** efficient — 8.84
+nuggets found per 1k characters against the shipped arm's 15.07 — so the objective trades verbosity for absolute
+coverage. Whether that is a good trade is a product decision that depends on how long an acceptable answer is; it is
+not settled by the recall delta, and the earlier framing implied it was.
+
+### What this does and does not invalidate
+
+- The paired delta **+0.0549 [+0.0240, +0.0841]** is unchanged: the coverage arm really does contain more of the
+  gold facts.
+- The claim "**both arms emitted 5.00 sentences**" was offered as the control and it controlled the sentence
+  *count* only. Length, which the metric is directly sensitive to, differed by 2.1×.
+- **A length-matched comparison has not been run.** Same-sentence-count is not it; a per-character normalisation or
+  a fixed-character budget would be. Until then the finding should be read as *"a denser, longer answer containing
+  more facts"*, with the verbosity cost stated beside the gain.
+
+`EXTRACT_COVERAGE` stays off by default, which is now better justified rather than less: the shipped behaviour
+emits answers half the length for two-thirds of the absolute coverage.
+
 ## Registered before the runs: the two composer measurements still owed
 
 The lock is held by the full-set retrieval row, so these are registered now and measured when it frees. A

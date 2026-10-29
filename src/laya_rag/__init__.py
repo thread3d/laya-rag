@@ -25,4 +25,4 @@ __all__ = [
     "RagEngine",
 ]
 
-__version__ = "2.4.3"
+__version__ = "2.5.0"
