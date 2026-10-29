@@ -6,6 +6,36 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.4.3 — 2026-10-30
+
+The content layer measured on real output: it **cannot fail here**, and that is worth knowing before the field is
+quoted.
+
+### Eight real answers, both layers
+
+| layer | result |
+| --- | --- |
+| structural (`clean`) | **7 of 8** |
+| advisory content (`content.clean`) | **8 of 8**, zero issues |
+
+**The first result is structural rather than empirical**: every emitted sentence is a substring of a cited passage,
+so its numbers are in the evidence *by construction*. A verbatim span cannot contain a number its own source lacks.
+What the layer still catches is **attribution** — a span quoted from passage 1 but cited to passage 2 has numbers
+absent from passage 2 — so its value here is *"the citation points at the right passage"*, not *"the claim is
+honest"*.
+
+`content_clean_all` on extractive rows will therefore read 1.0000 **for a structural reason rather than an
+evidential one**. That is stated in the finding before the number is quoted, because a 1.0000 that cannot be
+anything else is not evidence of anything. Its real audience is the `engine + <model>` row, where text is generated
+and can say anything.
+
+### And the one structural failure is also structural
+
+The seventh answer was an **abstention**, whose fixed sentence counts as one uncited claim — a documented
+interaction the harness reports rather than smooths. It is also why `citation_clean_all` is 1.0000 over an
+answerable-only set: abstentions are near zero there. My probe happened to include a query the engine abstained on,
+which is how a documented interaction surfaced in eight samples.
+
 ## 2.4.2 — 2026-10-30
 
 The honest transfer regime becomes what `make gate-train` produces, not something you must remember to ask for.

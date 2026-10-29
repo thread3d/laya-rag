@@ -111,6 +111,33 @@ figure alone. The published 1.0000s are therefore true and narrower than they lo
 the chapter-versus-document problem in [`findings-multihop-placement.md`](findings-multihop-placement.md), and the
 second time in one night that a number was right and its *name* was the problem.
 
+### Measured on the engine's own output: the content layer cannot fail, and that is the point
+
+Eight real answers from the extractive path, each through both layers:
+
+| layer | result |
+| --- | --- |
+| structural (`clean`) | **7 of 8** |
+| advisory content (`content.clean`) | **8 of 8**, zero issues in total |
+
+Two things follow, and the first is a *structural* fact rather than an empirical one.
+
+**On a verbatim-span engine the content layer has almost no discriminating power.** Every emitted sentence is a
+substring of a cited passage, so its numbers are in the evidence *by construction* — a verbatim span cannot contain
+a number its own source lacks. What the layer can still catch is **attribution**: a span quoted from passage 1 but
+cited to passage 2 has numbers that are absent from passage 2, and the check fires. So its value here is "the
+citation points at the right passage", not "the claim is honest", and recording `content_clean_all` on extractive
+rows will read 1.0000 for a structural reason rather than an evidential one. **That is worth knowing before the
+number is quoted** — the same class as everything else in this document.
+
+Its real audience is the `engine + <model>` row, where the text is generated and can therefore say anything.
+
+**The one structural failure is also structural.** The seventh answer was an **abstention**, whose fixed sentence —
+*"The retrieved evidence does not contain a sentence that answers the question."* — counts as one uncited claim.
+The harness documents that interaction rather than smoothing it, and it is why `citation_clean_all` is 1.0000 over
+an answerable-only set: abstentions are near zero there, so the sentence never appears. My probe happened to include
+a query the engine abstained on, which is how a documented interaction turned up in eight samples.
+
 ### The negation check's coverage, stated as a limit
 
 `_NEGATION` matches explicit negators — *not, no, never, cannot, without, none, nor*. It does **not** see antonym
