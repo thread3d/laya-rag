@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.3 — 2026-10-29
+
+The provenance failure class gains its fifth instance and the rule the five of them state.
+
+### Class 14, completed
+
+The ledger entry had four instances. The fifth is this round's own: the composer's objective was put into
+the resume **fingerprint** — so a resumed run could not mix arms — and into nothing a human reads, which
+left the two rows behind `0.2060 → 0.2610` distinguishable only by remembering which filename they were
+written to. Fixed two commits ago; recorded here because a class is worth more than its instances.
+
+The five, stated together:
+
+> When a configuration variable changes what a number means, it has to appear in the artefact — or the
+> artefact is a filename.
+
+That is the most transferable sentence the October round produced. It generalises past this repository:
+any harness that names its outputs by parameter (which is most of them) is one omission away from an
+unattributable result, and the tell — *two arms that should differ came out identical* — is cheap enough
+to check on every run.
+
+`docs/findings-extractive-coverage.md` now says how its own two arms are identified, since the rows
+predate the fix.
+
 ## 1.5.2 — 2026-10-29
 
 A row now records the composer objective it ran under — the fifth instance of the same class, and again

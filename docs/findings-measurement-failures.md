@@ -237,14 +237,29 @@ trusts instead of re-running the job.
   existing index could carry a block naming a directory that never existed on disk. Caught by a *new
   axis* that prints each input's settings beside the numbers it produced them from — the first time a
   provenance defect was found by making provenance visible rather than by reviewing it.
+* **A settings block omitting the variable the row was about.** The composer's objective was put into the
+  resume *fingerprint* — so a resumed run could not mix arms — and into nothing a human reads. The two
+  rows behind `0.2060 → 0.2610` were distinguishable only by remembering which filename they were written
+  to, because `947d10ba…` is a hash rather than an account. Fixed by recording `extract_coverage` in both
+  the META record and the final report, and by teaching the protocol's configuration axis to print it.
+  This one is the round's own, found by asking the same question of a new artefact that the previous four
+  had taught.
 
-**The tell.** In three of the four, two things that should have differed came out identical; in the
-fourth, a recorded value did not correspond to any file on disk. **Identical arms are the cheapest bug
-signal in a measurement programme**, and this round produced three of them.
+**The tell.** In three of the five, two things that should have differed came out identical; in the
+others, a recorded value did not correspond to any file on disk, or a field that decides what a number
+means was absent altogether. **Identical arms are the cheapest bug signal in a measurement programme**,
+and this round produced three of them.
 
-**Now:** the fingerprint covers the cache, the column, the resume key and the settings block; and the
-evidence protocol prints the configuration beside every number, so the next one of these is visible on
-the report's face rather than in a diff.
+**The rule they state together**, and it is worth stating on its own because it generalises to every
+harness anyone builds:
+
+> **When a configuration variable changes what a number means, it has to appear in the artefact — or the
+> artefact is a filename.**
+
+**Now:** the fingerprint covers the cache, the column, the resume key and the settings block; the settings
+block names the effective paths and the objective variables; and the evidence protocol prints the
+configuration beside every number, so the next one of these is visible on the report's face rather than
+in a diff.
 
 ## What they cost, counted rather than remembered
 

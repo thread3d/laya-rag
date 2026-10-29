@@ -87,6 +87,11 @@ index is the one every other row in this repository was measured on. 150 answera
 | coverage objective | **0.2610** | 5.00 | **1.0000** |
 | paired delta, 150 queries | **+0.0549** [+0.0240, +0.0841], p=0.0005 | | |
 
+Each row now records `extract_coverage` in its settings block, so which arm produced it is readable from
+the artefact rather than from its filename — a gap the rows above were written before closing, and one of
+the five provenance failures catalogued in
+[`findings-measurement-failures.md`](findings-measurement-failures.md).
+
 Per query: **107 improved, 37 worse, 6 unchanged**. Citation validity is unchanged at 1.0000 — the
 guarantees held, which is the property that had to survive a change of objective.
 
