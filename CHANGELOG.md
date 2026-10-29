@@ -6,6 +6,25 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.9 — 2026-10-29
+
+`make help` now lists every target that exists — fifteen were invisible.
+
+### The one command a reader runs first
+
+Of the Makefile's **98 targets**, 83 appeared in `make help`. The missing fifteen included
+`mteb-eval`, `calibration-report`, `nugget-recall`, `leakage-audit`, `reranker-fairness`, both
+`labelling-*` queues, `two-wiki`, the two `order-eval-*` arms and `heavy-status`. Every one is documented
+somewhere in the prose — which is why nobody noticed: the capability was discoverable *if you already
+knew to look for it*.
+
+A **capability a user cannot discover is one the project does not really have**, and `make help` is the
+only place all of them are meant to be listed together. The fifteen now have one-line descriptions taken
+from the targets' own comments, and `tests/test_make_help_lists_every_target.py` keeps it that way: every
+`.PHONY` target except `help` itself must be listed, `make help` must not name a target that does not
+exist, and both extractions must still see more than sixty entries so a broken regex cannot let either
+pass vacuously.
+
 ## 1.4.8 — 2026-10-29
 
 Tool paths written in prose are now checked — and the check found two of this round's own mistakes.
