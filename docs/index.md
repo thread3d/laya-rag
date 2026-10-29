@@ -30,6 +30,7 @@ Install it and run a first query with the README's [Setup](../README.md#setup) a
 | decide whether fine-tuning the encoder is worth it | [Fine-tuning study](study-laya-finetuning.md) |
 | avoid the measurement mistakes this programme has already paid for | [Measurement failures](findings-measurement-failures.md) |
 | read the background research notes | [Research notes](research/) |
+| read the dated 2026 market digests the October assessment rests on | [Retrieval market, 2026-10](research/09-retrieval-market-2026-10.md) · [RAG systems, 2026-10](research/10-rag-systems-2026-10.md) |
 | look at the generated comparison charts | [Charts](charts/) |
 
 ## Two rules that make the pages readable
