@@ -6,6 +6,44 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.5 — 2026-10-29
+
+R4's placement half: a command that formats the engine's row for MultiHop-RAG's retrieval table — and
+refuses to place a subset.
+
+### `make multihop-row`
+
+`tools/engine_extractive.py` already reports exactly the four columns the benchmark's primary table
+carries (`Hits@10`, `Hits@4`, `MAP@10`, `MRR@10`), and the table is retrieval-only, which is why this
+engine can be placed in it at all. `tools/multihop_row.py` puts its row beside the published anchors and
+prints the three caveats that travel with it — the chunking differs, the paper's table carries no lexical
+baseline, and the engine contributes two columns it owns (citation validity, answer nugget recall).
+
+**The refusal came first.** A report over 150 of the 2,255 answerable queries looks exactly like one over
+all of them, so the tool checks the count and prints:
+
+```
+**not placeable** — 150 queries, not the 2255 answerable records the table scores — this is a subset,
+and a subset presented as the member is the failure class 11 records
+```
+
+That is the eleventh class in the measurement-failures ledger turned into a gate rather than a footnote;
+`--allow-subset` prints the numbers anyway, clearly marked, for internal reading.
+
+### What the subset shows, marked as a subset
+
+| system | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| voyage-02 + rerank (published) | 0.747 | 0.663 | 0.480 | 0.586 |
+| **ours: engine + `bge-reranker-v2-m3`, 150-query subset** | **0.940** | **0.847** | 0.371 | **0.688** |
+
+Three of four columns exceed the best published row and `MAP@10` trails by 0.11 — this repository's
+long-standing shape (*the gold is found; the order is where the score goes*), with the 2026 reranker
+having closed most of the `MRR@10` gap. None of it is placeable until the full set runs, which is ~3
+hours and the one remaining measurement R4 needs.
+
+Six tests pin the tool, including the refusal and the caveats.
+
 ## 1.5.4 — 2026-10-29
 
 The composer objective checked against real weights, through the shipped verifier.
