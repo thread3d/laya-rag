@@ -155,3 +155,14 @@ def test_the_rendered_page_carries_the_configuration_and_its_warning():
     rendered = ep.render(report)
     assert "Which configuration produced these" in rendered
     assert "different samples" in rendered
+
+
+def test_the_cost_axis_defaults_to_the_report_the_pipeline_writes():
+    """Axis 4 should populate itself once `make cost-report` has run, without a flag to remember."""
+    from pathlib import Path
+
+    default = Path(ep.parse_args([]).cost)
+    assert default.name == "cost-report.json"
+    assert default.parent.name == "eval"
+    # and an absent file is "not measured", never a failure
+    assert ep.cost_axis(default) is None or isinstance(ep.cost_axis(default), dict)

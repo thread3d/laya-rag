@@ -156,6 +156,14 @@ basename, a scalar baseline read from the wrong column, a resume fingerprint tha
 objective — and it was found the same way: by making a number's provenance *visible* rather than
 reviewable.
 
+## Axis 4 wires itself now, and is still owed here
+
+`--cost` defaults to the report `make cost-report` writes, so the chain's last axis populates without a
+flag to remember — and an absent file leaves it reported as **not measured**, which is the behaviour the
+protocol exists to have. It reads "not measured" on this repository today: the cost report for the
+MultiHop index has not been run beside these two axes, so the honest state is a named gap rather than a
+number from a different index.
+
 ## What is owed
 
 - A cross-corpus negative set (MTRAG-UN), which turns "generalises across queries" into "travels".

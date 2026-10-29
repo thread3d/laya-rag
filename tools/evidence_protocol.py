@@ -303,7 +303,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="evidence_protocol.py", description=__doc__)
     ap.add_argument("--answer-row", default=None, help="engine-extractive report JSON")
     ap.add_argument("--gate-rows", default=None, help="gate dataset JSON (labelled feature rows)")
-    ap.add_argument("--cost", default=None, help="cost-report JSON")
+    ap.add_argument(
+        "--cost", default=str(ROOT / "eval" / "cost-report.json"),
+        help="cost-report JSON; defaults to the one `make cost-report` writes, and an absent file "
+             "leaves axis 4 reported as not measured rather than failing the run",
+    )
     ap.add_argument("--coverage", type=float, default=0.80)
     ap.add_argument("--out", default=str(ROOT / "eval" / "evidence-protocol"))
     return ap.parse_args(argv)

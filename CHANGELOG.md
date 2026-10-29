@@ -6,6 +6,24 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.8.2 — 2026-10-29
+
+The evidence protocol's cost axis wires itself to the report the pipeline writes.
+
+### `--cost` stops being a flag anyone has to remember
+
+Axis 4 — seconds, CPU seconds, device — was populated only when a caller passed `--cost`. That makes the
+last axis of a five-axis report depend on a flag that `make evidence-pipeline` did not pass, so the axis
+that answers "what does this cost" was the one most likely to read "not measured" for reasons having
+nothing to do with the system.
+
+It now defaults to `eval/cost-report.json`, the path `make cost-report` writes. An **absent** file still
+leaves the axis reported as *not measured* rather than failing the run, which is the behaviour the
+protocol exists to have: a named gap rather than a number from somewhere else.
+
+That is its state on this repository today, and the finding now says so explicitly — the cost report for
+the MultiHop index has not been run beside the other two axes, so axis 4 reads "not measured" because it is.
+
 ## 1.8.1 — 2026-10-29
 
 `docs/REPRODUCING.md`: every number this project quotes, with the command that produces it.
