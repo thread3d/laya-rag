@@ -111,13 +111,43 @@ bug signal, not a result — this repository recorded the same lesson when a har
 with `getattr` and both arms came out equal to four decimals. The flag now implies enabling it, and a
 test pins the implication.
 
-## 5. What would settle it
+## 5. NFCorpus reverses the sign on dense — and the fused row is positive on both
 
-Two more datasets (NFCorpus is running, ArguAna next), paired bootstrap over queries rather than a
-point-estimate comparison, and then — because a replica is not the system — the same encoder through
-`tools/engine_beir.py`, which measures the engine's own chunking rather than the harness's. The
-falsifier stands as written: fused nDCG@10 ≥ +0.03 over the 0.452 single-config mean, and the dense
-channel re-earning a non-zero weight on at least three of five datasets.
+The second dataset, same protocol, its control reproducing three of four recorded rows exactly
+(0.3042/0.304, 0.3244/0.324, 0.3391/0.339) and the fused row matching the README's 0.364:
+
+| dataset | encoder | dense nDCG@10 | hybrid |
+| --- | --- | ---: | ---: |
+| SciFact | `bge-small` | **0.7200** | 0.7320 |
+| SciFact | Qwen3-0.6B | 0.7012–0.7023 | 0.7389 |
+| NFCorpus | `bge-small` | 0.3391 | 0.3633 |
+| NFCorpus | Qwen3-0.6B | **0.3633** | **0.3694** |
+
+NFCorpus is **+0.024 on dense** where SciFact was −0.018, and the fused row is positive on both
+(+0.007 and +0.006). That is the same pattern this repository has already documented for the dense
+channel itself — a *per-corpus instrument, not an improvement* — reproduced at the encoder level, and
+it changes what R1's result means. "Refresh the encoder" is not a global win and not a global loss:
+
+- **fused**: +0.003 to +0.007 on both datasets, below the difference this repository's own MDE
+  guidance can resolve at these query counts (300 and 323). Positive in sign on 2 of 2, unproven.
+- **dense alone**: sign flips between corpora, exactly as the channel's own behaviour does.
+- **cost**: 15–21× the indexing (1.36 docs/s against 28), which for the 5.4M-document members is
+  weeks of CPU rather than hours.
+
+So the honest verdict after two datasets is narrower than the prediction and sharper than "it did not
+pay": **a 2026 encoder shifts which corpus the dense channel helps, at a cost the largest corpora
+cannot pay.** Adopting it would be a routing decision — the model on corpora where it wins, the small
+one where it does not — which is R1's original framing arriving by measurement rather than by
+argument.
+
+## 6. What would settle it
+
+ArguAna and FiQA next (the two remaining datasets whose controls are already anchored), paired
+bootstrap over queries rather than point estimates, and then — because a replica is not the system —
+the same encoder through `tools/engine_beir.py`, which measures the engine's own chunking rather than
+the harness's. The falsifier stands as written: fused nDCG@10 ≥ +0.03 over the 0.452 single-config
+mean, and the dense channel re-earning a non-zero weight on at least three of five datasets. On the
+first two it has re-earned it on one.
 
 ## What this does not claim
 

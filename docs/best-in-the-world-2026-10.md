@@ -376,6 +376,14 @@ lexical-only row by ≥0.02 on ≥3 of 5 at matched chunking, the "dense does no
 about encoders *in general* on these corpora and should be re-stated as such. Either outcome is worth
 publishing, and the cost is CPU-hours, not weeks.
 
+**Outcome (two of five datasets, measured).** SciFact: dense **−0.018**, fused +0.007. NFCorpus: dense
+**+0.024**, fused +0.006. The dense sign flips between corpora while the fused row is positive on both,
+at below-MDE size — the dense channel's own "per-corpus instrument" behaviour, reproduced at the encoder
+level — at 15–21× the indexing cost. So the refresh is a **routing** decision, not a swap, which is what
+R1's framing said and what the measurement now supports
+([`findings-component-refresh.md`](findings-component-refresh.md)). ArguAna and FiQA would confirm or
+break the pattern; the harness can now measure a 2026 encoder at all, which it could not before.
+
 ### R2 — Give the extractive composer an objective (days, `[offline]`)
 
 Replace rank-order selection with greedy max-coverage over candidate sentences: relevance to the query
@@ -412,6 +420,15 @@ split (in domain / question type held out / corpus held out) with abstention pre
 separately.
 **Falsifier:** mined negatives failing to beat in-corpus-only training on the held-out corpus ⇒ the
 failure is a feature problem, not a data problem, and the honest output is a stated negative.
+
+**Outcome (instrument landed; the pilot is not decidable and says so).** `tools/gate_transfer.py` carries
+the protocol — in-domain, transfer, **shuffled control**, `risk@80`, over either the thirteen shipped
+features or the three **model-free** shape features — with seven offline tests that let a gate fail as
+well as succeed. A two-corpus documentation pilot (19 and 17 rows) produced transfer AUCs of 0.514 and
+0.811, a permutation **null whose 95th percentile is 0.82 at 19 rows**, and a shuffled control matching
+its treatment to two decimals. Nothing there is a transfer result in either direction, which is a fact
+about the sample; the labelled negatives the claim needs are MultiHop-RAG's 301 `null_query` records plus
+MTRAG-UN's, an order of magnitude more ([`findings-abstention-transfer.md`](findings-abstention-transfer.md)).
 
 ### R4 — Publish the evidence-layer protocol, and take two leaderboard placements (weeks, `[web]`)
 

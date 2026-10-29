@@ -6,6 +6,45 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.2 — 2026-10-29
+
+The abstention-transfer protocol, and the second dataset's verdict on the 2026 encoder. One new tool,
+no behaviour change.
+
+### `tools/gate_transfer.py`: the transfer question gets an instrument
+
+The abstention claim is the strongest thing this architecture has and the least-evidenced: the gate is
+held-out AUC **0.8146** in domain and the shipped scalar is at chance out of domain (**0.5087**, risk@80
+0.4927). No benchmark in the 2026 landscape grades a retrieval-only answerability predictor with a
+held-out AUC, so this is instrumented here.
+
+The tool fits the gate on one corpus's feature rows and scores another, reporting **in-domain**,
+**transfer** and **shuffled-control** arms with `risk@80` beside every AUC, over either the thirteen
+shipped features or the three **model-free** shape features (max passage coverage, coverage spread,
+pairwise redundancy) — the latter because they need no decision-model call, so negatives can be mined at
+corpus scale. Seven offline tests let a gate fail as well as succeed.
+
+The first pilot (two documentation corpora, 19 and 17 rows) is **not decidable and says so**: transfer
+AUCs of 0.514 and 0.811, a permutation null whose 95th percentile is **0.82 at 19 rows**, and a shuffled
+control that matched its treatment to two decimals (0.822 against 0.811). The sample the claim needs is
+MultiHop-RAG's 301 `null_query` records plus MTRAG-UN's unanswerables.
+
+### NFCorpus reverses the encoder verdict on dense
+
+| dataset | `bge-small` dense | Qwen3-0.6B dense | fused, `bge-small` | fused, Qwen3 |
+| --- | ---: | ---: | ---: | ---: |
+| SciFact | **0.7200** | 0.7012–0.7023 | 0.7320 | 0.7389 |
+| NFCorpus | 0.3391 | **0.3633** | 0.3633 | 0.3694 |
+
+The dense sign flips between corpora (−0.018, +0.024) while the fused row is positive on both
+(+0.007, +0.006) at below-MDE size, for 15–21× the indexing. That is the dense channel's own
+"per-corpus instrument" behaviour reproduced at the encoder level, and it makes R1 a **routing**
+decision rather than a swap.
+
+### Still owed
+
+- The full 2,255-query extractive row (R2) and the ~300-negative gate run (R3); ArguAna and FiQA (R1).
+
 ## 1.3.1 — 2026-10-29
 
 An objective for the extractive answer, and the second dataset's verdict on the 2026 encoder. Both
