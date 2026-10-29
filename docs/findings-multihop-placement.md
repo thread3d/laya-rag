@@ -104,6 +104,33 @@ gets placed is the `doc_` one;** the chunk row stays because it is the system's 
 quoting a number without its document-level counterpart is what got this repository into the situation the
 placement tool was written to prevent.
 
+### The direction, measured: the chunk-level row is *harsher*
+
+An hour ago this document said the direction of the chunk-versus-document bias **could not be signed in
+advance**. That was honest and it is now out of date: an eight-query probe on the engine's own output signed it.
+
+| level | Hits@10 | MAP@10 |
+| --- | ---: | ---: |
+| chunk text (the rows the README quotes) | 0.7500 | **0.2816** |
+| distinct documents | **0.8750** | **0.4896** |
+
+One query improved at document level, **none worsened**, and the mean number of distinct documents behind five
+returned chunks was **2.38**. That last number is the explanation and it is worth sitting with: the engine's top
+five chunks represent about two and a half documents, so a *chunk-level* Hits@10 is effectively asking "does the
+gold fact appear among the top two or three documents", while every published row gets **ten**. The chunk-level
+metric is a structurally harder question wearing the same name.
+
+Two consequences, and they point in opposite directions for how the project should behave:
+
+1. **The published comparison is not inflated by this defect — it is understated.** The README's caveat was
+   written on the assumption that the error might be embarrassing; the probe says the error is conservative.
+2. **That is still an error and it still cannot be published as a result.** "We may be better than we said" is
+   as unmeasured as "we may be worse than we said" until the full-set document-level numbers exist.
+
+**This is a probe, not a result**: n=8, single run, read against gold facts the same way the full row is. It
+signs the direction and it does not estimate the magnitude — for that, the queued coverage arm's `doc_*` fields
+over 2,255 queries.
+
 ### The document-level row comes from the coverage arm, and that is valid
 
 The rank arm running now writes the old schema — it started before the field existed — so its document-level

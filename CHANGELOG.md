@@ -6,6 +6,39 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.1.4 — 2026-10-30
+
+The chunk-versus-document direction is measured, and it runs in the **cautious** direction rather than the
+flattering one.
+
+### The probe
+
+An hour ago the finding said the bias direction "cannot be signed in advance". Honest, and now out of date. An
+eight-query probe on the engine's own output signed it:
+
+| level | Hits@10 | MAP@10 |
+| --- | ---: | ---: |
+| chunk text (the rows the README quotes) | 0.7500 | **0.2816** |
+| distinct documents | **0.8750** | **0.4896** |
+
+One query improved at document level, **none worsened**, and the mean number of distinct documents behind five
+returned chunks was **2.38**.
+
+That last number is the explanation, and it is the interesting part: the engine's top five chunks represent
+about two and a half documents, so a *chunk-level* Hits@10 effectively asks "is the gold fact among the top two
+or three documents" while every published row gets **ten**. The chunk-level metric is a structurally harder
+question wearing the same name.
+
+### Two consequences that point opposite ways
+
+1. **The published comparison is not inflated by this defect — it is understated.** The caveat was written on
+   the suspicion that the error might be embarrassing; the probe says it is conservative.
+2. **That is still an error, and it still cannot be published as a result.** *"We may be better than we said"*
+   is exactly as unmeasured as *"we may be worse than we said"* until the full-set document-level numbers exist.
+
+The README's caveat and the finding both now say this, with the probe labelled a probe: it signs the direction
+and does not estimate the magnitude. For that, the queued coverage arm's `doc_*` fields over 2,255 queries.
+
 ## 2.1.3 — 2026-10-29
 
 The placement tool places the **document-level** row when one exists, and says *indicative* when it does not.

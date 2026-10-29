@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 2.1.3** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 2.1.4** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -1188,9 +1188,11 @@ paper's Table 5. All rows are the `chunk_overlap=200` setting the official harne
 **These rows are scored over chunks, and the published rows they sit beside are scored over documents.**
 The corpus chunks 609 documents into 4,592, so ten chunk slots hold a fraction of one document's text where a
 published row holds ten whole documents — the same metric computed over different things. The direction of the
-bias cannot be signed in advance (chunks make each slot smaller, which is harsher; a chunk containing the gold
-fact can outrank the document containing it, which is kinder), so **the rows below are a system-level
-measurement rather than a like-for-like placement**. `tools/engine_multihop.py` now records a
+bias was measured on an eight-query probe and it is **conservative**: five returned chunks represent about 2.4
+distinct documents, so a chunk-level Hits@10 asks "is the gold fact among the top two or three documents" where
+a published row gets ten — the probe reads 0.75 against 0.875 at document level, and MAP@10 0.2816 against
+0.4896, with no query worse. So **the rows below are a system-level measurement rather than a like-for-like
+placement, and the error runs in the cautious direction rather than the flattering one**. `tools/engine_multihop.py` now records a
 `doc_summary` alongside every run — the same metric over the top ten *distinct documents* — and the
 document-level counterparts of the rows below have **not yet been measured**. Until they are, the Hits@10 and
 Hits@4 comparisons against the published systems should be read as indicative:
