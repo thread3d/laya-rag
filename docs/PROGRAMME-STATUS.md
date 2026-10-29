@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `1.5.5` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `1.5.6` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -35,11 +35,31 @@ The programme above measured the system as it stood in early October. The
 | **R1** component refresh | **2 of 5 datasets** | A 2026 encoder is measurable again (the harness could not pool `last` or apply a per-family instruction). On SciFact Qwen3-0.6B is **−0.018** on dense, on NFCorpus **+0.024**; fused is **+0.007 / +0.006** for **15–21× the indexing**. Verdict: **routing, not a swap** |
 | **R2** composer objective | **done, prediction falsified** | Answer nugget recall **0.2060 → 0.2610** (**+0.0549 [+0.0240, +0.0841], p=0.0005**), citation validity unchanged at 1.0000, both arms at 5.00 sentences per answer. Half the pre-registered 0.10 bar, so selection is *a* binding constraint, not *the* one |
 | **R3** portable abstention | **gate shipped; transfer open** | On the benchmark's own 301 `null_query` records, the gate fitted over 40 stratified splits reads **AUC 0.8377** (risk@80 **0.4043**); the protocol's independent half-split run reads **0.8159** against the shipped scalar's **0.5208**. At the deployed threshold that run answers **69.3%** of unanswerable queries where the gate answers **30.7%**, and **72.0%** of answerable ones where the gate answers **76.7%**. Cross-corpus transfer still needs MTRAG-UN |
-| **R4** evidence protocol | **done and reproducible** | `make evidence-protocol` prints four axes, naming an absent axis rather than zeroing it. The chain runs from a fresh clone in **~68 min**. Its first report is the number the programme is built on: **production answers 69–72% of the questions the corpus cannot answer** |
+| **R4** evidence protocol + placement | **done and reproducible; the full row is owed** | `make evidence-protocol` prints five axes — the fifth says *which configuration* produced the numbers — naming an absent axis rather than zeroing it, and the chain runs from a fresh clone in **~68 min**. Its first report is the number the programme is built on: **production answers 69–72% of the questions the corpus cannot answer**. The placement half is `make multihop-row`, which formats the engine's row for the benchmark's retrieval table and **refuses to place a subset** — on the 150-query subset it shows Hits@10 **0.940**, Hits@4 **0.847**, MRR@10 **0.688** against the best published row's 0.747 / 0.663 / 0.586, with MAP@10 **0.371 against 0.480** |
 | **R5** reranker generation | **pointwise answered** | `bge-reranker-v2-m3` (2026, 568M) beats `bge-reranker-base` (2024, 278M) by **+0.0313 MAP@10 [+0.0052, +0.0578], p=0.0089** on the same pool, and both beat no reranker (**0.3128 → 0.3398 → 0.3710**). The gain is ordering, not completeness. The listwise arm is untested |
 | **R6** decision cost | **done** | `SECOND_STAGE_TOP_M=10` gives **43% less CPU at identical quality** (99.2 s → 56.1 s per query; MAP@10, Hits@10, nugget recall and citation all unchanged). **M=5** costs 0.023 MAP@10. Corpus-specific by construction, so off by default |
 | **R7** multilingual | **priced and scoped** | The smallest MIRACL collection is ~**28 hours** for one language here, so it was declined rather than truncated. What was measured instead: with the shipped lexical channel non-English recall is **1/3 at best and acronym leakage**, and forcing the dense channel on drops every non-English language to **0/3**. The README's "handles non-English text" claim was corrected |
-| **R8** submittable artefact | **not started** | Needs the ensemble distillation finished and a training run this host cannot do quickly |
+| **R8** submittable artefact | **gate shipped; artefact owed** | `make submission-check` audits any exported encoder against five properties — it loads, its vectors are unit, it is deterministic, its pooling and revision are pinned, the SearchProtocol adapter is present — and returns SUBMITTABLE or not with every failing check named. It deliberately does not score, so R8's own falsifier stays a scoring criterion. The training run that would produce a winning artefact is the one item this host cannot finish quickly |
+
+### The audit layer, which turned out to be the round's second product
+
+Eight contracts were added while the measurements ran, and **six of them found something**. Every failure
+was in a surface that *describes* the work rather than in the work:
+
+| contract | what it found |
+| --- | --- |
+| protocol axis 5 — *which configuration produced these* | a row recording a `--out`-derived index path the run never used |
+| measurement-failures class 14 | five provenance defects, three caught by *identical arms* |
+| environment variables documented | **nothing** — 91 of 91, a clean sweep worth recording |
+| findings-index reachability | one orphaned implementation record |
+| `/v1/stats` behaviour block | the levers that change behaviour were unreportable |
+| version consistency (five files) | one value, now enforced |
+| tool paths written in prose | **nine dangling, two of them the round's own** |
+| `make help` completeness | **fifteen targets undiscoverable** |
+| the front page's claim about its own gates | **"every quoted figure" was 54 of 8,370** |
+
+The rule the ledger now states: **when a configuration variable changes what a number means, it has to
+appear in the artefact — or the artefact is a filename.**
 
 Two properties of this round are worth stating because they are the point of it:
 

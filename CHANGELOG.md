@@ -6,6 +6,28 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.6 — 2026-10-29
+
+The programme's entry point carries the placement half and the audit layer, with its numbers pinned.
+
+### `docs/PROGRAMME-STATUS.md`, brought current again
+
+R4's row now reports both halves — the five-axis protocol reproducible in ~68 min, and `make
+multihop-row`, which refuses to place a subset while showing what the subset reads (Hits@10 0.940,
+Hits@4 0.847, MRR@10 0.688 against the best published row's 0.747 / 0.663 / 0.586, MAP@10 0.371 against
+0.480). R8's row moves from *not started* to *gate shipped, artefact owed*, which is where it actually
+stands.
+
+A new subsection records **the audit layer**, which turned out to be the round's second product: eight
+contracts, six of which found something, and every failure in a surface that *describes* the work rather
+than in the work — a settings block, a provenance ledger, a configuration table, an index, a help screen,
+a version string, a tool path, and the front page's claim about its own checking. The rule they state is
+in the table.
+
+Two tests now pin the placement numbers to the cross-encoder report that produced them, and one asserts
+the page keeps the word *subset* beside them — a number that is not placeable must not be printed as
+though it were.
+
 ## 1.5.5 — 2026-10-29
 
 R4's placement half: a command that formats the engine's row for MultiHop-RAG's retrieval table — and

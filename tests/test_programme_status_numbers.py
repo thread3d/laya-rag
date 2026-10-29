@@ -80,3 +80,22 @@ def test_the_page_names_the_three_corrections():
     """The round's own summary claims three corrections rather than three wins; that must stay true."""
     text = STATUS.read_text(encoding="utf-8")
     assert "Three of the eight items ended in a correction" in text
+
+
+def test_the_page_reports_the_placement_numbers_from_the_report_it_cites():
+    """The subset placement is quoted on the status page; it must match the report behind it."""
+    report = BENCH / "engine-extractive-ce-BAAI-bge-reranker-v2-m3.json"
+    if not report.is_file():
+        pytest.skip("no cross-encoder report on this checkout")
+    summary = json.loads(report.read_text(encoding="utf-8"))["summary"]
+    text = STATUS.read_text(encoding="utf-8")
+    for field, printed in (("Hits@10", "0.940"), ("Hits@4", "0.847"), ("MRR@10", "0.688")):
+        assert f"{summary[field]:.3f}" == printed, f"{field} moved: {summary[field]:.3f}"
+        assert printed in text, f"the status page no longer quotes {field} {printed}"
+
+
+def test_the_page_says_the_placement_is_a_subset():
+    """The row is shown with its refusal, not as the dataset's number."""
+    text = STATUS.read_text(encoding="utf-8")
+    assert "refuses to place a subset" in text
+    assert "150-query subset" in text
