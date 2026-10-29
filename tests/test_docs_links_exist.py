@@ -106,3 +106,24 @@ def test_the_reproduce_page_names_a_command_for_every_findings_document_it_claim
     assert invoked, "the reproduce page tells nobody to run anything"
     missing = sorted(invoked - available)
     assert not missing, f"docs/REPRODUCING.md names targets that do not exist: {missing}"
+
+
+def test_the_reproduce_page_states_one_heading_count_per_list():
+    """A page that says "four things" above five numbered items is the prose drift it exists to prevent."""
+    import re
+
+    root = Path(__file__).resolve().parents[1]
+    page = root / "docs" / "REPRODUCING.md"
+    if not page.is_file():
+        pytest.skip("no reproduce page on this checkout")
+    text = page.read_text(encoding="utf-8")
+    words = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7}
+    for heading in re.finditer(r"^## .*?\b(two|three|four|five|six|seven)\b.*$", text, re.MULTILINE | re.IGNORECASE):
+        stated = words[heading.group(1).lower()]
+        # count the numbered items that follow, up to the next heading
+        rest = text[heading.end():]
+        section = rest.split("\n## ", 1)[0]
+        numbered = len(re.findall(r"^\d+\.\s", section, re.MULTILINE))
+        assert numbered == stated, (
+            f"'{heading.group(0).strip()}' claims {stated} items but lists {numbered}"
+        )

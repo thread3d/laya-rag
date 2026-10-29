@@ -6,6 +6,28 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.2.1 — 2026-10-30
+
+The reproduce page catches up with three rounds of new capability — and with a heading that said *four* above
+five items.
+
+### Rows for the arms that now exist
+
+`docs/REPRODUCING.md` is the page whose only purpose is that a reader can re-derive any number. Three things had
+appeared since it was written:
+
+| added | what it lets someone reproduce |
+| --- | --- |
+| **R2b** | the answerability lever on the *answer* path — `--honour-answerability`, with its cost and where it records itself |
+| **R5b** | the listwise arm (`make listwise-rerank`, `jina-reranker-v3`, CC-BY-NC — measurable, not shippable) and its projected runtime |
+| a fourth comparability rule | **check the unit before the metric** — a row records both chunk-level and `doc_` figures because the published tables score documents |
+
+### The heading that said four
+
+Adding that rule made the list five and the heading still read *"The four things that make a re-run comparable"*.
+Fixed, and the drift is now **tested**: any `##` heading in that page containing a number word must match the
+count of numbered items beneath it. A page about preventing prose drift should not be the page that drifts.
+
 ## 2.2.0 — 2026-10-30
 
 The failures ledger gains three classes, and the three of them arrived in one night **without changing a single

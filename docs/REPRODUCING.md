@@ -40,26 +40,32 @@ cost claim that is not measured is the first thing a reader should distrust.
 | **R0** | where the CPU goes | `make index` then `make cost-report` | `eval/cost-report.{json,md}` | ~10 min | [`findings-cost-envelope.md`](findings-cost-envelope.md) |
 | **R1** | does a 2026 encoder move retrieval | `make beir DATASETS=scifact,nfcorpus` with and without `--biencoder-model` | `eval/beir/` | ~1 h per pair | [`findings-component-refresh.md`](findings-component-refresh.md) |
 | **R2** | does the composer's objective pay | `make multihop-fetch`, `make index MULTIHOP=1`, then `make engine-extractive ENGINE_EXTRACTIVE_ARGS="--limit 150 --zero-thresholds"` twice, once with `LAYA_RAG_EXTRACT_COVERAGE=1` | `engine-extractive-*.json` | ~12 min per arm | [`findings-extractive-coverage.md`](findings-extractive-coverage.md) |
+| **R2b** | does the answerability verdict reach the *answer* | the same row with `ENGINE_EXTRACTIVE_ARGS="... --honour-answerability"` | a second report; the flag is in the fingerprint and both settings blocks | ~12 min per arm, plus the shipped arm for comparison | [`findings-answerability-gate.md`](findings-answerability-gate.md) |
 | **R3** | is abstention portable | `make gate-dataset`, `make gate-train`, `make gate-transfer` | `eval/gate/` | ~46 min for the rows, 2 s to fit | [`findings-answerability-gate.md`](findings-answerability-gate.md) |
 | **R4** | the evidence layer, end to end | `make evidence-pipeline` | `eval/evidence-protocol.{json,md}` | **~68 min** from a fresh clone | [`findings-evidence-protocol.md`](findings-evidence-protocol.md) |
 | **R4b** | a row for the benchmark's table | the full extractive row, then `make multihop-row` | `eval/benchmarks/multihop-rag/engine-extractive-full.*` | ~2 h for the full 2,255 queries | [`findings-multihop-placement.md`](findings-multihop-placement.md) |
 | **R5** | does the reranker generation move | the extractive row with `--rerank-model BAAI/bge-reranker-v2-m3`, then the ArguAna arms | `engine-extractive-ce-*.json`, `eval/r1/arguana*` | 434 s → 995 s per 150 queries; 100 min for the ArguAna pair | [`findings-reranker-generation.md`](findings-reranker-generation.md) |
+| **R5b** | does a *listwise* ranker change the ArguAna collapse | `make listwise-rerank` — `jina-reranker-v3`, **CC-BY-NC-4.0**, so measurable and not shippable | `eval/r1/arguana-listwise.json` | ~40 s per query projected from a measured 8 s at depth 10; 1.5–2 h for 400 | [`findings-reranker-generation.md`](findings-reranker-generation.md) |
 | **R6** | what the decision costs | `make cost-report` with `LAYA_RAG_SECOND_STAGE_TOP_M` at 20 / 10 / 5 | `eval/cost-report.*` | ~4 min per arm | [`findings-decision-cascade.md`](findings-decision-cascade.md) |
 | **R7** | one multilingual collection | see the finding — it is **priced out**, not run | — | 28 h projected per collection | [`findings-multilingual-scope.md`](findings-multilingual-scope.md) |
 | **R8** | is an export submittable | `make submission-check SUBMISSION_ARGS=--check` | `eval/submission-check.{json,md}` | seconds | [`findings-submission-gate.md`](findings-submission-gate.md) |
 
-## The four things that make a re-run comparable to the recorded number
+## The five things that make a re-run comparable to the recorded number
 
 1. **Pin the index.** Rows record `index_identity`, a hash over the corpus, the chunker and the ingest
    settings. If it differs, the number is not comparable — and it changes when *any* ingest setting does,
    which is why it is a hash rather than a directory name.
 2. **Pin the query sample.** Subset runs take `--sample-seed`; the row records it. A row without a seed is
    not a sample, it is an accident.
-3. **Read the configuration block.** `make multihop-row` and `make evidence-protocol` both print the
+3. **Check the unit before the metric.** A row records both the chunk-level and the `doc_` document-level
+   figures, because the published tables score *documents* and this engine returns *chunks* — and one corpus's
+   five chunks cover about 2.4 documents. `make multihop-row` prefers the document-level row and says
+   *indicative* when the report has none.
+4. **Read the configuration block.** `make multihop-row` and `make evidence-protocol` both print the
    settings that produced each axis. The rule they enforce: *when a configuration variable changes what a
    number means, it has to appear in the artefact — or the artefact is a filename.* Five defects of that
    class are catalogued in [`findings-measurement-failures.md`](findings-measurement-failures.md).
-4. **Run the gates.** `make claim-check` resolves the registered figures against the reports that produced
+5. **Run the gates.** `make claim-check` resolves the registered figures against the reports that produced
    them; `make consistency-check` catches two documents disagreeing about the same quantity. Both skip
    cleanly when the gitignored artefacts are absent — a skip is not a pass, and the CI job says so.
 
