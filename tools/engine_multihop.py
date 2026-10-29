@@ -214,6 +214,11 @@ def _build_report(rows: dict) -> dict:
         "_settings": meta["_settings"],
         "queries": meta["queries"],
         "summary": summarize_rows([v["metrics"] for v in per_query.values()]),
+        # The document-level counterpart, so the placement row can be like-for-like with the published
+        # table rather than chunk-to-document.
+        "doc_summary": summarize_rows(
+            [v["doc_metrics"] for v in per_query.values() if "doc_metrics" in v]
+        ),
         "per_query": per_query,
     }
 
@@ -326,9 +331,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = engine.query(queries[key], top_k=args.top_k, max_passage_chars=None)
         texts = [str(p.get("text") or "") for p in result.passages[: args.top_k]]
         metrics, _ = official_metrics([texts], [gold_facts(item)])
+        # The published table scores **documents**; these passages are chunks, and the corpus chunks 609
+        # documents into 4,592. `ranking` already collapses to document ids, so the comparable metric is one
+        # `official_metrics` call away — and without it the two rows answer different questions in the same
+        # metric's clothes. See `docs/findings-multihop-placement.md`.
+        ranking = ranking_from_passages(result.passages, doc_ids)
+        doc_metrics, _ = official_metrics([ranking[: args.top_k]], [gold_facts(item)])
         run.record(key, {
             "metrics": metrics,
-            "ranking": ranking_from_passages(result.passages, doc_ids),
+            "doc_metrics": doc_metrics,
+            "ranking": ranking,
             "chunks": [str(p.get("chunk_id") or "") for p in result.passages[: args.top_k]],
             "considered": result.considered,
             "kept": result.kept,
@@ -343,6 +355,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "_settings": {**shared["_settings"], "seconds": round(time.perf_counter() - started, 1)},
         "queries": shared["queries"],
         "summary": summarize_rows([v["metrics"] for v in per_query.values()]),
+        # The document-level counterpart, so the placement row can be like-for-like with the published
+        # table rather than chunk-to-document.
+        "doc_summary": summarize_rows(
+            [v["doc_metrics"] for v in per_query.values() if "doc_metrics" in v]
+        ),
         "per_query": per_query,
     }
     run.finish(payload, total=len(mine))

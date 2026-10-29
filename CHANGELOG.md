@@ -6,6 +6,32 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.1.1 — 2026-10-29
+
+The same fairness problem reaches the README's headline MultiHop table, and the page now says so.
+
+### `engine_multihop.py` had the defect too, and its rows are the ones quoted
+
+The chunk-versus-document problem fixed in the extractive row an hour ago is in `tools/engine_multihop.py` as
+well — the same `official_metrics([texts], ...)` call over chunk text — and **those are the rows the README
+quotes**: `0.896 Hits@10` against voyage-02's published `0.747`, in a table whose every anchor is
+document-level.
+
+The harness already computed `ranking` (document ids) per query, so the comparable metric was one call away.
+Every run now records `doc_metrics` per query and a **`doc_summary`** in the report.
+
+### And the README says the comparison is indicative until measured
+
+**The historical reports this table came from are not on disk**, so their document-level counterparts cannot
+be derived — only re-run. The README therefore now states, directly above the table, that these rows are a
+**system-level measurement rather than a like-for-like placement**, that the bias direction cannot be signed
+in advance, and that the document-level counterparts have **not yet been measured**.
+
+That is a headline claim voluntarily weakened on the strength of a code reading, which is the correct response
+when the alternative is a comparison nobody can defend. The rows may well survive the correction — chunks make
+each slot smaller, which is the harsher direction — but *"may well"* is precisely what the programme refuses to
+publish as a result.
+
 ## 2.1.0 — 2026-10-29
 
 A fairness problem found **before** the placement was made: the row scores chunks, the published table scores
