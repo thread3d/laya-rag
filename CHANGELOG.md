@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.8 — 2026-10-29
+
+The listwise tool cached its corpus embedding in `/tmp` — found by reading it, not by running it.
+
+### A defect in code written three rounds ago
+
+`tools/listwise_rerank.py` embedded ArguAna's corpus to
+`/tmp/listwise-dense-cache` with `use_cache=False`. Three things wrong with that, in order of severity:
+
+1. **`/tmp` is not durable on this host**, so a cache written there is a cache nobody finds — and the queued
+   run would have embedded 8,674 documents for nothing.
+2. **`use_cache=False`** made the cache a write nobody reads: a re-run to re-derive a number would pay the
+   embedding again. A corpus embedding is *the* long part of a BEIR evaluation, which is why the harness has
+   a chunked, resumable cache for it.
+3. It wrote outside the workspace, which the sandbox permits for `/tmp` and which is therefore easy to do
+   without noticing.
+
+It now caches to `eval/r1/listwise-dense-cache` with `use_cache=True`. **The queued run picks the fix up**: the
+process starts only when the lock frees, so the file is read after the edit.
+
+The test that pins this looks at **string literals** through the AST rather than the source text — its first
+version failed on the explanatory comment that describes the bug it prevents, which is a small lesson in
+writing a check that tests the behaviour instead of the prose about it.
+
 ## 1.9.7 — 2026-10-29
 
 The dated market digest records what happened when its own listwise row was acted on.

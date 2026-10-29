@@ -64,3 +64,25 @@ def test_every_query_is_reranked_once():
     ranked = lr.score_listwise(model, None, {"q1": "x", "q2": "y"}, corpus, pools, top_k=2)
     assert model.calls == 2
     assert ranked["q1"] == ["b", "a"] and ranked["q2"] == ["a", "b"]
+
+
+def test_the_embedding_cache_lives_beside_the_run_not_in_tmp():
+    """A corpus embedding is the long part of an evaluation; `/tmp` is not durable on this host.
+
+    The first version cached under `/tmp/listwise-dense-cache` with `use_cache=False`, which meant a re-run
+    that re-derived a number would pay to embed ArguAna again — and would do it somewhere nothing ever
+    cleans up or finds. Caught by reading the tool rather than by running it, which is the cheaper of the two.
+    """
+    import ast
+
+    source = Path(lr.__file__).read_text(encoding="utf-8")
+    # String *literals* only: the comment above the fix explains why `/tmp` was wrong, and a crude substring
+    # search would fail on the explanation rather than on the behaviour.
+    literals = [
+        node.value for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+    offenders = [value for value in literals if value.startswith("/tmp")]
+    assert not offenders, f"the tool writes outside the workspace: {offenders}"
+    assert any("listwise-dense-cache" in value for value in literals), "no cache path at all"
+    assert "use_cache=True" in source

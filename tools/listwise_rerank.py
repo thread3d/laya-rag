@@ -46,7 +46,12 @@ def first_stage(corpus, queries, *, top_k: int, depth: int) -> dict[str, list[st
     import beir
 
     encoder = beir.BiEncoder(model_id="BAAI/bge-small-en-v1.5")
-    vectors = beir.cached_embed(encoder, corpus, Path("/tmp/listwise-dense-cache"), use_cache=False)
+    # Cache beside the run, not in `/tmp`: a corpus embedding is the long part of an evaluation, `/tmp` is
+    # not durable here, and a re-run that re-embedded ArguAna to prove a number was already measured would
+    # be paying twice for the same vectors.
+    cache = ROOT / "eval" / "r1" / "listwise-dense-cache"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    vectors = beir.cached_embed(encoder, corpus, cache, use_cache=True)
     dense = beir.dense_rankings(corpus, queries, encoder, vectors, top_k)
     lexical = beir.bm25_rankings(corpus, queries, top_k, k1=beir.BEIR_K1, b=beir.BEIR_B)
     fused = beir.hybrid_rankings(dense, lexical, top_k)
