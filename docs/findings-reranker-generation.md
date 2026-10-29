@@ -115,3 +115,20 @@ a result; the second is the more interesting one.
 
 **Cost, recorded in advance.** Three arms on the same first stage and the same 340 ArguAna queries; the
 568M arm costs about twice the 278M one per candidate, and both are reported beside the quality.
+
+### The 2024 collapse reproduces at half the recorded depth
+
+Before the 568M arm finished, the 278M arm established that the instrument is sound. ArguAna, seeded
+400-query subset (`--query-seed 17`), depth 50 — half the depth at which the −0.318 collapse was
+originally recorded:
+
+| arm | nDCG@10 |
+| --- | ---: |
+| `hybrid-biencoder` (first stage) | 0.5664 |
+| + `bge-reranker-base` | **0.2736** |
+
+That is **−0.293** against the recorded −0.318 at depth 100, and the first stage reproduces its own row
+(0.5664 against 0.568). So the collapse is a property of the ranker and the corpus, not of the depth it
+was measured at — which is the precondition for comparing a different ranker at this depth. The 568M arm
+is running at the same depth and on the same subset; its number lands in the next commit, because a
+prediction and its measurement should not arrive in the same edit.
