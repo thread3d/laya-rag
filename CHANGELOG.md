@@ -6,6 +6,37 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.2.0 — 2026-10-30
+
+The failures ledger gains three classes, and the three of them arrived in one night **without changing a single
+metric**.
+
+### Classes 15–17
+
+**15. A metric computed over a different unit than the comparison.** The MultiHop rows score top-ten *chunks*
+against published rows scoring top-ten *documents*, because the corpus chunks 609 documents into 4,592. Nothing in
+the metric complains — it matches gold sentences by substring against whatever it is handed. The tell is a number
+nobody computed: **five chunks cover 2.38 documents**, so the row asks a *harder* question wearing the same name.
+
+**16. An argument of the right type and the wrong meaning.** `ranking` (document ids, URLs) handed to a metric
+that wanted document *text*. Both `list[str]`, no exception, and every query scores **0.0** — two columns of zeros
+that read like a catastrophic retrieval result rather than a broken call. It reached a shipped harness. Caught
+because an analysis script made the same mistake minutes earlier and the two disagreed: **0.875 against 0.000**.
+
+**17. A number kept in a comment.** A default in `config.py` justified by a full-protocol measurement with an
+interval and a p-value — whose reports are not on disk. Correct, precise, and unreproducible, which is the one
+thing this repository does not accept anywhere else.
+
+### What the three have in common
+
+Nothing was mis-measured in the ordinary sense. The evaluator was the benchmark's, the qrels were the benchmark's,
+the runs completed. What was wrong was **what the numbers were about** — and no test that checks types or totals
+can see that.
+
+All three were caught by the same trick in different clothes: **compute the number a second way and require
+agreement** — against a different unit, against a second implementation, against a report that still exists. The
+ledger now says so, and notes that early failures are mechanical while late ones are semantic.
+
 ## 2.1.7 — 2026-10-30
 
 A quota and a wider pool are not interchangeable, and the finding now says which arm can reach which.

@@ -261,6 +261,70 @@ block names the effective paths and the objective variables; and the evidence pr
 configuration beside every number, so the next one of these is visible on the report's face rather than
 in a diff.
 
+## 15. A metric computed over a different unit than the comparison
+
+**Looks like:** a like-for-like table. The metric is the benchmark's own, the qrels are the benchmark's own, the
+evaluator is the benchmark's own.
+
+**Instance.** This project's MultiHop-RAG rows score the top-ten **chunks** against gold facts, and every
+published row they sit beside scores the top-ten **documents** — because this engine returns chunks and the corpus
+chunks **609 documents into 4,592**. Nothing in the metric complains: `official_metrics` matches gold sentences by
+normalised substring against whatever strings it is handed, so *what unit you hand it* is invisible in the output.
+The row has been quoted in the README against published systems since it was measured.
+
+**The tell is a number nobody computed: how many documents the chunks actually cover.** Five returned chunks
+represent **2.38 distinct documents** — measured only when the question was asked — so a chunk-level Hits@10 is
+effectively "is the gold fact among the top two or three documents" while every competitor gets ten. The
+chunk-level metric is a *harder* question wearing the same name, which is why it flattered nothing and was easy to
+miss.
+
+**Now:** both levels are recorded (`doc_*` fields beside the chunk ones), the placement tool prefers the
+document-level row and says *indicative rather than placeable* when only the chunk row exists, and the README
+states the mismatch above its table.
+
+**What generalises.** Before quoting a number against someone else's, ask **what unit it is over** — not what
+metric, not what dataset. A metric name and a unit are different things, and the benchmark rarely checks the
+second.
+
+## 16. An argument of the right type and the wrong meaning
+
+**Looks like:** working code. The call is well-typed, the variable names are right, and nothing raises.
+
+**Instances, same evening, two functions.**
+
+* The document-level metric was handed `ranking` — a list of document **ids** (URLs) — where it wanted document
+  **text**. Both are `list[str]`. A URL contains no gold sentence, so every query scored **0.0**: two columns of
+  zeros that read like a catastrophic retrieval result rather than a broken call. It reached `engine_multihop.py`,
+  a shipped harness, and would have produced a silently worthless column on every future run.
+* The same shape appeared in an *analysis script* minutes earlier, which is what caught it: two probes computed
+  the same quantity, disagreed (0.875 against 0.000), and the disagreement was the alarm.
+
+**The tell.** Zeros or ones at exactly the boundary. A real metric over a real corpus lands somewhere in between;
+a metric handed the wrong kind of string lands on 0.0 or 1.0 for every query, and the summary looks like a strong
+finding.
+
+**Now:** the text map the corpus writer already builds is threaded through, and a test pins the call. The general
+defence is cheaper than the fix: **compute the same number twice, two ways, and require them to agree.**
+
+## 17. A number kept in a comment
+
+**Looks like:** diligence. The comment is precise, carries an interval and a p-value, and explains a design
+decision.
+
+**Instance.** `config.py` justifies a default with a measurement — *"Full-protocol (2,255 queries) with lambda
+0.7 … MAP@10 0.3165 → 0.3192 (+0.0027 [+0.0002, +0.0052], p=0.037) but Hits@4 0.7694 → 0.7588 (−0.0106)"* — and
+**the reports behind it are not on disk**. A number from a complete run of the full benchmark now exists only as
+prose inside a source file, where nobody can re-derive it.
+
+**Why it is a class and not an incident.** This repository's whole claim is that figures trace to regenerable
+artefacts; a comment is the one place a figure can live without one, and it *feels* more trustworthy precisely
+because it sits next to the code that depends on it. The README's headline MultiHop table is the same failure from
+the other direction: a published comparison whose source reports are gone.
+
+**Now:** named in [`findings-multihop-placement.md`](findings-multihop-placement.md) as an artefact-loss case
+rather than silently relied on. The rule the ledger has been circling for seventeen entries: **a number needs a
+home that can be regenerated, and prose is not one.**
+
 ## What they cost, counted rather than remembered
 
 `git rev-list --count` over the session's span: **133 commits.** The per-class figures below are
@@ -282,6 +346,16 @@ The two classes at the top are **34% of the session's commits**, and both are of
 number that looked right and was not. That is the argument for the checks in one line — not that the
 failures were embarrassing, but that **two of them cost a third of the work**, and each was caught by
 re-deriving it from a direction nobody had used the first time.
+
+Classes **15–17 arrived in one night**, and together they say something the first fourteen did not: the last four
+were found **without changing a single metric**. Nothing was mis-measured in the ordinary sense — the evaluator was
+the benchmark's, the qrels were the benchmark's, the runs completed. What was wrong was what the numbers were
+*about*: a different unit, an argument of the wrong kind, and a figure with no artefact behind it.
+
+That is the shape of a maturing harness. Early failures are mechanical (an inert flag, a missing call); late ones
+are semantic, and no test that checks *types* or *totals* can see them. The three checks that caught them are all
+the same trick in different clothes: **compute the number a second way and require agreement** — against a
+different unit, against a second implementation, against a report that still exists.
 
 Class 14 is the one that aged best. Its four instances arrived from four *different* mechanisms — a
 cache key, a column name, a resume fingerprint, a recorded path — which means the class is not a set of
