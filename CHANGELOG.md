@@ -6,6 +6,26 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.4 — 2026-10-29
+
+The composer objective checked against real weights, through the shipped verifier.
+
+### A different selection, and the guarantees intact
+
+The API test for the per-request `coverage` runs against the stub model: it proves the plumbing and says
+nothing about whether the objective changes what a real model emits. On the documentation index with the
+multilingual checkpoint, both arms per query, every answer passed through `verify_citations`:
+
+| query | sentences | selection differs | rank arm clean | coverage arm clean |
+| --- | ---: | --- | --- | --- |
+| SciFact nDCG@10 | 5 / 5 | **yes** | yes | yes |
+| how the answerability gate abstains | 5 / 5 | **yes** | yes | yes |
+| which chunk sizes are chosen | 5 / 5 | **yes** | yes | yes |
+
+Three of three selections differ, and both arms are citation-clean on every query under the same verifier
+the end-to-end row uses. That is the property that had to hold — a different selection is only acceptable
+if the guarantees survive it — and it holds under the real checkpoint rather than only under the stub.
+
 ## 1.5.3 — 2026-10-29
 
 The provenance failure class gains its fifth instance and the rule the five of them state.

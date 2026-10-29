@@ -132,6 +132,24 @@ puts `LAYA_RAG_EXTRACT_COVERAGE` into its **resume fingerprint**: the composer's
 configuration of this row, so a resumed run that changed only that variable used to skip every
 completed row and silently report the other arm's numbers.
 
+## Checked against real weights, through the shipped verifier
+
+The API test for the per-request objective runs against the stub model, which proves the plumbing and says
+nothing about whether the objective changes what a *real* model emits. This does, on the documentation
+index with the multilingual checkpoint, both arms per query, with every answer passed through
+`verify_citations`:
+
+| query | sentences | selection differs | rank arm clean | coverage arm clean |
+| --- | ---: | --- | --- | --- |
+| SciFact nDCG@10 | 5 / 5 | **yes** | yes | yes |
+| how the answerability gate abstains | 5 / 5 | **yes** | yes | yes |
+| which chunk sizes are chosen | 5 / 5 | **yes** | yes | yes |
+
+Three of three selections differ, and **both arms are citation-clean on every query** according to the
+same verifier the end-to-end row uses. That is the property that had to hold: a different selection is
+only acceptable if the guarantees survive it, and they do under the real checkpoint rather than only under
+the stub.
+
 ## Still owed
 
 - The 400-query and full 2,255-query rows: 150 queries is a subset, and the published row's 0.1906 is
