@@ -443,6 +443,19 @@ on half of these rows and scored on the other half, so it generalises across que
 corpora. MTRAG-UN remains the sample that would settle that
 ([`findings-evidence-protocol.md`](findings-evidence-protocol.md)).
 
+**Outcome (the artefact ships, and the deployment trade is not a trade).** `make gate-dataset` →
+`make gate-train` → `LAYA_RAG_ANSWERABILITY_GATE_PATH`. On the 601 rows over 40 stratified splits the
+gate reads **AUC 0.8377 [0.8073, 0.8661]**, balanced accuracy 0.7546, **ECE 0.0521**, risk@80 0.4043,
+against the shipped scalar's 0.5002 / 0.4889 / 0.2829 / 0.5132. At the deployed threshold on the held-out
+half it answers **30.7%** of unanswerable queries against the scalar's **69.3%**, *and* answers **76.7%**
+of answerable ones against its 72.0% — fewer false accepts and more true accepts at the same threshold.
+A damaged artefact degrades to Laya's own decision rather than failing queries. Two plumbing defects
+were fixed on the way (the trainer could not read the newer flat feature file; its scalar baseline was
+all zeros because the column is `answerability` there, not `p`), both of the silent-wrong-number class
+this repository keeps finding. It stays opt-in: a gate fitted on news questions is a different
+instrument on a code corpus, and that is what `make gate-transfer` exists to measure
+([`findings-answerability-gate.md`](findings-answerability-gate.md)).
+
 ### R4 — Publish the evidence-layer protocol, and take two leaderboard placements (weeks, `[web]`)
 
 Package what already exists as **one named protocol with one command and one report**, on four axes:

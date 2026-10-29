@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.3.4** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.3.5** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -501,7 +501,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `EXTRACT_COVERAGE` | `false` | select the extractive answer's sentences by a **fact-coverage objective** (numbers, dates, acronyms and proper nouns it has not used yet, plus new content, plus the sentence's inherited relevance, with a redundancy guard) instead of by the parent document's rank. The shipped order is what the recorded end-to-end row was measured with — answer nugget recall **0.1906** against a pool carrying **0.7438** — so this is opt-in: it changes which sentences are emitted, never the guarantees, and a marker may then appear out of numerical order in the answer (the numbers are not renumbered, because they have to keep meaning the same document in the prompt and in the verifier) |
 | `RELEVANCE_THRESHOLD` | `0.5` | minimum Laya P(relevant) to keep a passage |
 | `ANSWERABILITY_THRESHOLD` | `0.5` | minimum Laya P(answerable) to report an answer |
-| `ANSWERABILITY_GATE_PATH` | unset | persisted feature-based answerability gate (see `tools/answerability_train.py`); unset uses Laya's own scalar decision |
+| `ANSWERABILITY_GATE_PATH` | unset | persisted feature-based answerability gate (see `tools/answerability_train.py`); unset uses Laya's own scalar decision. Fitted on MultiHop-RAG's own unanswerable records it halves the false-accept rate **and** raises the true-accept rate at the same threshold — 30.7% against 69.3% of unanswerable queries answered, 76.7% against 72.0% of answerable ones — with ECE 0.052 against the scalar's 0.283. It is opt-in because it is fitted to a corpus: a gate trained on news questions is a different instrument on a code corpus, and `make gate-transfer` is how that is measured rather than assumed |
 | `GATE_BRIDGE_FEATURE` | `false` | add the bridge-conditioned `s(q,b,c)` column to the feature gate's inputs (bridge = top ranked passage; costs one extra Laya pass per query). The 13-feature gate is **not trained/measured here**, so leave off unless you train one |
 | `ANSWERABILITY_NLI_MODEL` | unset | NLI cross-encoder used as an answerability scorer (e.g. `cross-encoder/nli-deberta-v3-base`); takes precedence over the gate and Laya's scalar |
 | `TRUST_MANIFEST` | unset | JSON file mapping path globs to a trust tier (`quarantined` < `untrusted` < `trusted`) and, optionally, `tenants` to per-caller path globs; unset means no trust or ACL filtering |
@@ -649,6 +649,7 @@ make generator-free-iteration  # does entity-probe expansion raise gold coverage
 make quantization-probe        # what int8/fp16/PQ cost on the shipped encoder's own vectors
 make mteb-eval                 # MTEB v2 SearchProtocol conformance over the engine itself
 make gate-dataset              # labelled answerability rows from the benchmark's own null_queries
+make gate-train                # fit and persist the twelve-feature answerability gate
 make gate-transfer             # does the answerability gate travel between corpora? (with a control)
 make evidence-protocol         # the four-axis evidence-layer report; absent axes are named, not zeroed
 ```

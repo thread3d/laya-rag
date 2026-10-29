@@ -40,8 +40,34 @@ from laya_rag.answerability import (  # noqa: E402
 
 
 def load_records(path: Path) -> list[dict[str, Any]]:
-    """Flatten the gate report's ``null``/``positive`` groups into one labelled list."""
+    """Flatten a labelled feature file into one list.
+
+    Two shapes exist and both are read, because they come from two tools that must agree:
+    the older gate report groups rows under ``null``/``positive``, and
+    ``tools/gate_dataset.py`` writes a flat ``rows`` list whose rows already carry a label.
+    Reading only one shape made the newer dataset unusable by the trainer — the same
+    two-answers problem as a duplicated pooling table.
+    """
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(payload, dict) and "rows" in payload:
+        rows = payload["rows"] or []
+        flat: list[dict[str, Any]] = []
+        for row in rows:
+            if "features" not in row:
+                raise ValueError(f"{path} has a row with no recorded features")
+            if row.get("label") not in (0, 1):
+                raise ValueError(f"{path} has a row with label {row.get('label')!r}")
+            # The scalar baseline is read from `p`. `gate_dataset.py` records the same quantity as
+            # `answerability`, so map it rather than leaving the baseline at zero — a zeroed
+            # baseline reports AUC 0.5 and risk@80 0.625 for the shipped system, which reads as
+            # "the scalar is at chance" for the right reason by accident.
+            row = dict(row)
+            if "p" not in row and row.get("answerability") is not None:
+                row["p"] = row["answerability"]
+            flat.append({**row, "label": int(row["label"])})
+        if not flat:
+            raise ValueError(f"{path} contains no records")
+        return flat
     records: list[dict[str, Any]] = []
     for group, default_label in (("null", 0), ("positive", 1)):
         for row in payload.get(group, []) or []:

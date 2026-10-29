@@ -85,6 +85,10 @@ LABELLING_ARGS ?= --help
 TWO_WIKI_ARGS ?=
 GFI_ARGS ?=
 QUANT_ARGS ?= --cache eval/beir/cache/scidocs.bge-small-en-v1.5.cls.npy
+GATE_ROWS ?= eval/gate/multihop.json
+GATE_ARTEFACT ?= eval/gate/answerability-gate.json
+GATE_SPLITS ?= 40
+GATE_TRAIN_ARGS ?=
 GATE_LIMIT ?= 300
 GATE_SEED ?= 17
 GATE_OUT ?= eval/gate/multihop
@@ -96,7 +100,7 @@ EVIDENCE_ANSWER_ROW ?= eval/benchmarks/multihop-rag/engine-extractive-rank150.js
 EVIDENCE_GATE_ROWS ?= eval/gate/multihop.json
 EVIDENCE_EXTRA_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe gate-dataset gate-transfer evidence-protocol job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe gate-dataset gate-train gate-transfer evidence-protocol job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -172,6 +176,7 @@ help:
 	@echo "fusion-tuning  tuned convex fusion vs the shipped RRF, tuned on held-out halves"
 	@echo "claim-check  do the numbers quoted in prose resolve against the reports?"
 	@echo "gate-dataset build labelled answerability feature rows from the benchmark's nulls"
+	@echo "gate-train     fit and persist the twelve-feature answerability gate"
 	@echo "gate-transfer  does the answerability gate travel between corpora?"
 	@echo "evidence-protocol  the four-axis evidence-layer report, with every absent axis named"
 	@echo "consistency-check  do two documents disagree about the same quantity?"
@@ -634,6 +639,14 @@ quantization-probe:
 gate-dataset:
 	$(PY) tools/gate_dataset.py --limit $(GATE_LIMIT) --sample-seed $(GATE_SEED) \
 		--out $(GATE_OUT)
+
+# Fit the twelve-feature answerability gate on labelled rows and persist the artefact. Point
+# LAYA_RAG_ANSWERABILITY_GATE_PATH at the `.gate` file to make it the engine's decision; on
+# MultiHop-RAG's own null_query class it halves the false-accept rate and raises the true-accept
+# rate at the same threshold (docs/findings-answerability-gate.md).
+gate-train:
+	$(PY) tools/answerability_train.py --features $(GATE_ROWS) --out $(GATE_ARTEFACT) \
+		--splits $(GATE_SPLITS) $(GATE_TRAIN_ARGS)
 
 # Does the answerability gate travel between corpora? Reports in-domain, held-out and a
 # shuffled-label control, with risk@80 beside each AUC.

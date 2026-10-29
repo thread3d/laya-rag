@@ -6,6 +6,54 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.5 — 2026-10-29
+
+The fitted answerability gate ships, and the deployment trade is not a trade: at the same threshold it
+more than halves the false-accept rate *and* raises the true-accept rate.
+
+### `make gate-dataset` → `make gate-train` → `LAYA_RAG_ANSWERABILITY_GATE_PATH`
+
+`tools/answerability_train.py` was written against one labelled-feature shape (`null`/`positive`
+groups) and `tools/gate_dataset.py` writes another (a flat `rows` list), so the newer dataset could not
+train a gate at all. **One loader reads both.** And the trainer's *scalar baseline* is read from a `p`
+column, which the newer dataset names `answerability` — so the baseline was silently all zeros,
+reporting the shipped system at AUC **0.500** for the right reason by accident. It is mapped now, and
+the comparison below is a measurement rather than a constant.
+
+601 rows — every one of MultiHop-RAG's **301 `null_query`** records plus 300 sampled answerable ones —
+13 features, 40 stratified splits with bootstrap intervals:
+
+| reading | gate | shipped scalar |
+| --- | ---: | ---: |
+| AUC | **0.8377** [0.8073, 0.8661] | 0.5002 |
+| balanced accuracy | **0.7546** | 0.4889 |
+| ECE | **0.0521** | 0.2829 |
+| Brier | **0.1656** | 0.3687 |
+| risk@80 | **0.4043** | 0.5132 |
+
+At the threshold a deployment actually uses, on the held-out half:
+
+| scorer | unanswerable answered (false accept) | answerable answered (true accept) |
+| --- | ---: | ---: |
+| scalar at 0.5 | **0.6933** | 0.7200 |
+| gate at 0.5 | **0.3067** | **0.7667** |
+
+Lower false accepts *and* higher true accepts at the same threshold. Every abstention number this
+repository published before this — "28.7% abstain on answerable queries", "the scalar is at chance out
+of domain" — described the system the gate replaces.
+
+It stays **opt-in**, and the README says why: it is fitted to a corpus, and a gate trained on news
+questions is a different instrument on a code corpus. A damaged or stale artefact degrades to Laya's
+own decision rather than failing queries — tested, because the alternative is a service that stops
+answering because a JSON file went bad.
+
+### Still owed
+
+- A provenance field on the artefact (trained on what, how many rows), which is the precondition for
+  ever defaulting it.
+- A prevalence-weighted reading, so the false-accept column can be quoted at a stated base rate.
+- The cross-corpus sample (MTRAG-UN's 97 unanswerable + 78 underspecified turns).
+
 ## 1.3.4 — 2026-10-29
 
 The evidence-layer protocol, run. One report over four axes, and the number it produced on its first
