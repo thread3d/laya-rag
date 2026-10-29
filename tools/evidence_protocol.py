@@ -162,6 +162,7 @@ def joint_score(evidence_map: float, abstention: Mapping[str, Any]) -> dict[str,
 CONFIG_KEYS = (
     "limit", "sample_seed", "rerank_model", "rerank_depth", "embed_model",
     "chunk_chars", "context_prefix", "max_sentences", "index_dir", "index_identity",
+    "extract_coverage", "second_stage_top_m",
 )
 
 

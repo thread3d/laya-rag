@@ -162,3 +162,19 @@ def test_render_handles_a_missing_nugget_reading():
         "Hits@10": 0.0, "Hits@4": 0.0, "MAP@10": 0.0, "MRR@10": 0.0,
     }})
     assert "| n/a |" in text
+
+
+def test_a_row_records_the_composer_objective_it_ran_under():
+    """A fingerprint is a hash: `947d10ba…` does not tell a reader which arm produced the row.
+
+    The objective went into the resume fingerprint first (so a resumed run cannot mix arms) and only
+    later into the settings block. That is the fifth instance of the same class in this programme — a
+    field that describes a run without saying what actually ran — and the cheapest defence is to assert
+    the field exists before any row is quoted from it.
+    """
+    import inspect
+
+    source = inspect.getsource(__import__("engine_extractive"))
+    assert source.count('"extract_coverage": os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", "")') == 2, (
+        "both the META record and the final report must carry the composer objective"
+    )

@@ -6,6 +6,36 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.2 — 2026-10-29
+
+A row now records the composer objective it ran under — the fifth instance of the same class, and again
+the round's own.
+
+### `extract_coverage` in the settings block, not only in the fingerprint
+
+The composer's objective went into `engine_extractive.py`'s **resume fingerprint** first, so a resumed
+run could not silently mix arms. That fixed the identity problem and left the *readability* one: a
+fingerprint is a hash, and `947d10ba…` does not tell a reader whether they are looking at the shipped
+order or the measured one. The rows produced by the 0.2060 → 0.2610 comparison could only be told apart
+by remembering which filename they were written to.
+
+Both records now carry `extract_coverage`, and the evidence protocol's configuration axis surfaces it
+alongside `second_stage_top_m`. A test asserts the field is written in **both** places — the META record
+and the final report — because either alone leaves a row unidentifiable.
+
+**Artefacts produced before this commit keep their old settings blocks**, and the protocol prints what is
+recorded rather than what is true: the `rank150` row still shows a stale `index_dir` and no
+`extract_coverage`. That is visible in the report (and in the fact that the directory it names does not
+exist), which is the behaviour the axis exists to have.
+
+### The class, counted
+
+Five instances in one programme: a cache keyed by a basename, a baseline read from the wrong column, a
+resume fingerprint missing the variable under test, a settings block naming a derived path, and now a
+settings block **omitting** the variable that the row's whole point depends on. The pattern is stable
+enough to state as a rule: **when a configuration variable changes what a number means, it has to appear
+in the artefact or the artefact is a filename.**
+
 ## 1.5.1 — 2026-10-29
 
 The composer's objective becomes a per-request choice on `POST /v1/extract`, not a service-wide setting.

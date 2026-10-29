@@ -296,7 +296,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if jobkit.META_KEY not in run:
         run.record(jobkit.META_KEY, {
-            "_settings": {**vars(args), "index_dir": str(index_dir), "index_identity": identity},
+            "_settings": {
+                **vars(args),
+                "index_dir": str(index_dir),
+                "index_identity": identity,
+                # The composer's objective is the variable this row's *point* depends on. It goes in
+                # the fingerprint (so a resume cannot mix arms) *and* here, because a fingerprint is a
+                # hash: a reader cannot tell from `947d10ba…` whether they are looking at the shipped
+                # order or the measured one. Fifth instance of this class in the programme.
+                "extract_coverage": os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", ""),
+            },
             "queries": queries,
         })
 
@@ -329,7 +338,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     mine_rows = [value for key, value in run.values().items() if key != jobkit.META_KEY]
     run.finish({
-        "_settings": {**vars(args), "index_dir": str(index_dir), "index_identity": identity},
+        "_settings": {
+            **vars(args),
+            "index_dir": str(index_dir),
+            "index_identity": identity,
+            "extract_coverage": os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", ""),
+        },
         "documents": len(raw),
         "queries": len(mine_rows),
         "seconds": round(seconds, 1),
