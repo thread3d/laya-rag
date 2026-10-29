@@ -19,7 +19,7 @@ import fnmatch
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 #: Ordered from least to most trusted; a query's minimum is compared by rank, not name.
 TIERS: tuple[str, ...] = ("quarantined", "untrusted", "trusted")

@@ -53,11 +53,40 @@ def test_a_report_is_refused_because_it_has_no_rankings(tmp_path: Path):
         raise AssertionError("a metrics report was accepted as a rankings sidecar")
 
 
+def _corpus_root(tmp_path: Path) -> Path:
+    """A two-query BEIR-shaped dataset, so `--check` needs nothing from `eval/`.
+
+    The check mode compares the shards against `qrels/test.tsv`, and it used to read the
+    repository's own corpus (`eval/beir/scifact`, gitignored) — so on a checkout that has not
+    downloaded SciFact the test failed on a missing directory rather than on the behaviour it
+    is about. `ensure_dataset` accepts any root that already holds `corpus.jsonl` and
+    `queries.jsonl`, so four small files make it hermetic.
+    """
+    root = tmp_path / "beir"
+    dataset = root / "scifact"
+    (dataset / "qrels").mkdir(parents=True)
+    (dataset / "corpus.jsonl").write_text(
+        json.dumps({"_id": "d1", "title": "", "text": "one"}) + "\n"
+        + json.dumps({"_id": "d2", "title": "", "text": "two"}) + "\n",
+        encoding="utf-8",
+    )
+    (dataset / "queries.jsonl").write_text(
+        json.dumps({"_id": "q1", "text": "first"}) + "\n"
+        + json.dumps({"_id": "q2", "text": "second"}) + "\n",
+        encoding="utf-8",
+    )
+    (dataset / "qrels" / "test.tsv").write_text(
+        "query-id\tcorpus-id\tscore\nq1\td1\t1\nq2\td2\t1\n", encoding="utf-8"
+    )
+    return root
+
+
 def test_check_mode_needs_no_output_and_reports_coverage(tmp_path: Path, capsys):
     """The mode to run before committing hours to a sharded sweep: it must not write anything."""
     a = _sidecar(tmp_path / "a.json", {"q1": ["d1"]})
     b = _sidecar(tmp_path / "b.json", {"q2": ["d2"]})
-    code = merge.main(["--dataset", "scifact", "--parts", str(a), str(b), "--check"])
+    code = merge.main(["--dataset", "scifact", "--parts", str(a), str(b), "--check",
+                       "--data-root", str(_corpus_root(tmp_path))])
     out = capsys.readouterr().out
     assert "covers" in out and "qrels queries" in out
     assert not list(tmp_path.glob("*.json.md"))

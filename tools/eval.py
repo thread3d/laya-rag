@@ -458,7 +458,7 @@ def render(payload: dict[str, Any]) -> str:
         "",
         evalkit.markdown_table(summary["relevance"]["sweep"]),
         "",
-        f"### Answerability threshold sweep (query level, short-circuited = 0.0)",
+        "### Answerability threshold sweep (query level, short-circuited = 0.0)",
         "",
         evalkit.markdown_table(summary["answerability"]["sweep_all_queries"]),
         "",

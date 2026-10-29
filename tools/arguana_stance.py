@@ -210,8 +210,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.merge:
         try:
-            merged = jobkit.merge_shards(args.out, args.merge, fingerprint=fingerprint,
-                                         build=_build_report)
+            jobkit.merge_shards(args.out, args.merge, fingerprint=fingerprint,
+                                build=_build_report)
         except (RuntimeError, jobkit.FingerprintMismatch) as exc:
             print(f"merge failed: {exc}", file=sys.stderr)
             return 2

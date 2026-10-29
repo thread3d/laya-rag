@@ -30,11 +30,15 @@ _DTYPES = {
 
 
 def convert(bin_path: Path, out_path: Path) -> dict[str, tuple[tuple[int, ...], str]]:
-    import torch
-    from safetensors.torch import save_file
-
+    # Refuse a file that is not an archive before importing torch. The import is what makes this
+    # function expensive (a multi-gigabyte wheel to fail fast on a two-byte file), and the check
+    # needs nothing but the standard library — which also means "this is not a .bin" is the one
+    # verdict the tool can give on an interpreter with no torch at all.
     if not zipfile.is_zipfile(bin_path):
         raise SystemExit(f"{bin_path}: not a ZIP archive — an older single-file pickle is unsupported")
+
+    import torch
+    from safetensors.torch import save_file
 
     with zipfile.ZipFile(bin_path) as archive:
         names = archive.namelist()

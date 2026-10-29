@@ -6,6 +6,162 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.2.2 — 2026-10-29
+
+Correctness and gate repair. No retrieval behaviour changes: every number in this repository stands.
+What changed is the machinery around them — a crash on the branch that reports good news, a checker
+that computed its arithmetic from the wrong directory, a tie-break that depended on the NumPy build,
+and the CI that would have caught all three.
+
+### The consistency gate crashed on the case where nothing is wrong
+
+`make consistency-check` computes the §1.2 deficit from `eval/beir/*.json`: for each BEIR member, the
+gap between this engine's best measured row and the best published model column, summed.
+
+```python
+total = sum(Decimal(str(-c["gap"])) for c in cells if c["gap"] < 0)
+macro = total / DENOMINATOR
+```
+
+A `sum()` over an **empty** sequence returns the *integer* `0`, so `macro` was a `float`, and
+`macro * Decimal("0.9")` raises `TypeError: unsupported operand type(s) for *: 'float' and
+'decimal.Decimal'`. The empty case is not an edge: it is the branch reached when **no member sits
+below its anchor** — the best outcome the document can report, and exactly what a run over a subset
+of well-measured cells produces. Four tests were red on it.
+
+Fixed with an explicit `Decimal(0)` start. The tests were red for the right reason and are now the
+regression test.
+
+### The deficit arithmetic was computed from a directory nobody asked about
+
+`check_channel_coverage(root)` read the §1.1 channel map from `root/eval/beir` and then called
+`module.deficit()` **with no argument**, which reads the repository's own `eval/beir`. So a checker
+handed a root carrying its own reports compared them against numbers from somewhere else — and on a
+checkout with no `eval/beir` at all the cell loop was empty, the check inspected nothing, and it
+passed. The tests that pinned it only passed because the author's tree had the gitignored reports.
+
+The directory is now threaded through, and the fixtures carry a numeric `nDCG@10` row rather than an
+empty retriever map, so §1.2 has a cell to check without reading anything the repository does not
+ship. A fixture that wants the deficit checked has to state the number, which is the property the
+test is about.
+
+### A tie is now settled by the index, not by the sort implementation
+
+`np.argpartition` selects the k largest — but *which* member of a block of equal scores it keeps is
+decided by introselect, and that differs between NumPy builds and between inputs that take a
+different pivot. This engine ties routinely: duplicate and near-duplicate documents, repeated
+boilerplate, and the deliberately uniform test corpora. So the candidate set was a function of the
+host rather than of the corpus, and — because the coverage and diversity passes reorder whatever
+they are handed — so was the answer.
+
+`index_store.top_k_indices` now returns one canonical ranking: partition once for the k-th largest
+score, keep everything strictly above it in index order, fill from the tie block in index order,
+then stable-sort by score. Same complexity, host-independent result, used by both the in-memory and
+the on-disk scan.
+
+One test was red on this and it is worth stating what that test found. `RERANK_MIN_DOCS=2` promises
+the first two kept passages come from distinct documents; the fixture built three files of identical
+text with 400-character chunks, so one file produced **43** chunks against a `retrieve_k` of 30, the
+pool held a single document, and there was nothing to spread across. The fixture now fits inside the
+pool and the contrast the test asserts is real (without the quota all four kept passages are the long
+file; with it, the head is the long file and a second document). The guarantee is **over the recall
+pool**, and the README says so now.
+
+### There is CI
+
+`.github/workflows/ci.yml` runs `make lint`, `make test`, `make claim-check` and
+`make consistency-check` on Python 3.10 and 3.12, plus an entry-point smoke (`import laya_rag`,
+`cli --help`, `doctor` expected to exit 3 with no checkpoint). It installs the package with
+`--no-deps` and states the runtime dependencies explicitly, because `pyproject.toml` declares `laya`
+— which drags in torch, ~800 MB this job never exercises, since the suite runs against `StubModel`
+and `model.py` imports `laya` lazily.
+
+It deliberately does **not** run the measurement harnesses, download the 2.3 GB of checkpoints, or
+call a generator; `make test-real`, `make eval` and `make bench` stay manual. Both documentation
+gates skip cleanly when their gitignored artefacts are absent, so on a fresh checkout they pass by
+having nothing to pin — they are in CI to keep the invocation working.
+
+The matrix stops at 3.12 because `numpy<2` publishes no cp313 wheel and the source build fails; that
+was measured, not assumed (a 3.13 venv cannot install the declared pin). Python 3.13 users are not
+newly broken by this — the package ran on it before and runs on it after — but CI cannot pin the
+declared version there.
+
+### The lint gate is real, and it found real defects
+
+`make lint` was `compileall` plus `node --check`. It now runs `ruff` with the **error class only**
+(`E9`, `F`): undefined names, unused imports and variables, shadowed redefinitions, broken f-strings.
+The house style is deliberately not linted — this tree is 32k lines of measurement tools and a full
+default rule set would report taste across all of it.
+
+100 findings; the defects worth naming:
+
+- `tools/frames_corpus.py` used `Mapping` in a signature without importing it (`F821`);
+- `tools/bench_lexical.py` shadowed the module-level `json` with a local import;
+- `tests/test_chunking.py` annotated with a `"Document"` that only resolved because a local import
+  happened to sit in the body (`F821`);
+- eleven variables were assigned and never used — among them a `Path(args.out)` binding left behind
+  by the fix that deliberately stopped anchoring documents to `--out`, and an `index_dir_for(args)`
+  binding that could disagree with the `LAYA_RAG_INDEX_DIR` the engine actually reads;
+- thirty-nine unused imports and seven f-strings without placeholders.
+
+One suppression, with its reason in the config: `tools/ann_bench.py` deletes its faiss indices at the
+end of each size iteration to keep peak RSS flat across a 10k → 1M sweep, and `F821` reads the next
+iteration's lambda captures as uses after that delete. The lambdas are evaluated eagerly, before the
+`del`; the alternative was holding five multi-gigabyte indices resident.
+
+### A dependency floor that the code actually needs
+
+`api.py` passes `exclude_content_types` to `GZipMiddleware` and imports
+`DEFAULT_EXCLUDED_CONTENT_TYPES`; both arrived in **Starlette 0.48**, while `fastapi>=0.110.0` alone
+resolves to 0.47 on an older index, where the service raises `TypeError: unexpected keyword argument
+'exclude_content_types'` **at construction**. Measured on 0.47.2 (104 tests red) and on 1.10.0 (all
+green). `starlette>=0.48` is now declared in `pyproject.toml`, `make setup` and CI.
+
+### Tests no longer depend on artefacts a fresh clone does not have
+
+Six tests read `eval/` reports that are gitignored, one needed `faiss`, one needed the `vendor/laya`
+submodule, and the docs-link checker failed on `SCORE-LIFT.md`'s link to `../best-in-the-world/` — the
+audit set in a sibling checkout. All now skip or fixture their way to hermetic:
+
+- the reversal-chart tests skip **on the missing file**, so they still assert when the data is there
+  and still fail on a missing key inside a present report;
+- `test_check_mode_needs_no_output_and_reports_coverage` builds a two-query BEIR-shaped dataset, so
+  `--check` needs nothing from `eval/`;
+- the ANN engine test skips on `faiss` (`pytest.importorskip`), matching the `[eval]` extra;
+- the `vendor/laya` docs test skips on the absent submodule;
+- the link checker now decides its exemption **per target** — "is this path inside `eval/` or the audit
+  tree?" — rather than from whether a directory exists. The old form was order-dependent: a test
+  elsewhere creates `eval/` for matplotlib's cache, and from then on every `eval/` link in the docs was
+  checked against a tree holding none of the reports.
+
+Two smaller corrections in the same family: `tools/engine_vs_harness.py` now validates the
+`--engine` report's recorded seed **before** reading the `--harness` report it defaults to (it used to
+report `FileNotFoundError` on an eval path instead of the argument error it was written to raise), and
+`tools/dotbin_to_safetensors.py` refuses a file that is not a ZIP archive before importing torch, so
+the cheapest verdict no longer needs a two-gigabyte wheel.
+
+### Verified
+
+- `make lint`: green (`ruff` error class, `compileall` over `src/ tests/ tools/`, `node --check`).
+- `make test` on this host: **1721 passed, 41 skipped, 5 deselected** — 14 failures before this pass,
+  none after. The suite collects **1766** tests (README's live count said 1764).
+- The same suite in a **torch-free venv installed as CI installs it** (`pip install -e . --no-deps`
+  plus the explicit runtime floors): **1685 passed, 57 skipped, 0 failed**.
+- `make claim-check` and `make consistency-check`: exit 0 (both skip with no `eval/` artefacts).
+- A real-weights smoke, unchanged from the 1.2.1 procedure: `doctor` loads the multilingual checkpoint
+  (embedding dim 768), 78 documents index to 345 chunks in 68 s, and `/v1/query` answers.
+
+### Still owed
+
+- The figures in this repository were produced under Laya **0.3.23** and remain compatibility-checked
+  only under 0.4.14; this pass changes no retrieval behaviour but is not a re-measurement either.
+- Starlette 1.x warns that `starlette.testclient` with `httpx` is deprecated in favour of `httpx2`.
+  The suite is green on 1.10.0 today; when that deprecation lands, the `dev` extra needs the new
+  client, and CI will be the thing that says so.
+- `RERANK_MIN_DOCS` still cannot spread a pool that holds fewer documents than the quota asks for;
+  that is now documented rather than fixed, because deepening the fusion limit to satisfy it is a
+  measured change and not a repair.
+
 ## 1.2.1 — 2026-10-24
 
 Dependency and prose only: no code in this repository changed. The vendored engine moved a minor series

@@ -28,7 +28,6 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
 
 from .config import (

@@ -13,7 +13,6 @@ the returned order is the retrieval order, and scores nDCG@10.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -219,7 +218,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     heavy_job_guard("engine_beir.py")
     shard_index, shard_count = jobkit.parse_shard(args.shard)
-    out = Path(args.out)
     index_path = resolve_index_dir(args)
     # NOT under `out`. `_doc_id` is sha256 of the document's full path, and the documents here are one
     # file per corpus document, so anchoring them to `--out` makes a chunk's identity depend on where the

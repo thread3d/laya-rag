@@ -262,3 +262,41 @@ def test_search_predicate_falls_back_to_the_exact_scan_with_ann():
     index.ann_nprobe = 1
     approx = index.search(query, k=2, allow=lambda path: path == "b.md")
     assert [hit.chunk.chunk_id for hit in approx] == [hit.chunk.chunk_id for hit in exact]
+
+
+# ── ties are settled by the corpus, not by the sort implementation ───────
+
+def test_identical_vectors_rank_by_insertion_order_not_by_the_sort():
+    """A block of equal scores must produce one canonical ranking, on any NumPy build.
+
+    `argpartition` picks an arbitrary subset of a tie block, so a corpus of identical documents
+    (repeated boilerplate, a duplicated file, the deliberately uniform test corpora) returned a
+    host-dependent candidate set: the same index answered differently on two machines, and the
+    coverage/diversity passes downstream then reordered whichever set they were handed. Chunk
+    ids are compared here rather than scores, because the ids are what the rest of the engine
+    and every report key on.
+    """
+    index = VectorIndex()
+    chunks = [make_chunk(f"c{i}", f"chunk {i}", path=f"/{i}.md", index=i) for i in range(40)]
+    vectors = np.tile(np.array([1.0, 0.0], dtype=np.float32), (40, 1))
+    index.add(chunks, vectors)
+
+    query = np.array([1.0, 0.0], dtype=np.float32)
+    first = [hit.chunk.chunk_id for hit in index.search(query, k=10)]
+    assert first == [f"c{i}" for i in range(10)]
+    # The same call twice is the same answer, and a narrower k is a prefix of a wider one.
+    assert first == [hit.chunk.chunk_id for hit in index.search(query, k=10)]
+    assert first[:4] == [hit.chunk.chunk_id for hit in index.search(query, k=4)]
+
+
+def test_the_tie_break_keeps_a_distinct_score_above_the_tie_block():
+    """Ties are broken by index; they must never displace a strictly better score."""
+    index = VectorIndex()
+    chunks = [make_chunk(f"c{i}", f"chunk {i}", path=f"/{i}.md", index=i) for i in range(6)]
+    vectors = np.array(
+        [[0.5, 0.5], [1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.2, 0.8]],
+        dtype=np.float32,
+    )
+    index.add(chunks, vectors)
+    hits = index.search(np.array([1.0, 0.0], dtype=np.float32), k=3)
+    assert [hit.chunk.chunk_id for hit in hits] == ["c1", "c2", "c3"]

@@ -21,7 +21,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TSV = ROOT / "eval" / "frames" / "test.tsv"

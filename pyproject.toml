@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "laya-rag"
-version = "1.2.1"
+version = "1.2.2"
 description = "Retrieval-augmented generation engine powered by the Laya decision engine, with an HTTP API and a web interface"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,8 +12,18 @@ license = { text = "Apache-2.0" }
 dependencies = [
     "laya>=0.3.23",
     "snowballstemmer>=2.2",
+    # `numpy<2` is not this package's own constraint: it is what the pinned torch 2.2.2
+    # (`make setup`) requires, and this repository's venv pins that. The engine code runs
+    # under numpy 2 as well — the full offline suite passes on 2.4 — but installing the
+    # package alone must not pull a numpy that the Laya checkpoint path cannot load.
     "numpy<2",
+    # The API serves `GZipMiddleware(..., exclude_content_types=...)` and imports
+    # `DEFAULT_EXCLUDED_CONTENT_TYPES`; both arrived in Starlette 0.48, while
+    # `fastapi>=0.110` alone resolves to Starlette 0.47 on an older index and the service
+    # then fails at construction with `TypeError: unexpected keyword argument`. The floor
+    # is stated here rather than left to the resolver, which cannot see the code.
     "fastapi>=0.110.0",
+    "starlette>=0.48",
     "uvicorn>=0.27.0",
     "pydantic>=2.0",
 ]
@@ -22,6 +32,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "httpx>=0.27",
+    "ruff>=0.6",
 ]
 # The MCP server is a separate process and an optional surface, so the SDK is an extra
 # rather than a core dependency: `pip install -e '.[mcp]'` adds `laya-rag-mcp`, while the
@@ -64,3 +75,29 @@ testpaths = ["tests"]
 markers = [
     "real_weights: requires downloaded Laya checkpoints and a working torch install",
 ]
+
+# ── static analysis ──────────────────────────────────────────────────────────
+# The rule set is deliberately the *error* class only (pyflakes + syntax), not a style
+# opinion: this tree is 32k lines of measurement tools written in a compact house style
+# (`import evalkit, jobkit` on one line, for instance), and a full default rule set would
+# report style across all of it while saying nothing new. What is selected here finds
+# undefined names, unused imports and variables, shadowed redefinitions and broken
+# f-strings — the defects that are bugs rather than taste. `make lint` runs this.
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["vendor", "eval", "indexes", "models"]
+
+[tool.ruff.lint]
+select = ["E9", "F"]
+# E501 is a line-length preference; the docs and the tables are full of long lines by design.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# `ann_bench.main` drops its faiss indices at the end of every size iteration so peak RSS
+# stays flat across a 10k → 1M sweep (`del vectors, flat, ivf, hnsw, ivfpq`). F821 reads the
+# next iteration's lambda captures as uses after that delete; the lambdas are evaluated
+# eagerly by `time_queries` before the `del` runs, so there is no use-after-delete. Verified
+# by reading, not by suppression: the alternative was renaming the delete away and holding
+# five multi-gigabyte indices resident across the sweep.
+"tools/ann_bench.py" = ["F821"]

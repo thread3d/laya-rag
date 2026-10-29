@@ -24,7 +24,6 @@ Scores, all of them the engine's:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -34,7 +33,7 @@ from typing import Any, Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
-import evalkit, jobkit  # noqa: E402
+import jobkit  # noqa: E402
 from engine_beir import write_corpus  # noqa: E402
 from frames_eval import load_corpus, load_questions, load_title_map, score_ranking  # noqa: E402
 from nugget_recall import Evidence, nuggets  # noqa: E402
@@ -229,7 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit(f"no corpus at {args.corpus}")
     print(f"{len(questions)} questions, {len(corpus)} articles", flush=True)
 
-    from engine_multihop import configure_engine, index_dir_for
+    from engine_multihop import configure_engine
 
     configure_engine(args)
     if args.index_dir:
@@ -245,7 +244,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     from laya_rag.config import EngineConfig
     from laya_rag.engine import RagEngine
 
-    index_dir = index_dir_for(args)
+    # The index directory is resolved by `configure_engine` above and published through
+    # `LAYA_RAG_INDEX_DIR`, which is what both the engine and the progress line read; a local
+    # `index_dir_for(args)` binding here was never used and could disagree with it.
     docs_dir = Path(str(args.out)).parent / "frames-engine-corpus"
     titles_by_position = list(corpus)
     write_corpus({str(i): corpus[title] for i, title in enumerate(titles_by_position)}, docs_dir)

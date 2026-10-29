@@ -192,6 +192,8 @@ def test_there_are_hard_negatives_so_the_answerability_gate_is_actually_exercise
 
 def test_docs_queries_label_files_in_the_vendored_checkout():
     docs = REPO_ROOT / "vendor" / "laya" / "docs"
+    if not docs.is_dir():
+        pytest.skip("vendor/laya is not checked out (`git submodule update --init --recursive`)")
     for query in evalkit.docs_queries():
         if not query.answerable:
             continue

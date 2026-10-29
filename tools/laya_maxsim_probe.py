@@ -39,7 +39,6 @@ from multihop_official import chunk_text  # noqa: E402
 from multihop_rerank_experiment import (  # noqa: E402
     gold_matches_for_pool,
     metrics_from_matches,
-    pit_order,
 )
 
 from laya_rag.config import EngineConfig  # noqa: E402

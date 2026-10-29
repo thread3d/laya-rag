@@ -14,6 +14,7 @@ import pytest
 
 from laya_rag.chunking import (
     SKIP_DIRS,
+    Document,
     chunk_documents,
     chunk_text,
     load_documents,
@@ -265,9 +266,7 @@ def test_chunk_documents_reports_progress_per_document(tmp_path):
 
 # -- structural context prefix ----------------------------------------------
 
-def _document(text: str, path: str = "/corpus/refunds.md") -> "Document":
-    from laya_rag.chunking import Document
-
+def _document(text: str, path: str = "/corpus/refunds.md") -> Document:
     return Document(doc_id="d", path=path, text=text)
 
 

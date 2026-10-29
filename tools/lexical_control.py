@@ -10,7 +10,6 @@ outliers, and `claim_check` pins the prose to those numbers instead of to my ari
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any, Sequence

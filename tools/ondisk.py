@@ -242,7 +242,6 @@ class OnDiskBM25:
         return max(math.log(1.0 + (self.n_docs - df + 0.5) / (df + 0.5)), 0.0)
 
     def search(self, query: str, k: int = 20) -> list[tuple[str, float]]:
-        ids = self._ids
         terms = tokenize(query, stem=self.stem)
         if self.drop_stopwords:
             terms = [t for t in terms if t not in STOPWORDS]

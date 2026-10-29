@@ -49,6 +49,37 @@ def _normalise(matrix: np.ndarray) -> np.ndarray:
     return matrix / norms
 
 
+def top_k_indices(scores: np.ndarray, take: int) -> np.ndarray:
+    """The ``take`` best indices by descending score, with ties broken by index.
+
+    ``np.argpartition`` is a selection, not a ranking: it returns *a* set of the k largest, and
+    which member of a block of equal scores it keeps is decided by introselect — behaviour that
+    differs between NumPy builds and, within a build, between inputs it takes a different pivot
+    on. This engine ties routinely: duplicate and near-duplicate documents, repeated boilerplate,
+    and the deliberately identical documents the chunking tests use. A tie decided by the sort
+    implementation makes the candidate set a function of the host rather than of the corpus, so
+    two machines can disagree about which documents reach the second stage — and, because the
+    coverage and diversity passes downstream reorder *whatever they are given*, about the answer.
+
+    The repair is exact and no more expensive: partition once to learn the k-th largest score,
+    keep everything strictly above it (at most ``take − 1`` elements, in index order), fill the
+    remainder from the tie block in index order, then stable-sort by score. The result is one
+    canonical ranking — descending score, then lowest index — that any host reproduces.
+    """
+    count = scores.shape[0]
+    if take <= 0:
+        return np.empty(0, dtype=np.intp)
+    if take >= count:
+        chosen = np.arange(count)
+    else:
+        seed = np.argpartition(-scores, take - 1)[:take]
+        threshold = scores[seed].min()
+        above = np.flatnonzero(scores > threshold)
+        ties = np.flatnonzero(scores == threshold)
+        chosen = np.concatenate((above, ties[: take - above.shape[0]]))
+    return chosen[np.argsort(-scores[chosen], kind="stable")]
+
+
 class VectorIndex:
     """An append-capable, normalised dense index over :class:`Chunk` records."""
 
@@ -251,9 +282,9 @@ class VectorIndex:
                 return []
             scores = np.where(mask, scores, -np.inf)
         take = min(k, scores.shape[0])
-        # argpartition selects the top-k unordered; sort those k for a stable ranking.
-        top = np.argpartition(-scores, take - 1)[:take]
-        ordered = top[np.argsort(-scores[top], kind="stable")]
+        # A canonical ranking, not merely the right set: equal scores are settled by index, so a
+        # corpus full of identical vectors returns the same candidates on every host.
+        ordered = top_k_indices(scores, take)
         return [
             Hit(chunk=self._chunks[int(i)], score=float(scores[int(i)]))
             for i in ordered

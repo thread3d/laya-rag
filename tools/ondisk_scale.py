@@ -156,7 +156,6 @@ def render_markdown(rows: Sequence[dict], tokens: int) -> str:
         "| axis | docs | vocab | terms | build s | index MB | peak RSS MB |",
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
-    base_docs = rows[0]["docs"] if rows else 0
     for row in rows:
         axis = "documents" if row["vocab"] == rows[0]["vocab"] else "vocabulary"
         lines.append(f"| {axis} | {row['docs']} | {row['vocab']} | {row['terms']} | "

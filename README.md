@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.2.1** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.2.2** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -467,7 +467,7 @@ without editing code. Prefix: `LAYA_RAG_`.
 | `LEXICAL_BACKEND` | `bm25` | `bm25` or `eager`; `eager` precomputes posting weights and scores with NumPy, with byte-identical rankings — measured 11–13× faster queries and ~5× smaller index at 20k docs |
 | `BM25_K1` / `BM25_B` | `1.2` / `0.75` | BM25 saturation and length normalisation (Lucene's defaults). The published BEIR/Anserini baseline is `0.9` / `0.4`; at the engine level the two are indistinguishable on SciFact (p=0.45), so the default stands and these exist to reproduce a baseline exactly or tune per corpus |
 | `RETRIEVE_K` / `RERANK_K` | `20` / `5` | candidates considered / passages kept |
-| `RERANK_MIN_DOCS` | `0` | guarantee that the first N kept passages are N distinct documents (prefix diversity for an evidence bundle). It left document-level nDCG exactly unchanged on 300 SciFact queries and can add documents a shorter `top_k` would cut; `0` keeps the pure passage order |
+| `RERANK_MIN_DOCS` | `0` | guarantee that the first N kept passages are N distinct documents (prefix diversity for an evidence bundle). It left document-level nDCG exactly unchanged on 300 SciFact queries and can add documents a shorter `top_k` would cut; `0` keeps the pure passage order. The guarantee is **over the recall pool**: the pass promotes the best passage of each distinct document the pool actually contains, so a pool holding fewer than N documents cannot satisfy it and is spread as far as it allows — raise `RETRIEVE_K` when that happens |
 | `QUERY_CACHE_SIZE` | `128` | recent query embeddings cached in memory, so a repeated question skips its one dense cost; `0` disables it (vectors only, never results) |
 | `EMBED_MODEL` | auto-detected at `models/laya-retrieval` | dense-channel embedder. Auto-adopted when a retrieval adaptation of Laya's own encoder is on disk (built by `make laya-finetune` + `tools/package_model.py`); `models/` is gitignored, so a fresh clone falls back to Laya's own encoder and the channel stays off. An explicit value always wins |
 | `EMBED_POOLING` | `auto` | `cls` for BGE-family models, `mean` otherwise — BGE is trained with `[CLS]` |
@@ -558,7 +558,7 @@ fails loudly on the first composed request rather than being silently substitute
 ## Testing
 
 ```sh
-make test          # Python suite, offline, deterministic (1764 tests)
+make test          # Python suite, offline, deterministic (1766 collected, 5 of them real-weights)
 make test-gui      # drive the GUI in headless Chrome (needs the service)
 make test-real     # the same path against real Laya weights (4 tests, ~40 s)
 make test-mcp      # the MCP server suite (skips without the [mcp] extra)

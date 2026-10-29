@@ -513,8 +513,8 @@ def chart_beir_macro(outdir: Path, plt: Any) -> bool:
                                                   cmp.BEST_PER_DATASET[d][1])))
                      for d in cmp.FOUR]
         four_ens = [float(np.mean(cmp.per_query_ensemble(d))) for d in cmp.FOUR]
-        ours4 = [(f"this engine — best per dataset", macro(four_best)["mean"]),
-                 (f"this engine — ensemble + BM25", macro(four_ens)["mean"])]
+        ours4 = [("this engine — best per dataset", macro(four_best)["mean"]),
+                 ("this engine — ensemble + BM25", macro(four_ens)["mean"])]
     except Exception:                                     # reports absent: leave the panel empty
         ours4 = []
     published4 = [(f"{name} ({params})", value) for name, params, value in cmp.PUBLISHED_4]
@@ -650,7 +650,6 @@ def chart_lexical_gap(outdir: Path, plt: Any) -> bool:
 
 def chart_parameters(outdir: Path, plt: Any) -> bool:
     """Quality against encoder size: the published 18-set systems, and where this engine sits."""
-    import numpy as np
 
     rows = our_rows()
     ours = our_macro(rows)
@@ -777,7 +776,6 @@ def chart_oss_landscape(outdir: Path, plt: Any) -> bool:
     the axis until every live project sat on one line. Clipped points are drawn as triangles and
     the threshold is stated on the axis, so nothing is hidden — only bounded.
     """
-    import numpy as np
 
     stale_days = 540
     rows = [row for row in oss_rows() if row["days_since_push"] is not None]

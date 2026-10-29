@@ -328,7 +328,12 @@ def check_channel_coverage(root: Path) -> list[str]:
                 f"SCORE-LIFT.md §1.1 does not carry the generated line {line!r} "
                 f"(run `make channel-coverage`, then paste the table)"
             )
-    for cell in module.deficit().get("cells", []):
+    # The deficit is computed from the *same* reports the coverage map above was read from. Calling
+    # `deficit()` with no argument reads the repository's own `eval/beir` instead, so a root that
+    # carries its own reports (a test tree, or a run in progress) was checked against numbers from
+    # somewhere else — and with no `eval/beir` in the repository at all, the cell loop was empty and
+    # the check passed by inspecting nothing.
+    for cell in module.deficit(root / "eval" / "beir").get("cells", []):
         candidates = [line for line in lines if line.startswith(f"| {cell['display']} |")]
         wanted = (
             (f"{cell['ours']:.4f}", "ours"),

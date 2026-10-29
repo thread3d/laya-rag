@@ -483,7 +483,6 @@ def second_stage_panels(
         rows.append((name, mean, mean - low, high - mean))
     rows.sort(key=lambda row: row[1])
     order = [row[0] for row in rows]
-    position = {name: index for index, name in enumerate(order)}
 
     fig, (left, right) = plt.subplots(
         1, 2, figsize=(12.4, 0.4 * len(rows) + 2.0), gridspec_kw={"width_ratios": [1, 1]}
@@ -651,7 +650,7 @@ def main(argv=None) -> int:
     print(f"  this system — best per dataset   {best[0]:.3f}  [{best_lo:.3f},{best_hi:.3f}]")
     print(f"  this system — one deployable cfg {deploy[0]:.3f}")
     print(f"  this system — bge-small cfg      {deploy_bge[0]:.3f}")
-    print(f"  BGE-large-v1.5 (published)       0.491")
+    print("  BGE-large-v1.5 (published)       0.491")
 
     rows = [("this system — 3-model ensemble", "478M", ens_mean),
             ("this system — best per dataset", "mixed", best[0]),

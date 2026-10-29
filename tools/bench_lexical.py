@@ -16,10 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import statistics
 import sys
 import time
-from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -107,8 +105,6 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def multihop_corpus(limit_queries: int) -> tuple[list[SimpleNamespace], list[str]]:
     """The real MultiHop-RAG chunks and queries, for a parity check on real text."""
-    import json
-
     sys.path.insert(0, str(ROOT / "tools"))
     from multihop_official import chunk_text
 

@@ -6,6 +6,8 @@
 PYTHON ?= python3
 VENV := .venv
 PY := $(VENV)/bin/python
+RUFF := $(VENV)/bin/ruff
+NODE ?= node
 PIP_CACHE := $(CURDIR)/vendor/laya/.pip-cache
 CORPUS ?= vendor/laya/docs
 PORT ?= 8077
@@ -173,8 +175,8 @@ setup:
 		"safetensors>=0.4.0" "huggingface_hub>=0.34.0,<1.0"
 	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet -e vendor/laya --no-deps
 	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet \
-		"fastapi>=0.110.0" "uvicorn>=0.27.0" "pydantic>=2.0" \
-		"pytest>=8.0" "httpx>=0.27"
+		"fastapi>=0.110.0" "starlette>=0.48" "uvicorn>=0.27.0" "pydantic>=2.0" \
+		"pytest>=8.0" "httpx>=0.27" "ruff>=0.6"
 	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet -e . --no-deps
 	@echo "ready: $(PY)"
 
@@ -618,9 +620,23 @@ quantization-probe:
 job-status:
 	$(PY) tools/job_status.py $(JOB_STATUS_ARGS)
 
+# Static analysis, then byte-compilation, then the JavaScript. `ruff` carries the rule set in
+# `pyproject.toml` ([tool.ruff]), which is the error class only — undefined names, unused
+# imports and variables, shadowed redefinitions, broken f-strings — not a style opinion.
+# It is installed by `make setup` and by CI; when it is absent (a minimal environment that
+# only wants the suite) the target says so and keeps going rather than failing on a tool
+# that is not required to run the engine.
 lint:
-	$(PY) -m compileall -q src/ tests/
-	node --check src/laya_rag/web/app.js
+	@if [ -x "$(RUFF)" ]; then \
+		"$(RUFF)" check .; \
+	elif command -v ruff >/dev/null 2>&1; then \
+		ruff check .; \
+	else \
+		echo "lint: ruff not installed (pip install ruff) — skipped static analysis" >&2; \
+	fi
+	$(PY) -m compileall -q src/ tests/ tools/
+	@if command -v $(NODE) >/dev/null 2>&1; then $(NODE) --check src/laya_rag/web/app.js; \
+	else echo "lint: node not installed — skipped the JavaScript syntax check" >&2; fi
 	@echo "ok"
 
 clean:

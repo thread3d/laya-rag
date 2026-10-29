@@ -15,7 +15,7 @@ from __future__ import annotations
 import base64
 import bisect
 import json
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Sequence
 
 from .problems import APIProblem
 

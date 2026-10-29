@@ -31,7 +31,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import numpy as np
 
 from .chunking import Chunk
-from .index_store import Hit, _normalise
+from .index_store import Hit, _normalise, top_k_indices
 from .lexical import K1, B, STOPWORDS, LexicalHit, bm25f_term_score, tokenize
 
 #: File names for the dense half, kept beside the in-memory format's files under the same
@@ -943,7 +943,9 @@ class OnDiskVectorIndex:
             take = min(count, len(scores))
             if take <= 0:
                 continue
-            local = np.argpartition(-scores, take - 1)[:take]
+            # Deterministic within the block (ties by position), so the union below — which is
+            # sorted stably by score — is one canonical ranking rather than a host-dependent one.
+            local = top_k_indices(scores, take)
             best.extend(
                 (float(scores[int(i)]), start + int(i))
                 for i in local

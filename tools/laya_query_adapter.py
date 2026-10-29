@@ -105,7 +105,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"{args.dataset}: {len(corpus)} docs, {len(train_queries)} train / "
           f"{len(test_queries)} test queries", flush=True)
 
-    from laya_rag.model import LayaModel
 
     laya = beir.LayaEmbedder(EngineConfig())
     teacher = beir.BiEncoder(args.teacher)

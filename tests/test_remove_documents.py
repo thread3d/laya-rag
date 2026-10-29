@@ -7,7 +7,6 @@ survivors, otherwise a deleted document keeps surfacing through BM25.
 """
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 
 from laya_rag import api

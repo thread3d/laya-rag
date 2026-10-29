@@ -322,10 +322,27 @@ def test_the_committed_documents_agree():
 
 # ── SCORE-LIFT.md §1 is pinned to the reports it is derived from ─────────
 
-def _beir_report(directory: Path, stem: str, dataset: str, retrievers, documents: int) -> None:
+def _beir_report(
+    directory: Path,
+    stem: str,
+    dataset: str,
+    retrievers,
+    documents: int,
+    ndcg: float | None = None,
+) -> None:
+    """A minimal BEIR report for a test root.
+
+    ``ndcg`` is optional because the two halves of the §1 gate read different things: §1.1
+    (channel coverage) reads only the retriever *names*, while §1.2 (the deficit arithmetic) reads
+    each row's ``nDCG@10``. These tests used to leave the rows empty and let §1.2 fall back to the
+    repository's own ``eval/beir`` — which is gitignored, so on a clean checkout the cell loop was
+    empty and the assertion below could not be reached. A fixture that wants §1.2 to have a cell
+    has to carry the number as well as the name.
+    """
     directory.mkdir(parents=True, exist_ok=True)
+    rows = {r: ({} if ndcg is None else {"nDCG@10": ndcg}) for r in retrievers}
     (directory / f"{stem}.json").write_text(json.dumps({
-        "datasets": {dataset: {"documents": documents, "retrievers": {r: {} for r in retrievers}}},
+        "datasets": {dataset: {"documents": documents, "retrievers": rows}},
     }))
 
 
@@ -342,10 +359,10 @@ def test_channel_coverage_pins_the_section_one_table(tmp_path):
 
 def test_channel_coverage_passes_a_fully_generated_section(tmp_path):
     beir = tmp_path / "eval" / "beir"
-    _beir_report(beir, "scifact", "scifact", ["bm25-engine"], 5_183)
+    _beir_report(beir, "scifact", "scifact", ["bm25-engine"], 5_183, ndcg=0.7670)
     module = cc.channel_coverage_module()
     coverage = module.channel_map(beir)
-    lines = module.coverage_table(coverage) + module.deficit_table(module.deficit())
+    lines = module.coverage_table(coverage) + module.deficit_table(module.deficit(beir))
     (tmp_path / "SCORE-LIFT.md").write_text("\n".join(lines) + "\n")
     assert cc.check_channel_coverage(tmp_path) == []
 
@@ -353,11 +370,13 @@ def test_channel_coverage_passes_a_fully_generated_section(tmp_path):
 def test_channel_coverage_pins_a_deficit_cell(tmp_path):
     """The §1.2 arithmetic is a computed quantity: a moved gap on any row fails."""
     beir = tmp_path / "eval" / "beir"
-    _beir_report(beir, "scifact", "scifact", ["bm25-engine"], 5_183)
+    _beir_report(beir, "scifact", "scifact", ["bm25-engine"], 5_183, ndcg=0.7670)
     module = cc.channel_coverage_module()
     lines = module.coverage_table(module.channel_map(beir))
-    # Every §1.2 row except SciFact's, which is replaced by one with a moved gap.
-    lines += [ln for ln in module.deficit_table(module.deficit()) if "| SciFact |" not in ln]
+    # Every §1.2 row except SciFact's, which is replaced by one with a moved gap: the "ours" and
+    # published columns are the computed ones (0.7670 against SPLADE's 0.699), so the gap is the
+    # only thing wrong — 0.7670 − 0.699 is +0.068, and the row claims +0.169.
+    lines += [ln for ln in module.deficit_table(module.deficit(beir)) if "| SciFact |" not in ln]
     lines.append("| SciFact | 0.7670 | 0.699 | **+0.169** | full |")
     (tmp_path / "SCORE-LIFT.md").write_text("\n".join(lines) + "\n")
     failures = cc.check_channel_coverage(tmp_path)

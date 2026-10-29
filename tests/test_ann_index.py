@@ -92,6 +92,10 @@ def test_an_ann_over_an_empty_index_is_a_no_op():
 
 
 def test_engine_builds_an_ann_only_when_configured(tmp_path):
+    # `faiss` is an extra (`pip install -e '.[eval]'`), and the engine degrades to the exact
+    # scan when it is absent — which the assertions below would misread as "the flag was
+    # ignored". Skip on the missing dependency rather than on the platform.
+    pytest.importorskip("faiss", reason="the ANN index is the [eval] extra, not a core dependency")
     from .support import StubModel, make_config, write_corpus
     from laya_rag.engine import RagEngine
 

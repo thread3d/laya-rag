@@ -23,7 +23,6 @@ Writes ``eval/bench.json`` and ``eval/bench.md``.
 from __future__ import annotations
 
 import argparse
-import json
 import platform
 import random
 import resource

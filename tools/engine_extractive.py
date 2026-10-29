@@ -40,7 +40,7 @@ from typing import Any, Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
-import evalkit, jobkit  # noqa: E402
+import jobkit  # noqa: E402
 from engine_beir import write_corpus  # noqa: E402
 from engine_multihop import (  # noqa: E402  (the retrieval row's own helpers, so the two agree)
     _ingest_settings,
@@ -269,7 +269,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from laya_rag.engine import RagEngine
 
     docs_dir = ROOT_BENCH / "engine-corpus"
-    doc_ids = write_corpus({a["url"]: a["title"] + " " + a["body"] for a in raw}, docs_dir)
+    write_corpus({a["url"]: a["title"] + " " + a["body"] for a in raw}, docs_dir)
     item_by_index = {i: x for i, x in items}
     queries = {str(i): x["query"] for i, x in items}
 

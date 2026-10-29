@@ -19,7 +19,6 @@ wired into `_mean_ci`, whose own default matches the flag's so nothing changes u
 from __future__ import annotations
 
 import ast
-import pathlib
 import sys
 from pathlib import Path
 

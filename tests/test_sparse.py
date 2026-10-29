@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 
-import numpy as np
 import pytest
 
 from laya_rag.sparse import SPARSE_FILE, SparseEncoder, SparseIndex

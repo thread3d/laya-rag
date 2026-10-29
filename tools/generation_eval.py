@@ -265,7 +265,7 @@ def _format_table(targets: Sequence[BenchmarkTarget]) -> str:
     for target in targets:
         lines.append(f"{target.name}")
         lines.append(f"  scores      : {target.scores}")
-        lines.append(f"  requires    :")
+        lines.append("  requires    :")
         for item in target.requires:
             lines.append(f"    - {item}")
         lines.append(f"  adapter     : {target.adapter or '(none in repo)'}")

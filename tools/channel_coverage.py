@@ -246,8 +246,11 @@ def deficit(directory: Path | None = None) -> dict[str, Any]:
         )
     cells.sort(key=lambda c: -c["ours"])
     # Summed in decimal from the stated per-cell gaps, so the printed total is the arithmetic the
-    # document shows rather than a float accumulation of it.
-    total = sum(Decimal(str(-c["gap"])) for c in cells if c["gap"] < 0)
+    # document shows rather than a float accumulation of it. The explicit `Decimal(0)` start
+    # matters: a plain `sum()` over an empty sequence returns the *int* 0, which makes `macro` a
+    # float, and `float * Decimal` raises. That is the state a run reaches when no member sits
+    # below its anchor — the best case, and the one this arithmetic exists to report.
+    total = sum((Decimal(str(-c["gap"])) for c in cells if c["gap"] < 0), Decimal(0))
     macro = total / DENOMINATOR
     return {
         "cells": cells,

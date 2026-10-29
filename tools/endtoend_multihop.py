@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import string
 import sys
 import time
@@ -38,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 os.environ.setdefault("HF_HOME", str(ROOT / "eval" / "beir" / "hf-cache"))
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
-import evalkit, jobkit  # noqa: E402
+import jobkit  # noqa: E402
 
 ROOT_BENCH = ROOT / "eval" / "benchmarks" / "multihop-rag"
 DEFAULT_INDEX = ROOT_BENCH / "index" / "engine-hybrid-400"
@@ -153,8 +152,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     fingerprint = _fingerprint(args)
     if args.merge:
         try:
-            merged = jobkit.merge_shards(args.out, args.merge, fingerprint=fingerprint,
-                                         build=_build_report)
+            jobkit.merge_shards(args.out, args.merge, fingerprint=fingerprint,
+                                build=_build_report)
         except (RuntimeError, jobkit.FingerprintMismatch) as exc:
             print(f"merge failed: {exc}", file=sys.stderr)
             return 2

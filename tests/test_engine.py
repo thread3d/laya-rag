@@ -473,14 +473,23 @@ def test_sparse_model_is_rejected_with_the_ondisk_backend(tmp_path):
 
 
 def _long_document_corpus(tmp_path):
+    """One long document whose overlapping chunks fill the head, two short ones beside it.
+
+    The sizes matter to what the quota can do: with the default 400-character chunks this used
+    to produce **43** chunks from `one.md` alone against a `retrieve_k` of 30, so the entire
+    candidate pool was one document and `RERANK_MIN_DOCS=2` had nothing to spread across — the
+    pass promotes the best passage of each *distinct document in the pool*, and there was one.
+    The corpus still holds a long document (~6 KB against ~1 KB) so that its chunks dominate the
+    head without the quota, but the whole corpus now fits inside the pool.
+    """
     corpus = tmp_path / "long"
     corpus.mkdir()
     (corpus / "one.md").write_text(
-        "# One\n\n" + ("refund policy details and processing times. " * 300), encoding="utf-8"
+        "# One\n\n" + ("refund policy details and processing times. " * 120), encoding="utf-8"
     )
     for name in ("two", "three"):
         (corpus / f"{name}.md").write_text(
-            f"# {name}\n\n" + ("refund policy details and processing times. " * 60),
+            f"# {name}\n\n" + ("refund policy details and processing times. " * 20),
             encoding="utf-8",
         )
     return corpus

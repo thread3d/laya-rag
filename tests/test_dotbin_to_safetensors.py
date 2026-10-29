@@ -26,6 +26,10 @@ def test_the_storage_dtypes_cover_what_the_archives_use():
 
 def test_a_forbidden_global_is_refused_rather_than_executed(tmp_path: Path):
     """A pickle naming `os.system` must raise at unpickle time, not run."""
+    # The allowlist this pins is built from torch's own rebuild helpers, so the conversion path
+    # needs torch. `make test` runs without it (that is what makes the suite fast and offline);
+    # the non-zip test below is the one conversion check that does not, and it stays runnable.
+    pytest.importorskip("torch", reason="the unpickler allowlist is built from torch._utils")
     payload = pickle.dumps({"x": __import__("os").system})
     archive = tmp_path / "evil.bin"
     with zipfile.ZipFile(archive, "w") as z:

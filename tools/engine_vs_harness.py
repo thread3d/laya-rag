@@ -117,17 +117,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     engine = json.loads(Path(args.engine).read_text(encoding="utf-8"))
-    harness = json.loads(Path(args.harness).read_text(encoding="utf-8"))
-    if args.arm not in harness:
-        raise SystemExit(f"{args.harness} has no arm {args.arm!r}; "
-                         f"available: {', '.join(k for k in harness if k != '_settings')}")
 
+    # Validate the report this run was *given* before reading the one it defaults to. The seed
+    # check is a statement about `--engine`; the default `--harness` points at a gitignored
+    # report that a fresh checkout does not have, and loading that first turned "your report
+    # cannot be paired" into `FileNotFoundError` on an unrelated path — the wrong error, in the
+    # wrong place, from a check that never ran.
     settings = engine.get("_settings", {})
     limit = settings.get("limit")
     sample_seed = settings.get("sample_seed")
     if limit and sample_seed is None:
         raise SystemExit("a --limit engine run must record its --sample-seed so the same queries "
                          f"can be reconstructed; got limit={limit!r}, sample_seed={sample_seed!r}")
+
+    harness = json.loads(Path(args.harness).read_text(encoding="utf-8"))
+    if args.arm not in harness:
+        raise SystemExit(f"{args.harness} has no arm {args.arm!r}; "
+                         f"available: {', '.join(k for k in harness if k != '_settings')}")
+
     items = json.loads(Path(args.items).read_text(encoding="utf-8"))
     keys = subset_keys(items, limit, sample_seed)
 

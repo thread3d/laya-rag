@@ -520,7 +520,6 @@ def coverage_query_rankings(
 
     atoms_by_doc = {doc_id: split_atoms(text) for doc_id, text in corpus.items()}
     atom_ids_of, atom_weight, atom_texts = atom_index(list(atoms_by_doc.values()))
-    atom_ids_by_doc = dict(zip(atoms_by_doc, atom_ids_of))
     atom_tokens = [set(text.split()) for text in atom_texts]
 
     names = [f"coverage-q-{boost}" for boost in qboosts]

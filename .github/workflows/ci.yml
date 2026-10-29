@@ -1,0 +1,102 @@
+name: ci
+
+# The offline suite, the lint gate and the two documentation gates, on every push.
+#
+# Why this file did not exist: everything here was already runnable — 1,764 tests, a claim ledger
+# that resolves prose numbers against the reports that produced them, a cross-document
+# consistency gate, a link checker, a Makefile-target checker — and all of it depended on the
+# author remembering to run it. Two defects that shipped in the meantime would have been caught
+# by it: `tools/channel_coverage.py` crashed on the branch where no BEIR cell sits below its
+# anchor (four tests red), and `tools/consistency_check.py` computed its deficit arithmetic from
+# the repository's own `eval/` while checking a root that carried different reports.
+#
+# What it deliberately does **not** do: download the Laya checkpoints, run the measurement
+# harnesses, or call a generator. Those need ~2.3 GB of weights, hours of CPU, or an Ollama
+# host, and `make test-real` / `make eval` / `make bench` stay manual. The suite runs against the
+# deterministic `StubModel` double, with no network.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch supersedes the first: these jobs are deterministic, and a
+# queue of stale matrix runs is only noise.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    name: suite, lint and doc gates (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the declared floor (`requires-python`); 3.12 is the newest interpreter the
+        # `numpy<2` pin has wheels for. 3.13 is deliberately absent: numpy 1.26 publishes no
+        # cp313 wheel, so installing the declared pin there builds from source instead.
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The documentation lives beside the code and several tests read the corpus and the
+          # Makefile; nothing here needs the weights, but `vendor/laya` is cheap and the docs
+          # link into it.
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install (engine dependencies only, no torch)
+        run: |
+          python -m pip install --upgrade pip
+          # `--no-deps` because `pyproject.toml` declares `laya`, which drags in torch — ~800 MB
+          # this job never exercises: the offline suite runs against the StubModel double and
+          # `model.py` imports `laya` lazily, only when a checkpoint is actually loaded. The
+          # runtime dependencies are installed explicitly below instead, at the floors the
+          # package declares. `starlette>=0.48` is load-bearing: `api.py` passes
+          # `exclude_content_types` to `GZipMiddleware`, which 0.47 rejects at construction.
+          python -m pip install -e . --no-deps
+          python -m pip install \
+            "numpy<2" \
+            "snowballstemmer>=2.2" \
+            "fastapi>=0.110.0" \
+            "starlette>=0.48" \
+            "uvicorn>=0.27.0" \
+            "pydantic>=2.0" \
+            "pytest>=8.0" \
+            "httpx>=0.27" \
+            "ruff>=0.6"
+
+      # `PY=python` and `RUFF=ruff` point the Makefile at the interpreter this job installed,
+      # rather than at the `.venv` that `make setup` would create. Keeping the commands in the
+      # Makefile rather than copying them here is the point: a documented command that CI does
+      # not run is the failure mode `tests/test_docs_make_targets_exist.py` exists to catch.
+      - name: Lint (ruff + byte-compile + JavaScript)
+        run: make lint PY=python RUFF=ruff
+
+      - name: Offline suite
+        run: make test PY=python
+
+      # Both gates skip cleanly when their gitignored artefacts are absent, so on a fresh
+      # checkout they pass by having nothing to pin. They are here to keep the invocation
+      # working — and to fail the moment someone adds a document that the checker can read.
+      - name: Documentation gates
+        run: |
+          make claim-check PY=python
+          make consistency-check PY=python
+
+      - name: Entry points import and run
+        run: |
+          python -c "import laya_rag, laya_rag.api, laya_rag.cli; print(laya_rag.__version__)"
+          python -m laya_rag.cli --help > /dev/null
+          # `doctor` exits 3 when no checkpoint is present; that is the correct answer here and
+          # the message must still be the diagnostic rather than a traceback.
+          python -m laya_rag.cli doctor || test $? -eq 3
