@@ -119,6 +119,31 @@ is also what makes the API "standard" (declared `securitySchemes`, scoped author
 
 ---
 
+### A measured lever is addressable, or it is a deployment decision
+
+The engine now has four levers whose *values were measured*: the answerability gate, the composer's
+objective, the reranker, and the second-stage cascade. None of them is a performance knob — each changes
+what a number means — and the API's rule for them is the same one this repository applies to its own
+reports: **a caller must be able to say which arm it used.**
+
+Two consequences, both shipped:
+
+- `POST /v1/extract` takes `coverage: true | false`. The objective was first reachable only through
+  `EXTRACT_COVERAGE`, read once at construction, which made the measured arm unreachable without a
+  restart. The guarantees are identical either way — every emitted sentence is a verbatim span of a
+  cited passage and the markers stay in range — which is what makes this a per-request choice rather than
+  a deployment decision.
+- `GET /v1/stats` carries a **`behaviour`** block: `second_stage`, `second_stage_top_m`,
+  `extract_coverage`, `fusion_mode`, `fusion_k`, `dense_weight`, `rerank_order`,
+  `rerank_coverage_lambda`, `recall_dedup_threshold`, `recall_coverage_lambda` and
+  `answerability_gate_configured`. The values are the *resolved* ones — `dense_weight` is what `auto`
+  came to, not the word — for the same reason a query result reports the resolved `device` rather than
+  the requested one.
+
+The alternative — a service-wide environment variable per lever — is smaller to implement and makes every
+number quoted from a running service unattributable, which is the failure this repository catalogs four
+instances of. A lever that cannot be named at the point of use is a lever that will be misquoted.
+
 ## 4. MCP server design
 
 ### 4.1 What it is for
