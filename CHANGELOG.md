@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.1.2 — 2026-10-29
+
+A test that cannot fail reads as coverage — so the suite is now audited for vacuous tests, and the audit's
+first find was itself.
+
+### `tests/test_no_vacuous_tests.py`
+
+`findings-measurement-failures.md` records this class at the level of *gates* ("a gate that is green because
+it had nothing to do"). It exists one level down and is easier to miss: a test function that calls a helper and
+asserts nothing passes forever, shows green in a summary, and counts in a total.
+
+The audit walks all **1,868 test functions** for a recognisable check — `assert`, `pytest.raises`/`fail`/`skip`,
+`numpy.testing.assert_*`, `self.assert*`. It found **two**, and both were instructive:
+
+- `test_blend_order_rejects_an_out_of_range_weight` used a hand-rolled `try/except ValueError: pass`, which
+  **passes when anything raises**, not when the right thing does. Rewritten with
+  `pytest.raises(ValueError, match="blend")`.
+- The other was **the audit itself**: its helper was named `test_functions`, so pytest collected it as a test,
+  and the audit flagged its own helper as vacuous. A rename fixed both — the file's first find was the file.
+
+A third category is named rather than pattern-matched: tests whose assertion is that **nothing raises**
+(`test_allow_concurrent_bypasses_the_lock`). The file states its blind spot too — semantic vacuity
+(`assert result == result`) and checks hidden inside helpers are invisible to it — because a check that hides
+its blind spot is the thing this file is about.
+
 ## 2.1.1 — 2026-10-29
 
 The same fairness problem reaches the README's headline MultiHop table, and the page now says so.

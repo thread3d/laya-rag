@@ -45,12 +45,10 @@ def test_blend_order_endpoints_are_the_two_stages():
 
 
 def test_blend_order_rejects_an_out_of_range_weight():
-    try:
+    """`pytest.raises` rather than a hand-rolled try/except: the latter passes when *anything* raises,
+    and reads to an AST-based audit as a test with no check at all."""
+    with pytest.raises(ValueError, match="blend"):
         exp.blend_order(["a"], [0.5], 1.5)
-    except ValueError:
-        pass
-    else:  # pragma: no cover
-        raise AssertionError("blend > 1 should raise")
 
 
 def test_guardrail_order_pins_the_first_stage_top_one():
