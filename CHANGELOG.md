@@ -6,6 +6,35 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.5.1 — 2026-10-30
+
+The length lens applied across every measured arm: it **strengthens** R5's claim and localises the confound to
+exactly one lever.
+
+### One table, five arms
+
+| arm | mean chars | nugget recall | **nuggets per 1k chars** |
+| --- | ---: | ---: | ---: |
+| rank order (no cross-encoder) | 593.6 | 0.2060 | 0.3471 |
+| + `bge-reranker-base` (2024) | **579.8** | 0.2281 | 0.3935 |
+| + `bge-reranker-v2-m3` (2026) | **559.9** | **0.2348** | **0.4195** |
+| coverage objective | **1282.6** | 0.2610 | 0.2034 |
+| cascade `M=10` | 593.6 | 0.2060 | 0.3471 |
+
+**The cross-encoder arms are shorter and better.** 560 and 580 characters against the baseline's 594, while
+containing *more* of the gold facts — so *"the gain is ordering, not completeness"* survives the check and is
+**strengthened** by it: +21% nuggets per thousand characters (0.4195 against 0.3471) while emitting 6% less text.
+
+### Two things the table shows for free
+
+The **cascade arm is byte-identical** to the baseline on all three columns — 593.6 characters, 0.2060 recall,
+0.3471 per 1k — an independent confirmation that the truncated run produced *the same answers*, not merely the same
+metrics.
+
+And **exactly one of five arms carries the length confound**, which turns it from *"a doubt about the measurement
+setup"* into *"a property of the coverage objective"*. A lens that condemned everything would have been a lens worth
+doubting; this one indicts one lever and clears four.
+
 ## 2.5.0 — 2026-10-30
 
 R2's headline delta has a confound nobody had checked: **the two arms do not emit the same amount of text.**

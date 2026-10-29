@@ -168,6 +168,29 @@ That is the difference between a mechanism story and a mechanism *measurement*, 
 unregistered sentence at the top of this document had to be tested rather than left as reasoning. The
 mechanism survived; the quantitative claim I would have made from it did not.
 
+### The length check: the gain is *not* bought with verbosity
+
+The composer objective's delta turned out to be confounded with answer length (2.1× the text, and worse coverage
+per character — `findings-extractive-coverage.md`). The same lens applied to every arm measured here:
+
+| arm | mean chars | sentences | answer nugget recall | **nuggets per 1k chars** |
+| --- | ---: | ---: | ---: | ---: |
+| rank order (no cross-encoder) | 593.6 | 5.00 | 0.2060 | 0.3471 |
+| + `bge-reranker-base` (2024) | **579.8** | 5.00 | 0.2281 | 0.3935 |
+| + `bge-reranker-v2-m3` (2026) | **559.9** | 5.00 | **0.2348** | **0.4195** |
+| coverage objective (for contrast) | 1282.6 | 5.00 | 0.2610 | 0.2034 |
+| cascade `M=10` (for contrast) | 593.6 | 5.00 | 0.2060 | 0.3471 |
+
+**The cross-encoder arms are *shorter*** — 560 and 580 characters against the baseline's 594 — while containing
+*more* of the gold facts. So "the gain is ordering, not completeness" survives the check and is strengthened by it:
+the 2026 reranker buys **+21% nuggets per thousand characters** (0.4195 against 0.3471) while emitting 6% less text.
+
+Two further things the table shows for free. The **cascade arm is byte-identical** to the baseline on all three
+columns — 593.6 characters, 0.2060 recall, 0.3471 per 1k — which is an independent confirmation that the truncated
+run really did produce the same answers rather than merely the same metrics. And **exactly one of five arms carries
+the length confound**, which is what makes it a property of the coverage objective rather than of the measurement
+setup.
+
 ### What this does not license
 
 It does not license "use a bigger reranker and the ArguAna problem goes away": the trend across two model

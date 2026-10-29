@@ -181,6 +181,13 @@ not settled by the recall delta, and the earlier framing implied it was.
   a fixed-character budget would be. Until then the finding should be read as *"a denser, longer answer containing
   more facts"*, with the verbosity cost stated beside the gain.
 
+**Exactly one of the five measured arms has this confound**, which is worth stating because it makes the problem a
+property of *this objective* rather than of the measurement setup. The cross-encoder arms emit **fewer** characters
+than the baseline while finding more facts (560 and 580 against 594, recall 0.2348 and 0.2281 against 0.2060), and
+the cascade arm is byte-identical to the baseline. So a length lens applied across the programme finds one arm
+buying coverage with verbosity, not a systematic flaw in how these rows are produced
+([`findings-reranker-generation.md`](findings-reranker-generation.md)).
+
 `EXTRACT_COVERAGE` stays off by default, which is now better justified rather than less: the shipped behaviour
 emits answers half the length for two-thirds of the absolute coverage.
 
