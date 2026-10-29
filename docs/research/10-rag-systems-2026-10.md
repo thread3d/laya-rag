@@ -11,6 +11,9 @@
 # RAG systems: the state of the art as of late 2026
 
 **A reading of the field for the Laya RAG project** — a fully-local, CPU-only, no-API-key
+# RAG systems: the state of the art as of late 2026
+
+**A reading of the field for the Laya RAG project** — a fully-local, CPU-only, no-API-key
 retrieval-augmented engine that does not generate text: it returns evidence passages with calibrated
 probabilities, adjudicates claims as `supported` / `contradicted` / `no_coverage`, and abstains.
 
@@ -142,6 +145,17 @@ in layers 2–4 at all without emitting answer text.
 | **LegalBench-RAG** (arXiv:2408.10343, Aug 2024) | 6,889 expert-annotated query→minimal-snippet pairs over legal corpora | **Precision@k / Recall@k** at snippet level | **No** — retrieval-only by construction | their own sweep: best **Recall@64 84.19%**, **Precision@1 14.38%**; precision@1 "only 2.65%" on the hardest subset |
 
 ### 1.2 What the top of each leaderboard actually is
+
+**TREC RAG 2024 is where the template came from, and it is worth knowing how small it started.**
+The inaugural track ran **301 topics** over MS MARCO Segment v2.1 with **three** tasks — Retrieval
+(R), Augmented Generation (AG, on the organisers' top-k segments) and RAG (own retrieval, mapped back
+to MS MARCO segment IDs "for reproducibility and ease of evaluation"). The announced methodology was
+already the modern one: score citation support first, then nuggetize, then assign nuggets to answer
+sentences, then aggregate. Submissions closed **25 Aug 2024**, judgements were returned **Oct 2024**,
+and the TREC 2024 conference was **Nov 2024**
+([trec-rag.github.io/trec24](https://trec-rag.github.io/trec24/), accessed 2026-10-29). The 2024
+overview paper itself was not retrievable (§1.5), so this report quotes **no 2024 winner numbers** —
+a 2026 report that quotes 2024 TREC numbers without the overview PDF is quoting from memory.
 
 **TREC RAG 2025 is the most complete public grading of RAG that exists, and it is a *retrieval*
 story as much as a generation story.** 46 retrieval runs from 12 groups, 51 RAG runs from 16
@@ -276,12 +290,14 @@ These are stated here because a 2026 reviewer will go straight at them:
 - **MuSiQue 0.3761 vs harness 0.3852** is a **retrieval MAP@10** figure over `is_supporting`
   paragraphs. It must always be labelled as such; the MuSiQue *answer* SOTA is EM ≈0.20 (Search-R1)
   and quoting 0.37 next to MuSiQue without the metric name would look like a fabricated SOTA.
-- **Answerability gate AUC 0.815 (feature gate) vs 0.520 (shipped scalar)** has no direct public
-  comparator. The nearest published anchors are MTRAG's IDK-judge answerability accuracy
-  (~0.86–0.89 for frontier LLMs, but that judge is itself an LLM reading a generated answer) and
-  the "Sufficient Context" line of work (see §3/§6). No benchmark I found grades a
-  *retrieval-only* answerability predictor with a held-out AUC, which is both the gap and the
-  opportunity.
+- **Answerability gate AUC 0.815 (feature gate) vs 0.520 (shipped scalar)** must never be quoted
+  bare: 0.815 is a **within-question-type** figure, falling to **0.767 [0.671, 0.827]** with a whole
+  question type held out and to **ROC-AUC 0.509 [0.463, 0.555]** (chance) out of domain — see §3.4,
+  which states all three. It also has no direct public comparator. The nearest published anchors are
+  MTRAG's IDK-judge answerability accuracy (~0.86–0.89 for frontier LLMs, but that judge is itself an
+  LLM reading a generated answer) and the "Sufficient Context" line of work (§3/§6). No benchmark I
+  found grades a *retrieval-only* answerability predictor with a held-out AUC, which is both the gap
+  and the opportunity.
 - **The 20-record end-to-end pilot with EM 0.000** is correctly characterised as non-evidence.
   What makes it non-evidence is not the sample size alone: the gold answers are short entities and
   the pilot graded *prose* generations, so EM is structurally 0. Any end-to-end row needs an
@@ -291,9 +307,10 @@ These are stated here because a 2026 reviewer will go straight at them:
 ### 1.5 Things I could not verify
 
 - The TREC RAG **2024** overview PDF: `trec.nist.gov/pubs/trec33/papers/Overview_rag.pdf` and the
-  `%5F`-encoded variant both returned **404** on 2026-10-29. Descriptions of the 2024 track here are
-  taken from the 2025 overview's citations and from `https://trec-rag.github.io/trec24/`, which I did
-  not fetch.
+  `%5F`-encoded variant both returned **404** on 2026-10-29, and I found no mirror. The 2024 track
+  description here therefore comes from the 2024 track site (`https://trec-rag.github.io/trec24/`,
+  fetched) — its task definitions and dates are reliable, but **no 2024 result numbers** are quoted
+  anywhere in this report.
 - No **FRAMES 2026 leaderboard** I could verify; the numbers above are the original paper's. Third-party
   aggregator sites (sota2.com, benchmarklist.com, theaggregate.ai) surface FRAMES/MuSiQue tables but I
   could not confirm their provenance or date, so I have not used their numbers.
@@ -1314,8 +1331,8 @@ track sites, GitHub API, model cards — not on secondary summaries.
 ### 7.3 Low confidence / explicitly unverified
 
 - **TREC RAG 2024 overview**: `trec.nist.gov/pubs/trec33/papers/Overview_rag.pdf` and the
-  `%5F`-encoded variant both returned 404 on 2026-10-29, and I did not find an alternative host. The
-  description of the 2024 track in this report is derived from the 2025 overview's citations.
+  `%5F`-encoded variant both returned 404 on 2026-10-29, and I found no alternative host. The 2024
+  description here comes from the 2024 track site, not from the overview paper.
 - **Whether TREC RAG 2026 judgements exist yet.** The site says results/judgements "TBD" and the
   conference is November 2026. If judgements are released between writing and reading this, the 2026
   numbers supersede several §1 statements.
@@ -1421,6 +1438,33 @@ embarrassment.
 publishes dollars per agent run; nobody publishes joules. Nobody in the landscape section publishes
 retrieval quality *per joule*. A CPU-only engine can own that column outright, and it is the honest
 version of the "local/cheap" story.
+
+**C6 — A measured retriever router, into a gap the literature names.** §2.4 records that routing
+*between* retrieval strategies (dense vs lexical vs graph) is "essentially unmeasured in the
+peer-reviewed literature"; what exists is routing between *no retrieval / single-step / multi-step*
+(SKR, Adaptive-RAG) and between long context and RAG (SELF-ROUTE). A project whose BEIR-18 result is
+already a *best-per-dataset* figure — 0.4799 over eighteen different winning configurations — is
+sitting on exactly the per-query data such a router would be trained and tested on. Publishing the
+router (features, held-out accuracy, cost per routed query, and where it misroutes) converts a
+criticisable aggregate into a contribution, and it is the one place where "we picked a different
+configuration per dataset" changes from an admission into a result.
+
+### 8.2b The generator-free lever set, with its measured numbers
+
+Everything below is available to an engine that never generates, and each line has a published
+number attached (§2): **HippoRAG's PPR-over-OpenIE** single-step multi-hop retrieval, **+7.3 average
+R@5** over ColBERTv2 while matching multi-step IRCoT at **10–30× lower online cost**, with a **local
+Llama-3.1-8B OpenIE indexer** competitive with GPT-3.5 on 2 of 3 datasets at $0 API cost;
+**Provence's** DeBERTa-fused pruning, **49%** of context removed with negligible-to-no drop in
+**25 s / 7.9×10¹⁴ MFLOPS** — 12×–68× cheaper in FLOPs than the LLMLingua family, which additionally
+needs a scoring LM and degrades hard on reasoning (BBH 70.07 → 56.85 at 7×); **Adaptive-RAG/SKR**
+small-classifier routing, about **three-quarters of the multi-step gain at 64% of the steps**
+(44.40 accuracy at 3.55 steps vs 47.00 at 5.53 on HotpotQA); **G-Retriever's** Steiner-tree subgraph
+selection, **−99% input tokens** (100,627 → 610); and the coverage/dedup selection this project
+already measures. Off-limits by construction, and worth saying so explicitly in any paper: Self-RAG's
+reflection tokens, CRAG's trained evaluator, CoRAG's chains, DRAGIN's uncertainty triggers, the whole
+Search-R1 / R1-Searcher / ZeroSearch family, and **HyDE** — the largest single retrieval-side gain in
+the literature (+16.8 nDCG@10 on DL19, TREC-COVID 27.3 → 59.3), and pure generator output.
 
 ### 8.3 The one experiment that would turn positioning into evidence
 
