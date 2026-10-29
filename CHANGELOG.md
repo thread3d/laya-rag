@@ -6,6 +6,29 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.4 — 2026-10-29
+
+The configuration table becomes a checked contract, and it holds: every one of the 91 variables the
+package can read is in it.
+
+### `tests/test_docs_env_vars.py`
+
+`test_docs_tool_flags_exist.py` has held the CLI flags to "documented means parsed" for a while. The
+environment is the larger surface — **91 variables** — and had no such check, so a new knob could ship
+in `config.py` and be invisible to every reader of the configuration table, which is the only place they
+are listed.
+
+The new test extracts every variable the package can read (`_env("X")` and its typed siblings, plus any
+explicit `LAYA_RAG_X`), every bare name the README's tables put in backticks, and asserts the first set
+is a subset of the second. **It holds with nothing missing** — a positive result worth recording, since
+91 hand-maintained rows is exactly where drift lives.
+
+Its gate was perturbed before being trusted: a planted `_env_int("UNDECLARED_KNOB_NOT_IN_README")` fails
+the test by name, and the file was restored. A third test asserts the extraction still finds more than
+sixty variables, so a broken regex cannot make the other two pass vacuously. The reverse direction is
+bounded rather than asserted — two variables (`AUDIT_LOG`, `EMBED_PASSAGE_PREFIX`) are read through paths
+the extractor models imperfectly, and failing the suite for that would be a false alarm.
+
 ## 1.4.3 — 2026-10-29
 
 The measurement-failures ledger gains its most transferable class, and the README's live test count is
