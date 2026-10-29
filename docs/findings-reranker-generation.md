@@ -89,3 +89,29 @@ this programme has had either.
   and the two have not been run together.
 - **No distillation.** The 568M model's cost is what R6's remaining stages would attack; the cascade
   already removed 43% of the decision work at equal quality, and the two have not been combined.
+
+---
+
+## The ArguAna question — pre-registered before the run
+
+R5's outcome above ends with an untested claim: *"nothing in this result suggests a bigger pointwise
+model changes [ArguAna's collapse]"*. That is a mechanism argument, not a measurement, and this
+repository has a rule about those. The measurement is cheap now that the 568M model is on disk.
+
+**The claim under test.** `bge-reranker-base` over the fused top-100 lowered ArguAna's nDCG@10 from
+**0.568 to 0.250** (−0.318), and the diagnosis was that ArguAna's relevance is an *opposition* relation
+— an argument countering the query's — which a pointwise topical scorer cannot represent. If that
+diagnosis is right, capacity does not help: a 568M pointwise model should collapse too.
+
+**Prediction.** At `--rerank-depth 50` (half the recorded depth, for compute), with `bge-small` as the
+first stage: `bge-reranker-v2-m3` lands **below** the no-cross-encoder hybrid's **0.568** — my point
+estimate is **0.35–0.50 nDCG@10**, i.e. a collapse of between a third and a half, better than the 2024
+model's 0.250 but nowhere near the first stage.
+
+**Falsifier.** If v2-m3 **beats** the no-CE hybrid on ArguAna by any margin, the collapse is a capacity
+artefact rather than an objective one, R5's mechanism claim is wrong, and the repository's "cross-encoders
+hurt on opposition" negative has to be re-stated as "cross-encoders *of that size* hurt". Either answer is
+a result; the second is the more interesting one.
+
+**Cost, recorded in advance.** Three arms on the same first stage and the same 340 ArguAna queries; the
+568M arm costs about twice the 278M one per candidate, and both are reported beside the quality.
