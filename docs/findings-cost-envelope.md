@@ -99,6 +99,30 @@ The probe writes `.scratch/envelope-probe.json` (per-query rows plus the summary
 `instrument_valid` flag computed from the falsifier, so a later run on a quiet host can say whether
 its own reading is trustworthy instead of assuming it.
 
+## The tail, found by accident while checking a run
+
+Investigating what looked like a stalled full-set row turned up something this envelope should carry:
+**per-query latency has a ~10x tail on that corpus**, at the same engine settings the medians above were
+measured with.
+
+| query | wall, 4 threads |
+| --- | ---: |
+| typical MultiHop-RAG query | ~3 s |
+| `answerable[751]` — "Between the Sporting News report on NBA betting sites…" | **29.2 s** |
+
+The row was **not** stalled — 25 rows completed in the two minutes after the probe — but the observation
+stands, and it is exactly what a median hides. A capacity plan built on 6.71 s would be wrong on p95 and
+worse on the tail, which is why `tools/cost_report.py` reports `p95` beside the median and why this document
+quotes a spread rather than a point for the R0 falsifier.
+
+The mechanism is visible in the number: the decision pass reads the whole evidence block, so a query whose
+top passage is long costs more, and nothing in the engine bounds that ratio.
+
+**What it does not establish.** One slow query is not a distribution. The honest statement is that the tail
+exists, that its cause is state length, and that a `--limit`-free row is where p95 for this corpus would come
+from if someone needs it. The check itself is worth recording as a practice: **a run that appears stuck is
+usually a slow query, and the way to know is to reproduce the one query rather than watch the counter.**
+
 ## What this does not claim
 
 - It does not claim the CPU-only envelope is *slow in general*: this host's 56 cores are shared, the

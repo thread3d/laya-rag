@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.3 — 2026-10-29
+
+A run that looked stalled was a slow query — and the tail it exposed belongs in the cost envelope.
+
+### The check
+
+The full-set row's manifest sat at 625 for 45 s while the process burned twenty cores, which looks exactly
+like a hang. Reproducing the one query instead of watching the counter settled it in 30 s: `answerable[751]`
+takes **29.2 s** at four threads where a typical query takes ~3 s, and the run completed 25 rows in the two
+minutes afterwards. **A run that appears stuck is usually a slow query, and the way to know is to reproduce
+that query** — the counter can only tell you that nothing finished, which is what a slow query looks like.
+
+### What the tail means
+
+The decision pass reads the whole evidence block, so a query whose top passage is long costs more, and
+nothing in the engine bounds that ratio. On this corpus the tail is **~10× the median**. That is exactly
+what a median hides: a capacity plan built on 6.71 s would be wrong on p95 and worse beyond it, which is why
+`tools/cost_report.py` reports `p95` beside the median and why the R0 finding quotes a spread rather than a
+point.
+
+Recorded with the limit that matters: **one slow query is not a distribution.** The finding says the tail
+exists, names its cause, and says where a per-corpus p95 would come from — a `--limit`-free row — rather than
+presenting a single observation as a shape.
+
 ## 1.9.2 — 2026-10-29
 
 A product defect found by measuring the gate instead of the decision layer: **the extractive path never

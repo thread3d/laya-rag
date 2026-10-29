@@ -154,7 +154,11 @@ are what stops the next pass from re-trying them.
   (±5% across repeats) fired at 8.1%, so the cost axis is published as medians with their spread
   rather than as a point estimate; and the same probe read 15.83 s for this configuration while two
   research agents were fetching pages and 6.71 s after they stopped — a 2.4× swing from co-tenancy
-  alone, which is the fourth time this repository has watched `seconds` invent a speed difference.
+  alone, which is the fourth time this repository has watched `seconds` invent a speed difference. A **~10x
+  tail** was then found by accident while checking a run that looked stalled: a typical query costs ~3 s on
+  that corpus and one retrieved a long passage and took **29.2 s**, because the decision pass reads the whole
+  evidence block and nothing bounds that ratio. The run was not stalled; the tail is real, and it is why
+  `p95` is reported beside the median.
   [findings-cost-envelope.md](findings-cost-envelope.md)
 
 - **A result off by an order of magnitude is a bug signal, not a finding — and here it was mine.**
