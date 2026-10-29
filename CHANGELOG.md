@@ -6,6 +6,34 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.5 — 2026-10-29
+
+The declared Python floor becomes a local check, because CI is the wrong place to find out.
+
+### `tests/test_python_floor.py`
+
+`pyproject.toml` says `requires-python = ">=3.10"` and CI runs 3.10 and 3.12. **The development host runs
+3.13**, so a 3.11+ syntax slip — a `type` statement, PEP 695 generics, `except*` — compiles here and fails on
+the first CI run, which is a push nobody can undo. That is the same class of gap as round 31's two tests
+that needed torch while the CI job installed none: *green on the machine where everything is installed says
+nothing about the machine that follows `pyproject.toml`.*
+
+The test parses every shipped module — `src`, `tools` and `tests`, **300+ files** — with
+`ast.parse(..., feature_version=(3, 10))`. It also asserts the **CI matrix actually runs the declared floor**,
+because a floor no run exercises is a floor nobody has tested.
+
+**Perturbed before trusted**: appending `type _FloorProbe = int` to `schemas.py` fails the test with
+`Type statement is only supported in Python 3.12 and greater`; restored.
+
+It cannot catch a *runtime* API added in a later version — the CI matrix is what covers that. It catches the
+syntax, which fails loudly and cheaply.
+
+### And the CI-shaped environment re-verified
+
+The same round re-ran the suite in a venv installed exactly as CI installs it, after several rounds of
+changes to `engine.py` and the tools: **1,822 passed, 58 skipped**. The configuration that caught round 31's
+regression still passes.
+
 ## 1.9.4 — 2026-10-29
 
 The answerability lever reaches the harness that measures it — flag, fingerprint and both settings
