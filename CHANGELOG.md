@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.3 — 2026-10-29
+
+The measurement-failures ledger gains its most transferable class, and the README's live test count is
+brought current.
+
+### Class 14: provenance that names something other than what ran
+
+The repository's catalogue of its own measurement mistakes had thirteen classes. The October round added
+a fourteenth, with four instances that arrived from four *different* mechanisms: a cache keyed by a
+directory basename (three benchmarks' worth of wrong rows), a scalar baseline read from the wrong column
+(AUC 0.500 for the right reason by accident), a resume fingerprint that ignored the variable under test
+(two arms identical to four decimals), and a settings block naming a `--out`-derived path the run never
+used.
+
+The class, stated in the ledger: **every field that is filled in automatically is a claim about what ran,
+and none of them is checked by default.** Three of the four were caught because two things that should
+have differed came out identical — the cheapest bug signal this programme has — and the fourth by making
+provenance visible on the report's face rather than reviewable in a diff.
+
+### The live test count
+
+`README.md` said 1,766 collected; it is **1,838**. That number is a live claim about the documented
+command, unlike the historical counts in the changelog, which stay as written.
+
 ## 1.4.2 — 2026-10-29
 
 A fifth axis on the evidence protocol, and the provenance defect it caught on its first run.

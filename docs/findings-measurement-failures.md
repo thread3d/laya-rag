@@ -211,6 +211,41 @@ breaks it.** Three of these four were fixed by *running something the sentence d
 fixed by re-reading, which is why this class is now in a catalogue about measurement rather than in a list
 of writing tips.
 
+## 14. Provenance that names something other than what ran
+
+**Looks like:** a settings block. It is populated, it is plausible, and it is the artefact a later reader
+trusts instead of re-running the job.
+
+**Instances, four of them in one October round, each caught by a different mechanism:**
+
+* **A cache keyed by a directory basename.** Two different encoders exported at the same path — a stock
+  one and a retrained one — shared a filename, so the second run silently reused the first's vectors. It
+  produced **three benchmarks' worth of wrong rows** before anyone looked. Caught by the reports disagreeing
+  with a re-run; now `tools/beir.py` writes a `model_fingerprint` over each file's path, size and mtime into
+  the cache's `.meta.json` and refuses a mismatch.
+* **A baseline read from the wrong column.** The answerability trainer reads its scalar baseline from `p`;
+  the newer dataset records the same quantity as `answerability`, so the baseline was silently **all
+  zeros** — reporting the shipped system at AUC **0.500** for the right reason by accident. Caught by the
+  gate's own numbers looking too good; now the loader maps the column.
+* **A resume fingerprint that ignored the variable under test.** `engine_extractive.py` fingerprinted its
+  arguments but not `LAYA_RAG_EXTRACT_COVERAGE`, so a resumed run that changed only the composer's
+  objective skipped every completed row and reported the *other* arm's numbers. Two arms came out
+  identical to four decimals, which is the tell this repository has now recorded three times. Caught by
+  the identity; now the variable is in the fingerprint.
+* **A settings block naming a derived path.** The same tool recorded the `index_dir` that `--out` would
+  have *derived*, while the run actually used the index named by `--index-dir`. A row measured against an
+  existing index could carry a block naming a directory that never existed on disk. Caught by a *new
+  axis* that prints each input's settings beside the numbers it produced them from — the first time a
+  provenance defect was found by making provenance visible rather than by reviewing it.
+
+**The tell.** In three of the four, two things that should have differed came out identical; in the
+fourth, a recorded value did not correspond to any file on disk. **Identical arms are the cheapest bug
+signal in a measurement programme**, and this round produced three of them.
+
+**Now:** the fingerprint covers the cache, the column, the resume key and the settings block; and the
+evidence protocol prints the configuration beside every number, so the next one of these is visible on
+the report's face rather than in a diff.
+
 ## What they cost, counted rather than remembered
 
 `git rev-list --count` over the session's span: **133 commits.** The per-class figures below are
@@ -232,6 +267,13 @@ The two classes at the top are **34% of the session's commits**, and both are of
 number that looked right and was not. That is the argument for the checks in one line — not that the
 failures were embarrassing, but that **two of them cost a third of the work**, and each was caught by
 re-deriving it from a direction nobody had used the first time.
+
+Class 14 is the one that aged best. Its four instances arrived from four *different* mechanisms — a
+cache key, a column name, a resume fingerprint, a recorded path — which means the class is not a set of
+accidents but a property of artefacts that describe runs: **every field that is filled in automatically
+is a claim about what ran, and none of them is checked by default.** The October round's answer was to
+make them visible on the report's face, which is cheaper than auditing them and catches the next one
+before it is quoted.
 
 ## The methods, in the order they proved useful
 
