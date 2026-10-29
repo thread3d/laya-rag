@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `1.3.9` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `1.4.0` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -21,6 +21,35 @@ schema, so a client can tell which engine it is talking to.
 
 The engine **beats the harness it replaced on MultiHop-RAG** (MAP@10 0.3128 against 0.2510) and
 **loses to it on MuSiQue** (0.3761 against 0.3852). Neither generalises, which is the finding.
+
+## The October 2026 frontier round (R0–R7)
+
+The programme above measured the system as it stood in early October. The
+[frontier assessment](best-in-the-world-2026-10.md) then re-scoped what "best" could mean against dated
+2026 sources and laid out R0–R8; this is how far that ran, and every item below has its own
+`findings-*.md` with a prediction recorded before the measurement.
+
+| item | state | headline |
+| --- | --- | --- |
+| **R0** cost envelope | **done** | `cpu_seconds` and the *resolved* `device` travel with every result. With the accelerator refused: **6.71 s median wall / 96.3 s median CPU** per query at 16 threads, and the decision pass is **99.8%** of it. R0's own falsifier fired — repeat spread **8.1%** — so the cost axis publishes medians with their spread, not point estimates |
+| **R1** component refresh | **2 of 5 datasets** | A 2026 encoder is measurable again (the harness could not pool `last` or apply a per-family instruction). On SciFact Qwen3-0.6B is **−0.018** on dense, on NFCorpus **+0.024**; fused is **+0.007 / +0.006** for **15–21× the indexing**. Verdict: **routing, not a swap** |
+| **R2** composer objective | **done, prediction falsified** | Answer nugget recall **0.2060 → 0.2610** (**+0.0549 [+0.0240, +0.0841], p=0.0005**), citation validity unchanged at 1.0000, both arms at 5.00 sentences per answer. Half the pre-registered 0.10 bar, so selection is *a* binding constraint, not *the* one |
+| **R3** portable abstention | **gate shipped; transfer open** | On the benchmark's own 301 `null_query` records, the gate fitted over 40 stratified splits reads **AUC 0.8377** (risk@80 **0.4043**); the protocol's independent half-split run reads **0.8159** against the shipped scalar's **0.5208**. At the deployed threshold that run answers **69.3%** of unanswerable queries where the gate answers **30.7%**, and **72.0%** of answerable ones where the gate answers **76.7%**. Cross-corpus transfer still needs MTRAG-UN |
+| **R4** evidence protocol | **done and reproducible** | `make evidence-protocol` prints four axes, naming an absent axis rather than zeroing it. The chain runs from a fresh clone in **~68 min**. Its first report is the number the programme is built on: **production answers 69–72% of the questions the corpus cannot answer** |
+| **R5** reranker generation | **pointwise answered** | `bge-reranker-v2-m3` (2026, 568M) beats `bge-reranker-base` (2024, 278M) by **+0.0313 MAP@10 [+0.0052, +0.0578], p=0.0089** on the same pool, and both beat no reranker (**0.3128 → 0.3398 → 0.3710**). The gain is ordering, not completeness. The listwise arm is untested |
+| **R6** decision cost | **done** | `SECOND_STAGE_TOP_M=10` gives **43% less CPU at identical quality** (99.2 s → 56.1 s per query; MAP@10, Hits@10, nugget recall and citation all unchanged). **M=5** costs 0.023 MAP@10. Corpus-specific by construction, so off by default |
+| **R7** multilingual | **priced and scoped** | The smallest MIRACL collection is ~**28 hours** for one language here, so it was declined rather than truncated. What was measured instead: with the shipped lexical channel non-English recall is **1/3 at best and acronym leakage**, and forcing the dense channel on drops every non-English language to **0/3**. The README's "handles non-English text" claim was corrected |
+| **R8** submittable artefact | **not started** | Needs the ensemble distillation finished and a training run this host cannot do quickly |
+
+Two properties of this round are worth stating because they are the point of it:
+
+- **Three of the eight items ended in a correction rather than a win** — the composer's level prediction
+  was twice too optimistic, the multilingual claim was false as documented, and the encoder refresh
+  turned out to be routing rather than a swap. Those are recorded as such.
+- **Four independent levers now have numbers**, and none of them was the one the programme expected in
+  October: the **gate** (halves false accepts, raises true accepts), the **composer objective**
+  (+0.055 nugget recall), the **reranker generation** (+0.031 MAP@10), and the **cascade** (43% CPU for
+  free). The cost axis finally has both a lever that spends and one that saves.
 
 ## What the programme refuted
 

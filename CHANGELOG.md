@@ -6,6 +6,39 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.0 — 2026-10-29
+
+The programme's own entry point brought current, and pinned so it cannot drift like the prose it
+replaced.
+
+### `docs/PROGRAMME-STATUS.md` now carries the October round
+
+The page that a reader lands on still described the system as it stood before R0–R7. It now has that
+round's table: the cost envelope (6.71 s wall / 96.3 s CPU per query, decision pass 99.8% of it, and the
+falsifier that fired at 8.1%), the encoder refresh (routing, not a swap), the composer objective
+(0.2060 → 0.2610, prediction twice too optimistic), the shipped gate (30.7% against 69.3% false accepts
+*and* 76.7% against 72.0% true accepts), the evidence protocol (~68 min from a fresh clone), the
+reranker generation (+0.0313 MAP@10), the cascade (43% less CPU for nothing), and the multilingual scope
+correction. R8 is listed as not started.
+
+### The numbers are pinned, and the pin caught itself
+
+`tests/test_programme_status_numbers.py` reads each registered quantity out of the artefact that
+produced it and asserts the page still prints it — the claim-ledger discipline applied to one page,
+skipping when the gitignored reports are absent. On its first execution it caught a **real ambiguity in
+the page**: the R3 row mixed two runs, quoting the trainer's 40-split AUC while the protocol artefact
+held a different half-split one. The page now says which run each number is from, and the pins are split
+accordingly. A ledger that cannot disagree with its own document is not a ledger.
+
+Its own implementation also learned something small and useful: one of the report keys is literally
+`scalar_false_accept_at_0.5`, so the field paths are `/`-separated rather than `.`-separated, and a pin
+carries a scale for quantities the page prints as percentages.
+
+### Still owed
+
+- R8: a submittable artefact, which needs the ensemble distillation finished and a training run.
+- R1's ArguAna and FiQA, R5's listwise arm, and the cross-corpus abstention sample (MTRAG-UN).
+
 ## 1.3.9 — 2026-10-29
 
 A capability claim corrected, and a collection priced rather than truncated.
