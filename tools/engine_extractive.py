@@ -285,6 +285,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"no index at {index_dir}; run `make engine-multihop` first", file=sys.stderr)
         return 2
     effective = Path(os.environ["LAYA_RAG_INDEX_DIR"])
+    # Record the index this run *used*, not the path `--out` would have derived. `index_dir_for(args)`
+    # names a directory from `--out` when `--index-dir` is unset, and the engine reads
+    # `LAYA_RAG_INDEX_DIR` — so a row measured against an existing index could carry a `_settings`
+    # index_dir that never existed on disk. Caught by surfacing the settings in the evidence protocol.
+    index_dir = effective
     print(f"using the index at {effective} ({len(engine.list_chunks())} chunks, "
           f"dense={config.resolved_dense_weight != 0.0}, sparse={config.sparse_enabled}, "
           f"gates {'zeroed' if args.zero_thresholds else 'as shipped'})", flush=True)

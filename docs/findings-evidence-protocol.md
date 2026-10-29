@@ -125,6 +125,31 @@ and the willingness to spend the hour. Nothing else in the chain is machine-spec
 downloaded and verified, the index is rebuilt from it, and every number in the report names the artefact
 it came from.
 
+## A fifth axis, added because the first four could not say what produced them
+
+The report's own caveat — *"quality and abstention come from different samples"* — was prose that a
+reader had to notice. It is now **computed**: `configuration` reads the settings block from each input
+and reports `same_query_sample`, with the warning when it is false. The first run of that axis on this
+repository's own artefacts printed
+
+```
+- answer_row: limit=150, sample_seed=17, rerank_model=None, …, index_dir=eval/…/engine-extractive-rank150
+- gate_rows:  limit=300, sample_seed=17, …                               index_dir=eval/…/engine-default
+  the axes were measured on different samples; the joint score is a joint report, not a product
+```
+
+and in doing so caught a **provenance defect**: the answer row recorded an `index_dir` that `--out`
+would have *derived*, while the run actually used the index named by `--index-dir` /
+`LAYA_RAG_INDEX_DIR`. A row measured against an existing index could therefore carry a settings block
+naming a directory that never existed on disk. `tools/engine_extractive.py` now records the effective
+path. Four tests pin the axis, including the case where the gate dataset carries its settings at the top
+level rather than under `_settings`.
+
+This is the same class of defect as the three others this programme has found — a cache keyed by a
+basename, a scalar baseline read from the wrong column, a resume fingerprint that ignored the composer's
+objective — and it was found the same way: by making a number's provenance *visible* rather than
+reviewable.
+
 ## What is owed
 
 - A cross-corpus negative set (MTRAG-UN), which turns "generalises across queries" into "travels".

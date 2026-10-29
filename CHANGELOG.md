@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.2 — 2026-10-29
+
+A fifth axis on the evidence protocol, and the provenance defect it caught on its first run.
+
+### "Which configuration produced these"
+
+The report's own caveat — *quality and abstention come from different samples* — was prose a reader had
+to notice. It is now **computed**: the protocol reads the settings block from each input and reports
+`same_query_sample`, with a warning when it is false. Its first run on this repository's artefacts printed
+
+```
+answer_row: limit=150, sample_seed=17, rerank_model=None, index_dir=eval/…/engine-extractive-rank150
+gate_rows:  limit=300, sample_seed=17, …                index_dir=eval/…/engine-default
+the axes were measured on different samples; the joint score is a joint report, not a product
+```
+
+and in doing so caught a **provenance defect**: the answer row recorded the `index_dir` that `--out`
+would have *derived*, while the run actually used the index named by `--index-dir` /
+`LAYA_RAG_INDEX_DIR`. A row measured against an existing index could carry a settings block naming a
+directory that never existed on disk. `tools/engine_extractive.py` now records the effective path.
+
+That is the fourth defect of this class the programme has found — after a cache keyed by a model
+basename, a scalar baseline read from the wrong column, and a resume fingerprint that ignored the
+composer's objective — and it was found the same way: by making a number's provenance *visible* rather
+than reviewable. Four tests pin the axis, including the case where the gate dataset carries its settings
+at the top level rather than under `_settings`.
+
 ## 1.4.1 — 2026-10-29
 
 R8's first half: a submission gate that decides whether an exported encoder is *believable*, and the

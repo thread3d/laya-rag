@@ -116,3 +116,42 @@ def test_render_carries_every_measured_axis():
     rendered = ep.render(report)
     assert "not measured" not in rendered
     assert "0.3128" in rendered and "cpu" in rendered and "96.3" in rendered
+
+
+# ── which configuration produced the numbers ─────────────────────────────
+
+def test_the_report_says_when_two_axes_share_a_query_sample():
+    answer = {"_settings": {"limit": 150, "sample_seed": 17, "rerank_model": None}}
+    gate = {"_settings": {"limit": 150, "sample_seed": 17}}
+    config = ep.configuration(answer, gate)
+    assert config["same_query_sample"] is True
+    assert "share a query sample" in config["note"]
+
+
+def test_the_report_says_so_when_they_do_not():
+    """The joint score multiplies two samples; the report should compute that, not repeat a caveat."""
+    answer = {"_settings": {"limit": 150, "sample_seed": 17}}
+    gate = {"_settings": {"limit": 300, "sample_seed": 17}}
+    config = ep.configuration(answer, gate)
+    assert config["same_query_sample"] is False
+    assert "different samples" in config["note"]
+
+
+def test_a_gate_dataset_without_settings_block_is_still_described():
+    """`gate_dataset.py` records its settings at the top level, not under `_settings`."""
+    config = ep.configuration({"limit": 150, "sample_seed": 17}, {"limit": 300, "sample_seed": 17, "records": "x.json"})
+    assert config["gate_rows"]["limit"] == 300
+    assert config["same_query_sample"] is False
+
+
+def test_the_rendered_page_carries_the_configuration_and_its_warning():
+    report = {
+        "evidence_quality": ep.evidence_quality(_answer_row()),
+        "abstention": ep.abstention_axis(_gate_rows()),
+        "joint": ep.joint_score(0.3128, ep.abstention_axis(_gate_rows())),
+        "cost": None,
+        "configuration": ep.configuration({"limit": 150, "sample_seed": 17}, {"limit": 300, "sample_seed": 17}),
+    }
+    rendered = ep.render(report)
+    assert "Which configuration produced these" in rendered
+    assert "different samples" in rendered
