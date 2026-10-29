@@ -194,3 +194,32 @@ def test_the_answerability_lever_is_in_the_fingerprint_and_the_record():
         "both the META record and the final report must carry it"
     )
     assert "honour_answerability=args.honour_answerability" in source, "not passed to query_extractive"
+
+
+def test_the_row_can_be_scored_at_document_level_as_well_as_chunk_level():
+    """The published table scores **documents**; the engine returns chunks.
+
+    This corpus chunks 609 documents into 4,592, so ten chunk slots hold a fraction of one document's text
+    where the published rows hold ten whole documents. A chunk-level row and a document-level row therefore
+    answer different questions in the same metric's clothes. Both are recorded: the chunk row is the
+    system's own, the document row is the one that can be placed beside a published one.
+    """
+    import inspect
+
+    module = _load()
+    source = inspect.getsource(module)
+    assert "doc_texts = [corpus_document_text(document_id) for document_id in document_ids]" in source
+    assert "ranking_from_passages(passages, corpus_document_ids())[:10]" in source, (
+        "the collapse to distinct documents must reuse the harness's own path-to-id mapping"
+    )
+    assert '"doc_passages": len(document_ids)' in source, "how many documents the ten chunks covered"
+    # the keys are built by an f-string, so assert on the pattern rather than on expanded literals
+    assert 'f"doc_{key}"' in source, "no document-level counterpart keys"
+    assert "for key in METRIC_KEYS" in source
+
+
+def test_the_corpus_map_is_the_text_the_engine_indexed():
+    module = _load()
+    text = module.corpus_text()
+    assert len(text) == 609, f"expected the benchmark's 609 documents, got {len(text)}"
+    assert all(value.strip() for value in text.values()), "a document with no text"

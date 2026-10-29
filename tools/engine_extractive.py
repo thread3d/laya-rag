@@ -96,6 +96,30 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
+_CORPUS_TEXT: dict[str, str] | None = None
+
+
+def corpus_text() -> dict[str, str]:
+    """The benchmark corpus as `url -> title + body`, the exact text the engine indexed.
+
+    `write_corpus` names each document by its position, so `ranking_from_passages` maps a returned path back
+    to a corpus id and this maps that id to the text the published metric expects to see.
+    """
+    global _CORPUS_TEXT
+    if _CORPUS_TEXT is None:
+        raw = json.load(open(ROOT_BENCH / "corpus.json"))
+        _CORPUS_TEXT = {a["url"]: a["title"] + " " + a["body"] for a in raw}
+    return _CORPUS_TEXT
+
+
+def corpus_document_ids() -> list[str]:
+    return list(corpus_text())
+
+
+def corpus_document_text(document_id: str) -> str:
+    return corpus_text().get(document_id, "")
+
+
 def score_one(payload: Mapping[str, Any], item: Mapping[str, Any]) -> dict[str, Any]:
     """Everything one query contributes, computed here so the report cannot re-derive it."""
     from laya_rag.evidence import group_passages_by_document
@@ -124,6 +148,17 @@ def score_one(payload: Mapping[str, Any], item: Mapping[str, Any]) -> dict[str, 
     # and look like a retrieval failure.
     texts = [str(passage.get("text") or "") for passage in passages[: 10]]
     metrics, _matches = official_metrics([texts], [facts])
+    # The published table this row is meant to be placed in scores **documents** — ten of them per query —
+    # while the engine returns chunks, and this corpus chunks 609 documents into 4,592. A chunk-level row
+    # therefore answers a different question in the same metric's clothes: ten slots hold a fraction of one
+    # document's text instead of ten whole ones. `document_metrics` collapses the top ten chunks to distinct
+    # documents (first-appearance order, which preserves the ranking) and scores those, so the placement is
+    # like-for-like. Both are kept: the chunk row is the system's own, the document row is the comparable one.
+    from engine_beir import ranking_from_passages
+
+    document_ids = ranking_from_passages(passages, corpus_document_ids())[:10]
+    doc_texts = [corpus_document_text(document_id) for document_id in document_ids]
+    doc_metrics, _doc_matches = official_metrics([doc_texts], [facts])
     return {
         "answer": str(payload.get("answer") or ""),
         "abstained": bool(payload.get("abstained")),
@@ -138,6 +173,8 @@ def score_one(payload: Mapping[str, Any], item: Mapping[str, Any]) -> dict[str, 
         "nugget_recall": round(len(found) / len(wanted), 4) if wanted else None,
         "nuggets": len(wanted),
         **{key: float(metrics[key]) for key in METRIC_KEYS},
+        **{f"doc_{key}": float(doc_metrics[key]) for key in METRIC_KEYS},
+        "doc_passages": len(document_ids),
     }
 
 

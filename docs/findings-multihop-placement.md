@@ -76,6 +76,38 @@ never in question. The registered prediction in
 [`findings-extractive-coverage.md`](findings-extractive-coverage.md) is about the **delta between the two
 composer objectives** on the full set, and this check says nothing about it: only one arm is running.
 
+## A fairness problem found before the placement was made
+
+The published table this row is meant to sit in scores **ten documents** per query. The engine returns
+**chunks**, and this corpus chunks **609 documents into 4,592** — 7.5 chunks per document. So a chunk-level
+row is answering a different question in the same metric's clothes: ten slots hold a fraction of one
+document's text where the published rows hold ten whole ones.
+
+The metric itself does not care — `official_metrics` matches gold facts by normalised substring against
+whatever strings it is handed — which is exactly why the problem is invisible in the number. The direction of
+the bias was not obvious either: chunks make each slot *smaller* (harsher for "does a gold fact appear in the
+top ten"), while a chunk that contains the fact can outrank the document that contains it, because the
+document's other chunks dilute it (kinder). A comparison whose bias direction cannot be signed is not a
+comparison.
+
+So the row now records **both**, and the pair is named in the artefact:
+
+| field | question it answers |
+| --- | --- |
+| `Hits@10`, `MAP@10`, … | the system's own question: does a gold fact appear in the top ten **chunks** |
+| `doc_Hits@10`, `doc_MAP@10`, … | the published table's question: does it appear in the top ten **documents** |
+| `doc_passages` | how many distinct documents those ten chunks actually covered |
+
+The collapse reuses the harness's own `ranking_from_passages`, which maps a returned path back to a corpus id
+and de-duplicates in first-appearance order, so the ranking is preserved rather than re-sorted. **The row that
+gets placed is the `doc_` one;** the chunk row stays because it is the system's own measurement and because
+quoting a number without its document-level counterpart is what got this repository into the situation the
+placement tool was written to prevent.
+
+**What this does not fix.** Chunking still differs — the published rows re-chunk at a 200-character overlap
+and the engine derives chunk size from the corpus — so `doc_Hits@10` compares *documents retrieved by
+different chunkers*, which is the closest this data allows and is stated rather than glossed.
+
 ## Why the anchors are quoted rather than merged into one sorted column
 
 Three caveats travel with the row, and the tool prints all three:

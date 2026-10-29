@@ -6,6 +6,45 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.1.0 — 2026-10-29
+
+A fairness problem found **before** the placement was made: the row scores chunks, the published table scores
+documents.
+
+### The problem
+
+The benchmark's table scores **ten documents** per query. The engine returns **chunks**, and this corpus
+chunks **609 documents into 4,592** — 7.5 chunks per document. A chunk-level row is therefore answering a
+different question in the same metric's clothes: ten slots hold a fraction of one document's text where the
+published rows hold ten whole ones.
+
+The metric does not care — `official_metrics` matches gold facts by normalised substring against whatever
+strings it is handed — **which is precisely why the problem is invisible in the number.** And the direction of
+the bias could not be signed: chunks make each slot *smaller* (harsher), while a chunk containing the fact can
+outrank the document containing it because the document's other chunks dilute it (kinder). **A comparison
+whose bias direction cannot be signed is not a comparison.**
+
+### The fix, recorded rather than resolved
+
+The row now carries both, named:
+
+| field | question |
+| --- | --- |
+| `Hits@10`, `MAP@10`, … | the system's own: does a gold fact appear in the top ten **chunks** |
+| `doc_Hits@10`, `doc_MAP@10`, … | the published table's: does it appear in the top ten **documents** |
+| `doc_passages` | how many distinct documents those ten chunks covered |
+
+The collapse reuses the harness's own `ranking_from_passages` — path → corpus id, de-duplicated in
+first-appearance order — so the ranking is preserved rather than re-sorted. **The row that gets placed is the
+`doc_` one.** The chunk row stays because it is the system's own measurement, and quoting a number without
+its document-level counterpart is the habit the placement tool exists to prevent.
+
+Chunking still differs between the two groups, and the finding says so rather than glossing it.
+
+**This landed mid-run and does not disturb the row in flight**: the running arm writes the old schema, and the
+queued coverage arm will write the new one — which is why the finding names both fields rather than replacing
+one with the other.
+
 ## 2.0.1 — 2026-10-29
 
 The objective's own rule is now a test: a prediction without a falsifier is caught.
