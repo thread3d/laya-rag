@@ -6,6 +6,26 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.7 — 2026-10-29
+
+The configuration axis checked on a non-default arm — and the full-set leaderboard row queued behind the
+running measurement.
+
+### The axis does the thing it was added for
+
+The same protocol run over the **cross-encoder** row now shows `rerank_model=BAAI/bge-reranker-v2-m3` in
+the answer row's settings, so the CE arm and the shipped arm are distinguishable at a glance rather than
+by filename. `index_identity` is identical across both, which is correct: the identity hashes the corpus
+and the ingest settings, not the second stage. A configuration axis that only ever printed the default
+would have been untested in the case it exists for.
+
+### R4's last measurement is queued
+
+The full 2,255-query answerable row — the one `make multihop-row` refuses to place a subset in place of —
+is queued behind the running cross-encoder arm and will start when the heavy-job lock frees. Measured
+cost: ~3 hours at 736 s per 150 queries. When it lands, `make multihop-row` will place it without the
+refusal, and R4's placement half will be a published-style row rather than a marked subset.
+
 ## 1.5.6 — 2026-10-29
 
 The programme's entry point carries the placement half and the audit layer, with its numbers pinned.

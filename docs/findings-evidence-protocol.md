@@ -145,6 +145,12 @@ naming a directory that never existed on disk. `tools/engine_extractive.py` now 
 path. Four tests pin the axis, including the case where the gate dataset carries its settings at the top
 level rather than under `_settings`.
 
+**And it distinguishes a non-default arm**, which is what it exists for. The same protocol run over the
+cross-encoder row shows `rerank_model=BAAI/bge-reranker-v2-m3` in the answer row's settings, so the CE arm
+and the shipped arm are distinguishable at a glance rather than by filename — while `index_identity` is
+identical across both, which is correct: the identity hashes the corpus and the ingest settings, not the
+second stage.
+
 This is the same class of defect as the three others this programme has found — a cache keyed by a
 basename, a scalar baseline read from the wrong column, a resume fingerprint that ignored the composer's
 objective — and it was found the same way: by making a number's provenance *visible* rather than
