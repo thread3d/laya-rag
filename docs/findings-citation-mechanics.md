@@ -63,3 +63,60 @@ answer an unanswerable question invents a quotation, and no weights are needed t
 - **Group by answerability.** Aggregating the null records with the answerable ones would have
   hidden the one result that matters most here — that fabricated quotes appear where the corpus had
   no answer.
+
+---
+
+## What "cite-clean 1.0000" actually certifies — audited 2026-10-30
+
+Every finding in this programme quotes `citation_clean_all`, and the number is 1.0000 nearly everywhere. **Nobody
+had audited what it certifies.** Eight adversarial cases, each with an expected verdict:
+
+| case | `clean` | expected | verdict |
+| --- | --- | --- | --- |
+| verbatim, cited correctly | True | True | correct |
+| **verbatim, one number changed** (0.4799 → 0.4979) | **True** | False | **not caught by `clean`** |
+| **verbatim, wrong citation index** (`[2]` for text in `[1]`) | **True** | False | **not caught by `clean`** |
+| **polarity flipped** ("above" → "below") | **True** | False | **not caught by anything** |
+| quote not present in the evidence | False | False | caught |
+| a sentence with no citation | False | False | caught |
+| two sentences, one fabricated | **True** | False | **not caught by `clean`** |
+
+So `clean` is **structural**: every citation is in range, every quote it contains was found in the evidence, and no
+sentence is uncited. It is a real property and it is the one that matters most for a quoting engine — a span that
+does not exist cannot be emitted at all — but **it is not a claim about the numbers or the sense**.
+
+**The code knows this and says so.** `verify.py`'s docstring: the content layer *"is reported in a separate
+`content` block and never change[s] the `clean` verdict. A noisy check is one a reader learns to ignore."* The
+content layer exists, works (it flagged the changed number and the fabricated figure), and is **advisory by
+design**, because a numeric mismatch has legitimate exceptions — rounding, "five" versus 5, a range's endpoint.
+
+**What was wrong was not the checker but the reporting.** No finding in this programme ever quoted the content
+layer, so `citation_clean_all 1.0000` sat alone in every table as if it meant *the answers are faithful*. A reader
+can be forgiven for concluding that the numbers had been checked; the checker checked them and nothing published
+the result.
+
+### Fixed going forward, and stated here for what is already recorded
+
+The extractive row now records, beside the structural figure:
+
+| field | meaning |
+| --- | --- |
+| `citation_clean_all` | structural: citations valid, quotes found, nothing uncited |
+| `content_clean_all` | **advisory**: every cited claim's numbers, dates and units occur in the evidence it cites |
+| `content_issue_total` | how many advisory findings, summed |
+| `negation_flags` | the `possible_negation_flip` count |
+
+**Rows measured before today do not carry these fields**, and their `1.0000` should be read as the structural
+figure alone. The published 1.0000s are therefore true and narrower than they look — which is the same shape as
+the chapter-versus-document problem in [`findings-multihop-placement.md`](findings-multihop-placement.md), and the
+second time in one night that a number was right and its *name* was the problem.
+
+### The negation check's coverage, stated as a limit
+
+`_NEGATION` matches explicit negators — *not, no, never, cannot, without, none, nor*. It does **not** see antonym
+pairs: *above/below*, *higher/lower*, *more/fewer* all pass silently, which is why the fourth case above is flagged
+by nothing at all. That is a deliberate heuristic at a high bar ("two shared content tokens"), and it is worth
+being explicit that **a polarity inversion is outside what this engine's checks can detect** — the defence against
+it is structural rather than semantic: the engine emits *verbatim spans*, so an inverted claim cannot be produced
+by the extractive path in the first place. A generator would change that, which is why the `engine + <model>` row
+is labelled separately.

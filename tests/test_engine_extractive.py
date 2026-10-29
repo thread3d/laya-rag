@@ -239,3 +239,20 @@ def test_the_placement_finding_states_which_lever_each_arm_has():
     finding = (Path(__file__).resolve().parents[1] / "docs" / "findings-multihop-placement.md").read_text()
     assert "Without a cross-encoder" in finding
     assert "resolved_rerank_coverage_lambda` returns **0.7**" in finding
+
+
+def test_the_row_records_what_citation_clean_does_not_cover():
+    """`clean` is structural; the advisory content layer never folds into it, by design.
+
+    A wrong number, a wrong citation index and a fabricated figure all leave `clean` True — the verifier says so
+    in its own docstring ("reported in a separate `content` block and never change the `clean` verdict"). Every
+    finding in this programme quotes `citation_clean_all`, and none of them quoted the content layer, so a reader
+    could reasonably infer that 1.0000 meant the numbers were checked. It does not.
+    """
+    import inspect
+
+    module = _load()
+    source = inspect.getsource(module)
+    assert '"content_clean": bool(citation["content"]["clean"])' in source
+    assert '"content_clean_all": round(sum(1 for r in rows if r.get("content_clean")) / total, 4)' in source
+    assert '"negation_flags": sum(int(r.get("negation_flags") or 0) for r in rows)' in source

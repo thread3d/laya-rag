@@ -166,6 +166,14 @@ def score_one(payload: Mapping[str, Any], item: Mapping[str, Any]) -> dict[str, 
         "answerable": bool(payload.get("answerable")),
         "answerability": payload.get("answerability"),
         "citation_clean": bool(citation["clean"]),
+        # `clean` is **structural**: citations in range, quotes found, nothing uncited. The advisory content
+        # layer — does a cited claim's number actually occur in the evidence it cites — is reported
+        # separately and deliberately never folds into `clean` (`verify.py` explains why: rounding and
+        # "five"-vs-5 have legitimate exceptions). Recording it means a reader can tell the two apart
+        # instead of inferring that "citation clean 1.0000" checked the numbers. It does not.
+        "content_clean": bool(citation["content"]["clean"]),
+        "content_issues": sum(citation["content"]["counts"].values()),
+        "negation_flags": int(citation["content"]["counts"].get("possible_negation_flip", 0)),
         "citation_claims": int(citation["counts"]["claims"]),
         "citation_uncited": int(citation["counts"]["uncited"]),
         "citation_invalid": int(citation["counts"]["invalid_citations"]),
@@ -203,6 +211,9 @@ def summarize(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             else None
         ),
         "citation_clean_all": round(sum(1 for r in rows if r["citation_clean"]) / total, 4),
+        "content_clean_all": round(sum(1 for r in rows if r.get("content_clean")) / total, 4),
+        "content_issue_total": sum(int(r.get("content_issues") or 0) for r in rows),
+        "negation_flags": sum(int(r.get("negation_flags") or 0) for r in rows),
         "uncited_sentences": sum(r["citation_uncited"] for r in rows),
         "claims": sum(r["citation_claims"] for r in rows),
         "answer_nugget_recall": (

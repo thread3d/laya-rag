@@ -6,6 +6,45 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.3.0 — 2026-10-30
+
+The most-quoted number in the programme audited: **"cite-clean 1.0000" certifies structure, not truth.**
+
+### Eight adversarial cases
+
+| case | `clean` | expected |
+| --- | --- | --- |
+| verbatim, cited correctly | True | True |
+| **one number changed** (0.4799 → 0.4979) | **True** | False |
+| **wrong citation index** | **True** | False |
+| **polarity flipped** ("above" → "below") | **True** | False |
+| **two sentences, one fabricated** | **True** | False |
+| quote not in the evidence | False | False |
+| sentence with no citation | False | False |
+
+`clean` is **structural**: every citation in range, every quote found in the evidence, nothing uncited. That is a
+real and load-bearing property for a quoting engine — a span that does not exist cannot be emitted — but **it says
+nothing about the numbers or the sense of a claim.**
+
+### The checker was right; the reporting was not
+
+`verify.py` documents this deliberately: the content layer *"is reported in a separate `content` block and never
+change[s] the `clean` verdict. A noisy check is one a reader learns to ignore."* It works — it flagged the changed
+number and the fabricated figure — and **no finding in this programme ever quoted it**. So `citation_clean_all
+1.0000` sat alone in every table as though it meant the answers were faithful. A reader could be forgiven for that;
+the checker checked the numbers and nothing published the result.
+
+The extractive row now records `content_clean_all`, `content_issue_total` and `negation_flags` beside the
+structural figure. **Rows measured before today do not carry them**, and their 1.0000 is the structural one alone.
+
+### And one limit stated as a limit
+
+`_NEGATION` matches explicit negators (not, no, never, cannot, without, none, nor) and **not antonym pairs** —
+above/below, higher/lower, more/fewer all pass silently. A polarity inversion is therefore outside what these
+checks can detect; the defence against it is structural (the engine emits verbatim spans, so it cannot produce an
+inverted claim) rather than semantic. A generator would change that, which is why the `engine + <model>` row is
+labelled separately.
+
 ## 2.2.1 — 2026-10-30
 
 The reproduce page catches up with three rounds of new capability — and with a heading that said *four* above
