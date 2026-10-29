@@ -6,6 +6,51 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.3.8 — 2026-10-29
+
+R5's cheaper half answered: the pointwise reranker generation moved, by +0.031 MAP@10 over the model
+this repository measured.
+
+### `bge-reranker-v2-m3` against `bge-reranker-base`, on the same pool
+
+MultiHop-RAG, 150 answerable queries at seed 17, the engine's own 4,592-chunk index, gates zeroed,
+`RERANK_THRESHOLD` at 0 so the measurement isolates ordering:
+
+| arm | MAP@10 | Hits@10 | answer nugget recall | citation clean | run time |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| no cross-encoder (shipped) | 0.3128 | 0.9067 | 0.2060 | 1.0000 | 736 s |
+| `bge-reranker-base` (2024, 278M) | 0.3398 | 0.9333 | 0.2281 | 1.0000 | 434 s |
+| `bge-reranker-v2-m3` (2026, 568M) | **0.3710** | **0.9400** | **0.2348** | 1.0000 | 995 s |
+
+Paired bootstrap, 10,000 resamples: base → v2-m3 **+0.0313 [+0.0052, +0.0578], p=0.0089**; no CE → v2-m3
+**+0.0582 [+0.0324, +0.0855], p=0.0001**.
+
+The prediction was recorded before the run and is reported as it fell: **right in direction and at the
+top of its +0.01–0.03 band, wrong in level** (predicted 0.30–0.33, measured 0.3710).
+
+### Why this does not contradict the 2026 grid
+
+That grid measured large pointwise rerankers over a *strong bi-encoder* first stage, where they add
++0.47 to +0.70 nDCG@10. This engine's shipped first stage is lexical, which is much weaker, and the same
+class of model buys +0.058 MAP@10. It is this repository's own finding — *a cross-encoder helps a weak
+first stage, not a strong one* — with the 2026 numbers attached, and it means the two literatures
+measured different first stages rather than disagreeing.
+
+### The gain is ordering, not completeness
+
+Base → v2-m3 improves MAP@10 significantly (p=0.0089) while its answer nugget recall gain is **not**
+significant (+0.0067, p=0.27). A better ranker moves the right passages up; it does not put more facts
+into five sentences. That is the composer objective's job, and the two are complementary.
+
+### Still owed
+
+- The listwise arm R5 actually named. The licence-clean candidates need a generative interface this
+  harness does not have, and `jina-reranker-v3` is CC BY-NC.
+- Whether v2-m3 rescues the five BEIR datasets that `bge-reranker-base` *lowered* — ArguAna above all,
+  where the mechanism is opposition rather than topicality.
+- Composition with R6's cascade (43% less decision CPU at equal quality) and with the raised
+  `RERANK_THRESHOLD` (+0.0801 measured separately).
+
 ## 1.3.7 — 2026-10-29
 
 The evidence protocol becomes reproducible elsewhere, which is the falsifier it set for itself.

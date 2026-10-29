@@ -500,6 +500,17 @@ already demands — per corpus, with a rank-1 guardrail and a calibrated blend �
 **Falsifier:** if listwise does not clear the pointwise cross-encoder by ≥+0.02 MAP@10 on the multi-hop
 protocol at equal pool, the gain is a BEIR-only artefact and does not transfer to sets.
 
+**Outcome (the pointwise generation moved; listwise still untested).** Before reaching for a listwise
+model, the cheaper question was asked: did the *pointwise* generation move? It did.
+`bge-reranker-v2-m3` (568M, 2026) beats `bge-reranker-base` (278M, 2024) by **+0.0313 MAP@10
+[+0.0052, +0.0578] at p=0.0089** on the same pool, and both beat no reranker (**0.3128 → 0.3398 →
+0.3710**, the last at p=0.0001 against the baseline). The registered prediction was +0.01–0.03 (it landed
+at the top) and a 0.30–0.33 level (wrong: 0.3710). The mechanism is the first stage: the 2026 grid that
+made large rerankers look pointless used a strong bi-encoder, and this engine's lexical first stage has
+far more for a cross-encoder to fix — the repository's own "helps a weak first stage" finding, with 2026
+numbers. The listwise arm R5 actually named remains untested
+([`findings-reranker-generation.md`](findings-reranker-generation.md)).
+
 ### R6 — Cut the decision cost (weeks, `[offline]` `[model]`)
 
 Three stages, cheapest first: measure whether candidates are already batched into one forward pass; then
