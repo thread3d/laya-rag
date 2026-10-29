@@ -41,6 +41,13 @@ Three bars, all stated before the work so a regression cannot read as a gain:
 3. **Cost** — latency, peak RSS, and index size per query, reported beside every quality number
    (RAGPerf's axis), because "best per unit of compute" is the actual claim.
 
+The **October 2026 reassessment** of those axes against the field is
+[`docs/best-in-the-world-2026-10.md`](docs/best-in-the-world-2026-10.md): which of the three bars moved,
+which components changed underneath them (the small-model market did; see its §3/G1), which leaderboards
+are enterable without a generator, and the seven-item programme that follows. It supersedes nothing here
+— it re-scores §0 against dated 2026 sources and states, for each proposal, the measurement that would
+falsify it.
+
 ---
 
 ## 1. Operating rules (non-negotiable)

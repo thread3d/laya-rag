@@ -24,6 +24,7 @@ Install it and run a first query with the README's [Setup](../README.md#setup) a
 | see every result the measurement programme produced, wins and negatives alike | [Findings index](FINDINGS.md) |
 | compare the engine with published retrieval systems | [Comparisons across systems](COMPARISONS.md) |
 | pick the work up: what landed, what was refuted, what is left and what it costs | [Programme status](PROGRAMME-STATUS.md) |
+| ask what "best RAG system in the world" would take, and which of it this can win | [The best in the world, October 2026](best-in-the-world-2026-10.md) |
 | read the HTTP API and MCP server design record | [An industry-standard API and an MCP server](api-mcp-design.md) |
 | choose between the extractive answer path and an external generator | [Generation and placement](generation-placement.md) |
 | decide whether fine-tuning the encoder is worth it | [Fine-tuning study](study-laya-finetuning.md) |
