@@ -561,6 +561,16 @@ MTEB. This is the only route from *compared* to *ranked*.
 **Falsifier:** if the distilled student misses the ensemble's fused score by more than 0.005 on the five
 datasets, do not submit — a ranked row below the stock `bge-small` row is worse than no row.
 
+**Outcome (the gate shipped; the artefact is still the hard half).** `make submission-check` audits any
+exported encoder against the properties that decide whether it can be *believed*: it loads at a known
+dimension, its outputs are unit vectors, it is deterministic across calls, its pooling comes from the
+engine's verified family table rather than a guess, its revision is pinned, and the engine's
+SearchProtocol adapter is present. The verdict is SUBMITTABLE or not with every failing check named, and
+the stock `bge-small` passes it — a demonstration that the gate passes what deserves to pass. It
+deliberately does not score, so R8's falsifier above stays a scoring criterion: the one item this round
+cannot finish is the training run that would decide whether an MTEB submission is worth making
+([`findings-submission-gate.md`](findings-submission-gate.md)).
+
 ### What not to do
 
 The 2026 evidence strengthens the existing ledger and adds three closures of its own:

@@ -6,6 +6,42 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.1 — 2026-10-29
+
+R8's first half: a submission gate that decides whether an exported encoder is *believable*, and the
+stock one passes it.
+
+### `make submission-check`: five checks, a verdict, and no score
+
+```sh
+make submission-check                                              # the stock encoder
+make submission-check SUBMISSION_MODEL=eval/distill-nfcorpus-model  # an exported student
+make submission-check SUBMISSION_ARGS=--check                      # exit 1 on failure
+```
+
+| check | what a failure would mean |
+| --- | --- |
+| loads and returns embeddings | the package is broken, or the wrong dimension |
+| outputs are unit vectors | a cosine index on un-normalised vectors retrieves garbage while looking plausible |
+| deterministic across calls | a reported score is not reproducible |
+| revision is pinned | MTEB skips results computed on a different revision; a local export must carry a content fingerprint |
+| SearchProtocol adapter present | the route by which the *engine*, not just an encoder, can be entered |
+
+`BAAI/bge-small-en-v1.5` reads **SUBMITTABLE** at 384 dimensions with pooling `cls` — taken from the
+engine's verified family table, not guessed — and revision `5c38ec7c…`. That is a demonstration that the
+gate passes what deserves to pass, not a claim that the encoder is competitive.
+
+The gate deliberately **does not score**: R8's falsifier (*reproduce the ensemble's fused score within
++0.005 on the five measured datasets*) stays a scoring criterion, and the numbers keep coming from the
+harnesses. Eight offline tests drive every check with a stub embedder — no download, no network —
+including the two failures that matter in practice: non-unit vectors and non-determinism.
+
+### Still owed
+
+The artefact itself. Distillation is measured on one dataset (+0.0120 NFCorpus, ~29% of the ensemble's
+gain), the export is verified faithful to its source exactly (max |Δ| 0), and the shipped thing is now
+verified believable — but the five-dataset distillation is a training run this host cannot finish quickly.
+
 ## 1.4.0 — 2026-10-29
 
 The programme's own entry point brought current, and pinned so it cannot drift like the prose it
