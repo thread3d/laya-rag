@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.7.1 — 2026-10-29
+
+The ArguAna verdict reaches the three places that carry R5, and the cascade's interactions reach the
+status page.
+
+### R5's verdict, in the pages a reader uses
+
+`docs/PROGRAMME-STATUS.md`, `docs/best-in-the-world-2026-10.md` and `docs/FINDINGS.md` all carried R5 as
+"pointwise answered; listwise untested" — a state that stopped being current the moment the ArguAna arm
+landed. Each now states the verdict: the prediction held inside its registered band (0.4722 against a
+0.35–0.50 estimate), the falsifier did not fire, and capacity recovers two thirds of the opposition damage
+without reversing the sign.
+
+**The "listwise arm is still untested" sentence stays in all three**, deliberately. A confirmed prediction
+is not a licence to widen it, and the falsifier named the listwise question as the one the test *could not*
+reach.
+
+### R6's row gains its interactions
+
+The cascade's row said "identical quality" — true of the retrieval metrics it measured, and now qualified
+by the two interaction probes: **4 of 20 gate verdicts flip** between M=20 and M=10 while the aggregate is
+nearly indifferent, and the composer loses **0.0043 of nugget recall** at M=10 with abstention rising.
+"Free for the ranker, slightly expensive for the answer" is the accurate form.
+
+Three tests pin the ArguAna numbers to the two reports that produced them and keep the untested-arm
+sentence in place.
+
 ## 1.7.0 — 2026-10-29
 
 The ArguAna prediction held — and the magnitude, not the sign, is what moved. Plus the cascade's second

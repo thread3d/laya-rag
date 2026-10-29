@@ -511,6 +511,18 @@ far more for a cross-encoder to fix — the repository's own "helps a weak first
 numbers. The listwise arm R5 actually named remains untested
 ([`findings-reranker-generation.md`](findings-reranker-generation.md)).
 
+**The ArguAna question followed, against a registered prediction.** R5's outcome asserted that "nothing in
+this result suggests a bigger pointwise model changes ArguAna's collapse", which was a mechanism argument
+rather than a measurement. The prediction was registered before the run — v2-m3 lands *below* the no-CE
+hybrid's 0.568, point estimate 0.35–0.50; falsifier: if it beats the first stage by any margin, the collapse
+is a capacity artefact and the mechanism claim is wrong. Measured at depth 50 on a seeded 400-query subset:
+first stage **0.5664**, v2-m3 **0.4722** (first stage **+0.0942 [+0.0530, +0.1335]**, losing on 290 of 400
+queries), 2024 model **0.2736** (first stage **+0.2928 [+0.2522, +0.3328]**), and **v2-m3 − base +0.1986
+[+0.1566, +0.2407]**. The prediction landed inside its band and the falsifier did not fire. Capacity
+recovers **two thirds** of the opposition damage without reversing the sign, at 3.2× the compute — so the
+standing negative is precise rather than wrong: a pointwise ranker pays for opposition in proportion to how
+little it knows.
+
 ### R6 — Cut the decision cost (weeks, `[offline]` `[model]`)
 
 Three stages, cheapest first: measure whether candidates are already batched into one forward pass; then

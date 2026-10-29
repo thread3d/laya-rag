@@ -99,3 +99,29 @@ def test_the_page_says_the_placement_is_a_subset():
     text = STATUS.read_text(encoding="utf-8")
     assert "refuses to place a subset" in text
     assert "150-query subset" in text
+
+
+def test_the_page_reports_the_arguana_verdict_from_the_reports():
+    """The ArguAna numbers are quoted on the status page; they must match the two reports."""
+    base = ROOT / "eval" / "r1" / "arguana400-BAAI-bge-reranker-base.json"
+    big = ROOT / "eval" / "r1" / "arguana400-BAAI-bge-reranker-v2-m3.json"
+    if not base.is_file() or not big.is_file():
+        pytest.skip("no ArguAna reports on this checkout")
+    first = json.loads(big.read_text(encoding="utf-8"))["datasets"]["arguana"]["retrievers"]
+    text = STATUS.read_text(encoding="utf-8")
+    for field, printed in (
+        ("hybrid-biencoder", "0.5664"),
+        ("crossencoder", "0.4722"),
+    ):
+        assert f"{first[field]['nDCG@10']:.4f}" == printed, f"{field} moved"
+        assert printed in text, f"the status page no longer quotes {field} {printed}"
+    small = json.loads(base.read_text(encoding="utf-8"))["datasets"]["arguana"]["retrievers"]
+    assert f"{small['crossencoder']['nDCG@10']:.4f}" == "0.2736"
+    assert "0.2736" in text
+
+
+def test_the_page_says_the_falsifier_did_not_fire_and_the_arm_is_still_untested():
+    """A confirmed prediction is not a licence: the listwise arm is still open, and the page must say so."""
+    text = STATUS.read_text(encoding="utf-8")
+    assert "falsifier did not fire" in text
+    assert "The listwise arm is still untested" in text
