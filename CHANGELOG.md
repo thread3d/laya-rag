@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.1.6 — 2026-10-30
+
+A caution written **before** the number lands, and an artefact-loss case found while writing it.
+
+### What the document-level row will and will not be comparable to
+
+The queued coverage arm runs at the shipped `top_k` — five chunks, about **2.4 distinct documents** — so its
+`doc_*` fields will compare "gold fact among the top 2.4 documents" against published rows scored over **ten**.
+That is *more* comparable than the chunk row and **still not the fair comparison**, and the finding now says so
+in advance, because it is exactly what a reader would otherwise assume.
+
+Making it fair needs a document quota. The engine has one — `RERANK_COVERAGE_MIN_DOCS` — and it is off by
+default for a measured reason.
+
+### The artefact-loss case that surfaced
+
+The reason is recorded in `config.py` as a **full-protocol (2,255-query)** measurement: MAP@10 0.3165 → 0.3192
+(+0.0027, p=0.037) against Hits@4 0.7694 → 0.7588 (−0.0106). Correct, interval included, honest about the trade
+— and **its reports are not on disk**. A number from a complete run of the full set now lives only as a comment
+in a configuration file, and cannot be re-derived.
+
+That is the standard every other number here is held to, so it is named rather than quietly relied on. The
+finding also notes that a quota or wider-pool row is *a measurement to run deliberately*, not a footnote to
+attach to this one.
+
 ## 2.1.5 — 2026-10-30
 
 Two probes disagreed, and the disagreement was a **silent zero in shipped code**.

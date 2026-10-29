@@ -159,6 +159,27 @@ distinct documents from **2.38 to 3.50**; at twenty it reaches **5.00**. So the 
 really does cover about two and a half documents, and a document-quota setting is the obvious lever if the
 document-level row is to be compared at ten. That is a measurement to make, not a change to make on a probe.
 
+### What the document-level row will and will not be comparable to
+
+A caution to write **before** the number lands, because it is the kind of thing a reader will otherwise assume.
+
+The queued coverage arm runs at the shipped `top_k`, which is **five chunks** — about **2.4 distinct
+documents**. Its `doc_*` fields will therefore compare "gold fact among the top 2.4 documents" against published
+rows scored over **ten**. That is *more* comparable than the chunk row and it is still not the fair comparison.
+
+Making it fair needs a wider pool or a document quota. The engine has one — `RERANK_COVERAGE_MIN_DOCS`, the
+first *N* selections forced to distinct documents — and it is **off by default** for a measured reason recorded
+in `config.py`: on a full-protocol (2,255-query) run it moved MAP@10 **0.3165 → 0.3192** (+0.0027, p=0.037)
+while dropping Hits@4 **0.7694 → 0.7588** (−0.0106). A real trade, which is why it is not a default.
+
+**That full-protocol measurement is also an artefact-loss case worth naming**: its reports are not on disk, so a
+number from a complete 2,255-query run now lives only as a comment in a configuration file. It is not wrong — the
+code's own comment records the interval and the trade — but it cannot be re-derived, which is the standard every
+other number in this repository is held to.
+
+So the placed row will be **document-level at ~2.4 documents**, and the finding will say so rather than calling it
+ten. A quota or wider-pool row is a measurement to run deliberately, not a footnote to attach.
+
 ### The document-level row comes from the coverage arm, and that is valid
 
 The rank arm running now writes the old schema — it started before the field existed — so its document-level
