@@ -6,6 +6,26 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.4.5 — 2026-10-29
+
+Every findings document is now reachable from the index that claims to list them all — and one was not.
+
+### `tests/test_docs_findings_indexed.py`
+
+`docs/FINDINGS.md` opens with "every measurement the improvement programme produced, with the headline
+result and the document that carries the detail", and `docs/index.md` sends a reader there to "see every
+result". A findings document that neither the index nor any indexed document links to is therefore a
+result nobody can find — the same failure as a number with no report behind it, one step further along.
+
+The check is **one hop or fewer**, because that is how the programme writes: the index points at the
+measurement, and the measurement points at the implementation record that produced it. It found one
+orphan, `findings-bridge-gate-column.md` — the record of the wiring, reachable only from a pass report
+that the index does not link — and the measurement document now points at it, which is where a reader
+looking for "what shipped" would go anyway.
+
+Two tests drive the checker itself: an orphan is detected on a synthetic tree, and a one-hop chain is
+accepted, so neither failure nor leniency is accidental.
+
 ## 1.4.4 — 2026-10-29
 
 The configuration table becomes a checked contract, and it holds: every one of the 91 variables the

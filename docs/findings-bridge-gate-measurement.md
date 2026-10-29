@@ -2,8 +2,9 @@
 
 Horizon 1 asked for the bridge-conditioned score to be **wired into the answerability gate as an
 additional column and measured**. The wiring landed earlier (`GATE_BRIDGE_FEATURE`, a 13th
-`FEATURE_NAMES` entry, `extract_features(..., bridge_conditioned=...)`); the column was never
-collected, so there was no number. This is the measurement, and it is negative: with the true
+`FEATURE_NAMES` entry, `extract_features(..., bridge_conditioned=...)`, recorded in
+[findings-bridge-gate-column.md](findings-bridge-gate-column.md)); the column was never collected, so
+there was no number. This is the measurement, and it is negative: with the true
 bridge the gate gets **slightly worse**, and the shuffled-bridge control is neutral — so the cost
 is attributable to the conditioning content, not to a thirteenth column.
 
