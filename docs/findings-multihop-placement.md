@@ -104,6 +104,21 @@ gets placed is the `doc_` one;** the chunk row stays because it is the system's 
 quoting a number without its document-level counterpart is what got this repository into the situation the
 placement tool was written to prevent.
 
+### The document-level row comes from the coverage arm, and that is valid
+
+The rank arm running now writes the old schema — it started before the field existed — so its document-level
+counterpart cannot be derived after the fact (the row stores answers, not document ids). **The queued coverage
+arm runs the current code and will record it.**
+
+Using the coverage arm's retrieval numbers for the placed row is legitimate rather than a compromise, and the
+reason is worth stating: **retrieval is deterministic and identical between the two composer arms**. The
+objective changes which sentences are *selected*, not which passages are *retrieved* — `multihop_official`'s
+own docstring says re-running reproduces the same ranking exactly. So the coverage arm's `doc_*` metrics are
+the rank arm's document-level retrieval, measured once.
+
+`make multihop-row` now prefers `doc_*` when present and, when it is absent, prints that the row is **indicative
+rather than placeable** instead of putting a chunk-level number in the same four columns.
+
 **What this does not fix.** Chunking still differs — the published rows re-chunk at a 200-character overlap
 and the engine derives chunk size from the corpus — so `doc_Hits@10` compares *documents retrieved by
 different chunkers*, which is the closest this data allows and is stated rather than glossed.

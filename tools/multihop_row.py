@@ -50,8 +50,14 @@ def summarise(report: Mapping[str, Any]) -> dict[str, Any]:
     missing = [name for name in wanted if name not in summary]
     if missing:
         raise SystemExit(f"the report has no {', '.join(missing)}; is it a retrieval row?")
+    # The published table scores **documents**; this engine returns chunks, and the corpus splits 609
+    # documents into 4,592. When the run recorded a document-level counterpart, that is the row to place —
+    # and when it did not, the chunk-level metrics are reported with the mismatch stated rather than silently
+    # presented as comparable.
+    document = {name: float(summary[f"doc_{name}"]) for name in wanted if f"doc_{name}" in summary}
     return {
         "metrics": {name: float(summary[name]) for name in wanted},
+        "document_metrics": document,
         "queries": int(summary.get("queries") or 0),
         "citation_clean": summary.get("citation_clean_all"),
         "nugget_recall": summary.get("answer_nugget_recall"),
@@ -85,7 +91,8 @@ def render(row: Mapping[str, Any], *, label: str, allow_subset: bool = False) ->
             "```",
             "",
         ]
-    metrics = row["metrics"]
+    metrics = row.get("document_metrics") or row["metrics"]
+    level = "documents" if row.get("document_metrics") else "chunks"
     lines += [
         "| system | Hits@10 | Hits@4 | MAP@10 | MRR@10 |",
         "| --- | ---: | ---: | ---: | ---: |",
@@ -98,7 +105,15 @@ def render(row: Mapping[str, Any], *, label: str, allow_subset: bool = False) ->
     )
     lines += [
         "",
-        f"Over **{row['queries']}** answerable queries. Citation validity "
+        (
+            f"Over **{row['queries']}** answerable queries, scored over **documents** — the level the published "
+            "rows are scored over — so the comparison is like-for-like apart from chunking."
+            if level == "documents"
+            else f"Over **{row['queries']}** answerable queries, scored over **chunks**. The published rows are "
+                 "scored over **documents**, and this report carries no document-level counterpart, so the row "
+                 "is indicative rather than placeable."
+        ),
+        f"Citation validity "
         f"**{row['citation_clean'] if row['citation_clean'] is not None else 'not measured'}**, answer "
         f"nugget recall **{row['nugget_recall'] if row['nugget_recall'] is not None else 'not measured'}** "
         "— the two columns this engine adds to a retrieval table, and the reason its row is comparable "

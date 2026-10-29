@@ -65,3 +65,28 @@ def test_the_published_anchors_travel_with_their_own_caveats():
     assert "voyage-02" in rendered
     assert "Chunking differs" in rendered
     assert "no lexical baseline" in rendered
+
+
+def test_the_document_level_row_is_preferred_when_the_report_has_one():
+    """The published table scores documents; a chunk-level row is indicative, not placeable.
+
+    `engine_extractive.py` records `doc_*` metrics when it scores against whole documents. When they are
+    present the tool must place *those*, and when they are absent it must say so rather than print a
+    chunk-level number in the same four columns and let a reader assume the comparison holds.
+    """
+    report = {
+        "summary": {
+            "queries": mr.FULL_SET,
+            "Hits@10": 0.94, "Hits@4": 0.847, "MAP@10": 0.371, "MRR@10": 0.688,
+            "doc_Hits@10": 0.61, "doc_Hits@4": 0.52, "doc_MAP@10": 0.33, "doc_MRR@10": 0.55,
+        }
+    }
+    row = mr.summarise(report)
+    assert row["document_metrics"]["Hits@10"] == 0.61
+    rendered = mr.render(row, label="ours")
+    assert "scored over **documents**" in rendered
+    assert "like-for-like" in rendered
+
+    chunk_only = mr.summarise(_report(mr.FULL_SET))
+    assert chunk_only["document_metrics"] == {}
+    assert "no document-level counterpart" in mr.render(chunk_only, label="ours")

@@ -6,6 +6,32 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.1.3 — 2026-10-29
+
+The placement tool places the **document-level** row when one exists, and says *indicative* when it does not.
+
+### `make multihop-row` prefers `doc_*`
+
+Now that `engine_extractive.py` records both levels, the tool places the comparable one:
+
+- with `doc_*` present → the rendered row says **scored over documents**, "like-for-like apart from chunking";
+- without it → the row says **scored over chunks**, that the published rows are scored over documents, and
+  that **this report carries no document-level counterpart, so the row is indicative rather than placeable**.
+
+That distinction is the whole point of the last two rounds. Printing a chunk-level number in the same four
+columns as document-level anchors and letting a reader assume the comparison holds is how the README's table
+became a claim it could not defend.
+
+### Why the coverage arm can supply it, and that is not a compromise
+
+The rank arm running now started before the field existed, so its document-level counterpart cannot be derived
+after the fact — the row stores answers, not document ids. The **queued coverage arm** runs the current code and
+will record it.
+
+Using the coverage arm's retrieval numbers for the placed row is legitimate because **retrieval is deterministic
+and identical between the two composer arms**: the objective changes which sentences are *selected*, not which
+passages are *retrieved*. The document-level metrics are the rank arm's retrieval, measured once.
+
 ## 2.1.2 — 2026-10-29
 
 A test that cannot fail reads as coverage — so the suite is now audited for vacuous tests, and the audit's
