@@ -6,6 +6,34 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.5.9 — 2026-10-29
+
+The README's Known limits carries the October round's limits, and the long-jobs section documents
+`heavy-wait`.
+
+### Four levers, four limits, in the section a careful reader reads
+
+`README.md`'s **Known limits** said "these are measured, by `make eval` and `make bench`" — a set written
+before any of October's results existed. Each of the four levers now appears there with the limit that
+travels with it:
+
+- the gate **transfers across queries, not across corpora** — fitted on halves of one benchmark, classes
+  balanced by construction, news questions;
+- the composer's objective is **+0.055, not the +0.25 the gap suggested** — significant, half the
+  pre-registered bar, so selection is *a* constraint rather than *the* one;
+- the cascade is **free on this corpus because the first stage is strong there**, and per-corpus by
+  construction;
+- the reranker generation is **a lever only against a weak first stage**, with its ArguAna behaviour
+  being measured rather than assumed.
+
+Each points at the findings document that supports it, which is the same structure the pre-existing
+entries use.
+
+### And the long-jobs section gains the one command that queues
+
+`make heavy-wait` is documented where a reader looks for it — beside `heavy-status` — with the reason it
+exists: a shell that waits on `pgrep -f "tools/beir.py"` matches its own command line and waits forever.
+
 ## 1.5.8 — 2026-10-29
 
 `heavylock.py --wait`: queue behind a long job by asking the lock, not by grepping for its name.

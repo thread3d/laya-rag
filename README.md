@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 1.5.8** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 1.5.9** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -851,7 +851,13 @@ fine-tuning/distillation, the ANN and on-disk scale benches, `bright`, `frames_e
 ```sh
 .venv/bin/python tools/heavylock.py --status    # who, if anyone, holds it
 make heavy-status
+make heavy-wait                                 # block until it is free, then exit 0
 ```
+
+`make heavy-wait` exists because the obvious way to queue behind a long job is wrong: a shell that
+waits with `pgrep -f "tools/beir.py"` matches **its own command line** and waits forever, even after the
+job exits. Waiting on the lock asks the same question the job asks when it starts, and holds nothing on
+return, so the job that follows takes the lock itself and its holder record stays honest.
 
 A second job exits `2` with the holder's name, pid and start time instead of piling on. The kernel
 releases the lock when a process dies, so a crashed or killed job leaves **no stale lock** to clean
@@ -1806,6 +1812,32 @@ fine.
 overflowed `max_len` — it stayed above 0.73 even at 2.9x the budget, because Laya truncates the
 state and the relevant passage is usually read first. Chunking still keeps blocks well inside the
 budget at the default thresholds.
+
+### What the October round measured, and what each new lever cannot do
+
+Four levers were added or measured in October, and every one of them carries a limit that a reader has
+to know before quoting its number:
+
+- **The answerability gate transfers across queries, not across corpora.** On the benchmark's own 301
+  `null_query` records it reads AUC **0.8377** and more than halves the false-accept rate at the same
+  threshold — but it is fitted on halves of *one* benchmark, the classes are balanced by construction,
+  and the questions are news. A corpus with 2% unanswerable questions, or a code corpus, is exactly the
+  domain shift `make gate-transfer` exists to measure and the MTRAG-UN sample is the one that would
+  settle it ([`docs/findings-answerability-gate.md`](docs/findings-answerability-gate.md)).
+- **The composer's objective is worth +0.055, not the +0.25 the gap suggested.** Answer nugget recall
+  moves 0.2060 → 0.2610 at unchanged citation validity, which is significant and is half the
+  pre-registered bar: selection is *a* binding constraint, not *the* one, and the five-sentence budget is
+  the next constraint to test ([`docs/findings-extractive-coverage.md`](docs/findings-extractive-coverage.md)).
+- **The cascade is free on *this* corpus.** `SECOND_STAGE_TOP_M=10` halves the decision CPU at identical
+  quality on MultiHop-RAG because the first stage's ordering is strong there. Where it is weak —
+  Touché, FRAMES-shaped ensembles — the truncation removes exactly the candidates the decision model
+  exists to rescue, so the setting is per corpus and defaults to off
+  ([`docs/findings-decision-cascade.md`](docs/findings-decision-cascade.md)).
+- **The reranker generation is a lever only against a weak first stage.** A 2026 568M cross-encoder beats
+  its 2024 predecessor by +0.031 MAP@10 on this engine's *lexical* first stage, and that is consistent
+  with the same model adding +0.47 nDCG@10 over a strong bi-encoder elsewhere. Its ArguAna behaviour —
+  where a pointwise ranker scored 0.250 against a first stage's 0.568 — is being measured, not assumed
+  ([`docs/findings-reranker-generation.md`](docs/findings-reranker-generation.md)).
 
 ## The vendored submodule
 
