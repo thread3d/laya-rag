@@ -6,6 +6,26 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.8.4 — 2026-10-29
+
+The claim ledger reaches the index page — the surface that actually gets quoted.
+
+### `docs/FINDINGS.md` is pinned, not just `PROGRAMME-STATUS.md`
+
+The status page has had its numbers pinned to their reports since the October round. The **findings
+index** had no such pin, though it is the larger surface — the page a reader cites when they want to know
+what this programme measured — and its rows quote the same four levers.
+
+The same registry now covers it: gate held-out AUC **0.8377**, composer's shipped arm **0.2060** and its
+objective arm **0.2610**, reranker v2-m3 MAP@10 **0.3710**, and the cascade's M=10 CPU seconds when a cost
+report exists (it does not here, so that pin skips — the same gap axis 4 reports).
+
+**Perturbed before trusted**: changing the objective arm's number in the index to 0.2699 fails the test and
+names the file and field that disagree; restored.
+
+That leaves the index and the status page on one ledger, applied to the two pages a reader is most likely
+to quote from.
+
 ## 1.8.3 — 2026-10-29
 
 The two-hour full-set row is checked at 6% rather than trusted only at the end.

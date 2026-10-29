@@ -142,3 +142,39 @@ def test_the_assessment_no_longer_says_none_of_its_predictions_were_measured():
         assert item in text, f"the outcome table no longer records that an item was {item}"
     # and the two falsifications the table calls out by name
     assert "R0" in text and "R2" in text
+
+
+# ── the same ledger applied to the index page ─────────────────────────────
+
+FINDINGS = ROOT / "docs" / "FINDINGS.md"
+
+#: (label, report, `/`-separated field, decimals, scale) — the four levers, as the index quotes them.
+INDEX_PINS = (
+    ("gate held-out AUC", ROOT / "eval" / "gate" / "answerability-gate.json",
+     "held_out/gate_auc/mean", 4),
+    ("composer shipped arm", BENCH / "engine-extractive-rank150.json", "summary/answer_nugget_recall", 4),
+    ("composer objective arm", BENCH / "engine-extractive-cov150.json", "summary/answer_nugget_recall", 4),
+    ("reranker v2-m3 MAP@10", BENCH / "engine-extractive-ce-BAAI-bge-reranker-v2-m3.json",
+     "summary/MAP@10", 4),
+    ("cascade M=10 CPU seconds", ROOT / "eval" / "cost-report.json", "cpu_seconds/p50", 1),
+)
+
+
+def test_the_findings_index_quotes_the_numbers_its_rows_are_about():
+    """`FINDINGS.md` is the page that gets quoted; its four lever numbers must match their reports.
+
+    The status page has had this pin since the October round and the index page had none, though it is
+    the larger surface and the one a reader cites. Same registry, same rule: a number that is not on the
+    page is either a stale pin or a stale page, and a missing artefact skips rather than fails.
+    """
+    text = FINDINGS.read_text(encoding="utf-8")
+    present = [pin for pin in INDEX_PINS if pin[1].is_file()]
+    if not present:
+        pytest.skip("no eval/ artefacts on this checkout; run the measurement chain first")
+    missing = []
+    for label, report, dotted, decimals, *rest in present:
+        value = _dig(json.loads(Path(report).read_text(encoding="utf-8")), dotted)
+        printed = f"{value * (rest[0] if rest else 1.0):.{decimals}f}"
+        if printed not in text:
+            missing.append(f"{label}: {printed} (from {Path(report).name}:{dotted})")
+    assert not missing, "docs/FINDINGS.md no longer quotes:\n  " + "\n  ".join(missing)
