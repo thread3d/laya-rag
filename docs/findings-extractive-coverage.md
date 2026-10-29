@@ -188,7 +188,16 @@ result of the two.
 
 **Cost.** Three arms × 150 queries ≈ 40 min at the measured 736 s/150.
 
-Both are registered with the measurement that would overturn them, and neither has been run.
+Both are registered with the measurement that would overturn them.
+
+**Status.** (a)'s two arms are now **queued**: the rank arm is running (the full-set retrieval row), and the
+coverage arm waits on the heavy-job lock behind the listwise measurement. (b) is not queued — it needs the
+index and the lock, and it is the cheaper of the two, so it goes after them.
+
+The queue is deliberate about one thing: the coverage arm runs with the **shipped** abstention behaviour, not
+with `--honour-answerability`. Prediction (a) was registered against the behaviour that produced the
+150-query measurement, and changing two things at once would make the delta unattributable — the same reason
+the harness carries both settings in its fingerprint.
 
 ## Still owed
 

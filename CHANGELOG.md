@@ -6,6 +6,28 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.6 — 2026-10-29
+
+The second half of registered prediction (a) is queued, not merely owed.
+
+### Three measurements, one lock, an explicit order
+
+The programme now has a queue rather than a to-do list:
+
+| | state |
+| --- | --- |
+| full-set **rank** arm (R4b's placement row) | running, 725 of 2,255 |
+| **listwise** arm (R5's named measurement) | waiting on the lock, queued first |
+| full-set **coverage** arm (prediction (a)'s other half) | waiting on the lock, queued second |
+
+All three use the same flock-based wait, so the order is enforced by the lock rather than by whoever
+remembers. Each checkpoints, so an interruption resumes.
+
+**One thing the queue is explicit about**: the coverage arm runs with the **shipped** abstention behaviour,
+not with `--honour-answerability`. Prediction (a) was registered against the behaviour that produced the
+150-query measurement, and changing two things at once would make the delta unattributable — the same reason
+the harness carries both settings in its fingerprint. The answerability lever gets its own arm afterwards.
+
 ## 1.9.5 — 2026-10-29
 
 The declared Python floor becomes a local check, because CI is the wrong place to find out.
