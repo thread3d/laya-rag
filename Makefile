@@ -89,6 +89,12 @@ GATE_ROWS ?= eval/gate/multihop.json
 GATE_ARTEFACT ?= eval/gate/answerability-gate.json
 GATE_SPLITS ?= 40
 GATE_TRAIN_ARGS ?=
+LISTWISE_THREADS ?= 24
+LISTWISE_QUERIES ?= 400
+LISTWISE_SEED ?= 17
+LISTWISE_DEPTH ?= 50
+LISTWISE_OUT ?= eval/r1/arguana-listwise
+LISTWISE_ARGS ?=
 HEAVY_POLL ?= 30
 MULTIHOP_ROW_REPORT ?= eval/benchmarks/multihop-rag/engine-extractive-full.json
 MULTIHOP_ROW_LABEL ?= ours: the engine, shipped defaults
@@ -107,7 +113,7 @@ EVIDENCE_ANSWER_ROW ?= eval/benchmarks/multihop-rag/engine-extractive-rank150.js
 EVIDENCE_GATE_ROWS ?= eval/gate/multihop.json
 EVIDENCE_EXTRA_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe multihop-fetch multihop-row heavy-wait gate-dataset gate-train gate-transfer evidence-protocol evidence-pipeline submission-check job-status lint clean
+.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe multihop-fetch multihop-row heavy-wait listwise-rerank gate-dataset gate-train gate-transfer evidence-protocol evidence-pipeline submission-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
@@ -194,6 +200,7 @@ help:
 	@echo "job-status   every resumable job's manifest: running, complete, or half-finished"
 	@echo "heavy-status is a heavyweight job running? (they run one at a time)"
 	@echo "heavy-wait   block until no heavyweight job is running, then exit 0"
+	@echo "listwise-rerank  the listwise arm: jina-reranker-v3 over the ArguAna pool (CC-BY-NC)"
 	@echo "audit-verify verify the hash-chained audit log of index mutations"
 	@echo "mteb-eval    MTEB v2 SearchProtocol conformance — scores the engine, not an encoder"
 	@echo "calibration-report  reliability, ECE, Brier and risk-coverage of the answerability decision"
@@ -522,6 +529,14 @@ distill-verify:
 multihop-row:
 	$(PY) tools/multihop_row.py --report $(MULTIHOP_ROW_REPORT) --label "$(MULTIHOP_ROW_LABEL)" \
 		$(MULTIHOP_ROW_ARGS)
+
+# R5's named-but-blocked arm: jina-reranker-v3 over the same ArguAna pool as the pointwise arms. The model
+# is CC-BY-NC-4.0, so this measures a research instrument the engine could not ship — the report records
+# the licence beside the number. Prediction and both falsifiers are registered in the finding first.
+listwise-rerank:
+	OMP_NUM_THREADS=$(LISTWISE_THREADS) $(PY) tools/listwise_rerank.py \
+		--limit-queries $(LISTWISE_QUERIES) --query-seed $(LISTWISE_SEED) \
+		--depth $(LISTWISE_DEPTH) --out $(LISTWISE_OUT) $(LISTWISE_ARGS)
 
 # R8's gate: is an exported encoder submittable — does it load, produce unit vectors, reproduce
 # itself, name its pooling and revision, and expose the engine's SearchProtocol adapter? Checks a stock

@@ -6,6 +6,45 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 1.9.0 — 2026-10-29
+
+R5's listwise arm: the blocker was checked rather than assumed, and it has moved. The arm is built,
+predicted and queued.
+
+### The blocker, resolved at the interface and bounded by the licence
+
+R5 was blocked on two things. Both were checked:
+
+- **The interface moved.** [`jinaai/jina-reranker-v3`](https://huggingface.co/jinaai/jina-reranker-v3) —
+  the model behind *Last but not Late Interaction for Listwise Document Reranking*
+  ([arXiv 2509.25085](https://arxiv.org/abs/2509.25085v4)) — is a **596M listwise** reranker, the same size
+  class as the pointwise model already measured, and it runs here: `AutoModel` with `trust_remote_code`,
+  exposing `model.rerank(query=…, documents=[…])`, which scores a whole candidate list in one pass.
+- **The licence did not move, and that bounds the conclusion.** It is **CC-BY-NC-4.0**: a research
+  instrument, not something this engine could ship. The Apache-2.0 alternative, `bge-reranker-v2-gemma`, is
+  **2.5B parameters** with a generative interface — 4.4× the compute and another harness path. So the arm
+  can be *measured* and still not *shipped*, and every number is quoted with that beside it.
+
+### The prediction and both falsifiers, registered before the run
+
+nDCG@10 in **0.50–0.56** — above `v2-m3`'s 0.4722, still below the first stage's 0.5664. *Falsifier A:* if
+it beats 0.5664, the collapse is an **interface** property and the standing negative must name the
+interface. *Falsifier B:* if it lands below 0.4722, seeing candidates together buys nothing and the
+objective story stands alone.
+
+### The interface was proved before the run was paid for
+
+A five-query smoke test at depth 20 — 120 s — established the whole path: the pool built by the harness's
+own `hybrid-biencoder` functions, one listwise call per query, positions mapped back to document ids. It
+also caught a real defect: `evaluate_rankings` was scoring all **1,406** ArguAna queries while five had been
+ranked, so unsampled queries counted as zeros and the summary read **nDCG@10 0.0028 over 1,406 queries**.
+The harness's rule — restrict the qrels to the sample — was missing. With it, the same five read **0.80**.
+*A catastrophic-looking number and a good-looking number were one line apart, and no table would have
+flagged either.*
+
+Four tests cover the two things that can be wrong without a metric noticing: the pool the model sees, and
+the position-to-id mapping. `make listwise-rerank` runs the full 400-query arm, queued behind the lock.
+
 ## 1.8.4 — 2026-10-29
 
 The claim ledger reaches the index page — the surface that actually gets quoted.

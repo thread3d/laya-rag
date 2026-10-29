@@ -174,3 +174,61 @@ It does not license "use a bigger reranker and the ArguAna problem goes away": t
 sizes is suggestive and two points are not a trend. It does not license a claim about *listwise* models
 either — none was run (see the section above on why), and the opposition argument predicts a listwise
 ranker would behave differently, which remains untested rather than assumed.
+
+---
+
+## The listwise blocker, resolved and bounded — and the prediction registered before the run
+
+R5's outcome left the listwise arm untested for two stated reasons: no licence-clean candidate supported by
+the harness, and most listwise models being generative-interface-only. Both were **checked** rather than
+assumed, and both have moved.
+
+**The interface moved.** `jinaai/jina-reranker-v3` ([paper](https://arxiv.org/abs/2509.25085v4),
+[model card](https://huggingface.co/jinaai/jina-reranker-v3)) is a **596M listwise** reranker — "Last but not
+Late Interaction for Listwise Document Reranking" — and it loads and runs here: `AutoModel` with
+`trust_remote_code`, exposing `model.rerank(query=…, documents=[…])`, which scores a *whole candidate list
+in one pass* rather than one (query, document) pair at a time. That is the interface the pointwise models
+this document measured do not have, and it is the one ArguAna's opposition relation would need.
+
+**The licence did not move, and that bounds the conclusion.** The model is **CC-BY-NC-4.0**: it can be
+measured as a research instrument, and it cannot be shipped inside this engine's dependency path. The other
+candidate, `BAAI/bge-reranker-v2-gemma`, is Apache-2.0 but **2.5B parameters with a generative interface** —
+4.4× the compute of the model already measured, and a different harness path again. So the listwise arm can
+now be *measured* and still not *shipped*, and any conclusion below is stated with that in view.
+
+### The prediction, registered before the run
+
+Same protocol as the pointwise measurements: ArguAna, the seeded 400-query subset, depth 50, the same
+`bge-small` hybrid first stage, nDCG@10.
+
+- **Prediction.** Listwise lands **between the pointwise model and the first stage**: nDCG@10 in
+  **0.50–0.56**. That is +0.03 to +0.09 over `v2-m3`'s 0.4722, and still 0.01–0.07 *below* the first stage's
+  0.5664. The reasoning: a listwise pass can see the pro and con arguments together, which is closer to
+  what an opposition relation needs, but the corpus's relevance is a *stance* judgement that a topical
+  reranker has no supervision for at any interface.
+- **Falsifier A.** If listwise **beats 0.5664**, the collapse is an **interface** property rather than an
+  objective one, this repository's standing negative must be re-stated to name the interface, and the whole
+  "pointwise rankers cannot do opposition" claim collapses.
+- **Falsifier B.** If listwise lands **below 0.4722**, the interface argument is refuted in the other
+  direction: seeing the candidates together buys nothing, and the objective story stands on its own.
+- **Cost.** One listwise pass per query over fifty candidates, 400 queries. Recorded when it runs; the
+  pointwise arm of the same size took 6,007 s.
+
+Either falsifier is a better outcome than the prediction, which is the point of stating it first.
+
+### The interface was proved before the run was paid for
+
+A five-query smoke test at depth 20 established that the adapter works end to end — pool built by the
+harness's own `hybrid-biencoder` functions, one listwise call per query, the returned positions mapped back
+to document ids — and it cost 120 s. That is worth doing before committing hours: the two things that can
+be wrong without a metric noticing are the **pool** (a different pool answers a different question) and the
+**position mapping** (a plausible ranking of the wrong documents), and both are now covered by tests.
+
+The smoke test also caught a real defect in the adapter: `evaluate_rankings` was scoring all 1,406 ArguAna
+queries while five had been ranked, so every unsampled query counted as a zero and the summary read
+**nDCG@10 0.0028 over 1,406 queries**. The harness's own rule — restrict the qrels to the sampled queries —
+was missing. With it, the same five queries read **0.80**. A number that looks like a catastrophic result
+and a number that looks like a good one were one line apart, and neither would have been flagged by a table.
+
+The full 400-query, depth-50 run is queued behind the heavy-job lock. Its licence is recorded beside its
+number wherever it is quoted.
