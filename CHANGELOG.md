@@ -6,6 +6,34 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.8.2 — 2026-10-30
+
+A cross-cutting audit of the night's four corrections: two pages had gaps, and the audit's own first run produced
+**two false positives** worth recording.
+
+### What the audit found
+
+Each correction is a number whose name promised more than its measurement. Propagating them page by page over a dozen
+rounds means they can be undone page by page, so the claim-bearing pages were checked for pairing:
+
+| page | gap |
+| --- | --- |
+| `BENCHMARKS.md` | quoted the composer's recall with no length caveat — **fixed** (the row now carries the 2.1× length, the 0.0790 ratio collapse and the 0.1764 character budget) |
+| `best-in-the-world` | its §8 outcome row still said *"transfer across corpora still unmeasured"* — **fixed**, with the hold-out pair and the per-type spread |
+| `findings-evidence-protocol`, `findings-reranker-generation` | quoted citation cleanliness without a qualifier — **fixed** |
+| `PROGRAMME-STATUS` | quoted `cite-clean 1.0000` bare — **fixed** |
+
+### And two false positives
+
+The same audit flagged `findings-extractive-row.md` (which *defines* "citation clean" as "every claim cites in-range
+evidence" in the same table cell — clearer than adding the word) and `findings-coverage-scope.md`, where **`0.0521` is
+an ArguAna Hits@4 table cell**, not the gate's ECE.
+
+That is the lesson: **a number alone is not a claim identity.** So the test that now enforces the pairing is scoped to
+the six pages whose *job* is to make claims, where a bare number is one — and it accepts the qualifier as a
+**concept** rather than a spelling, because the assessment's own phrasing (*"mechanical citation validity, not semantic
+support"*) is better than the word the test was looking for.
+
 ## 2.8.1 — 2026-10-30
 
 The one README row a deployer reads **before** switching the gate on was quoting the weaker regime alone.

@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `2.8.1` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `2.8.2` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -189,7 +189,7 @@ lock**, and a fresh agent should read this before starting anything heavy:
 
 | measurement | state | cost | closes |
 | --- | --- | --- | --- |
-| full-set **rank** row, 2,255 queries | **finished** — Hits@10 **0.9011**, MAP@10 0.3120, cite-clean 1.0000 over all 2,255 | ~4 h | R4b: the row is no longer a subset, and the subset was **0.0225 optimistic** on nugget recall |
+| full-set **rank** row, 2,255 queries | **finished** — Hits@10 **0.9011**, MAP@10 0.3120, cite-clean 1.0000 (structural) over all 2,255 | ~4 h | R4b: the row is no longer a subset, and the subset was **0.0225 optimistic** on nugget recall |
 | **listwise** arm, `jina-reranker-v3`, 400 queries at depth 50 | **queued** on the lock | ~1.5–2 h projected from a measured 8 s/query at depth 10 | R5's named, previously blocked, arm |
 | full-set **coverage** arm | **queued** on the lock, behind the listwise arm | ~2 h | prediction (a): does the composer's +0.055 hold at 2,255 queries |
 | **`--honour-answerability`** full-set arm | not queued — waits for the three above | ~2 h | the product-level effect of the abstention lever found in this round |

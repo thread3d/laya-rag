@@ -34,7 +34,7 @@ MultiHop-RAG, 150 answerable queries at seed 17, the engine's own 4,592-chunk in
 `RERANK_THRESHOLD` at 0 (the pool is kept; the ordering decides). All three arms on the same 150
 queries and the same pool, so the comparison is paired:
 
-| arm | MAP@10 | Hits@10 | answer nugget recall | citation clean | run time |
+| arm | MAP@10 | Hits@10 | answer nugget recall | citation clean (structural) | run time |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | no cross-encoder (shipped) | 0.3128 | 0.9067 | 0.2060 | 1.0000 | 736 s |
 | `bge-reranker-base` (2024, 278M) | 0.3398 | 0.9333 | 0.2281 | 1.0000 | 434 s |

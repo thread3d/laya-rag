@@ -18,7 +18,7 @@ Four axes, each reading an artefact the programme already produces, each number 
 field:
 
 1. **Evidence quality** — MAP@10 / Hits@10 / Hits@4 / MRR@10 of the retrieval the answers were composed
-   from, plus the answer's own two numbers (nugget recall, citation validity).
+   from, plus the answer's own two numbers (nugget recall, and **structural** citation validity — every citation in range and every quote found; the advisory content layer is separate).
 2. **Evidence-side abstention** — AUC, risk@80 and AURC of the decision that says "this corpus cannot
    answer", scored on the benchmark's own negative class, against the shipped scalar as a baseline.
 3. **Joint score** — evidence quality × (1 − false-access rate), the score that stops abstention being

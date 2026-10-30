@@ -456,6 +456,8 @@ this repository keeps finding. It stays opt-in: a gate fitted on news questions 
 instrument on a code corpus, and that is what `make gate-transfer` exists to measure
 ([`findings-answerability-gate.md`](findings-answerability-gate.md)).
 
+**The transfer number followed, and it splits the claim.** Held out by question *type* — the regime the trainer's own docstring calls the only real transfer test — the ordering survives (**AUC 0.8377 → 0.7909**, balanced accuracy 0.7546 → 0.7213) and the **calibration does not** (**ECE 0.0521 → 0.1361**), with per-type AUCs of 0.9117 (temporal), 0.7325 (inference) and 0.7285 (comparison). Calibration is what the shipped gate is advertised *for* — the deployment argument is that its probabilities can be thresholded — so that half of the claim is much weaker than published.
+
 ### R4 — Publish the evidence-layer protocol, and take two leaderboard placements (weeks, `[web]`)
 
 Package what already exists as **one named protocol with one command and one report**, on four axes:
@@ -672,7 +674,7 @@ asking for exactly that.
 | **R0** decision share | batching would put the decision at 30–40% of CPU | **falsified** — 99.8% of the cost is the decision pass itself; the falsifier fired at an 8.1% spread, and the honest conclusion was that no batching exists to harvest |
 | **R1** encoder refresh | a 0.6B encoder would move BEIR | **partly** — dense −0.018 on SciFact, +0.024 on NFCorpus, fused +0.007/+0.006 at 15–21× the indexing cost: the choice is routing, not a swap |
 | **R2** composer objective | the objective recovers ~0.25 of the gap | **falsified three times over** — it recovered 0.0489 of 0.5404; and the gain it *did* make is bought with length (2.1× the text, worse per thousand characters). Both registered remedies failed: a ratio score collapsed recall to 0.0790, a 900-character budget read 0.1764 — **less than the shipped arm at 20% more text**. Selection is *a* binding constraint, and "more facts without more text" is not available on this corpus |
-| **R3** portable abstention | a feature gate beats the shipped scalar | **confirmed** — held-out AUC 0.8377, false accepts 30.7% against 69.3% *and* true accepts 76.7% against 72.0%. Transfer across corpora still unmeasured |
+| **R3** portable abstention | a feature gate beats the shipped scalar | **confirmed, with its calibration qualified** — random-split AUC 0.8377, false accepts 30.7% against 69.3% *and* true accepts 76.7% against 72.0%; held out **by question type** the ordering survives (AUC **0.7909**) and the calibration does not (**ECE 0.0521 → 0.1361**), with a 0.18 spread between types. Cross-**corpus** transfer still unmeasured |
 | **R4** evidence protocol | four axes, absent ones named | **shipped, and now five** — the fifth says which configuration produced the numbers. The placement half produced a row the tool refuses to place until the full set runs |
 | **R5** reranker generation | the pointwise generation moved | **confirmed** — +0.0313 MAP@10 on the same pool (p=0.0089). The ArguAna prediction, registered before its run, **held inside its band** (0.4722 against 0.35–0.50) and its falsifier did not fire |
 | **R6** decision cost | 3–10× fewer decision seconds at ≤0.005 MAP@10 | **confirmed at the small end** — 43% less CPU at identical retrieval quality. Its interactions are not free: 4 of 20 gate verdicts flip, and the composer loses 0.0043 nugget recall |
