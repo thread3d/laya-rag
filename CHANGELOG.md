@@ -6,6 +6,38 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.8.0 — 2026-10-30
+
+The objective is accounted for **item by item**, against its own words — the page a reader should use to decide
+whether the work was done.
+
+### Why this page exists
+
+Ten rounds of measurement and thirteen of integrity work produced a lot of prose. None of it answered the question a
+reader actually has: *the brief named nine things — which of them are done?*
+
+`docs/PROGRAMME-STATUS.md` now carries a table with one row per item of the brief, each stating **what was measured**,
+**what it establishes** and **what remains**. The summary:
+
+| | count |
+| --- | ---: |
+| closed as stated | **5** |
+| partial, with the blocker named | **4** |
+| half done | **1** |
+
+And two cross-cutting lines the brief also asked for: every change ships with a test and a findings document (1,912
+tests, eighteen catalogued failure classes, every finding reachable from the index), and every prediction carries its
+falsifier (nine blocks, all paired, **now enforced by a test**).
+
+### What the table is careful about
+
+It does not round a partial into a done. "Take the generator-free leaderboard placements" reads **measured, not yet
+placeable** — because the full-set row exists but is chunk-level, and the document-level counterpart is in the queue.
+"Own a submittable artefact" reads **half**, because the gate ships and the training run does not.
+
+The two words that recur in the partial rows are *queued* and *blocked*, and the distinction matters: **nothing here
+is waiting on a design decision.** One item waits on three runs, and two wait on resources this host does not have.
+
 ## 2.7.8 — 2026-10-30
 
 The README's exact test count was wrong by sixteen and drifting — it is now stated at a precision the page can keep.

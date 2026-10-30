@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `2.7.8` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `2.8.0` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -89,6 +89,29 @@ Negatives are results here, and these are the ones worth keeping:
 - **Two of my own hypotheses were falsified by the runs that tested them**: that the lexical shortfall
   grows with corpus size (DBPedia at 4.6M documents is −0.008), and that our lexical settings cause it
   (the published-settings control row is *further* from the anchor).
+
+## The objective, item by item
+
+The brief for this round was nine concrete things. Here is each one against its own words, with the evidence and
+what remains — the page a reader should use to decide whether the work was done, rather than the narrative above.
+
+| the brief said | state | evidence | what remains |
+| --- | --- | --- | --- |
+| **instrument the CPU-only envelope** | **done, and the prediction was falsified** | 6.71 s wall / 96.3 s CPU per query at shipped defaults; the decision pass is **99.8%** of it, not the 30–40% predicted; the falsifier fired at an 8.1% spread; a **~10× latency tail** was later found and traced to state length | nothing — the envelope is published with its spread and its tail |
+| **refresh the retrieval components under this repo's own protocol** | **partial: 2 of 5 datasets** | SciFact dense **−0.018**, NFCorpus **+0.024**, fused +0.007/+0.006 at 15–21× the indexing cost — the finding is *routing, not a swap* | ArguAna and FiQA were priced at 1.8–9 h of encoder time each and not run; ArguAna was measured separately for the cross-encoder question |
+| **give the extractive composer an objective** | **done, with three falsifications** | nugget recall 0.2060 → 0.2610 (p=0.0005), then: the gain is **2.1× the text**; a ratio score collapsed to 0.0790; a 900-char budget read 0.1764 — *below* the shipped arm at 20% more text | nothing — "more facts without more text is not available here" is the closed result |
+| **make abstention portable** | **gate done; cross-corpus open** | shipped gate: AUC 0.8377, false accepts 30.7% vs 69.3% *and* true accepts 76.7% vs 72.0%. Held out by question type: AUC **0.7909**, **ECE 0.1361**, 0.18 spread between types | cross-**corpus** transfer needs the MTRAG-UN sample (97 unanswerable + 78 underspecified), which is a download this host has not made |
+| **publish the evidence-layer protocol** | **done** | five axes, every absent axis named rather than zeroed; the whole chain reproduces from a fresh clone in **~68 min** | nothing |
+| **take the generator-free leaderboard placements** | **measured, not yet placeable** | full 2,255-query row: Hits@10 **0.9011**, Hits@4 0.7561, MAP@10 0.3120, MRR@10 0.6166, cite-clean 1.0000 | the row is **chunk-level**; the document-level counterpart comes from the queued coverage arm, and until it lands the placement is indicative rather than like-for-like |
+| **test a listwise reranker** | **built, predicted, running** | `jina-reranker-v3` (596M listwise, CC-BY-NC) loads and runs; the prediction is 0.50–0.56 nDCG@10 on ArguAna with both falsifiers stated; the interface was proved on a 5-query smoke test | the 400-query depth-50 run is in flight |
+| **cut the decision cost** | **done, with its interactions measured** | `SECOND_STAGE_TOP_M=10` gives **43% less CPU** at identical retrieval quality; at the gate 4 of 20 verdicts flip and at the composer ~0.015 nugget recall is lost | nothing |
+| **measure one multilingual collection** | **done — by being priced out** | 28 h projected per collection on this host; the cheap probes (lexical en 2/3, de 1/3, fr 1/3, es 0/3, ja 1/3) are recorded, and the README's stronger multilingual claim was **withdrawn** | nothing at this budget |
+| **own a submittable artefact** | **half** | the submission **gate** ships (`make submission-check`, five checks, passes a stock encoder) | the training run that would produce a winning artefact is a corpus-scale distillation this host cannot finish quickly |
+| *every change ships with a test and a findings document* | **done** | 1,912 tests; eighteen measured failure classes catalogued; every finding indexed and reachable from `FINDINGS.md` | nothing |
+| *every prediction carries its falsifier* | **done, and enforced** | nine prediction blocks, all with falsifiers, now **checked by a test** | nothing |
+
+**Five items are closed as stated, four are partial with the blocker named, and one is half done.** The two words
+that recur in the partial rows are *queued* and *blocked*: nothing in this list is waiting on a design decision.
 
 ## What is left, and what it costs
 
