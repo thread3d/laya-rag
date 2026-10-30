@@ -6,6 +6,23 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.2 — 2026-10-30
+
+The queued diagnostics run was checked against its consumer **before** it started.
+
+### The contract nobody was testing
+
+`tools/multihop_diagnostics.py` writes the artefact; `tools/claim_check.py` reads **43 of the 54 registered claims** out
+of it. Neither imports the other, so nothing but convention kept the key names aligned — and a rename in the writer would
+make every one of those claims **skip**, which is indistinguishable from passing in the ledger's one-line output until
+you read the count.
+
+`tests/test_diagnostics_contract.py` pins the four names both sides depend on: the per-query `pool_fact_recall@{depth}`,
+the `summary["depth"]` block, the depth-100 ceiling the ceiling claim resolves against, and the `per_query` container.
+
+They agree today. The test exists so that the *next* run does not discover a divergence at 04:00 with the artefact half
+written — which is the cheap version of the listwise smoke test's lesson, applied before the run rather than after it.
+
 ## 3.0.1 — 2026-10-30
 
 The measurement queue had a race, and it had already cost one arm.
