@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `3.0.2` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `3.0.3` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -103,7 +103,7 @@ Everything the repository can verify offline, verified in one pass at round 100 
 | claim ledger | **11 checks passed** against the reports that name themselves; 43 skipped for want of one artefact |
 | consistency gate | skipped — no `eval/beir` reports to pin |
 | working tree | clean |
-| version | 3.0.2, identical in five files and in the OpenAPI schema |
+| version | 3.0.3, identical in five files and in the OpenAPI schema |
 
 **What is not verified, and cannot be here**: the three measurements in the queue (listwise, diagnostics, coverage), and
 the two items whose blockers are resources rather than decisions (MTRAG-UN, R8's training run).
@@ -223,7 +223,7 @@ lock**, and a fresh agent should read this before starting anything heavy:
 | **sentence-budget** sweep (5 → 8 → 10) | not queued | ~40 min | prediction (b): is the budget the dominant constraint |
 | **coverage-per-character** selection | **measured and refuted** — kept opt-in, never made default | 40-query probe | prediction (c) failed: recall 0.0790 against the shipped 0.1945 at 0.37× the length. The remedy that remains untested is a **character budget**, not a ratio objective |
 | **cross-corpus abstention** sample (MTRAG-UN) | **blocked**: needs the dataset (97 unanswerable + 78 underspecified) | download + ~30 min | R3's transfer claim |
-| **diagnostics artefact** (`make multihop-diagnostics`) | **queued** on the lock | minutes — the corpus is 609 documents | **43 of the 54 registered claim checks** resolve against it, so producing it is what lets the claim ledger verify the prose beyond the 11 it already checks |
+| **diagnostics artefact** (`make multihop-diagnostics`) | **running concurrently** — it is not heavy enough to wait for the listwise arm | ~15 min: the tool re-chunks to match the official harness, so it embeds **17,259 chunks**, not the corpus's 609 documents | **43 of the 54 registered claim checks** resolve against it, so producing it is what lets the claim ledger verify the prose beyond the 11 it already checks |
 | **R8's training run** | **blocked**: a corpus-scale distillation this host cannot finish quickly | hours–days | the submittable artefact |
 
 Each queued job waits on `eval/.heavy-job.lock` itself rather than on a process-name pattern, because a

@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.3 — 2026-10-30
+
+The diagnostics pass started concurrently — and my estimate of its cost was wrong in the same way, for the third time
+tonight.
+
+### Why concurrent
+
+It unlocks **43 of the 54 claim checks**, and it is not heavy enough to justify waiting an hour behind the listwise arm.
+It started beside it with a modest thread count.
+
+### And the estimate was wrong about the unit
+
+The status page said *"minutes — the corpus is 609 documents"*. The tool **re-chunks to match the official harness**, so it
+embeds **17,259 chunks** — 28× the number I counted — and takes ~15 minutes rather than "minutes".
+
+That is the third cost estimate in one night to fail the same way:
+
+| estimate | claimed | actual cause |
+| --- | --- | --- |
+| listwise arm, v1 | 1.5–2 h | assumed thread scaling that did not happen |
+| listwise arm, v2 | 4.5 h | still low; the tail is longer than two smoke queries suggest |
+| diagnostics pass | "minutes" | **counted documents where the tool counts chunks** |
+
+The last one is class 15 of the failures ledger — *a metric computed over a different unit than the comparison* —
+applied to a **cost** estimate. The rule does not care whether the number is a score or a duration: **ask what unit it is
+over before quoting it.**
+
 ## 3.0.2 — 2026-10-30
 
 The queued diagnostics run was checked against its consumer **before** it started.
