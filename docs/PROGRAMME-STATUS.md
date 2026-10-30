@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `2.9.6` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `2.9.7` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -103,7 +103,7 @@ what remains — the page a reader should use to decide whether the work was don
 | **make abstention portable** | **gate done; cross-corpus open** | shipped gate: AUC 0.8377, false accepts 30.7% vs 69.3% *and* true accepts 76.7% vs 72.0%. Held out by question type: AUC **0.7909**, **ECE 0.1361**, 0.18 spread between types | cross-**corpus** transfer needs the MTRAG-UN sample (97 unanswerable + 78 underspecified), which is a download this host has not made |
 | **publish the evidence-layer protocol** | **done** | five axes, every absent axis named rather than zeroed; the whole chain reproduces from a fresh clone in **~68 min** | nothing |
 | **take the generator-free leaderboard placements** | **measured, not yet placeable** | full 2,255-query row: Hits@10 **0.9011**, Hits@4 0.7561, MAP@10 0.3120, MRR@10 0.6166, cite-clean 1.0000 | the row is **chunk-level**; the document-level counterpart comes from the queued coverage arm, and until it lands the placement is indicative rather than like-for-like |
-| **test a listwise reranker** | **built, predicted, running** | `jina-reranker-v3` (596M listwise, CC-BY-NC) loads and runs; the prediction is 0.50–0.56 nDCG@10 on ArguAna with both falsifiers stated; the interface was proved on a 5-query smoke test | the 400-query depth-50 run is in flight |
+| **test a listwise reranker** | **built, predicted, running** | `jina-reranker-v3` (596M listwise, CC-BY-NC) loads and runs; the prediction is 0.50–0.56 nDCG@10 on ArguAna with both falsifiers stated, and the **paired comparison was written before the number existed** so the reported interval cannot be chosen after the fact; the interface was proved on a 5-query smoke test | the 400-query depth-50 run is in flight |
 | **cut the decision cost** | **done, with its interactions measured** | `SECOND_STAGE_TOP_M=10` gives **43% less CPU** at identical retrieval quality; at the gate 4 of 20 verdicts flip and at the composer ~0.015 nugget recall is lost | nothing |
 | **measure one multilingual collection** | **done — by being priced out** | 28 h projected per collection on this host; the cheap probes (lexical en 2/3, de 1/3, fr 1/3, es 0/3, ja 1/3) are recorded, and the README's stronger multilingual claim was **withdrawn** | nothing at this budget |
 | **own a submittable artefact** | **half** | the submission **gate** ships (`make submission-check`, five checks, passes a stock encoder) | the training run that would produce a winning artefact is a corpus-scale distillation this host cannot finish quickly |
@@ -190,7 +190,7 @@ lock**, and a fresh agent should read this before starting anything heavy:
 | measurement | state | cost | closes |
 | --- | --- | --- | --- |
 | full-set **rank** row, 2,255 queries | **finished** — Hits@10 **0.9011**, MAP@10 0.3120, cite-clean 1.0000 (structural) over all 2,255 | ~4 h | R4b: the row is no longer a subset, and the subset was **0.0225 optimistic** on nugget recall |
-| **listwise** arm, `jina-reranker-v3`, 400 queries at depth 50 | **queued** on the lock | ~1.5–2 h projected from a measured 8 s/query at depth 10 | R5's named, previously blocked, arm |
+| **listwise** arm, `jina-reranker-v3`, 400 queries at depth 50 | **running** — 4h30m elapsed of a projected **4.5 h** | the first projection said 1.5–2 h because it assumed 8→24 threads would divide the per-query cost; it did not. Depth scaled, threads did not | R5's named, previously blocked, arm |
 | full-set **coverage** arm | **queued** on the lock, behind the listwise arm | ~2 h | prediction (a): does the composer's +0.055 hold at 2,255 queries |
 | **`--honour-answerability`** full-set arm | not queued — waits for the three above | ~2 h | the product-level effect of the abstention lever found in this round |
 | **sentence-budget** sweep (5 → 8 → 10) | not queued | ~40 min | prediction (b): is the budget the dominant constraint |

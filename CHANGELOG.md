@@ -6,6 +6,26 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.9.7 — 2026-10-30
+
+The corrected cost projection reaches the queue row a fresh agent reads first.
+
+### The page that was still wrong
+
+Round 96 corrected the listwise run's cost in the finding and in `REPRODUCING.md` — and left the **queue table** on the
+status page saying *"~1.5–2 h projected"*. That is the row a fresh agent consults before starting anything heavy, and it
+is the one that would have made the next scheduler's plan wrong by 2.5×.
+
+It now reads: **running, 4h30m elapsed of a projected 4.5 h** — with the reason the first estimate was wrong written
+beside it (*depth scaled, threads did not*), because a corrected number without its mechanism invites the same mistake
+next time.
+
+### And the queue row names the pre-written analysis
+
+The objective's own item row for the listwise arm now says the **paired comparison was written before the number existed**,
+so the reported interval cannot be chosen after the fact. A reader deciding how much to trust the result needs that
+ordering, and it is not visible in the result.
+
 ## 2.9.6 — 2026-10-30
 
 The listwise run reports progress — four hours of silence is indistinguishable from a hung process.
