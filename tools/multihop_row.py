@@ -64,6 +64,47 @@ def summarise(report: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def summary_mismatches(report: Mapping[str, Any], row: Mapping[str, Any]) -> list[str]:
+    """Recompute the headline figures from the report's own per-query shard and require agreement.
+
+    A report's `summary` and its `jsonl` can disagree — a resumed run whose shard and roll-up were written at
+    different times, or a roll-up computed over a different query set than the rows. The row that gets placed is the
+    summary, so the check is: does the summary describe *these* rows? This is the "compute the number a second way"
+    rule applied on the placement path, and it costs one pass over a file that is already on disk.
+    """
+    settings = report.get("_settings") or {}
+    out = str(settings.get("out") or "")
+    if not out:
+        return []
+    shard = Path(out + ".jsonl")
+    if not shard.is_file():
+        return [f"the report names its rows at {shard}, which does not exist"]
+    rows = []
+    for line in shard.read_text(encoding="utf-8").splitlines():
+        value = (json.loads(line).get("value") or {}) if line.strip() else {}
+        if "nugget_recall" in value:
+            rows.append(value)
+    if not rows:
+        return []
+    if len(rows) != row["queries"]:
+        return [f"the summary counts {row['queries']} queries but its shard holds {len(rows)}"]
+
+    def mean(key: str) -> float | None:
+        values = [r[key] for r in rows if r.get(key) is not None]
+        return sum(values) / len(values) if values else None
+
+    problems = []
+    if mean("nugget_recall") is not None and abs(mean("nugget_recall") - (row["nugget_recall"] or 0)) > 1e-4:
+        problems.append(
+            f"nugget recall: summary {row['nugget_recall']}, shard {mean('nugget_recall'):.4f}"
+        )
+    for key in ("Hits@10", "MAP@10"):
+        recomputed = mean(key)
+        if recomputed is not None and abs(recomputed - row["metrics"][key]) > 1e-4:
+            problems.append(f"{key}: summary {row['metrics'][key]}, shard {recomputed:.4f}")
+    return problems
+
+
 def placement_problems(row: Mapping[str, Any], *, full_set: int = FULL_SET) -> list[str]:
     """Every reason this report cannot be presented as the dataset's row."""
     problems: list[str] = []
@@ -75,8 +116,16 @@ def placement_problems(row: Mapping[str, Any], *, full_set: int = FULL_SET) -> l
     return problems
 
 
-def render(row: Mapping[str, Any], *, label: str, allow_subset: bool = False) -> str:
+def render(
+    row: Mapping[str, Any],
+    *,
+    label: str,
+    allow_subset: bool = False,
+    report_for_check: Mapping[str, Any] | None = None,
+) -> str:
     problems = placement_problems(row)
+    if report_for_check is not None:
+        problems += summary_mismatches(report_for_check, row)
     lines: list[str] = []
     if problems and not allow_subset:
         lines += ["**not placeable** — " + problem for problem in problems]
@@ -149,14 +198,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     report = json.loads(Path(args.report).read_text(encoding="utf-8"))
     row = summarise(report)
-    rendered = render(row, label=args.label, allow_subset=args.allow_subset)
+    rendered = render(row, label=args.label, allow_subset=args.allow_subset, report_for_check=report)
     print(rendered)
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.with_suffix(".md").write_text(rendered + "\n", encoding="utf-8")
         print(f"\nwrote {out.with_suffix('.md')}")
-    if args.check and placement_problems(row):
+    if args.check and (placement_problems(row) or summary_mismatches(report, row)):
         return 1
     return 0
 

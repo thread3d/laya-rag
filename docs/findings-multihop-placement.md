@@ -99,6 +99,18 @@ mattered.
 before the document-level fields existed. `make multihop-row` refuses to present it as like-for-like, and prints
 the published anchors beside it with that caveat rather than sorting the two groups into one column.
 
+### And the report was checked against its own rows before it was quoted
+
+The full-set report's summary recomputes **exactly** from its 2,255 per-query rows — every headline figure, to four
+decimals — and records the same `index_identity` (`947d10ba…`) as the 150-query subset, so the two are on the same
+index and the comparison between them is like-for-like.
+
+That check is now part of the placement path rather than a thing done once by hand: `make multihop-row` re-reads the
+report's own `.jsonl` shard and refuses the row if the summary's query count or headline metrics disagree with the
+rows they claim to summarise. A rolled-up summary and a per-query shard can diverge — a resumed run writing them at
+different times, or a summary computed over a different query set — and that is **the subset-as-member failure
+wearing a different hat**: the summary is what gets quoted, so the question is whether it describes *these* rows.
+
 ## A fairness problem found before the placement was made
 
 The published table this row is meant to sit in scores **ten documents** per query. The engine returns

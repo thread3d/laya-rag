@@ -6,6 +6,34 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.2 — 2026-10-30
+
+The placement path now re-derives a report's summary from its own rows — and the full-set report passed.
+
+### The check
+
+`make multihop-row` reads a report's `summary`, and the summary is what gets quoted. A summary and its per-query
+shard can disagree — a resumed run writing them at different times, or a summary computed over a different query set
+— which is **the subset-as-member failure wearing a different hat**. The tool now re-reads the report's own `.jsonl`
+and refuses the row if the query count or the headline metrics disagree.
+
+The full-set report **passes**: every figure recomputes exactly from its 2,255 rows, to four decimals, and it records
+the same `index_identity` (`947d10ba…`) as the 150-query subset — so the two are on the same index and the
+subset-versus-full comparison is like-for-like.
+
+| key | recorded | recomputed |
+| --- | ---: | ---: |
+| answer nugget recall | 0.1835 | 0.1835 |
+| Hits@10 | 0.9011 | 0.9011 |
+| Hits@4 | 0.7561 | 0.7561 |
+| MAP@10 | 0.3120 | 0.3120 |
+| MRR@10 | 0.6166 | 0.6166 |
+| citation-clean, all | 1.0000 | 1.0000 |
+
+Two tests drive the failure path: an inflated summary is refused with the key and both values named, and a summary
+counting 2,255 queries against a one-row shard is refused with the count. The check costs one pass over a file that
+is already on disk, which is the cheapest integrity gate the programme has.
+
 ## 2.7.1 — 2026-10-30
 
 The night's results reach the R-table and the outcome table — and R2's row now records **three** falsifications.

@@ -7,6 +7,7 @@ footnote.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -90,3 +91,47 @@ def test_the_document_level_row_is_preferred_when_the_report_has_one():
     chunk_only = mr.summarise(_report(mr.FULL_SET))
     assert chunk_only["document_metrics"] == {}
     assert "no document-level counterpart" in mr.render(chunk_only, label="ours")
+
+
+def test_a_summary_that_does_not_describe_its_own_rows_is_refused(tmp_path):
+    """The placed row is the *summary*; the check is whether the summary describes these rows.
+
+    A report's roll-up and its per-query shard can disagree — a resumed run whose shard and summary were written at
+    different times, or a summary computed over a different query set. That is the subset-as-member failure wearing
+    a different hat, and it costs one pass over a file already on disk to rule out.
+    """
+    stem = tmp_path / "row"
+    rows = [
+        {"nugget_recall": 0.2, "Hits@10": 1.0, "MAP@10": 0.5, "citation_clean": True, "abstained": False},
+        {"nugget_recall": 0.4, "Hits@10": 1.0, "MAP@10": 0.5, "citation_clean": True, "abstained": False},
+    ]
+    stem.with_suffix(".jsonl").write_text(
+        "\n".join(json.dumps({"key": str(i), "value": v}) for i, v in enumerate(rows)), encoding="utf-8"
+    )
+    honest = {
+        "_settings": {"out": str(stem)},
+        "summary": {"queries": 2, "Hits@10": 1.0, "MAP@10": 0.5, "nugget_recall": 0.3},
+    }
+    assert mr.summary_mismatches(honest, {"queries": 2, "metrics": {"Hits@10": 1.0, "MAP@10": 0.5},
+                                         "nugget_recall": 0.3}) == []
+
+    inflated = {
+        "_settings": {"out": str(stem)},
+        "summary": {"queries": 2, "Hits@10": 1.0, "MAP@10": 0.5, "nugget_recall": 0.9},
+    }
+    problems = mr.summary_mismatches(inflated, {"queries": 2, "metrics": {"Hits@10": 1.0, "MAP@10": 0.5},
+                                                "nugget_recall": 0.9})
+    assert problems and "nugget recall" in problems[0]
+
+
+def test_a_summary_counting_more_queries_than_its_shard_is_refused(tmp_path):
+    stem = tmp_path / "row"
+    stem.with_suffix(".jsonl").write_text(
+        json.dumps({"key": "0", "value": {"nugget_recall": 0.2, "Hits@10": 1.0, "MAP@10": 0.5,
+                                          "citation_clean": True, "abstained": False}}),
+        encoding="utf-8",
+    )
+    report = {"_settings": {"out": str(stem)}, "summary": {"queries": 2255}}
+    problems = mr.summary_mismatches(report, {"queries": 2255, "metrics": {"Hits@10": 1.0, "MAP@10": 0.5},
+                                              "nugget_recall": 0.2})
+    assert problems and "holds 1" in problems[0]
