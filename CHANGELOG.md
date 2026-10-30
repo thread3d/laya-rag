@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.1 — 2026-10-30
+
+The night's results reach the R-table and the outcome table — and R2's row now records **three** falsifications.
+
+### The status row
+
+`PROGRAMME-STATUS.md`'s R2 entry said "done, prediction falsified" and quoted the +0.0549. It now carries what came
+after: the gain is **bought with length** (2.1× the text, worse per thousand characters), the **ratio remedy
+collapsed** to 0.0790, and the **character-budget remedy** read 0.1764 — *less than the shipped arm at 20% more text*.
+
+The queue table's full-set row moves from *running* to *finished*: Hits@10 **0.9011**, MAP@10 0.3120, cite-clean
+1.0000 over all 2,255 queries — and, recorded beside it, that the 150-query subset was **0.0225 optimistic** on the
+metric R2's delta depends on.
+
+### The outcome table
+
+The assessment's §8 row for R2 now reads **"falsified three times over"**: the magnitude (0.0489 of 0.5404), the
+cost (length), and both remedies. That is a different kind of entry from the original — a prediction that was wrong,
+followed by two attempts to rescue it, both measured, both failed, and a conclusion that is stronger than either
+number: **"more facts without more text" is not available on this corpus.**
+
+A row that records a refutation and then shrugs is a footnote. A row that records the refutation, the two rescue
+attempts and what they jointly establish is a finding.
+
 ## 2.7.0 — 2026-10-30
 
 Two results land together: the **full-set placement row** finished, and prediction (d) is **falsified** — which
