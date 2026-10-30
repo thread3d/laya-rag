@@ -13,6 +13,14 @@ Two properties carry almost all of the weight, and both are enforced rather than
 
 - **Every long job checkpoints.** Re-issue the same command after an interruption and it resumes; the
   checkpoint is keyed to the run's settings *and to the index it was measured against*.
+
+  **Except where it does not, and the audit is worth reading before trusting that sentence.** `cached_embed` supports
+  chunked checkpointing (`chunk=N` writes a `.done` marker per chunk); **sixteen of the twenty calls to it in `tools/`
+  omit the argument**, so those embedding passes are unrecoverable if interrupted. The main harness (`tools/beir.py`)
+  passes `chunk=args.embed_chunk`, and the two passes run on 2026-10-30 — the listwise ranking and the diagnostics
+  embedding — were fixed after losing work to it. The rest are **not** converted deliberately: the chunk boundaries
+  change batch composition and therefore the cached vectors by a few ULPs, so converting a tool invalidates the cache it
+  has already paid for. The rule is enforced where it has been paid for and recorded where it has not.
 - **One heavy job at a time.** Twenty-six long-running tools take an exclusive `flock` on
   `eval/.heavy-job.lock`. A second one exits `2` with the holder's name rather than piling on — and
   `make heavy-wait HEAVY_POLL=5` queues behind whatever is running, by asking the lock rather than by

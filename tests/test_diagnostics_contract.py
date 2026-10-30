@@ -72,3 +72,22 @@ def test_the_embedding_pass_is_checkpointed():
     writer = WRITER.read_text(encoding="utf-8")
     assert "chunk=500" in writer, "the embedding call no longer passes a chunk size"
     assert "cached_embed(" in writer
+
+
+def test_the_passes_run_tonight_are_checkpointed():
+    """The rule from REPRODUCING.md, enforced on the three passes this session actually ran.
+
+    `cached_embed(..., chunk=N)` checkpoint; without it an interrupted embedding is lost. Sixteen of twenty calls in
+    `tools/` omit it, and converting one invalidates the cache it has already paid for — so the enforcement here is
+    scoped to the passes that ran tonight plus the main harness, and the rest is recorded as a known gap rather than
+    silently claimed.
+    """
+    for name in ("multihop_diagnostics.py", "listwise_rerank.py"):
+        text = (ROOT / "tools" / name).read_text(encoding="utf-8")
+        assert "cached_embed(" in text
+        # every call in these two tools must pass a chunk size
+        calls = text.split("cached_embed(")[1:]
+        assert all("chunk=" in call[:400] for call in calls), f"{name} has an unchunked cached_embed call"
+
+    harness = (ROOT / "tools" / "beir.py").read_text(encoding="utf-8")
+    assert "chunk=args.embed_chunk" in harness

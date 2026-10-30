@@ -51,7 +51,7 @@ def first_stage(corpus, queries, *, top_k: int, depth: int) -> dict[str, list[st
     # be paying twice for the same vectors.
     cache = ROOT / "eval" / "r1" / "listwise-dense-cache"
     cache.parent.mkdir(parents=True, exist_ok=True)
-    vectors = beir.cached_embed(encoder, corpus, cache, use_cache=True)
+    vectors = beir.cached_embed(encoder, corpus, cache, use_cache=True, chunk=500)
     dense = beir.dense_rankings(corpus, queries, encoder, vectors, top_k)
     lexical = beir.bm25_rankings(corpus, queries, top_k, k1=beir.BEIR_K1, b=beir.BEIR_B)
     fused = beir.hybrid_rankings(dense, lexical, top_k)

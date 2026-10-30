@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.7 — 2026-10-30
+
+The checkpointing rule is audited: **sixteen of twenty `cached_embed` calls omit the chunk size**, and that is now
+recorded rather than claimed away.
+
+### The audit
+
+`cached_embed(..., chunk=N)` writes a `.done` marker per chunk, so an interrupted embedding resumes. A scan of every
+call in `tools/`:
+
+| | count |
+| --- | ---: |
+| calls to `cached_embed` | **20** |
+| passing a chunk size | **4** (the main harness via `args.embed_chunk`, `musique`, `twowiki`, and one of tonight's) |
+| omitting it | **16**, across twelve tools |
+| fixed tonight | **3** — `multihop_diagnostics`, `listwise_rerank`, and the same for its dense cache |
+
+### Why the rest are *not* converted
+
+Chunk boundaries change batch composition and therefore the cached vectors by a few ULPs (measured at 4.17e-07 on 2,000
+`bge-small` vectors). Converting a tool therefore **invalidates the cache it has already paid for** — so a blanket edit
+would trade an unrecoverable *interruption* for a guaranteed *re-embedding*, which is worse for the corpora that fit.
+
+The honest position is in `REPRODUCING.md`: the rule is **enforced on the passes that ran tonight and the main harness**,
+and **recorded as a known gap everywhere else**, with the reason. A rule documented in prose and enforced in four places
+out of twenty is not a rule; a rule plus an audit that says where it holds is.
+
 ## 3.0.6 — 2026-10-30
 
 The diagnostics embedding pass is now checkpointed — the last long pass in the repository that was not.
