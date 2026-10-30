@@ -273,6 +273,52 @@ experiment, not a tweak, and it is not registered yet.
 `EXTRACT_COVERAGE`'s default stays off, and this result strengthens the case for it: the arm that improves absolute
 coverage pays 1.74× in length, and the obvious way to avoid paying collapses the answer.
 
+### (d) A character budget on the absolute objective — registered before its run
+
+Falsifier B's branch, and a **different mechanism** from (c): keep the absolute fact objective and stop when the
+text is spent, which selects *fewer long* sentences rather than *more short* ones. (c) changed the score to a ratio
+and collapsed; this changes only the stopping rule.
+
+- **Prediction.** At a **600-character** budget and the same five-sentence ceiling, recall lands **within 0.015 of
+  the unbounded coverage arm** (≥ 0.210 against 0.2251) while mean length sits near the shipped arm's
+  (~600 against 568). The long sentences carry the facts, so spending fewer slots on more of them should preserve
+  coverage; a 900-character budget should recover almost all of it.
+- **Falsifier.** If 600 characters loses **more than half** the coverage gain (below 0.2035 on this sample), then the
+  facts genuinely need more text than the shipped arm emits, the frontier is flat, and *"more facts without more
+  text"* is not available on this corpus at all — which is a stronger and more useful statement than either
+  arm's number.
+
+**Cost.** One stop-rule change plus the same 40-query probe (~15 min).
+
+### (d) outcome: **falsified — and the frontier is flat**
+
+Prediction (d) said a 600-character budget keeps recall within 0.015 of the unbounded arm; the falsifier said that
+losing more than half the gain would mean *"the facts genuinely need more text than the shipped arm emits"*. Forty
+queries:
+
+| arm | nugget recall | vs shipped | mean chars | vs shipped | sentences |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| rank order (shipped) | 0.1945 | — | 568.2 | 1.00× | 4.25 |
+| coverage, unbounded | **0.2251** | +0.0306 | 989.6 | 1.74× | 4.25 |
+| coverage @ 900 chars | 0.1764 | **−0.0181** | 682.8 | 1.20× | 3.00 |
+| coverage @ 600 chars | 0.1402 | **−0.0543** | 440.8 | 0.78× | 1.90 |
+
+**Both bounded arms fall below the shipped arm.** At 900 characters the coverage objective still emits 20% more
+text than the shipped order and finds *fewer* facts; at 600 it collapses. So the falsifier fired, and the sentence it
+implies is the important one:
+
+> **"More facts without more text" is not available on this corpus.** The coverage objective's gain exists only at
+> 1.7× the length, and every budget that brings it near the shipped length loses more coverage than the extra text
+> buys. The shipped ordering is **on the efficient frontier**; the objective sits off it.
+
+That is a stronger and more useful result than either number alone, and it is the honest completion of R2: the lever
+is real, it is a pure length-for-coverage trade with **no free lunch**, and the shipped default is the efficient
+choice rather than merely the incumbent one. Two registered remedies were tried — a ratio score and a character
+budget — and neither escaped the trade.
+
+**What would still be untested**: a sentence budget *above* five at fixed length (fewer, longer sentences are not the
+only shape), and a corpus where facts live in short sentences. Neither is registered.
+
 ### (b) The sentence budget — is five sentences the next constraint?
 
 **What it is.** R2's falsifier already established that selection is **a** binding constraint rather than

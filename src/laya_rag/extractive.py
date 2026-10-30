@@ -163,6 +163,7 @@ def _select_by_coverage(
     budget: int,
     *,
     per_char: bool = False,
+    max_chars: int = 0,
 ) -> list[ExtractedSentence]:
     """Greedy max-coverage over *facts*, not over the parent document's rank.
 
@@ -199,7 +200,8 @@ def _select_by_coverage(
     covered_terms: set[str] = set()
     chosen: set[str] = set()
     remaining = list(candidates)
-    while remaining and len(selected) < budget:
+    spent_chars = 0
+    while remaining and len(selected) < budget and (max_chars <= 0 or spent_chars < max_chars):
         best: ExtractedSentence | None = None
         best_value = float("-inf")
         for sentence in remaining:
@@ -229,6 +231,13 @@ def _select_by_coverage(
                 best, best_value = sentence, value
         if best is None:  # every remaining candidate is a duplicate
             break
+        if max_chars > 0 and selected and spent_chars + len(best.text) > max_chars:
+            # The character budget is a *stop* rule on the absolute objective, not a per-character score:
+            # it takes the most fact-dense sentences by absolute value and stops when the text is spent,
+            # which selects *fewer long* sentences rather than *more short* ones. Prediction (c) tested the
+            # other reading and collapsed; this one is prediction (d).
+            break
+        spent_chars += len(best.text)
         chosen.add(_normalise(best.text))
         covered_facts |= _fact_terms(best.text)
         covered_terms |= _content_terms(best.text)
@@ -245,6 +254,7 @@ def compose_extractive(
     min_score: float = 0.0,
     coverage: bool = False,
     coverage_per_char: bool = False,
+    max_chars: int = 0,
 ) -> ExtractiveAnswer:
     """Emit up to ``max_sentences`` verbatim sentences, best-scored first, each cited.
 
@@ -312,7 +322,9 @@ def compose_extractive(
         # measured with, and `findings-extractive-row.md` quotes it. Selecting by coverage changes
         # *which* sentences are emitted, never the guarantees — every sentence is still a verbatim
         # span of a cited passage, and the abstention path is untouched.
-        kept = _select_by_coverage(candidates, max_sentences, per_char=coverage_per_char)
+        kept = _select_by_coverage(
+            candidates, max_sentences, per_char=coverage_per_char, max_chars=max_chars
+        )
     else:
         candidates.sort(key=lambda sentence: -sentence.score)
         seen: set[str] = set()

@@ -1487,6 +1487,7 @@ class RagEngine:
         include_evidence: bool = False,
         coverage: bool | None = None,
         coverage_per_char: bool = False,
+        max_answer_chars: int = 0,
         honour_answerability: bool = False,
         **query_kwargs: Any,
     ) -> dict[str, Any]:
@@ -1514,6 +1515,7 @@ class RagEngine:
             min_score=min_score,
             coverage=self.config.extract_coverage if coverage is None else bool(coverage),
             coverage_per_char=coverage_per_char,
+            max_chars=max_answer_chars,
         )
         # The decision layer's verdict and the composer's are two different questions: *can the corpus
         # answer this* (answerability) and *is there a quotable span* (composition). This path honours only

@@ -6,6 +6,48 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.0 — 2026-10-30
+
+Two results land together: the **full-set placement row** finished, and prediction (d) is **falsified** — which
+establishes that the coverage/length frontier is flat.
+
+### The full 2,255-query row
+
+| system | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| voyage-02 + rerank (published) | 0.747 | 0.663 | 0.480 | 0.586 |
+| bge-large + rerank (published) | 0.718 | 0.636 | 0.476 | 0.563 |
+| bge-large, no rerank (published) | 0.672 | 0.522 | 0.342 | 0.430 |
+| **the engine, shipped defaults** | **0.9011** | **0.7561** | 0.3120 | **0.6166** |
+
+Citation validity **1.0000** across all 2,255 answers, nugget recall 0.1835, abstention 0.
+
+**The full set is not the subset**: the same arm on 150 queries read nugget recall **0.2060** — **0.0225 optimistic**,
+the largest divergence and the one R2's delta depends on. The subset could not have been quoted as the member, and
+this is the measurement of how much it would have mattered. The row remains **chunk-level and indicative** because
+it started before the document-level fields existed; `make multihop-row` says so instead of sorting it beside the
+anchors.
+
+### Prediction (d), falsified — and it says something stronger
+
+| arm | nugget recall | vs shipped | mean chars | vs shipped |
+| --- | ---: | ---: | ---: | ---: |
+| rank order (shipped) | 0.1945 | — | 568.2 | 1.00× |
+| coverage, unbounded | **0.2251** | +0.0306 | 989.6 | 1.74× |
+| coverage @ 900 chars | 0.1764 | **−0.0181** | 682.8 | 1.20× |
+| coverage @ 600 chars | 0.1402 | **−0.0543** | 440.8 | 0.78× |
+
+**Both bounded arms fall below the shipped arm.** At 900 characters the objective still emits 20% more text than the
+shipped order and finds *fewer* facts. So:
+
+> **"More facts without more text" is not available on this corpus.** The gain exists only at 1.7× the length, and
+> every budget that brings it near the shipped length loses more coverage than the extra text buys. The shipped
+> ordering is **on the efficient frontier**; the objective sits off it.
+
+Two registered remedies — a ratio score and a character budget — and neither escaped the trade. That is the honest
+completion of R2: the lever is real, it is a pure length-for-coverage exchange with no free lunch, and the shipped
+default is the *efficient* choice rather than merely the incumbent one.
+
 ## 2.6.0 — 2026-10-30
 
 Prediction (c) registered two rounds ago, measured now: **falsified, and decisively** — with the mechanism

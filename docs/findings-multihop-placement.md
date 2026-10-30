@@ -76,6 +76,29 @@ never in question. The registered prediction in
 [`findings-extractive-coverage.md`](findings-extractive-coverage.md) is about the **delta between the two
 composer objectives** on the full set, and this check says nothing about it: only one arm is running.
 
+## The full-set row, measured
+
+The 2,255-query row finished. Over the **full answerable set**, scored over chunks, at the shipped defaults:
+
+| system | Hits@10 | Hits@4 | MAP@10 | MRR@10 |
+| --- | ---: | ---: | ---: | ---: |
+| voyage-02 + rerank (published) | 0.747 | 0.663 | 0.480 | 0.586 |
+| bge-large + rerank (published) | 0.718 | 0.636 | 0.476 | 0.563 |
+| bge-large, no rerank (published) | 0.672 | 0.522 | 0.342 | 0.430 |
+| **the engine, shipped defaults** | **0.9011** | **0.7561** | 0.3120 | **0.6166** |
+
+Citation validity **1.0000** over all 2,255 answers, answer nugget recall **0.1835**, abstention **0**.
+
+**The full set is not the subset.** The same arm on 150 queries read Hits@10 0.9067, Hits@4 0.7400, MAP@10 0.3128,
+MRR@10 0.6152 and nugget recall **0.2060** — so the subset was within 0.007 on the retrieval columns but **0.0225
+optimistic on nugget recall**, which is the largest single divergence and the one that matters for R2's delta. A
+subset read as the member was already refused by the tool; this is the measurement of how much it would have
+mattered.
+
+**The row is still chunk-level and therefore still indicative**, for the reason in the next section: it started
+before the document-level fields existed. `make multihop-row` refuses to present it as like-for-like, and prints
+the published anchors beside it with that caveat rather than sorting the two groups into one column.
+
 ## A fairness problem found before the placement was made
 
 The published table this row is meant to sit in scores **ten documents** per query. The engine returns
