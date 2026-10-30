@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.1 — 2026-10-30
+
+The measurement queue had a race, and it had already cost one arm.
+
+### The defect
+
+Each queued job waited on `eval/.heavy-job.lock` itself. That is the right question to ask — it is what replaced the
+`pgrep` pattern that matched its own command line — but **two independent waiters on one lock race when it frees**: the
+winner re-acquires and runs, and the loser's tool hits its own guard and exits `2`.
+
+It had already happened. The coverage arm was queued behind the listwise arm at 01:50 and **silently vanished** when the
+rank row released the lock, because the listwise waiter won the race. It was found by *noticing a queued job was missing*
+— not by a test, and not by a log line.
+
+### The fix
+
+One runner, one waiter, jobs in sequence:
+
+```sh
+while ! flock -n 9; do sleep 20; done 9>>eval/.heavy-job.lock
+exec 9>&-
+# then each job in order, each taking its own lock the ordinary way
+```
+
+**One waiter cannot race itself.** The status page now records why the queue is shaped that way, because the next
+person adding a job will otherwise copy the pattern that lost one.
+
 ## 3.0.0 — 2026-10-30
 
 A hundred rounds in: the checkup, recorded on the page a maintainer reads.

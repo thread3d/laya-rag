@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `3.0.0` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `3.0.1` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -103,7 +103,7 @@ Everything the repository can verify offline, verified in one pass at round 100 
 | claim ledger | **11 checks passed** against the reports that name themselves; 43 skipped for want of one artefact |
 | consistency gate | skipped — no `eval/beir` reports to pin |
 | working tree | clean |
-| version | 3.0.0, identical in five files and in the OpenAPI schema |
+| version | 3.0.1, identical in five files and in the OpenAPI schema |
 
 **What is not verified, and cannot be here**: the three measurements in the queue (listwise, diagnostics, coverage), and
 the two items whose blockers are resources rather than decisions (MTRAG-UN, R8's training run).
@@ -229,6 +229,12 @@ lock**, and a fresh agent should read this before starting anything heavy:
 Each queued job waits on `eval/.heavy-job.lock` itself rather than on a process-name pattern, because a
 script that greps for a job's name matches its own command line and waits forever. `make heavy-wait` is the
 supported way to queue a shell behind one.
+
+**But the queue runs through one runner, not one waiter per job.** Two independent waiters on the same lock race when
+it frees: the winner re-acquires and runs, the loser's tool hits its own guard and exits `2` — which is exactly what
+happened to the coverage arm at 01:50, and it was found by noticing a queued job had vanished rather than by a test. The
+runner waits once, then invokes each job **sequentially**, and each job still takes its own lock the ordinary way. One
+waiter cannot race itself.
 
 ### What the queue has already settled
 
