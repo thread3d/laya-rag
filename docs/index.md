@@ -37,8 +37,8 @@ Install it and run a first query with the README's [Setup](../README.md#setup) a
 ## Two rules that make the pages readable
 
 Numbers here are pinned **where it matters, and not everywhere**. `make claim-check` resolves **54**
-registered figures against the report that produced them — **26 against reports they name individually and 28
-against one diagnostics artefact** — and `make consistency-check` pins documents to each other at registered
+registered figures against the report that produced them — **28 against one diagnostics artefact and 26 against
+reports they name individually** — and `make consistency-check` pins documents to each other at registered
 sites and computes the BEIR coverage count from disk. A run without that diagnostics file checks the 26 and says
 how many it skipped, rather than skipping silently. The tracked prose contains
 several thousand decimal figures in total, so the great majority are covered by neither gate: a number no

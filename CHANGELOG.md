@@ -6,6 +6,35 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.5 — 2026-10-30
+
+The claim ledger's own arithmetic was stated wrong three times in a row — **28**, not 43.
+
+### The error
+
+I wrote *"43 of the 54 registered claim checks resolve against the diagnostics artefact"* in the README's note, the status
+page and two changelog entries. The truth:
+
+| | count |
+| --- | ---: |
+| registered claims | **54** |
+| resolve against one diagnostics artefact (`report is None`) | **28** |
+| name their own report | **26** |
+| of those, have data on this checkout and pass | **11** |
+| **skipped** on this checkout (28 + 15 absent) | **43** |
+
+**43 is the count of claims *skipped*, quoted as the count that *resolve against the artefact*.** A number measuring one
+thing presented as a number measuring another — **class 15 of the failures ledger**, committed while describing the
+ledger itself.
+
+### How it was caught
+
+By enumerating the 15 distinct source paths the default-report claims read, to check the writer emits them all before the
+artefact lands. The enumeration printed `28` and the number in the prose did not match it. That is the round-67 method
+again — **compute it a second way** — this time against my own summary rather than against a report.
+
+A test now pins 28 / 26 / 54 and requires the status page to say 28.
+
 ## 3.0.4 — 2026-10-30
 
 Four and a half hours of rankings were living only in memory. They now stream to disk as they are produced.

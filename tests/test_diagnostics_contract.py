@@ -37,3 +37,26 @@ def test_the_writer_emits_the_keys_the_ledger_reads():
 def test_the_check_sees_both_files():
     assert WRITER.is_file() and READER.is_file()
     assert len(READER.read_text(encoding="utf-8")) > 5_000
+
+
+def test_the_claim_counts_are_stated_as_they_are():
+    """28 claims resolve against the diagnostics report; 26 name their own; 11 of those have data here.
+
+    The numbers were stated wrong three times in a row — "43 of the 54 resolve against it" — when 43 is the count of
+    claims *skipped* on a checkout without the artefact (28 default-report plus 15 whose own reports are absent). The
+    mistake is small and the pattern is familiar: a number that measures one thing quoted as if it measured another,
+    which is class 15 of the failures ledger. This pins both halves so the next edit cannot reintroduce it.
+    """
+    import sys
+
+    sys.path.insert(0, str(ROOT / "tools"))
+    import claim_check as cc
+
+    default = [c for c in cc.CHECKS if c.report is None]
+    explicit = [c for c in cc.CHECKS if c.report is not None]
+    assert len(cc.CHECKS) == 54
+    assert len(default) == 28, f"{len(default)} claims resolve against the default report"
+    assert len(explicit) == 26, f"{len(explicit)} claims name their own report"
+
+    status = (ROOT / "docs" / "PROGRAMME-STATUS.md").read_text(encoding="utf-8")
+    assert "**28** claims resolve against one diagnostics artefact" in status
