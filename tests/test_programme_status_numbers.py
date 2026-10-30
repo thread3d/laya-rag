@@ -198,3 +198,21 @@ def test_the_grouped_transfer_numbers_are_quoted_where_the_gate_is():
         text = page.read_text(encoding="utf-8")
         assert auc in text, f"{page.name} does not quote the grouped AUC {auc}"
         assert ece in text, f"{page.name} does not quote the grouped ECE {ece}"
+
+
+def test_the_findings_index_quotes_the_full_set_row_it_names():
+    """The index's extractive entry now quotes the full 2,255-query row; keep it tied to the report."""
+    report = BENCH / "engine-extractive-full.json"
+    if not report.is_file():
+        pytest.skip("the full-set row is not on this checkout")
+    summary = json.loads(report.read_text(encoding="utf-8"))["summary"]
+    text = FINDINGS.read_text(encoding="utf-8")
+    assert summary["queries"] == 2255
+    for field, printed in (
+        ("Hits@10", "0.9011"), ("Hits@4", "0.7561"), ("MAP@10", "0.3120"),
+        ("MRR@10", "0.6166"), ("answer_nugget_recall", "0.1835"),
+    ):
+        assert f"{summary[field]:.4f}" == printed, f"{field} moved: {summary[field]:.4f}"
+        assert printed in text, f"the index no longer quotes {field} {printed}"
+    # and the caveat that keeps it from being read as a like-for-like placement
+    assert "chunk-level" in text

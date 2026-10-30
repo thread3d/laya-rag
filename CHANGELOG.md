@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.4 — 2026-10-30
+
+The findings index quotes the **full-set row** — and the numbers are pinned to the report that produced them.
+
+### The last index entry with a subset number
+
+`docs/FINDINGS.md`'s extractive-row entry described the row's construction and its three citation defects, and quoted
+nothing from the run itself. It now carries the full 2,255-query figures:
+
+| field | value |
+| --- | ---: |
+| Hits@10 | **0.9011** |
+| Hits@4 | 0.7561 |
+| MAP@10 | 0.3120 |
+| MRR@10 | 0.6166 |
+| citation validity (structural) | 1.0000 |
+| nugget recall | 0.1835 |
+
+…with the two things a reader needs beside them: the 150-query preview was **0.0225 optimistic on nugget recall** —
+the metric every composer delta depends on — and the row is **chunk-level**, so it is indicative rather than
+like-for-like until the document-level counterpart is placed.
+
+A test now reads `engine-extractive-full.json` and requires all five figures on the index page, plus the word
+*chunk-level*. The index is the page a stranger cites, so it is the one where a rounded number has the longest life.
+
 ## 2.7.3 — 2026-10-30
 
 The two remaining claim surfaces catch up: the cross-system comparison page and the README's citation-validity
