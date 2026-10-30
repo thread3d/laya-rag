@@ -6,6 +6,28 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.9.6 — 2026-10-30
+
+The listwise run reports progress — four hours of silence is indistinguishable from a hung process.
+
+### The gap
+
+`tools/engine_extractive.py` prints a line every 25 queries. `tools/listwise_rerank.py` printed **nothing** until it
+finished, and its own measured cost is **~4.5 h for 400 queries**. So the operator's only signal was a `ps` column and a
+prediction, and the difference between *working* and *stuck* was a judgement call rather than an observation.
+
+It now prints elapsed time, seconds per query and minutes remaining every ten queries:
+
+```
+  10/400 in 402s (40.2 s/query, ~262 min left)
+```
+
+The estimate is derived from the run's own first ten queries rather than from the projection that was 2.5× wrong an hour
+ago — which is the useful property: **the progress line is a measurement, not a restatement of the estimate.**
+
+The edit landed while the run was in flight and does not affect it: Python read the file at process start, so the running
+job keeps the old code and the next one gets the line.
+
 ## 2.9.5 — 2026-10-30
 
 The listwise comparison is written **before** the number exists.

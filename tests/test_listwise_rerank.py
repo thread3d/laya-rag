@@ -86,3 +86,18 @@ def test_the_embedding_cache_lives_beside_the_run_not_in_tmp():
     assert not offenders, f"the tool writes outside the workspace: {offenders}"
     assert any("listwise-dense-cache" in value for value in literals), "no cache path at all"
     assert "use_cache=True" in source
+
+
+def test_a_long_run_reports_progress(capsys):
+    """Four hours of silence is indistinguishable from a hung process.
+
+    The first version printed nothing until the run finished. Its own cost projection (~4.5 h for 400 queries) is the
+    reason that matters: `tools/engine_extractive.py` prints a line every 25 queries and this is the same rule.
+    """
+    corpus = {"a": "A", "b": "B"}
+    pools = {"q1": ["a", "b"], "q2": ["b", "a"]}
+    lr.score_listwise(FakeListwise([1, 0]), None, {"q1": "x", "q2": "y"}, corpus, pools, top_k=2,
+                      progress_every=1)
+    captured = capsys.readouterr().out
+    assert "1/2" in captured and "2/2" in captured
+    assert "s/query" in captured and "left" in captured

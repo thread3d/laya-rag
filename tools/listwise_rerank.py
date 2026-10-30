@@ -58,14 +58,32 @@ def first_stage(corpus, queries, *, top_k: int, depth: int) -> dict[str, list[st
     return {qid: ids[:depth] for qid, ids in fused.items()}
 
 
-def score_listwise(model, tokenizer, queries, corpus_text, pools, top_k: int) -> dict[str, list[str]]:
-    """One listwise pass per query; the model sees every candidate at once, which is the whole point."""
+def score_listwise(
+    model, tokenizer, queries, corpus_text, pools, top_k: int, *, progress_every: int = 10
+) -> dict[str, list[str]]:
+    """One listwise pass per query; the model sees every candidate at once, which is the whole point.
+
+    ``progress_every`` prints elapsed time and a remaining estimate, because a listwise pass over 400 queries takes
+    **~4.5 h on this host** and the first version of this function printed nothing until it finished — a four-hour
+    silent run is indistinguishable from a hung one, which is a monitoring gap rather than a preference.
+    """
+    import time
+
     ranked: dict[str, list[str]] = {}
-    for query_id, doc_ids in pools.items():
+    started = time.time()
+    for position, (query_id, doc_ids) in enumerate(pools.items(), 1):
         documents = [corpus_text[doc_id] for doc_id in doc_ids]
         result = model.rerank(query=queries[query_id], documents=documents, top_n=len(documents))
         order = [doc_ids[int(item["index"])] for item in result]
         ranked[query_id] = order[:top_k]
+        if progress_every and position % progress_every == 0:
+            elapsed = time.time() - started
+            per_query = elapsed / position
+            remaining = per_query * (len(pools) - position)
+            print(
+                f"  {position}/{len(pools)} in {elapsed:.0f}s ({per_query:.1f} s/query, ~{remaining / 60:.0f} min left)",
+                flush=True,
+            )
     return ranked
 
 
