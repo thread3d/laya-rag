@@ -73,3 +73,16 @@ def test_the_openapi_schema_publishes_the_package_version():
 
     app = create_app()
     assert app.openapi()["info"]["version"] == laya_rag.__version__
+
+
+def test_the_readme_does_not_state_an_exact_test_count_it_cannot_keep():
+    """An exact count in the README drifts every round; '~1,900' does not.
+
+    The page said "1896 collected" while the suite collected 1,912 — a live claim about the documented command, wrong
+    by sixteen and drifting with every test added. The historical counts in `CHANGELOG.md` stay exact because they
+    describe the runs that produced them; the README's is a promise about *now*, so it is stated at a precision the
+    page can keep.
+    """
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "tests; 5 need real weights" in text, "the README's suite note changed shape"
+    assert "collected, 5 of them real-weights" not in text, "an exact, drifting count is back"

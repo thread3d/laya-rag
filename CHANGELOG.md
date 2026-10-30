@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.8 — 2026-10-30
+
+The README's exact test count was wrong by sixteen and drifting — it is now stated at a precision the page can keep.
+
+### A live claim that could not stay true
+
+`README.md` said **"1896 collected, 5 of them real-weights"**; the suite collects **1,912**. It was correct when the
+line was last touched and wrong within a few rounds, because a count of tests changes every time a test is added and
+nothing recomputes it.
+
+That is the same shape as the front page's "every quoted figure" and the status page's empty queue: **a claim about
+the present, written once.** The difference is that this one cannot be pinned to an artefact — a test cannot count the
+suite it is part of — so the honest fix is a change of precision rather than of value:
+
+```
+make test          # Python suite, offline, deterministic (~1,900 tests; 5 need real weights)
+```
+
+**Historical counts in this changelog stay exact**, because they describe the runs that produced them and are not
+promises about now. A test forbids the exact form from returning to the README.
+
+The general rule, which now has three instances: **state a number at the precision your machinery can maintain, or
+attach it to something that recomputes it.** Anything else is a claim with a shelf life nobody wrote down.
+
 ## 2.7.7 — 2026-10-30
 
 The artefact that unlocks 43 of the 54 claim checks is queued — and the queue table says why it matters.
