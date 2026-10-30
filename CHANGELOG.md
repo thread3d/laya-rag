@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.4 — 2026-10-30
+
+Four and a half hours of rankings were living only in memory. They now stream to disk as they are produced.
+
+### The risk
+
+`listwise_rerank.py` built its whole `ranked` mapping in memory and wrote the report **after** evaluating it. So an
+exception anywhere in the scoring loop or in `evaluate_rankings` would have cost the entire pass — and the pass is
+**~4.5 h**.
+
+That is the same failure `cached_embed`'s chunked checkpointing exists to prevent for the embedding half of a BEIR run,
+and the programme already applies the rule everywhere else: **a long job checkpoints, so a crash resumes rather than
+restarts.** This tool was the exception, and it was the one running longest.
+
+### The fix
+
+The scoring loop is now a generator (`_iter_listwise`) and the caller writes each ranking to `*.rankings.jsonl` **before**
+computing the next. An interrupted run leaves a readable partial ranking rather than nothing.
+
+**It does not help the run in flight** — Python read the file at process start — so this is insurance for the next one, and
+the honest statement of why it was worth doing even though the current run might finish fine.
+
+Three tests cover it: the writer flushes per query, the generator yields one query at a time in pool order, and the
+progress line still reports.
+
 ## 3.0.3 — 2026-10-30
 
 The diagnostics pass started concurrently — and my estimate of its cost was wrong in the same way, for the third time

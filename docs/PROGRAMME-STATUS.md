@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `3.0.3` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `3.0.4` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -103,7 +103,7 @@ Everything the repository can verify offline, verified in one pass at round 100 
 | claim ledger | **11 checks passed** against the reports that name themselves; 43 skipped for want of one artefact |
 | consistency gate | skipped — no `eval/beir` reports to pin |
 | working tree | clean |
-| version | 3.0.3, identical in five files and in the OpenAPI schema |
+| version | 3.0.4, identical in five files and in the OpenAPI schema |
 
 **What is not verified, and cannot be here**: the three measurements in the queue (listwise, diagnostics, coverage), and
 the two items whose blockers are resources rather than decisions (MTRAG-UN, R8's training run).

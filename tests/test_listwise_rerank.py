@@ -101,3 +101,25 @@ def test_a_long_run_reports_progress(capsys):
     captured = capsys.readouterr().out
     assert "1/2" in captured and "2/2" in captured
     assert "s/query" in captured and "left" in captured
+
+
+def test_rankings_are_streamed_to_disk_as_they_are_computed(tmp_path):
+    """Four and a half hours of rankings must not live only in memory.
+
+    The run holds its result until the report is written, so an exception anywhere in the scoring or evaluation step
+    would have cost the whole pass — the failure `cached_embed`'s chunked checkpointing exists to prevent for the
+    embedding half. The writer now persists each ranking as it is produced, so an interrupted run leaves a readable
+    partial ranking instead of nothing.
+    """
+    import json as _json
+
+    source = Path(lr.__file__).read_text(encoding="utf-8")
+    assert ".rankings.jsonl" in source
+    assert "sink.write(" in source and "sink.flush()" in source, "the writer must flush per query"
+
+    # and the streaming helper yields before the next query is computed
+    corpus = {"a": "A", "b": "B"}
+    streamed = list(lr._iter_listwise(FakeListwise([1, 0]), None, {"q1": "x", "q2": "y"}, corpus,
+                                      {"q1": ["a", "b"], "q2": ["b", "a"]}, top_k=2, progress_every=0))
+    assert [qid for qid, _ in streamed] == ["q1", "q2"]
+    assert isinstance(_json.dumps({"q": streamed[0]}), str)

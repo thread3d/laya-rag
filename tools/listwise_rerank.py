@@ -67,15 +67,24 @@ def score_listwise(
     **~4.5 h on this host** and the first version of this function printed nothing until it finished — a four-hour
     silent run is indistinguishable from a hung one, which is a monitoring gap rather than a preference.
     """
+    ranked: dict[str, list[str]] = {}
+    for query_id, order in _iter_listwise(
+        model, tokenizer, queries, corpus_text, pools, top_k, progress_every=progress_every
+    ):
+        ranked[query_id] = order
+    return ranked
+
+
+def _iter_listwise(model, tokenizer, queries, corpus_text, pools, top_k: int, *, progress_every: int = 10):
+    """Yield `(query_id, ranking)` one at a time, so a caller can persist each before the next is computed."""
     import time
 
-    ranked: dict[str, list[str]] = {}
     started = time.time()
     for position, (query_id, doc_ids) in enumerate(pools.items(), 1):
         documents = [corpus_text[doc_id] for doc_id in doc_ids]
         result = model.rerank(query=queries[query_id], documents=documents, top_n=len(documents))
         order = [doc_ids[int(item["index"])] for item in result]
-        ranked[query_id] = order[:top_k]
+        yield query_id, order[:top_k]
         if progress_every and position % progress_every == 0:
             elapsed = time.time() - started
             per_query = elapsed / position
@@ -84,7 +93,6 @@ def score_listwise(
                 f"  {position}/{len(pools)} in {elapsed:.0f}s ({per_query:.1f} s/query, ~{remaining / 60:.0f} min left)",
                 flush=True,
             )
-    return ranked
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -125,7 +133,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     model = AutoModel.from_pretrained(MODEL, trust_remote_code=True, dtype=torch.float32).eval()
 
     started = time.time()
-    ranked = score_listwise(model, tokenizer, queries, corpus, pools, args.top_k)
+    # Persist the rankings **before** evaluating them. The pass is ~4.5 h on this host and the result lived only in
+    # memory until the report was written, so an exception anywhere in the scoring or evaluation step would have cost
+    # the whole run — which is exactly the failure `cached_embed`'s chunked checkpointing exists to prevent for the
+    # embedding half. The file is written as it goes, so an interrupted run leaves a readable partial ranking.
+    rankings_path = Path(str(args.out) + ".rankings.jsonl")
+    rankings_path.parent.mkdir(parents=True, exist_ok=True)
+    scored: dict[str, list[str]] = {}
+    with rankings_path.open("w", encoding="utf-8") as sink:
+        for query_id, order in _iter_listwise(model, tokenizer, queries, corpus, pools, args.top_k):
+            scored[query_id] = order
+            sink.write(json.dumps({"query_id": query_id, "ranking": order}) + "\n")
+            sink.flush()
+    ranked = scored
     seconds = time.time() - started
 
     import evalkit
