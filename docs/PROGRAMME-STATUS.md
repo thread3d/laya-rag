@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `2.5.4` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `2.6.0` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -171,7 +171,7 @@ lock**, and a fresh agent should read this before starting anything heavy:
 | full-set **coverage** arm | **queued** on the lock, behind the listwise arm | ~2 h | prediction (a): does the composer's +0.055 hold at 2,255 queries |
 | **`--honour-answerability`** full-set arm | not queued — waits for the three above | ~2 h | the product-level effect of the abstention lever found in this round |
 | **sentence-budget** sweep (5 → 8 → 10) | not queued | ~40 min | prediction (b): is the budget the dominant constraint |
-| **coverage-per-character** selection | not queued, and **must not** jump the queue | ~12 min per arm | prediction (c): the remedy for the length confound — but it changes the algorithm prediction (a) is measuring, so it goes after the coverage arm |
+| **coverage-per-character** selection | **measured and refuted** — kept opt-in, never made default | 40-query probe | prediction (c) failed: recall 0.0790 against the shipped 0.1945 at 0.37× the length. The remedy that remains untested is a **character budget**, not a ratio objective |
 | **cross-corpus abstention** sample (MTRAG-UN) | **blocked**: needs the dataset (97 unanswerable + 78 underspecified) | download + ~30 min | R3's transfer claim |
 | **R8's training run** | **blocked**: a corpus-scale distillation this host cannot finish quickly | hours–days | the submittable artefact |
 

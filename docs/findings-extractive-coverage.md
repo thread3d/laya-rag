@@ -233,6 +233,46 @@ length-controlling at all and the whole arm needs a character budget instead.
 before it runs would make prediction (a) a measurement of a different algorithm than the 150-query delta. The arm
 goes first, then this.
 
+### (c) outcome: **falsified, and decisively** — the ratio objective starves a count budget
+
+Prediction (c) was registered above: coverage-per-character keeps ≥80% of the gain at within 20% of the shipped
+length. **Falsifier A fired, far past its threshold.** Forty queries, three arms:
+
+| arm | nugget recall | mean chars | length vs shipped | per 1k chars |
+| --- | ---: | ---: | ---: | ---: |
+| rank order (shipped) | 0.1945 | 568.2 | 1.00× | 0.3422 |
+| coverage (absolute) | **0.2251** | 989.6 | 1.74× | 0.2275 |
+| **coverage per character** | **0.0790** | 212.7 | 0.37× | 0.3714 |
+
+Not *"most of the coverage, most of the brevity"* but **a collapse to less than half the shipped arm's recall** and
+answers a third as long. The prediction was not merely wrong in magnitude; it was wrong in sign.
+
+### The mechanism, measured separately
+
+Scoring `new facts / length` under a budget of **five sentences** is a ratio objective facing a count constraint, and
+those do not compose. Scored over 43,463 corpus sentences:
+
+| | value |
+| --- | ---: |
+| correlation(length, fact count) | **0.466** |
+| facts per 100 characters, sentences under 100 chars | **3.27** |
+| facts per 100 characters, sentences 250+ chars | **2.40** |
+
+Short sentences are *more* fact-dense per character — so a per-character objective dutifully picks the five densest
+short sentences it can find, which contain about one fact each, and the answer ends up with ~15 facts where the
+absolute objective's five long sentences carry ~40. **The ratio objective optimises the wrong quantity under a
+constraint expressed in the other one.**
+
+### What this leaves, and it is falsifier B's branch
+
+The length is not a fixable artefact of bad scoring; it is what absolute fact coverage *costs* when the budget is
+counted in sentences. The remedy that remains untested is the one the other falsifier named: **keep the absolute
+objective and constrain length directly** — a character budget instead of a sentence budget. That is a different
+experiment, not a tweak, and it is not registered yet.
+
+`EXTRACT_COVERAGE`'s default stays off, and this result strengthens the case for it: the arm that improves absolute
+coverage pays 1.74× in length, and the obvious way to avoid paying collapses the answer.
+
 ### (b) The sentence budget — is five sentences the next constraint?
 
 **What it is.** R2's falsifier already established that selection is **a** binding constraint rather than

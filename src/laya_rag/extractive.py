@@ -161,6 +161,8 @@ def _jaccard(left: set[str], right: set[str]) -> float:
 def _select_by_coverage(
     candidates: Sequence[ExtractedSentence],
     budget: int,
+    *,
+    per_char: bool = False,
 ) -> list[ExtractedSentence]:
     """Greedy max-coverage over *facts*, not over the parent document's rank.
 
@@ -179,6 +181,12 @@ def _select_by_coverage(
       fill a five-sentence budget;
     * **parent relevance** — the retrieval score the sentence inherits, as a tie-break so a
       fact-dense sentence from an irrelevant document does not outrank a fact-dense relevant one.
+
+    ``per_char`` divides that value by the sentence's length — the registered remedy for the length confound
+    (prediction (c) in `docs/findings-extractive-coverage.md`): under the shipped objective a fact-dense sentence
+    wins regardless of how long it is, and the arm measured 2.1x the text of the shipped order. It is **opt-in and
+    changes nothing by default**, because the queued full-set row is measuring the shipped objective and a
+    changed default under a running measurement is the provenance failure this repository catalogs five times.
 
     Query terms are deliberately *not* the coverage unit: every candidate comes from a passage
     retrieved for the query, so all of them contain its terms, and covering them again measures
@@ -210,6 +218,13 @@ def _select_by_coverage(
                 + 0.25 * len(terms - covered_terms)
                 + 0.5 * sentence.score
             )
+            if per_char:
+                # The registered remedy for the length confound (prediction (c)): score *new facts per
+                # character* rather than new facts. Under the shipped objective a fact-dense sentence wins
+                # regardless of how long it is, and the arm measured 2.1x the text of the shipped order —
+                # per thousand characters it was the less efficient of the two. This is opt-in and does not
+                # touch the default, because the queued full-set row is measuring the shipped objective.
+                value = value / max(1, len(sentence.text))
             if value > best_value:
                 best, best_value = sentence, value
         if best is None:  # every remaining candidate is a duplicate
@@ -229,6 +244,7 @@ def compose_extractive(
     max_sentences: int = 5,
     min_score: float = 0.0,
     coverage: bool = False,
+    coverage_per_char: bool = False,
 ) -> ExtractiveAnswer:
     """Emit up to ``max_sentences`` verbatim sentences, best-scored first, each cited.
 
@@ -296,7 +312,7 @@ def compose_extractive(
         # measured with, and `findings-extractive-row.md` quotes it. Selecting by coverage changes
         # *which* sentences are emitted, never the guarantees — every sentence is still a verbatim
         # span of a cited passage, and the abstention path is untouched.
-        kept = _select_by_coverage(candidates, max_sentences)
+        kept = _select_by_coverage(candidates, max_sentences, per_char=coverage_per_char)
     else:
         candidates.sort(key=lambda sentence: -sentence.score)
         seen: set[str] = set()

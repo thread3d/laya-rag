@@ -6,6 +6,47 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.6.0 — 2026-10-30
+
+Prediction (c) registered two rounds ago, measured now: **falsified, and decisively** — with the mechanism
+measured separately.
+
+### The result
+
+| arm | nugget recall | mean chars | length vs shipped |
+| --- | ---: | ---: | ---: |
+| rank order (shipped) | 0.1945 | 568.2 | 1.00× |
+| coverage (absolute) | **0.2251** | 989.6 | 1.74× |
+| **coverage per character** | **0.0790** | 212.7 | 0.37× |
+
+Not "most of the coverage, most of the brevity" but **less than half the shipped arm's recall** in a third of the
+length. The prediction was wrong in **sign**, not magnitude — falsifier A fired far past its threshold.
+
+### The mechanism, measured separately
+
+Scoring `new facts / length` under a budget of **five sentences** is a ratio objective facing a count constraint,
+and those do not compose. Over 43,463 corpus sentences:
+
+| | value |
+| --- | ---: |
+| correlation(length, fact count) | **0.466** |
+| facts per 100 chars, sentences under 100 chars | **3.27** |
+| facts per 100 chars, sentences 250+ chars | **2.40** |
+
+Short sentences are *more* fact-dense per character — so a per-character objective dutifully picks the five densest
+short sentences, which carry about one fact each: ~15 facts where the absolute objective's five long sentences carry
+~40. **The ratio objective optimises the wrong quantity under a constraint expressed in the other one.**
+
+### What it leaves
+
+The length is not a fixable artefact of bad scoring; it is what absolute fact coverage *costs* when the budget is
+counted in sentences. The remedy that remains untested is falsifier B's branch: **keep the absolute objective and
+constrain length directly** — a character budget. That is a different experiment, not a tweak, and it is not
+registered yet.
+
+The rejected mode stays **opt-in and non-default**, so no recorded row changes; a test pins that it changes the
+selection and that the shipped path is untouched.
+
 ## 2.5.4 — 2026-10-30
 
 The status page's queue brought current, and — more usefully — what the queue has *already settled*.

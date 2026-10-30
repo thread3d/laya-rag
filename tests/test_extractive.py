@@ -303,3 +303,26 @@ def test_duplicate_sentences_cannot_fill_the_budget_under_the_objective():
     answer = compose_extractive([repeated], query="What was the figure?", max_sentences=3,
                                 coverage=True)
     assert len(answer.sentences) == 1
+
+
+def test_per_character_selection_is_opt_in_and_changes_the_choice():
+    """Prediction (c)'s implementation: score new facts *per character*, without touching the default.
+
+    Under the shipped objective a fact-dense sentence wins regardless of length, which is how the coverage arm
+    came to emit 2.1x the text of the shipped order. Scoring per character is the registered remedy — and it is
+    opt-in because the queued full-set row is measuring the shipped objective.
+    """
+    from laya_rag.extractive import _select_by_coverage, ExtractedSentence
+
+    short_dense = ExtractedSentence(text="Revenue rose 12%.", citation=1, path=None, chunk_id=None, score=0.9)
+    long_dense = ExtractedSentence(
+        text="Revenue rose 12% and the company said that margins improved across every region "
+             "it operates in during the period under review. " * 3,
+        citation=2, path=None, chunk_id=None, score=0.9,
+    )
+    candidates = [long_dense, short_dense]
+
+    absolute = _select_by_coverage(candidates, 1)
+    per_char = _select_by_coverage(candidates, 1, per_char=True)
+    assert absolute[0] is long_dense, "the absolute objective prefers the longer, denser sentence"
+    assert per_char[0] is short_dense, "the per-character objective prefers the efficient one"
