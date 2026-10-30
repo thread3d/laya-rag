@@ -180,7 +180,21 @@ protocol (2,255 queries, 4,592 chunks, hybrid first stage) we **win the top-k** 
 
 The chart uses the **hybrid first stage**, not the coverage-plus-quota row the README also
 carries (that row reads 0.896 / 0.759 / 0.319 / 0.619 and narrows the MAP@10 gap to −0.157 against
-the published best). The absolute figures are in the README's MultiHop chart; the delta view is
+the published best).
+
+**Two caveats belong beside every delta on this page, and neither was here when it was written.**
+
+*These are chunk-level rows competing with document-level published ones.* The engine returns chunks and the corpus
+chunks 609 documents into 4,592, so ten chunk slots hold a fraction of one document's text where a published row holds
+ten whole documents. Nothing in the metric notices. The direction has since been measured and it is **conservative** —
+the engine's five chunks cover about 2.4 documents, so its rows ask the harder question — but a delta computed over
+different units is indicative rather than like-for-like until the document-level counterpart is placed
+([`findings-multihop-placement.md`](findings-multihop-placement.md)).
+
+*And the full 2,255-query run has now been made*, at the shipped defaults: **Hits@10 0.9011, Hits@4 0.7561, MAP@10
+0.3120, MRR@10 0.6166** — the same shape the chart shows, from the complete set rather than the 150-query preview,
+which was **0.0225 optimistic on nugget recall**. The chart's deltas come from the arm they always came from; the
+full-set row is where a reader should look for the level. The absolute figures are in the README's MultiHop chart; the delta view is
 here because it makes
 the shape obvious: retrieval finds the evidence, selection spends it badly, and the multi-hop MAP
 gap the programme has chased since Phase 2 is visible as the red block.

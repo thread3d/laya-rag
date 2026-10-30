@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.3 — 2026-10-30
+
+The two remaining claim surfaces catch up: the cross-system comparison page and the README's citation-validity
+mentions.
+
+### `COMPARISONS.md` gets both caveats
+
+The page's MultiHop deltas were computed over chunks and sat beside published document-level rows with nothing saying
+so. It now says so — including that the direction has since been **measured and is conservative** (five chunks cover
+about 2.4 documents, so the engine's rows ask the harder question) — and it records that the **full 2,255-query run**
+now exists: Hits@10 **0.9011**, Hits@4 0.7561, MAP@10 0.3120, MRR@10 0.6166, from the complete set rather than the
+150-query preview that was **0.0225 optimistic** on nugget recall.
+
+### And "citation validity 1.0000" carries its own meaning
+
+Two places in the README quoted citation validity without saying it is the **structural** figure — every citation in
+range, every quote found, nothing uncited — with the advisory content layer reported separately. Both now do. A
+reader who took 1.0000 for "the numbers were checked" would have been wrong, and the round-67 audit is the evidence
+that the distinction is not academic.
+
+Every claim-bearing page in the programme now quotes the gate's transfer pair, the composer's length cost, the
+chunk-versus-document caveat and the structural-versus-content distinction. That is four independent corrections from
+one night, none of which changed a measurement — only what the measurements are understood to say.
+
 ## 2.7.2 — 2026-10-30
 
 The placement path now re-derives a report's summary from its own rows — and the full-set report passed.
