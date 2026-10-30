@@ -6,6 +6,41 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.9.1 — 2026-10-30
+
+The other side of the lever, measured and **falsified**: it refuses two answerable questions in twenty, not none.
+
+### The prediction and the miss
+
+Predicted: abstention on answerable records stays ≤ 15%. Measured with the same gate on twenty answerable records:
+
+| arm | abstained | rate | mean `P(answerable)` |
+| --- | ---: | ---: | ---: |
+| gate configured, flag **off** | 4 / 20 | **0.20** | 0.598 |
+| gate configured, flag **on** | 6 / 20 | **0.30** | 0.598 |
+
+30%, double the predicted ceiling and sitting exactly on the boundary the falsifier named.
+
+### Two things that matter more than the miss
+
+**The shipped path already refuses one answerable question in five** with the gate configured and the verdict ignored —
+those are *composition* failures (no quotable sentence), not judgement. So the honest baseline for what the flag costs
+is 20%, not 0%.
+
+**And the flag adds 2 answerable refusals for 15 unanswerable ones** — 3 → 18 on the negative side, 4 → 6 on the
+positive side. A **7.5:1** ratio in favour of correct refusals, which is the number a deployment should weigh and which
+neither the prediction nor the falsifier framed that way.
+
+### What is registered instead of claimed
+
+Whether a threshold tuned for the product path (rather than the gate's default 0.5) recovers the two answerable refusals
+without losing unanswerable ones is a **registered-next** question, not a result: it would move both numbers, and the
+trade is what has to be measured.
+
+Both claim surfaces now carry the cost beside the benefit: the findings index and the README's configuration row, which
+tells a deployer the lever refuses **two answerable questions in twenty for every fifteen unanswerable ones it
+correctly refuses**.
+
 ## 2.9.0 — 2026-10-30
 
 The abstention lever's **product effect**, measured: **85% → 10%** of unanswerable questions answered.

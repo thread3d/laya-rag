@@ -240,6 +240,46 @@ paired measurement on answerable records that would confirm it stays discriminat
 rather than how well it would generalise. The generalisation question is the type-hold-out result above — where the
 ordering survives and the calibration does not — plus the cross-corpus sample that remains owed.
 
+### Registered before the run: does it refuse answerable questions too?
+
+The 0.90 above shows the lever refuses unanswerable questions. The question a deployment actually asks is the other
+half: **how many answerable ones does it refuse?**
+
+- **Prediction.** On twenty answerable records — same gate, flag on — abstention stays **at or below 15%** (the shipped
+  path abstains on none of them), i.e. at most three false refusals. Mean `P(answerable)` on this population is around
+  0.7, so most should clear the 0.5 threshold with room.
+- **Falsifier.** Above **30%** refused, the lever is too blunt at the shipped threshold and would need a threshold
+  tuned for the product path rather than the gate's default — which would be a *new* finding about the deployment, not
+  a defect in the fix.
+
+**Cost.** Twenty queries, minutes.
+
+### And on answerable records it refuses more than predicted — two in ten, for fifteen in twenty
+
+The prediction above said abstention on answerable records stays at or below 15%. Measured on twenty answerable
+records with the same gate:
+
+| arm | abstained | answered | rate | mean `P(answerable)` |
+| --- | ---: | ---: | ---: | ---: |
+| gate configured, flag **off** | 4 | 16 | **0.20** | 0.598 |
+| gate configured, flag **on** | 6 | 14 | **0.30** | 0.598 |
+
+**Falsified**: 30%, double the predicted ceiling, and right at the boundary the falsifier named (above 30% would mean
+the threshold is too blunt). It did not cross it, but it sits on it.
+
+Two things matter more than the miss, and both are in the table:
+
+1. **The shipped path already refuses one answerable question in five** — 4 of 20 — with the gate configured and the
+   verdict ignored. Those are *composition* failures: no quotable sentence, not a judgement. So the honest baseline for
+   "what does the flag cost" is 20%, not 0%.
+2. **The flag adds 2 answerable refusals for 15 unanswerable ones.** Twenty of each: unanswerable abstention went
+   3 → 18 (+15), answerable went 4 → 6 (+2). A **7.5:1** ratio in favour of correct refusals — which is the number a
+   deployment should weigh, and neither my prediction nor the falsifier framed it that way.
+
+**What this does not settle.** Twenty records per class, one threshold, one corpus. Whether a threshold tuned for the
+product path (rather than the gate's default 0.5) recovers the two answerable refusals without losing unanswerable ones
+is a **registered-next** question, not a result: it would move both numbers and the trade is what has to be measured.
+
 ### The three product-level numbers, side by side
 
 | configuration | answers to questions the corpus cannot answer |
