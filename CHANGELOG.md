@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.5 — 2026-10-30
+
+The torch-free property that keeps CI green becomes a test — and the CI-shaped run re-verified after nineteen rounds
+of changes.
+
+### The re-verification
+
+The suite was last run in a venv installed **exactly as CI installs it** (`-e . --no-deps` plus the explicit list, no
+torch) at round 50. Nineteen rounds of changes to `engine.py`, `extractive.py` and the tools later: **1,846 passed, 58
+skipped** — the 17 extra skips being the model-dependent tests the CI-shaped environment cannot run. Everything
+still parses under the declared 3.10 floor.
+
+### And the property, mechanised
+
+`tests/test_core_imports_without_torch.py` enforces what makes that possible: **no heavy import at module scope** in
+`src/laya_rag`. A module-level `import torch` anywhere in the package would break every CI run *at collection time*,
+and the failure would look like a broken suite rather than a misplaced import.
+
+Three assertions, and the third is the one that matters: the scan is checked against a **planted** module-level
+`import torch`, so it cannot silently stop detecting. The second is behavioural — the package is imported in a
+subprocess with `sys.modules['torch'] = None`, which makes any import of torch raise, and the import has to succeed.
+
+This is the same class as round 31's two torch-dependent tests: the check exists so that the experiment that found
+them does not have to be repeated.
+
 ## 2.7.4 — 2026-10-30
 
 The findings index quotes the **full-set row** — and the numbers are pinned to the report that produced them.
