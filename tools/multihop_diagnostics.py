@@ -416,8 +416,12 @@ def main(argv=None) -> int:
     tokens_of = chunk_token_sets(corpus)
 
     enc = beir.BiEncoder(model_id)
+    # `chunk` turns the embedding pass into a checkpointed one: 17,259 chunks at 8 threads is ~30 min, and without a
+    # chunk size an interruption loses all of it. `cached_embed` writes a `.done` marker per chunk, so a stopped run
+    # resumes at the next chunk rather than restarting — the same rule the listwise rankings and every long extractive
+    # row already follow.
     vectors = beir.cached_embed(
-        enc, corpus, ROOT_BENCH / "cache" / f"multihop-chunks{args.overlap}.{enc.name}"
+        enc, corpus, ROOT_BENCH / "cache" / f"multihop-chunks{args.overlap}.{enc.name}", chunk=500
     )
     print("  lexical ranking...", flush=True)
     lexical = beir.bm25_rankings(

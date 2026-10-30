@@ -60,3 +60,15 @@ def test_the_claim_counts_are_stated_as_they_are():
 
     status = (ROOT / "docs" / "PROGRAMME-STATUS.md").read_text(encoding="utf-8")
     assert "**28** claims resolve against one diagnostics artefact" in status
+
+
+def test_the_embedding_pass_is_checkpointed():
+    """17,259 chunks is ~30 min; without a chunk size an interruption loses the whole pass.
+
+    `cached_embed(..., chunk=N)` writes a `.done` marker per chunk so a stopped run resumes rather than restarts. The
+    call omitted it, which is the one place in this tool where a long pass was not recoverable — the same gap the
+    listwise rankings had, and the reason the rule is stated in `REPRODUCING.md`: a long job checkpoints.
+    """
+    writer = WRITER.read_text(encoding="utf-8")
+    assert "chunk=500" in writer, "the embedding call no longer passes a chunk size"
+    assert "cached_embed(" in writer

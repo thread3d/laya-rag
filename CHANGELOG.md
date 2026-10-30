@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.6 — 2026-10-30
+
+The diagnostics embedding pass is now checkpointed — the last long pass in the repository that was not.
+
+### The gap
+
+`multihop_diagnostics.py` called `cached_embed(...)` **without a chunk size**. That function supports chunked
+checkpointing (`chunk=N` writes a `.done` marker per chunk, so a stopped run resumes at the next chunk), and this call
+omitted it — over a **17,259-chunk** pass that takes ~30 minutes at eight threads.
+
+So an interruption lost the whole embedding. That is the same gap the listwise rankings had one round ago, in a different
+tool, and the third instance tonight of a long pass that could not be resumed:
+
+| pass | checkpointed? |
+| --- | --- |
+| `engine_extractive` rows | yes — jobkit, per row |
+| `multihop_diagnostics` embedding | **no → now yes** (`chunk=500`) |
+| `listwise_rerank` rankings | **no → now yes** (streamed jsonl) |
+
+The rule is in `REPRODUCING.md` and the README: *a long job checkpoints, so a crash resumes rather than restarts.* Three
+passes in one night were not following it — which is what happens when a rule is documented in prose and enforced
+nowhere.
+
+A test pins the `chunk=` argument so it cannot be dropped again.
+
 ## 3.0.5 — 2026-10-30
 
 The claim ledger's own arithmetic was stated wrong three times in a row — **28**, not 43.
