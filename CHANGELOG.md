@@ -6,6 +6,39 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.9.2 — 2026-10-30
+
+The threshold question answered by falsification: the gate's default **0.5 is not the best setting for the product
+path**, and **0.6 weakly dominates it**.
+
+### The curve
+
+| threshold | false-answer | true-answer |
+| --- | ---: | ---: |
+| 0.3 | 0.30 | 0.75 |
+| 0.4 | 0.25 | 0.70 |
+| **0.5** (default) | **0.10** | 0.70 |
+| **0.6** | **0.05** | **0.70** |
+| 0.7 | 0.00 | 0.60 |
+
+The prediction was a monotone trade with nothing dominating 0.5. **0.6 weakly dominates it**: the same coverage — 14 of
+20 answerable records answered — and **half the false answers**, 1 in 20 instead of 2. The falsifier's branch fired as
+written: *"if some threshold dominates 0.5 … then the default is mis-set for this path."*
+
+The probabilities explain the step rather than a slope: the negative class's `P(answerable)` runs 0.00–0.619 with a mean
+of 0.218, so nearly every negative sits below both thresholds, and the two at the default are the two nulls scoring
+above both. The answerable class spreads 0.00–0.995, and the ones below 0.5 are below 0.6 too — which is why coverage
+does not move.
+
+### What it licenses, and what it does not
+
+**Licensed:** on this sample, 0.6 is free — strictly fewer answers to unanswerable questions at equal coverage. It is a
+*recommendation*, and the README's configuration row now carries it **with its sample size attached**.
+
+**Not licensed:** twenty records per class, one corpus, one gate, in-sample. A threshold is a policy choice for a
+deployment, not a fact about the gate. The finding is that the shipped default is not obviously the best one, which is
+a smaller claim than "0.6 is correct" and enough to justify the warning.
+
 ## 2.9.1 — 2026-10-30
 
 The other side of the lever, measured and **falsified**: it refuses two answerable questions in twenty, not none.

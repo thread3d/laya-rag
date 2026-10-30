@@ -280,6 +280,48 @@ Two things matter more than the miss, and both are in the table:
 product path (rather than the gate's default 0.5) recovers the two answerable refusals without losing unanswerable ones
 is a **registered-next** question, not a result: it would move both numbers and the trade is what has to be measured.
 
+### Registered: is the default threshold the right one *for the product path*?
+
+Round 93 left this open — the lever refuses 85% of unanswerable and 30% of answerable questions at the gate's default
+`0.5`, and whether another threshold does better is a decision, not a detail.
+
+- **Prediction.** Sweeping the threshold over 0.3–0.7 moves along a **monotone trade**: no threshold in that range
+  dominates 0.5 on both the false-answer and true-answer rates. Lowering it admits more of both, raising it refuses
+  more of both, and the useful question is where a deployment wants to sit rather than which setting is correct.
+- **Falsifier.** If some threshold **dominates** 0.5 — refusing more unanswerable *and* fewer answerable — then the
+  default is mis-set for this path and that is a finding about the shipped configuration, not about the user's taste.
+- **Cost.** Forty queries collecting per-record probabilities, then arithmetic.
+
+### Falsified — and the falsifier named a real mis-setting
+
+The prediction was a monotone trade with no threshold dominating 0.5. Twenty `null` and twenty answerable records,
+per-record gate probabilities, then arithmetic:
+
+| threshold | false-answer rate | true-answer rate |
+| --- | ---: | ---: |
+| 0.3 | 0.30 | 0.75 |
+| 0.4 | 0.25 | 0.70 |
+| **0.5** (the default) | **0.10** | 0.70 |
+| **0.6** | **0.05** | **0.70** |
+| 0.7 | 0.00 | 0.60 |
+
+**0.6 weakly dominates 0.5**: the same true-answer rate — 14 of 20 answerable records answered — and **half the false
+answers**, 1 in 20 instead of 2. The falsifier's branch fired exactly as written: *"if some threshold dominates 0.5 …
+then the default is mis-set for this path and that is a finding about the shipped configuration."*
+
+The probabilities explain why the curve has a step rather than a slope: `P(answerable)` for the negative class runs
+0.00–0.619 with a mean of 0.218, so almost every negative sits below 0.5 **and** below 0.6 — the two refusals at the
+default are the two nulls that score above both. The answerable class spreads 0.00–0.995, and the ones below 0.5 are
+below 0.6 too, which is why the true-answer rate does not move.
+
+**What this licenses.** On this sample, setting the threshold to **0.6** is free: strictly fewer answers to
+unanswerable questions at the same coverage. It is a *recommendation*, and the same recommendation appears in the
+README's configuration row with its sample size attached.
+
+**What it does not license.** Twenty records per class, one corpus, one gate, in-sample. A threshold is a policy
+choice for a deployment, not a fact about the gate: the finding is that the shipped default is not obviously the best
+one, which is a smaller claim than "0.6 is correct" and enough to justify the warning.
+
 ### The three product-level numbers, side by side
 
 | configuration | answers to questions the corpus cannot answer |
