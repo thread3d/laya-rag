@@ -95,6 +95,12 @@ optimistic on nugget recall**, which is the largest single divergence and the on
 subset read as the member was already refused by the tool; this is the measurement of how much it would have
 mattered.
 
+**And its settings block is from an earlier era.** The row started before two fields existed — the document-level
+metrics and `honour_answerability` — so its `_settings` says nothing about either, and **absence is indistinguishable
+from `false`**. That is not a defect in this row; it is a defect in any artefact that does not say what wrote it. The
+tool now stamps `tool_version` into both its records, so the next row's age is readable rather than inferred from a
+timestamp, and a field's absence can be read as *"not yet possible"* rather than *"not set"*.
+
 **The row is still chunk-level and therefore still indicative**, for the reason in the next section: it started
 before the document-level fields existed. `make multihop-row` refuses to present it as like-for-like, and prints
 the published anchors beside it with that caveat rather than sorting the two groups into one column.

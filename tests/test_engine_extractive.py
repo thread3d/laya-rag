@@ -256,3 +256,20 @@ def test_the_row_records_what_citation_clean_does_not_cover():
     assert '"content_clean": bool(citation["content"]["clean"])' in source
     assert '"content_clean_all": round(sum(1 for r in rows if r.get("content_clean")) / total, 4)' in source
     assert '"negation_flags": sum(int(r.get("negation_flags") or 0) for r in rows)' in source
+
+
+def test_rows_are_stamped_with_the_version_that_wrote_them():
+    """Absence of a settings field is indistinguishable from `false` unless the row says what wrote it.
+
+    The full-set row demonstrates the problem: it started before `honour_answerability` and the `doc_*` fields
+    existed, so its settings say nothing about either. A reader comparing it to the coverage arm — which has both —
+    cannot tell whether the difference is a configuration or an era. The stamp is the fix: a row records the version
+    that wrote it, so a field's absence can be read as "not yet possible" rather than "not set".
+    """
+    import inspect
+
+    source = inspect.getsource(__import__("engine_extractive"))
+    assert "def _tool_version()" in source
+    assert source.count('"tool_version": _tool_version()') == 2, (
+        "both the META record and the final report must carry the stamp"
+    )

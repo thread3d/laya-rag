@@ -96,6 +96,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
+def _tool_version() -> str:
+    """The package version this row was written by, so a later reader can tell what fields were possible."""
+    try:
+        import laya_rag
+
+        return str(laya_rag.__version__)
+    except Exception:  # noqa: BLE001 - a row without a version stamp is better than no row
+        return ""
+
+
 _CORPUS_TEXT: dict[str, str] | None = None
 
 
@@ -363,6 +373,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 # order or the measured one. Fifth instance of this class in the programme.
                 "extract_coverage": os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", ""),
                 "honour_answerability": bool(args.honour_answerability),
+                # Which version of this tool wrote the row. A field added after a run started is *absent* from that
+                # row's settings, and absence is indistinguishable from `false` unless the row says what it was
+                # written by. The full-set row demonstrates it: it predates `honour_answerability` and `doc_*`, so
+                # its settings say nothing about either, and the only way to know is the date.
+                "tool_version": _tool_version(),
             },
             "queries": queries,
         })
@@ -403,6 +418,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "index_identity": identity,
             "extract_coverage": os.environ.get("LAYA_RAG_EXTRACT_COVERAGE", ""),
             "honour_answerability": bool(args.honour_answerability),
+            "tool_version": _tool_version(),
         },
         "documents": len(raw),
         "queries": len(mine_rows),

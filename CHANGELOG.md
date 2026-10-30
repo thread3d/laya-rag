@@ -6,6 +6,30 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.8.3 — 2026-10-30
+
+Rows are stamped with the version that wrote them — because **absence of a field is indistinguishable from `false`**.
+
+### The problem the full-set row exposed
+
+The 2,255-query row started at 22:22 and the document-level metrics and `honour_answerability` were added later, so its
+`_settings` block names neither. A reader comparing it to the coverage arm — which will have both — cannot tell
+whether the difference is a **configuration** or an **era**. Its abstention behaviour is the pre-flag default, but the
+row does not say so, and the only evidence is a timestamp.
+
+That is not a defect in the row; it is a defect in any artefact that does not say what wrote it. The five provenance
+defects catalogued in the failures ledger are all about a field naming the *wrong* thing; this is the sixth shape:
+**a field that is not there, and looks like a false one.**
+
+### The fix
+
+`tools/engine_extractive.py` now stamps `tool_version` (the package version) into both its META record and its final
+report. A field's absence can then be read as *"not yet possible"* rather than *"not set"*, and the next row's age is
+readable rather than inferred.
+
+Two assertions hold it: the helper exists, and the stamp appears in **both** records — the same pair the composer's
+objective and the answerability lever are held to.
+
 ## 2.8.2 — 2026-10-30
 
 A cross-cutting audit of the night's four corrections: two pages had gaps, and the audit's own first run produced
