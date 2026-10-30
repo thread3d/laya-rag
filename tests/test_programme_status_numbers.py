@@ -216,3 +216,18 @@ def test_the_findings_index_quotes_the_full_set_row_it_names():
         assert printed in text, f"the index no longer quotes {field} {printed}"
     # and the caveat that keeps it from being read as a like-for-like placement
     assert "chunk-level" in text
+
+
+def test_the_configuration_table_carries_the_gate_transfer_caveat():
+    """The row a user reads *before setting the variable* must not quote the random-split ECE alone.
+
+    `ANSWERABILITY_GATE_PATH` is the one place a deployer decides whether to switch the gate on. Its row quoted
+    "ECE 0.052 against the scalar's 0.283" — the random-split figure — with nothing about the type-hold-out result,
+    where the ordering survives and the calibration more than doubles. A deployer reading only that row would
+    over-trust the probabilities on traffic unlike the fit data.
+    """
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    row = next(line for line in text.splitlines() if line.startswith("| `ANSWERABILITY_GATE_PATH`"))
+    assert "0.136" in row, "the hold-out ECE is missing from the row that turns the gate on"
+    assert "0.7909" in row, "the hold-out AUC is missing from the same row"
+    assert "at random splits" in row, "the row does not say which regime its first figure comes from"

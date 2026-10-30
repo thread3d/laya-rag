@@ -6,6 +6,31 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.8.1 — 2026-10-30
+
+The one README row a deployer reads **before** switching the gate on was quoting the weaker regime alone.
+
+### The row that decides
+
+`ANSWERABILITY_GATE_PATH` is where someone decides whether the fitted gate goes into a deployment. Its row said:
+
+> …it halves the false-accept rate **and** raises the true-accept rate at the same threshold — 30.7% against 69.3%
+> … **with ECE 0.052 against the scalar's 0.283**.
+
+Every figure true, and all of them from **random splits**. Nothing said that held out by question *type* the ordering
+survives (AUC 0.8377 → 0.7909) and the calibration more than doubles (**ECE 0.052 → 0.136**). A deployer reading only
+that row would over-trust the probabilities on traffic unlike the fit data — which is the case the gate's opt-in status
+exists for.
+
+The row now carries both regimes and says which is which, with the practical consequence stated in the reader's own
+terms: *expect the probabilities to be less trustworthy on traffic unlike the fit data even before the corpus changes.*
+
+### Why this was the last place it mattered most
+
+The three claim *pages* were updated a dozen rounds ago. This is a **configuration row** — shorter, denser, and read by
+someone about to change a setting rather than someone evaluating the work. Those rows carry the highest ratio of
+consequence to length in the whole repository, and a test now requires the hold-out pair in this one.
+
 ## 2.8.0 — 2026-10-30
 
 The objective is accounted for **item by item**, against its own words — the page a reader should use to decide
