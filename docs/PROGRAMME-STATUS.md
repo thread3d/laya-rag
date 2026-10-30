@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `2.7.6` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `2.7.7` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -173,6 +173,7 @@ lock**, and a fresh agent should read this before starting anything heavy:
 | **sentence-budget** sweep (5 → 8 → 10) | not queued | ~40 min | prediction (b): is the budget the dominant constraint |
 | **coverage-per-character** selection | **measured and refuted** — kept opt-in, never made default | 40-query probe | prediction (c) failed: recall 0.0790 against the shipped 0.1945 at 0.37× the length. The remedy that remains untested is a **character budget**, not a ratio objective |
 | **cross-corpus abstention** sample (MTRAG-UN) | **blocked**: needs the dataset (97 unanswerable + 78 underspecified) | download + ~30 min | R3's transfer claim |
+| **diagnostics artefact** (`make multihop-diagnostics`) | **queued** on the lock | minutes — the corpus is 609 documents | **43 of the 54 registered claim checks** resolve against it, so producing it is what lets the claim ledger verify the prose beyond the 11 it already checks |
 | **R8's training run** | **blocked**: a corpus-scale distillation this host cannot finish quickly | hours–days | the submittable artefact |
 
 Each queued job waits on `eval/.heavy-job.lock` itself rather than on a process-name pattern, because a

@@ -6,6 +6,23 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.7 — 2026-10-30
+
+The artefact that unlocks 43 of the 54 claim checks is queued — and the queue table says why it matters.
+
+### One file, 43 checks
+
+Round 85's fix let the ledger run against the 26 claims that name their own report; **11** of those have their data
+here and pass. The other **43** resolve against a single artefact, `eval/benchmarks/multihop-rag/diagnostics.json`,
+which this checkout does not have.
+
+Producing it is cheap in a way worth stating: the benchmark's corpus is **609 documents**, so the diagnostic pass
+(`max-depth 500`, depths 10/100/500) is minutes rather than the hours the extractive and listwise arms take. It is
+queued on the heavy-job lock behind them.
+
+The status page's queue table now carries the row, with what it unlocks written beside it — because a queue entry
+that says only *what* is pending ages into a wish list, while one that says *what it is for* is a plan.
+
 ## 2.7.6 — 2026-10-30
 
 The claim ledger had never run in this checkout — one missing file silenced all 54 checks, and 11 of them had
