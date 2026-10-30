@@ -6,6 +6,40 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.9.3 — 2026-10-30
+
+The threshold recommendation was retracted by its own sample one round after it was made.
+
+### What happened
+
+Round 94 reported that **0.6 weakly dominates 0.5** — identical answerable coverage, half the false answers — and put
+it in the README as a recommendation to validate. Before leaving it standing, the sample was firmed up from twenty
+records per class to fifty:
+
+| threshold | false-answer (n=50) | true-answer (n=50) |
+| --- | ---: | ---: |
+| 0.4 | 0.24 | **0.66** |
+| **0.5** (default) | 0.16 | **0.64** |
+| 0.6 | **0.06** | 0.60 |
+| 0.7 | 0.04 | 0.54 |
+
+**The dominance was a one-record artefact.** At twenty, 0.6 kept 14 of 20 answerable; at fifty it costs **four points**
+of true-answer to buy ten of false-answer. A trade, like every other point on the curve.
+
+### So the original prediction was right
+
+Round 94's prediction was *"a monotone trade, no threshold dominates 0.5"*, and the falsification it looked like was
+noise. The README and the findings index now say what is true: the default **sits near the knee**, 0.4 answers more of
+everything, 0.6 answers less of everything, and where a deployment should sit is a policy choice.
+
+### The finding is the sample size
+
+> A dominance claim from twenty records per class was a one-record artefact. Any statement of the form *"this setting is
+> free"* needs a sample that can distinguish *free* from *four points worse*, and twenty cannot.
+
+Which is the round-67 lesson (compute the number a second way) applied to **sample size** rather than to arithmetic: the
+first computation was not wrong, it was **underpowered**, and the difference only appeared when the sample grew.
+
 ## 2.9.2 — 2026-10-30
 
 The threshold question answered by falsification: the gate's default **0.5 is not the best setting for the product

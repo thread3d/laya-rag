@@ -292,35 +292,38 @@ Round 93 left this open — the lever refuses 85% of unanswerable and 30% of ans
   default is mis-set for this path and that is a finding about the shipped configuration, not about the user's taste.
 - **Cost.** Forty queries collecting per-record probabilities, then arithmetic.
 
-### Falsified — and the falsifier named a real mis-setting
+### The threshold curve, and a dominance claim that did not survive its own sample
 
-The prediction was a monotone trade with no threshold dominating 0.5. Twenty `null` and twenty answerable records,
-per-record gate probabilities, then arithmetic:
+The prediction was a monotone trade with no threshold dominating 0.5. On **twenty** records per class it looked
+falsified — 0.6 kept 0.70 of the true-answer rate while halving the false answers. So the sample was firmed up before
+the recommendation was left standing, and **the dominance disappeared**:
 
-| threshold | false-answer rate | true-answer rate |
+| threshold | false-answer (n=50) | true-answer (n=50) |
 | --- | ---: | ---: |
-| 0.3 | 0.30 | 0.75 |
-| 0.4 | 0.25 | 0.70 |
-| **0.5** (the default) | **0.10** | 0.70 |
-| **0.6** | **0.05** | **0.70** |
-| 0.7 | 0.00 | 0.60 |
+| 0.4 | 0.24 | **0.66** |
+| **0.5** (default) | 0.16 | **0.64** |
+| 0.6 | **0.06** | 0.60 |
+| 0.7 | 0.04 | 0.54 |
 
-**0.6 weakly dominates 0.5**: the same true-answer rate — 14 of 20 answerable records answered — and **half the false
-answers**, 1 in 20 instead of 2. The falsifier's branch fired exactly as written: *"if some threshold dominates 0.5 …
-then the default is mis-set for this path and that is a finding about the shipped configuration."*
+At twenty records per class, 0.6 read as *free*: 14 of 20 answerable answered, 1 of 20 unanswerable. At fifty, it costs
+**four points of true-answer** (0.64 → 0.60) to buy ten of false-answer (0.16 → 0.06) — a trade, like every other
+point on the curve, not a dominating setting.
 
-The probabilities explain why the curve has a step rather than a slope: `P(answerable)` for the negative class runs
-0.00–0.619 with a mean of 0.218, so almost every negative sits below 0.5 **and** below 0.6 — the two refusals at the
-default are the two nulls that score above both. The answerable class spreads 0.00–0.995, and the ones below 0.5 are
-below 0.6 too, which is why the true-answer rate does not move.
+**So the original prediction was right and its apparent falsification was noise.** A one-record difference in the
+positive class produced it: 14 of 20 versus 13 of 20 is the whole gap between "identical coverage" and "four points
+worse", and twenty records cannot tell those apart.
 
-**What this licenses.** On this sample, setting the threshold to **0.6** is free: strictly fewer answers to
-unanswerable questions at the same coverage. It is a *recommendation*, and the same recommendation appears in the
-README's configuration row with its sample size attached.
+### What the curve does license
 
-**What it does not license.** Twenty records per class, one corpus, one gate, in-sample. A threshold is a policy
-choice for a deployment, not a fact about the gate: the finding is that the shipped default is not obviously the best
-one, which is a smaller claim than "0.6 is correct" and enough to justify the warning.
+Nothing about which threshold is correct. What it licenses is the observation the prediction was about: **the trade is
+monotone, and the default sits near the knee** — 0.5 gives the best true-answer rate short of 0.4's, at a false-answer
+cost between 0.4's and 0.6's. A deployment that values refusing unanswerable questions above answering answerable ones
+should move right; one that values coverage should move left. The shipped default is a defensible point, not an
+unexamined one.
+
+**And the sample-size lesson is the finding**: a dominance claim from twenty records per class was a one-record
+artefact. Any statement of the form *"this setting is free"* needs a sample that can distinguish free from
+four-points-worse, and twenty cannot.
 
 ### The three product-level numbers, side by side
 
