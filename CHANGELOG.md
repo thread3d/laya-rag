@@ -6,6 +6,40 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.9.0 — 2026-10-30
+
+The abstention lever's **product effect**, measured: **85% → 10%** of unanswerable questions answered.
+
+### Registered, then measured
+
+The defect was that the extractive path ignored the answerability verdict. The fix existed and had never been measured
+on the product path. Registered: abstention rises from 15% to **70–90%**; falsifiers at 50% (not wired) and 100%
+(indiscriminate). Measured on the same twenty `null_query` records with the fitted gate configured:
+
+| arm | abstained | answered anyway | rate |
+| --- | ---: | ---: | ---: |
+| gate configured, `honour_answerability` **off** (shipped) | 3 | 17 | **0.15** |
+| gate configured, `honour_answerability` **on** | **18** | 2 | **0.90** |
+
+**Top of the predicted band; neither falsifier fired.** Two answers still get through, so the behaviour is not
+indiscriminate — and the paired measurement on answerable records that would confirm it *stays* discriminating has not
+been run.
+
+### The three product-level numbers, side by side
+
+| configuration | answers to questions the corpus cannot answer |
+| --- | ---: |
+| shipped defaults, no gate | **85%** |
+| gate configured, verdict ignored | **85%** — the defect |
+| gate configured and honoured | **10%** |
+
+That middle row is why the defect mattered: the gate was measured, shipped, opt-in, and **bypassed**. The distance
+between rows two and three is the value of the fix, and it was invisible until the product path was tested.
+
+The caveat travels with the number: these twenty records are part of the gate's **fit data**, so 0.90 is in-sample and
+describes the mechanism working rather than how well it generalises. The README's configuration row now warns a
+deployer of exactly this: *configuring it is not enough on its own.*
+
 ## 2.8.3 — 2026-10-30
 
 Rows are stamped with the version that wrote them — because **absence of a field is indistinguishable from `false`**.

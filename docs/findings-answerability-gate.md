@@ -207,7 +207,51 @@ every number this document previously quoted.
 `eval/gate/multihop-grouped.json` is the 601 rows with `question_type` joined back from the benchmark by query
 text; the grouped report and its persisted `.gate` artefact sit beside it.
 
-## Still owed
+### Registered before the run: what the lever *does* at the product level
+
+The defect above was that the extractive path ignored the verdict. The fix exists (`honour_answerability=True`) and has
+**not been measured on the product path** — only the mechanism was. Registered now:
+
+- **Prediction.** On the same twenty `null_query` records with the fitted gate configured *and* the flag on, the
+  abstention rate rises from **15% to 70–90%**: mean `P(answerable)` under the gate is 0.218, so at the shipped 0.5
+  threshold most of these should be refused. Cite-clean should stay at 1.0000 on any answer that *is* emitted.
+- **Falsifier.** If abstention stays below **50%**, the flag is not wired into the extractive path the way the unit
+  test suggests, and the product-level fix does not exist. If it reaches **100%**, the lever is indiscriminate at this
+  threshold and would refuse answerable questions too — which the *paired* measurement on answerable records would
+  have to rule out, and has not been run.
+
+**Cost.** Twenty queries, minutes.
+
+### Measured: the lever closes the product-level gap
+
+The prediction above, measured on the same twenty `null_query` records with the fitted gate configured:
+
+| arm | abstained | answered anyway | abstention rate |
+| --- | ---: | ---: | ---: |
+| gate configured, `honour_answerability` **off** (the shipped behaviour) | 3 | 17 | **0.15** |
+| gate configured, `honour_answerability` **on** | **18** | 2 | **0.90** |
+
+**Landed at the top of the predicted 70–90% band, and neither falsifier fired.** The lever works at the product level:
+on this sample it turns *85% of unanswerable questions answered* into **10%**, an 8.5× reduction in answers to
+questions the corpus cannot answer. Two answers still get through, so the behaviour is not indiscriminate — and the
+paired measurement on answerable records that would confirm it stays discriminating has **not** been run.
+
+**These twenty records are part of the gate's fit data**, so the 0.90 is in-sample and describes the mechanism working
+rather than how well it would generalise. The generalisation question is the type-hold-out result above — where the
+ordering survives and the calibration does not — plus the cross-corpus sample that remains owed.
+
+### The three product-level numbers, side by side
+
+| configuration | answers to questions the corpus cannot answer |
+| --- | ---: |
+| shipped defaults, no gate | **85%** |
+| fitted gate configured, verdict ignored by the extractive path | **85%** — the defect |
+| fitted gate configured and honoured | **10%** |
+
+That middle row is why the defect mattered: the gate was measured, shipped, opt-in, and *bypassed*. The distance between
+rows two and three is the value of fixing it, and it was invisible until the product path was tested.
+
+## What is owed
 
 - **Default it, deliberately.** The gate is opt-in (`ANSWERABILITY_GATE_PATH`). The numbers above
   argue for a default *when a fitted artefact for the corpus is present*, which needs a
