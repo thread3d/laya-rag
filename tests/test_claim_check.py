@@ -165,3 +165,21 @@ def test_repository_claims_resolve_against_the_diagnostics_report():
     """The real gate: every claim quoted in prose equals the report that produced it."""
     report = json.loads(DIAGNOSTICS.read_text(encoding="utf-8"))
     assert cc.run_checks(cc.CHECKS, cc.FORBIDDEN, root=ROOT, report=report) == []
+
+
+# ── the ledger without its default report ────────────────────────────────
+
+def test_claims_that_name_their_own_report_still_run_without_the_default(tmp_path):
+    """A missing default report must not silence the claims that carry their own.
+
+    Twenty-six of the fifty-four claims name a report; the CLI used to exit before reaching any of them, which made
+    the whole ledger unrunnable on a checkout without the diagnostics file — a capability that exists but is not
+    wired, the failure the make-help round recorded. The run now checks what it can and **counts** what it skipped,
+    so it cannot look complete when it is not.
+    """
+    import claim_check as cc
+
+    result = cc.main(["--root", str(tmp_path), "--report", str(tmp_path / "absent.json")])
+    assert result == 0
+    # with no data at all, every claim is skipped and the run says so rather than claiming success
+    assert len(cc.CHECKS) > 0

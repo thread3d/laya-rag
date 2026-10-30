@@ -423,10 +423,15 @@ def main(argv=None) -> int:
     report_path = Path(args.report)
     if not report_path.is_absolute():
         report_path = root / report_path
-    if not report_path.is_file():
-        print(f"claim-check: SKIPPED — {report_path} not found (run `make multihop-diagnostics`)")
-        return 0
-    report = json.loads(report_path.read_text(encoding="utf-8"))
+    # A missing *default* report must not stop the claims that name their own. Twenty-six of the fifty-four do,
+    # and exiting here made the whole ledger unrunnable on a checkout without the diagnostics file — the same
+    # "a capability that exists but is not wired is capability nobody has" failure the make-help round recorded.
+    # Claims that do need the default are skipped and **counted**, so the run cannot look complete when it is not.
+    default_missing = not report_path.is_file()
+    report = {} if default_missing else json.loads(report_path.read_text(encoding="utf-8"))
+    if default_missing:
+        print(f"claim-check: {report_path} not found (run `make multihop-diagnostics`); "
+              "checking only the claims that name their own report")
 
     # Claims sourced from other reports load them on demand; a claim whose report is absent is
     # skipped, so a fresh checkout with no eval/ still passes rather than failing on missing data.
@@ -437,7 +442,11 @@ def main(argv=None) -> int:
         path = root / claim.report
         if path.is_file():
             reports[claim.report] = json.loads(path.read_text(encoding="utf-8"))
-    checkable = [c for c in CHECKS if c.report is None or c.report in reports]
+    checkable = [
+        c for c in CHECKS
+        if (c.report is not None and c.report in reports) or (c.report is None and not default_missing)
+    ]
+    skipped = len(CHECKS) - len(checkable)
     failures = run_checks(checkable, FORBIDDEN, root=root, report=report, reports=reports)
     checked = len(checkable) + len(FORBIDDEN)
     if failures:
@@ -445,7 +454,9 @@ def main(argv=None) -> int:
         for line in failures:
             print(f"  - {line}")
         return 1
-    print(f"claim-check: {checked} checks passed against {report_path.relative_to(root)}")
+    where = "their own reports" if default_missing else str(report_path.relative_to(root))
+    tail = f" ({skipped} skipped without data)" if skipped else ""
+    print(f"claim-check: {checked} checks passed against {where}{tail}")
     return 0
 
 

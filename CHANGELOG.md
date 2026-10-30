@@ -6,6 +6,41 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.7.6 — 2026-10-30
+
+The claim ledger had never run in this checkout — one missing file silenced all 54 checks, and 11 of them had
+their data all along.
+
+### The defect
+
+`make claim-check` exits early when the *default* report is absent:
+
+```
+claim-check: SKIPPED — .../diagnostics.json not found (run `make multihop-diagnostics`)
+```
+
+But **26 of the 54 registered claims name their own report** — `eval/beir/lexical-control.json`,
+`eval/frames-eval-ensemble.json`, the per-dataset BEIR rows — and the loader already handled them on demand. The
+early exit ran before any of that, so the whole ledger silently vanished whenever one file was missing. That is the
+round-20 failure again: **a capability that exists but is not wired is capability nobody has.**
+
+### What it found once it ran
+
+**11 checks passed against their own reports.** The prose and those artefacts agree — the first time this ledger has
+verified anything in this session, because before the fix it could not start.
+
+### And the count is now honest
+
+A run without the diagnostics file checks the 26 and prints how many it skipped:
+
+```
+claim-check: 11 checks passed against their own reports (54 skipped without data)
+```
+
+The front page's claim-coverage sentence now says the same: **26 against reports they name, 28 against one
+diagnostics artefact**, and a run without it checks the 26 rather than skipping silently. A ledger whose output is
+either "passed" or "skipped, and here is how much" cannot be misread as complete.
+
 ## 2.7.5 — 2026-10-30
 
 The torch-free property that keeps CI green becomes a test — and the CI-shaped run re-verified after nineteen rounds
