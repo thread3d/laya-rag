@@ -191,6 +191,24 @@ run really did produce the same answers rather than merely the same metrics. And
 the length confound**, which is what makes it a property of the coverage objective rather than of the measurement
 setup.
 
+### The analysis is written before the number exists
+
+The listwise run's interpreter reads `per_query_nDCG@10` from four artefacts — the first stage, both pointwise arms and
+the listwise arm — aligns them on query id, and reports paired bootstrap intervals for three comparisons:
+
+| comparison | what it answers |
+| --- | --- |
+| first stage − listwise | does the listwise pass beat the pool it was given |
+| listwise − pointwise 2026 | does the *interface* buy anything at the same size |
+| listwise − pointwise 2024 | how far the interface goes against the older pointwise model |
+
+plus an explicit verdict on the two registered falsifiers, evaluated by the script rather than by the author reading a
+number and deciding what it means. Written while the run was still going, so the comparison cannot be chosen after seeing
+which one is flattering.
+
+That is the same rule the predictions follow, one level down: **a prediction fixes the claim, and a pre-written analysis
+fixes the comparison.** Both have to exist before the data does, or the data decides.
+
 ### What this does not license
 
 It does not license "use a bigger reranker and the ArguAna problem goes away": the trend across two model

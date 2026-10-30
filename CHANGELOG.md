@@ -6,6 +6,25 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.9.5 — 2026-10-30
+
+The listwise comparison is written **before** the number exists.
+
+### Why that ordering matters
+
+Three comparisons will decide what the listwise arm means — against the first stage, against the pointwise model of the
+same size, and against the older pointwise model. Which of those is *reported first*, and which interval is quoted, are
+choices that a person reading a fresh number is tempted to make in the flattering direction.
+
+So the interpreter was written while the run was still going. It aligns four artefacts on query id, reports all three
+paired bootstrap intervals, and evaluates **both registered falsifiers by code** rather than by the author reading a
+number and deciding what it signifies.
+
+> A prediction fixes the claim; a pre-written analysis fixes the comparison. Both have to exist before the data does, or
+> the data decides.
+
+One level down from the prediction rule, and the same reason.
+
 ## 2.9.4 — 2026-10-30
 
 The listwise run's cost projection was **2.5× optimistic**, and the assumption behind it was never checked.
