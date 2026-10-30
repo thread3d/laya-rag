@@ -256,8 +256,16 @@ and a number that looks like a good one were one line apart, and neither would h
 The full 400-query, depth-50 run is queued behind the heavy-job lock. Its licence is recorded beside its
 number wherever it is quoted.
 
-**Its cost, projected from measurement rather than guessed.** The re-smoke after a cache fix — two queries at
-depth 10 — took **16.4 s**, which is ~8 s per query at that depth. Depth 50 is five times the candidates in
-one pass, so the queue's expectation is **~40 s per query at eight threads, roughly 1.5–2 h for 400 queries
-on 24**. If it comes in far outside that, the likely cause is a slow tail rather than a wrong measurement —
-the same 10× spread the cost envelope's finding records on this benchmark.
+**Its cost, projected from measurement rather than guessed — and the first projection was 2.5× optimistic.** The
+re-smoke after a cache fix (two queries at depth 10) took **16.4 s**, so ~8 s per query at that depth; depth 50 is five
+times the candidates in one pass. Applying both gives **~41 s per query and 4.5 h for 400 queries** — and the run's
+elapsed time tracked that almost exactly.
+
+The number first written here was **1.5–2 h**, and the arithmetic behind it was the same except for one assumption that
+was never checked: that going from 8 threads in the smoke test to 24 on the run would divide the per-query cost. It did
+not. A listwise pass over fifty documents per query does not scale with thread count the way the pointwise model's
+batched forward passes do, and the projection silently assumed it would.
+
+**The lesson is the one this document keeps paying for**: a projection is a prediction, and the assumption inside it —
+*threads multiply throughput* — was never measured on this workload. The depth scaling was right; the thread scaling was
+invented.

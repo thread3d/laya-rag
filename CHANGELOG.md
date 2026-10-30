@@ -6,6 +6,33 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 2.9.4 — 2026-10-30
+
+The listwise run's cost projection was **2.5× optimistic**, and the assumption behind it was never checked.
+
+### The arithmetic
+
+The re-smoke test measured **8 s per query at depth 10**. Depth 50 is five times the candidates in one pass, so:
+
+| step | value |
+| --- | ---: |
+| per query at depth 50 | **41 s** |
+| 400 queries | **4.5 h** |
+
+The run's elapsed time tracked that almost exactly. The number written when it was queued was **1.5–2 h**, from the
+same arithmetic *minus one assumption nobody measured*: that going from 8 threads in the smoke test to 24 on the run
+would divide the per-query cost. **It did not.** A listwise pass over fifty documents per query does not scale with
+thread count the way the pointwise model's batched forward passes do.
+
+### Why it belongs in the finding
+
+> A projection is a prediction, and the assumption inside it — *threads multiply throughput* — was never measured on this
+> workload. The **depth scaling was right**; the **thread scaling was invented.**
+
+The same three-way discipline the programme applies to measurements now applies to estimates: state the projection, say
+what it assumes, and check the assumption when the run reports. The `REPRODUCING.md` row that quotes the run's cost now
+carries both numbers and says which one was wrong.
+
 ## 2.9.3 — 2026-10-30
 
 The threshold recommendation was retracted by its own sample one round after it was made.
