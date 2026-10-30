@@ -6,6 +6,40 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.0 — 2026-10-30
+
+A hundred rounds in: the checkup, recorded on the page a maintainer reads.
+
+### Every offline check, in one pass
+
+| check | result |
+| --- | --- |
+| offline suite | **1,876 passed, 41 skipped, 5 deselected** |
+| the same suite in a venv installed **exactly as CI installs it** | **1,859 passed, 58 skipped** |
+| lint | clean |
+| documentation gates | **40 passed** |
+| claim ledger | **11 checks passed** (43 skipped for want of one artefact) |
+| consistency gate | skipped — nothing to pin |
+| working tree | clean |
+| version | 2.9.7, identical in five files and in the OpenAPI schema |
+
+### What a hundred rounds produced, counted rather than remembered
+
+**89 findings documents**, **eighteen catalogued measurement-failure classes**, a suite of ~1,900 tests of which **40
+are gates on the documentation itself**, and **three corrections to published numbers in the last night alone**: the
+gate's calibration under transfer, the composer's gain under a length lens, and the unit the placement row is scored
+over.
+
+### The pattern the hundred rounds exposed
+
+> **Every serious defect was in a surface that describes the work rather than in the work** — a cache key, a column
+> name, a resume fingerprint, a settings block, a unit, a denominator, a threshold's sample size. The measurements held
+> up. It was the sentences about them that needed auditing.
+
+Version 3.0.0 not for a feature but for a state: the programme's evidence, its limits, its reproduction path and its open
+queue are now all legible from disk, and every claim on the pages a stranger reads is pinned to something that
+recomputes it.
+
 ## 2.9.7 — 2026-10-30
 
 The corrected cost projection reaches the queue row a fresh agent reads first.

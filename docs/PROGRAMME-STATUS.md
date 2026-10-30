@@ -4,7 +4,7 @@ A single page for whoever picks this up next. `ROADMAP.md` carries each item's l
 commands; this states where the programme actually landed, what it refuted, and what is left with the
 cost of getting it.
 
-**Release:** `2.9.7` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
+**Release:** `3.0.0` is the current tagged release; its notes are [`CHANGELOG.md`](../CHANGELOG.md). The
 version is what `laya_rag.__version__` reports and what the HTTP API publishes in its OpenAPI
 schema, so a client can tell which engine it is talking to.
 
@@ -89,6 +89,33 @@ Negatives are results here, and these are the ones worth keeping:
 - **Two of my own hypotheses were falsified by the runs that tested them**: that the lexical shortfall
   grows with corpus size (DBPedia at 4.6M documents is −0.008), and that our lexical settings cause it
   (the published-settings control row is *further* from the anchor).
+
+## A hundred rounds in: the checkup
+
+Everything the repository can verify offline, verified in one pass at round 100 of this session.
+
+| check | result |
+| --- | --- |
+| offline suite | **1,876 passed, 41 skipped, 5 deselected** |
+| suite in a venv installed **exactly as CI installs it** (no torch, `--no-deps`) | **1,859 passed, 58 skipped** |
+| lint (ruff error class) | clean |
+| documentation gates (links, doubled text, findings index, make targets, tool paths, env vars, claim coverage, corrections, falsifiers, status pins) | **40 passed** |
+| claim ledger | **11 checks passed** against the reports that name themselves; 43 skipped for want of one artefact |
+| consistency gate | skipped — no `eval/beir` reports to pin |
+| working tree | clean |
+| version | 3.0.0, identical in five files and in the OpenAPI schema |
+
+**What is not verified, and cannot be here**: the three measurements in the queue (listwise, diagnostics, coverage), and
+the two items whose blockers are resources rather than decisions (MTRAG-UN, R8's training run).
+
+**What a hundred rounds produced**, counted rather than remembered: **89 findings documents**, **eighteen catalogued
+measurement-failure classes**, a test suite of 1,900-odd tests of which **40 are gates on the documentation itself**, and
+**three corrections to published numbers** in the last night alone — the gate's calibration under transfer, the composer's
+gain under a length lens, and the unit the placement row is scored over.
+
+The pattern worth carrying out of the hundred: **every serious defect was in a surface that describes the work rather
+than in the work** — a cache key, a column name, a resume fingerprint, a settings block, a unit, a denominator, a
+threshold's sample size. The measurements held up. It was the sentences about them that needed auditing.
 
 ## The objective, item by item
 
