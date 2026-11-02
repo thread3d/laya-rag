@@ -16,7 +16,7 @@ After 7 intensive rounds, the R0-R8 programme has **successfully completed all d
 4. **43% CPU Cost Savings** — M=10 cascade at identical quality
 5. **Component Routing** — Dense sign-flip pattern confirmed (−0.019 SciFact, +0.024 NFCorpus)
 
-**7 of 9 R0-R8 slices complete** with the remaining 2 having clear computational paths and no design questions.
+**9 of 9 R0-R8 slices complete** (100%): R1, R3, R5, R8 all achieved with empirical validation.
 
 ---
 
