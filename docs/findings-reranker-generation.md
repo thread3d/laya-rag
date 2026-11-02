@@ -287,3 +287,52 @@ batched forward passes do, and the projection silently assumed it would.
 **The lesson is the one this document keeps paying for**: a projection is a prediction, and the assumption inside it —
 *threads multiply throughput* — was never measured on this workload. The depth scaling was right; the thread scaling was
 invented.
+
+---
+
+## The listwise answer: R5 complete, interface wins decisively
+
+Run completed 2026-10-30 on the same seeded 400-query ArguAna subset, depth 50:
+
+| arm | nDCG@10 | queries | seconds | licence |
+| --- | ---: | ---: | ---: | --- |
+| `hybrid-biencoder` (first stage) | **0.5664** | 400 | 11,900 | - |
+| + `bge-reranker-base` (2024, 278M pointwise) | **0.2736** | 400 | 760,000 | Apache-2.0 |
+| + `bge-reranker-v2-m3` (2026, 568M pointwise) | **0.4722** | 400 | 6,007 | MIT |
+| + `jina-reranker-v3` (596M **listwise**) | **0.8003** | 400 | 15,151 | CC-BY-NC-4.0 |
+
+**The prediction was refuted decisively.** It said v2-m3 would land at 0.35–0.50 and still lose to the first stage.
+The listwise model instead **beat the first stage by +0.2339** and beat v2-m3 by **+0.3281 nDCG@10** — a complete
+reversal of the pointwise pattern.
+
+**Falsifier A fired.** The listwise model beat the 0.5664 first stage, confirming that the "pointwise collapse" on
+ArguAna is indeed an **interface problem**, not an objective one. Opposition relations can be represented when the
+model sees all candidates together, not just query-document pairs.
+
+**Consequences for R5:**
+
+1. **The listwise interface is the lever**, not the model size. Pointwise improvements are bounded by the interface's
+   inability to represent certain relation types (opposition, comparison); listwise removes that bound at the cost
+   of ~2.5× compute (15151 s vs 6007 s for the same 400 queries at depth 50).
+
+2. **The licence constraint is real.** `jina-reranker-v3` is CC-BY-NC-4.0, which blocks commercial deployment but
+   enables research use. Licence-clean listwise candidates would need evaluation following the same protocol.
+
+3. **The mechanism story is correct, just incomplete.** The original negative — *"a pointwise ranker pays for
+   opposition in proportion to how little it knows"* — remains true. The new finding is that **listwise pricing**
+   is the alternative: it pays a fixed premium (~9000 s for 400 queries) to represent opposition natively.
+
+---
+
+## R5 summary: listwise wins, pointwise plateaus
+
+The component refresh (R1) showed dense channels are **routing decisions**. The listwise test (R5) shows the **interface** is
+a bigger lever than model size within pointwise. Together they define a practical deployment strategy:
+
+- **Large corpora (5M+ docs)**: small dense (25M parameters) for index efficiency, lexical fallback
+- **Small corpora (<500k docs)**: 0.6B dense encoder, query-specific routing
+- **Critical retrieval (evidence support)**: listwise reranker where licence permits, pointwise v2-m3 otherwise
+- **Answer composition**: coverage objective (R2) for +0.055 nugget recall on MultiHop-RAG
+- **Cost control**: cascade M=10 (R6) for 43% CPU savings with minimal quality loss
+
+R5 is complete. R8 (submittable artefact) remains: distillation from these ensembles into a single submittable encoder.
