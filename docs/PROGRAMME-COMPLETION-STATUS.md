@@ -146,14 +146,14 @@ After 5 rounds of design, documentation, and specification work:
 2. **Start ArguAna component refresh** (1-2 hours)
    ```bash
    cd laya-rag
-   python tools/beir.py --model Qwen/Qwen3-Embedding-0.6B \
-     --arguana --pooling last --out eval/r1/arguana-qwen3.json
+   python tools/beir.py --biencoder-model Qwen/Qwen3-Embedding-0.6B \
+     --datasets=arguana --biencoder-pooling last --out eval/r1/arguana-qwen3.json
    ```
 
 3. **Start FiQA component refresh** (1-2 hours, parallel)
    ```bash
-   python tools/beir.py --model Qwen/Qwen3-Embedding-0.6B \
-     --fiqa --pooling last --out eval/r1/fiqa-qwen3.json
+   python tools/beir.py --biencoder-model Qwen/Qwen3-Embedding-0.6B \
+     --datasets=fiqa --biencoder-pooling last --out eval/r1/fiqa-qwen3.json
    ```
 
 ### Day 2-3 (After MTRAG-UN Approval)

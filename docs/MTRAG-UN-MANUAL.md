@@ -170,7 +170,7 @@ python -c "from laya_rag.index_store import IndexStore; print(IndexStore.exists(
 
 If index doesn't exist, build it first:
 ```bash
-make build-index-cached
+make index
 ```
 
 ### Gate file not found

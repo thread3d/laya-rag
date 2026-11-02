@@ -95,8 +95,8 @@ The R0-R8 programme from [`best-in-the-world-2026-10.md`](./best-in-the-world-20
 
 **Execution Path:**
 1. Download FiQA dataset (~5 minutes)
-2. Run `python tools/beir.py --model Qwen/Qwen3-Embedding-0.6B --arguana --pooling last` (~1-2 hours)
-3. Run `python tools/beir.py --model Qwen/Qwen3-Embedding-0.6B --fiqa --pooling last` (~1-2 hours)
+2. Run `python tools/beir.py --biencoder-model Qwen/Qwen3-Embedding-0.6B --datasets=arguana --biencoder-pooling last` (~1-2 hours)
+3. Run `python tools/beir.py --biencoder-model Qwen/Qwen3-Embedding-0.6B --datasets=fiqa --biencoder-pooling last` (~1-2 hours)
 4. Compute 5-dataset mean with paired bootstrap intervals
 5. Update `findings-component-refresh.md`
 
