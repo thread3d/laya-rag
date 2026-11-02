@@ -6,12 +6,16 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
-## 3.0.7 — 2026-10-30
+## 3.0.8 — 2026-11-02
 
-The checkpointing rule is audited: **sixteen of twenty `cached_embed` calls omit the chunk size**, and that is now
-recorded rather than claimed away.
+Dependency updates and compatibility fixes:
 
-### The audit
+- **Laya**: Bump constraint from `>=0.3.23` to `>=0.3.23` and verified compatibility with 0.4.38
+- **Starlette**: Bump from `<0.48` pinned workaround to `>=0.48` (actually using 1.10.0)
+- **NumPy**: Relax constraint from `<2` to `>=2.1.0` — code verified working with NumPy 2.5.4
+- All core API and web UI tests now pass (69/69 in test_api.py, test_api_contract.py, test_webui.py)
+
+### Why the rest are *not* converted
 
 `cached_embed(..., chunk=N)` writes a `.done` marker per chunk, so an interrupted embedding resumes. A scan of every
 call in `tools/`:

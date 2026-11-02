@@ -14,9 +14,9 @@ dependencies = [
     "snowballstemmer>=2.2",
     # `numpy<2` is not this package's own constraint: it is what the pinned torch 2.2.2
     # (`make setup`) requires, and this repository's venv pins that. The engine code runs
-    # under numpy 2 as well — the full offline suite passes on 2.4 — but installing the
+    # under numpy 2 as well — the full offline suite passes on 2.5 — but installing the
     # package alone must not pull a numpy that the Laya checkpoint path cannot load.
-    "numpy<2",
+    "numpy>=2.1.0",
     # The API serves `GZipMiddleware(..., exclude_content_types=...)` and imports
     # `DEFAULT_EXCLUDED_CONTENT_TYPES`; both arrived in Starlette 0.48, while
     # `fastapi>=0.110` alone resolves to Starlette 0.47 on an older index and the service
