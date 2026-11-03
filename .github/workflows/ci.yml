@@ -37,19 +37,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.10 is the declared floor (`requires-python`); 3.12 is the newest interpreter the
-        # `numpy<2` pin has wheels for. 3.13 is deliberately absent: numpy 1.26 publishes no
-        # cp313 wheel, so installing the declared pin there builds from source instead.
-        python-version: ["3.10", "3.12"]
+        # 3.10 is the declared floor (`requires-python`); 3.13 is the newest interpreter the
+        # `numpy>=2.1` floor has wheels for, and the one the development venv runs — so a suite
+        # that only passes there is caught here rather than by a user's first `pip install`.
+        python-version: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # The documentation lives beside the code and several tests read the corpus and the
           # Makefile; nothing here needs the weights, but `vendor/laya` is cheap and the docs
           # link into it.
           submodules: recursive
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -64,8 +64,14 @@ jobs:
           # package declares. `starlette>=0.48` is load-bearing: `api.py` passes
           # `exclude_content_types` to `GZipMiddleware`, which 0.47 rejects at construction.
           python -m pip install -e . --no-deps
+          # Every spec below is a floor `pyproject.toml` declares, copied rather than resolved, so a
+          # step that installs *below* a declared floor cannot pass quietly. numpy is the one that
+          # used to: this job pinned `numpy<2` — the constraint the torch 2.2.2 venv needs, not this
+          # package's — and pip ended every install with `laya-rag 3.0.8 requires numpy>=2.1.0, but
+          # you have numpy 1.26.4`, an error line in the job that calls itself the offline gate. The
+          # engine runs under numpy 2; the development venv does, at 2.5.
           python -m pip install \
-            "numpy<2" \
+            "numpy>=2.1.0" \
             "snowballstemmer>=2.2" \
             "fastapi>=0.110.0" \
             "starlette>=0.48" \

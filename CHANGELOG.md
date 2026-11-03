@@ -6,6 +6,59 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.9 — 2026-11-03
+
+The first CI run of this repository failed, and every failure was a test that passed only on the machine which had
+run the measurement programme. `ci` ran for the first time on `49f7751` and lost `make test` on both matrix rows.
+
+### The eight tests that read a gitignored corpus
+
+`tests/test_engine_extractive.py` scored through `eval/benchmarks/multihop-rag/corpus.json`, which is gitignored: it
+exists on a host that has downloaded MultiHop-RAG and nowhere else. The tests passed here and failed on a fresh
+checkout with `FileNotFoundError`, one per test. They now build a three-document corpus in the benchmark's on-disk
+shape under `tmp_path` and point the harness at it — `score_one` needs the corpus only to collapse returned chunks
+to distinct documents, which three documents exercise — and the single test that genuinely pins the downloaded
+corpus (609 documents) skips when it is absent, the way every other `eval/`-reading gate in this suite already did.
+
+### The guard that failed on the floor it was guarding
+
+`tests/test_python_floor.py` hard-coded a 3.12 construct (`def f[T](x: T) -> T`) and asserted that the *running*
+interpreter parses it. True on the development host, false on the 3.10 matrix row: the test that exists to catch
+floor-only syntax was itself a floor-only failure. It now picks the cheapest construct newer than `requires-python`
+that this host can also parse (`except*`, PEP 695 generics, `type` statements) and skips the "the floor must refuse
+it" half when the host *is* the floor, where no such construct exists.
+
+### The workflow
+
+- **numpy** was pinned `numpy<2` — the constraint the torch 2.2.2 venv needs, not this package's, which declares
+  `>=2.1.0`. Every install therefore ended on `laya-rag 3.0.8 requires numpy>=2.1.0, but you have numpy 1.26.4`, an
+  error line inside the job that calls itself the offline gate. The job installs the declared floor now.
+- **The matrix moves from 3.10/3.12 to 3.10/3.13**: 3.13 is what the development venv runs and the newest
+  interpreter `numpy>=2.1` publishes wheels for, so the row that was silently untested is the one under the newest
+  runtime this project is developed on.
+- **`actions/checkout` v4 → v5 and `actions/setup-python` v5 → v6.** The run carried two deprecation annotations
+  ("Node.js 20 is deprecated … forced to run on Node.js 24") on every job; neither action version is affected by
+  the Ubuntu 24→26 label migration that the same run also announced.
+
+### Verification
+
+Both matrix rows reproduced in a copy of the tree holding only tracked files — no `eval/`, which is what a checkout
+is — with the workflow's own install list and no torch:
+
+| interpreter | numpy | result |
+| --- | --- | --- |
+| 3.10.19 | 2.2.6 | **1858 passed, 66 skipped, 5 deselected** |
+| 3.13.9 | 2.5.4 | **1859 passed, 65 skipped, 5 deselected** |
+
+The one-test difference is the floor test above: on 3.10 it skips, because no newer-than-floor construct exists
+there to refuse.
+
+### Also in this release
+
+`CHANGELOG.md` lost its `## 3.0.7` heading in the previous commit: the 3.0.8 release notes were written over the
+heading and its opening paragraph, leaving the 3.0.7 audit body orphaned under 3.0.8 with a duplicated
+`### Why the rest are *not* converted` heading. The 3.0.7 section is restored from `c3f9979`; no content changed.
+
 ## 3.0.8 — 2026-11-02
 
 Dependency updates and compatibility fixes:
@@ -15,7 +68,12 @@ Dependency updates and compatibility fixes:
 - **NumPy**: Relax constraint from `<2` to `>=2.1.0` — code verified working with NumPy 2.5.4
 - All core API and web UI tests now pass (69/69 in test_api.py, test_api_contract.py, test_webui.py)
 
-### Why the rest are *not* converted
+## 3.0.7 — 2026-10-30
+
+The checkpointing rule is audited: **sixteen of twenty `cached_embed` calls omit the chunk size**, and that is now
+recorded rather than claimed away.
+
+### The audit
 
 `cached_embed(..., chunk=N)` writes a `.done` marker per chunk, so an interrupted embedding resumes. A scan of every
 call in `tools/`:

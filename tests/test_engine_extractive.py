@@ -8,6 +8,7 @@ the benchmark's own metric over the same passages — not a re-derivation.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -17,6 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
+
+# Where the harness looks for MultiHop-RAG. `eval/` is gitignored, so this holds the benchmark only
+# on a host that has downloaded it — never on a fresh checkout, which is what CI is.
+BENCH = ROOT / "eval" / "benchmarks" / "multihop-rag"
 
 
 def _load():
@@ -29,6 +34,33 @@ def _load():
 
 
 ex = _load()
+
+
+@pytest.fixture()
+def corpus(tmp_path, monkeypatch):
+    """A three-document corpus in the benchmark's on-disk shape, so the scoring tests read nothing
+    that a checkout does not have.
+
+    `score_one` needs the corpus for one thing: `ranking_from_passages` maps a returned passage path
+    (`/docs/000000.txt`) back to a corpus id and the document row scores that id's text. A
+    hand-written three-document corpus exercises exactly that path. The eight scoring tests used to
+    read `eval/benchmarks/multihop-rag/corpus.json` directly, which exists on a machine that has run
+    the benchmark download and nowhere else: they passed locally and the first CI push failed on
+    all of them with `FileNotFoundError`. A test that needs a 2 GB download to state that an
+    uncited sentence is not clean is measuring the download.
+    """
+    raw = [
+        {"url": "https://example.invalid/a", "title": "Refunds",
+         "body": "Refunds are processed within five business days."},
+        {"url": "https://example.invalid/b", "title": "Shipping",
+         "body": "Shipping is free over $50."},
+        {"url": "https://example.invalid/c", "title": "Returns",
+         "body": "Returns take a fortnight."},
+    ]
+    (tmp_path / "corpus.json").write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setattr(ex, "ROOT_BENCH", tmp_path)
+    monkeypatch.setattr(ex, "_CORPUS_TEXT", None)
+    return tmp_path
 
 
 def _payload(answer: str, sentences, text: str, *, abstained=False, query="who?"):
@@ -47,7 +79,7 @@ def _item(*facts: str):
     return {"evidence_list": [{"fact": fact} for fact in facts]}
 
 
-def test_a_verbatim_answer_that_cites_cleanly_scores_clean():
+def test_a_verbatim_answer_that_cites_cleanly_scores_clean(corpus):
     fact = "Refunds are processed within five business days."
     row = ex.score_one(
         _payload("[1] Refunds are processed within five business days.",
@@ -60,7 +92,7 @@ def test_a_verbatim_answer_that_cites_cleanly_scores_clean():
     assert row["nugget_recall"] == pytest.approx(1.0)
 
 
-def test_an_uncited_answer_is_not_clean():
+def test_an_uncited_answer_is_not_clean(corpus):
     """The contract the row rests on: below 1.0 on attribution is a bug, and it must show up."""
     fact = "Refunds are processed within five business days."
     row = ex.score_one(
@@ -71,7 +103,7 @@ def test_an_uncited_answer_is_not_clean():
     assert row["citation_uncited"] == 1
 
 
-def test_an_answer_quoting_something_not_in_the_evidence_is_not_clean():
+def test_an_answer_quoting_something_not_in_the_evidence_is_not_clean(corpus):
     """A span that is not in the passages cannot be verified, so the row must not call it clean."""
     fact = "Refunds are processed within five business days."
     row = ex.score_one(
@@ -84,7 +116,7 @@ def test_an_answer_quoting_something_not_in_the_evidence_is_not_clean():
     assert row["citation_unfound_quotes"] >= 1
 
 
-def test_the_retrieval_half_is_the_benchmark_s_metric():
+def test_the_retrieval_half_is_the_benchmark_s_metric(corpus):
     """A gold fact present in the returned passage is a hit; one that is not, is not."""
     hit = ex.score_one(
         _payload("[1] Refunds are processed within five business days.", [], 
@@ -100,7 +132,7 @@ def test_the_retrieval_half_is_the_benchmark_s_metric():
     assert miss["Hits@10"] == 0.0
 
 
-def test_answer_nugget_recall_is_the_answer_s_not_the_passage_s():
+def test_answer_nugget_recall_is_the_answer_s_not_the_passage_s(corpus):
     """The point of the metric: the passage covers the fact, a short extract of it may not."""
     fact = "Refunds arrive in 5 days; shipping is free over $50."
     row = ex.score_one(
@@ -111,12 +143,12 @@ def test_answer_nugget_recall_is_the_answer_s_not_the_passage_s():
     assert row["nugget_recall"] < 1.0           # the answer does not
 
 
-def test_a_query_with_no_nuggets_reports_none_rather_than_zero():
+def test_a_query_with_no_nuggets_reports_none_rather_than_zero(corpus):
     row = ex.score_one(_payload("[1] A.", [], "A."), _item("a"))
     assert row["nugget_recall"] is None
 
 
-def test_summarize_counts_abstention_and_skips_null_recalls():
+def test_summarize_counts_abstention_and_skips_null_recalls(corpus):
     # The answer has to be long enough to be a claim: `split_claims` drops a fragment of fewer
     # than three words, and a report with no claims is not a clean one.
     fact = "Refunds are processed within five business days."
@@ -218,9 +250,33 @@ def test_the_row_can_be_scored_at_document_level_as_well_as_chunk_level():
     assert "for key in METRIC_KEYS" in source
 
 
-def test_the_corpus_map_is_the_text_the_engine_indexed():
-    module = _load()
-    text = module.corpus_text()
+def test_the_corpus_map_is_the_text_the_engine_indexed(corpus):
+    """`url -> title + body`, which is what `write_corpus` writes and what the document row scores.
+
+    The engine indexes `a["title"] + " " + a["body"]`; if this map keyed the body alone, the document row
+    would score a text the engine never saw and the placement against the published table would be
+    between two different corpora.
+    """
+    text = ex.corpus_text()
+    assert set(text) == {
+        "https://example.invalid/a", "https://example.invalid/b", "https://example.invalid/c",
+    }
+    assert text["https://example.invalid/a"] == (
+        "Refunds Refunds are processed within five business days."
+    ), "the map dropped the title, which the engine's own corpus carries"
+    assert all(value.strip() for value in text.values()), "a document with no text"
+
+
+def test_the_downloaded_benchmark_corpus_is_the_size_the_findings_quote():
+    """609 documents: the number `README.md` and `docs/findings-engine-multihop.md` quote.
+
+    Skips rather than fails on a checkout without the benchmark, the way every other `eval/`-reading
+    gate in this suite does — `eval/` is gitignored, and a test whose verdict depends on whether the
+    author has run the download is not a test.
+    """
+    if not (BENCH / "corpus.json").is_file():
+        pytest.skip("no downloaded MultiHop-RAG corpus (eval/ is gitignored)")
+    text = ex.corpus_text()
     assert len(text) == 609, f"expected the benchmark's 609 documents, got {len(text)}"
     assert all(value.strip() for value in text.values()), "a document with no text"
 
