@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from .accelerator import describe_device
 from .config import EngineConfig
 from .engine import IndexNotBuiltError, RagEngine
 from .model import ModelUnavailableError
@@ -264,9 +265,17 @@ def _cmd_doctor(args: argparse.Namespace, config: EngineConfig) -> int:
     except ModelUnavailableError as exc:
         model_state = "UNAVAILABLE"
         problems.append(str(exc))
+    # `auto` is a request, so echo what it resolved to rather than the request itself: the
+    # whole value of this command is telling a caller which hardware the numbers will come
+    # from, and on a host with a GPU the difference between "auto" and "cpu" is the difference
+    # between a fast claim and a false one.
+    resolved = engine.device
+    accel = describe_device(resolved)
     payload = {
         "checkpoint": config.checkpoint,
         "device": config.device,
+        "resolved_device": resolved,
+        "accelerator": accel,
         "models_dir": str(config.models_dir),
         "model": model_state,
         "index_dir": str(config.index_dir),
@@ -275,7 +284,7 @@ def _cmd_doctor(args: argparse.Namespace, config: EngineConfig) -> int:
     }
     _emit(payload, args.json, "\n".join([
         f"models dir  : {config.models_dir}",
-        f"checkpoint  : {config.checkpoint} on {config.device}",
+        f"checkpoint  : {config.checkpoint} on {config.device} -> {accel}",
         f"model       : {model_state}",
         f"index       : {'present' if engine.has_index() else 'absent'} at {config.index_dir}",
         *(f"problem     : {p}" for p in problems),

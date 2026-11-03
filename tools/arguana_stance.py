@@ -31,6 +31,7 @@ os.environ.setdefault("HF_HOME", str(ROOT / "eval" / "nli-hf-cache"))
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 import beir, evalkit, jobkit  # noqa: E402
+from laya_rag.accelerator import resolve_device  # noqa: E402
 
 NLI_MODEL = "cross-encoder/nli-deberta-v3-base"
 DATASET = "arguana"
@@ -80,7 +81,7 @@ class StanceScorer:
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         self.torch = torch
-        self.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
+        self.device = resolve_device(device, torch)
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_id).to(self.device).eval()
         self.contradiction, self.entailment = stance_label_indices(self.model.config.id2label)

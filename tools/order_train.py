@@ -38,6 +38,7 @@ os.environ.setdefault("HF_HOME", str(ROOT / "eval" / "order-hf-cache"))
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 import evalkit, jobkit  # noqa: E402
+from laya_rag.accelerator import resolve_device  # noqa: E402
 
 ROOT_BENCH = ROOT / "eval" / "benchmarks" / "musique"
 DEFAULT_BASE = "cross-encoder/ms-marco-MiniLM-L-6-v2"
@@ -130,7 +131,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     import torch
     from sentence_transformers import CrossEncoder
 
-    device = args.device or ("mps" if torch.backends.mps.is_available() else "cpu")
+    device = resolve_device(args.device, torch)
     checkpoint_dir = Path(args.checkpoint_dir or (ROOT / "eval" / "order-ce-checkpoints" / args.tag))
 
     raw = json.loads(Path(args.split_file).read_text(encoding="utf-8"))

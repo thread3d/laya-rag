@@ -37,6 +37,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
+from .accelerator import resolve_device
 from .lexical import STOPWORDS, tokenize
 
 GATE_VERSION = 1
@@ -743,9 +744,7 @@ class NLIAnswerability:
                 "an NLI answerability model needs torch and transformers; install the "
                 "engine's default dependencies"
             ) from exc
-        device = self.device
-        if device in ("auto", ""):
-            device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = resolve_device(self.device, torch)
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         self._model = (
             AutoModelForSequenceClassification.from_pretrained(self.model_id).to(device).eval()

@@ -31,6 +31,7 @@ os.environ.setdefault("USE_TORCH", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
+from .accelerator import prepare_rocm_libraries, resolve_device
 from .config import REPO_ROOT, EngineConfig  # noqa: E402  (import after the env defaults)
 
 CHECKPOINT_SUBFOLDERS: dict[str, str | None] = {
@@ -111,8 +112,9 @@ class LayaModel:
                 import torch
             except ImportError as exc:  # pragma: no cover - environment dependent
                 raise ModelUnavailableError(
-                    "torch is not installed. Laya needs the pinned CPU build; run the Laya "
-                    "checkout's setup_laya.sh."
+                    "torch is not installed. Run `make setup` (or `make setup-rocm` on an "
+                    "AMD host) to build the environment, or the Laya checkout's "
+                    "setup_laya.sh."
                 ) from exc
             try:
                 import laya
@@ -123,7 +125,12 @@ class LayaModel:
 
             torch.set_num_threads(self.config.torch_threads)
             spec, subfolder = self._resolve_spec()
-            # "auto" lets Laya pick CUDA -> MPS -> CPU itself.
+            # "auto" lets Laya pick CUDA -> MPS -> CPU itself, which makes this the one path
+            # where device selection belongs to another library: Laya initialises the
+            # accelerator before any of this package's own resolvers run, so the ROCm loader
+            # repair has to be applied here too or a GPU host fails on the checkpoint load
+            # that `resolve_device` would have made work.
+            prepare_rocm_libraries(torch)
             device = None if self.config.device in {"auto", ""} else self.config.device
             started = time.perf_counter()
             try:
@@ -425,7 +432,8 @@ class BiEncoderModel:
                 import torch
             except ImportError as exc:  # pragma: no cover - environment dependent
                 raise ModelUnavailableError(
-                    "torch is not installed; a bi-encoder needs the pinned CPU build."
+                    "torch is not installed; a bi-encoder needs it (`make setup`, or "
+                    "`make setup-rocm` on an AMD host)."
                 ) from exc
             try:
                 from transformers import AutoModel, AutoTokenizer
@@ -434,9 +442,7 @@ class BiEncoderModel:
                     "transformers is not installed; a bi-encoder needs it (it ships with Laya)."
                 ) from exc
 
-            device = self.config.device
-            if device in ("auto", ""):
-                device = "mps" if torch.backends.mps.is_available() else "cpu"
+            device = resolve_device(self.config.device, torch)
             torch.set_num_threads(self.config.torch_threads)
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -617,9 +623,7 @@ class CrossEncoderModel:
                     "transformers is not installed; a cross-encoder needs it (it ships with Laya)."
                 ) from exc
 
-            device = self.config.device
-            if device in ("auto", ""):
-                device = "mps" if torch.backends.mps.is_available() else "cpu"
+            device = resolve_device(self.config.device, torch)
             torch.set_num_threads(self.config.torch_threads)
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -799,9 +803,7 @@ class GenerativeRerankerModel:
                     "transformers is not installed; a generative reranker needs it."
                 ) from exc
 
-            device = self.config.device
-            if device in ("auto", ""):
-                device = "mps" if torch.backends.mps.is_available() else "cpu"
+            device = resolve_device(self.config.device, torch)
             torch.set_num_threads(self.config.torch_threads)
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)

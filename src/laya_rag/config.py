@@ -107,8 +107,13 @@ class EngineConfig:
     # durable side effect and most deployments do not need one. See `laya_rag.audit`.
     audit_log: Path | None = field(default_factory=lambda: _env_path("AUDIT_LOG"))
     checkpoint: str = field(default_factory=lambda: _env("CHECKPOINT") or "multilingual")
-    # "auto" defers to Laya's CUDA -> MPS -> CPU selection. On this host that picks
-    # MPS (Metal), which measured 1.6-3x faster than CPU in the Laya checkout.
+    # "auto" means "the fastest device the installed torch can reach": CUDA -- which on a
+    # ROCm build is an AMD GPU, since HIP is reached through torch's CUDA API -- then MPS,
+    # then CPU. Laya resolves it for its own checkpoint and `accelerator.resolve_device`
+    # resolves it for the models this package loads itself (bi-encoder, cross-encoder,
+    # generative reranker, NLI head, sparse encoder), so the two cannot disagree about what
+    # this host can do. An explicit DEVICE is honoured verbatim, including one that will
+    # fail to load: a caller who asked for cuda needs that error, not a silent CPU fallback.
     device: str = field(default_factory=lambda: _env("DEVICE") or "auto")
 
     # Encoder limits. max_len governs the state (document) budget; head_max_len the

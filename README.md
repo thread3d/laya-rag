@@ -3,7 +3,7 @@
 A retrieval-augmented generation system that uses [Laya](https://github.com/thread3d/laya) as its
 retrieval and decision engine, with a command line, an HTTP API and a web interface.
 
-**Version 3.0.9** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
+**Version 3.0.10** — see [`CHANGELOG.md`](CHANGELOG.md) for what it contains, and what it
 deliberately does not claim.
 
 Clients meet the engine over a local HTTP service:
@@ -64,10 +64,23 @@ and measured on this repository's own documentation it put the expected file out
 
 - macOS or Linux, Python 3.10+
 - ~3 GB disk for the Laya checkpoints and ~1 GB for the virtualenv
-- No GPU required. Laya runs fp32 on CPU, and picks up Metal (MPS) automatically when available
+- No GPU required. Laya runs fp32 on CPU, and picks up an accelerator automatically when
+  available: CUDA, ROCm (which torch reaches through its CUDA API, so a ROCm host reports
+  `cuda`) or Metal (MPS)
 
 This machine is an Intel Mac with no CUDA; the engine auto-selects **MPS** and answers a query in
 2–5 s end to end. On CPU-only hosts it works but is slower.
+
+`DEVICE=auto` — the default for every model this package loads itself, not only for Laya — means
+"the fastest device the installed torch can reach". That is a property of the *wheel* as much as
+of the hardware, so `doctor` prints what it resolved to alongside the request:
+
+```
+checkpoint  : multilingual on auto -> cuda:0 - AMD Radeon Graphics (ROCm 6.1.40091-a8dbc0c19)
+```
+
+An explicit `DEVICE=cpu`, `cuda`, `cuda:1` or `mps` is honoured verbatim, including one this host
+cannot serve: a caller who asked for `cuda` gets the load error rather than a silent CPU fallback.
 
 ## Setup
 
@@ -87,6 +100,19 @@ make setup
 
 `make setup` creates `.venv`, installs the same pins, installs Laya and this package editable, and
 reuses the pip cache from step 1 so it is quick.
+
+On an AMD host, install the ROCm wheel instead of the portable default:
+
+```sh
+make setup-rocm                            # torch==2.6.0+rocm6.1, from the ROCm wheel index
+make setup-rocm ROCM_TORCH_SPEC=torch==2.6.0+rocm6.2 ROCM_TORCH_INDEX=https://download.pytorch.org/whl/rocm6.2
+```
+
+The accelerator is a property of the wheel, so this is the step that decides whether the GPU is
+reachable at all: a CPU wheel on a ROCm host reports `torch.cuda.is_available() == False` and every
+model resolves to `cpu`, producing CPU numbers with nothing in them saying so. `make setup` takes
+the same choice through `TORCH_SPEC` and `TORCH_INDEX` for a CUDA box, and derives its `numpy` pin
+from the torch spec because only the 2.2.2 wheel predates numpy 2.
 
 Verify everything is wired up:
 

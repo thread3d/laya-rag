@@ -6,6 +6,71 @@ Earlier development predates this file, so the history below begins at the first
 the measurement programme's own record is `SCORE-LIFT.md` §10 and `docs/FINDINGS.md`, which are
 kept per-result rather than per-release.
 
+## 3.0.10 — 2026-11-03
+
+`DEVICE=auto` never selected a GPU on Linux. The five models this package loads itself — the bi-encoder, the
+cross-encoder, the generative reranker, the NLI answerability head and the learned-sparse encoder — each resolved
+`auto` to `"mps" if torch.backends.mps.is_available() else "cpu"`. That was right for the Intel Mac the measurement
+programme ran on and silently wrong everywhere else: a CUDA host and a ROCm host both fell through to `cpu`, so the
+answerability gate and the sparse channel ran on the CPU on machines with idle GPUs, and nothing in the result said
+so — the one kind of claim this project does not make quietly.
+
+Measured on a Radeon Pro W6800X (gfx1030, ROCm 6.1), the cross-encoder over 256 pairs went from 294 ms to 80 ms
+(1.15 → 0.31 ms/pair) once it actually reached the device.
+
+### One resolver instead of eight
+
+`laya_rag.accelerator.resolve_device` is now the only place `auto` is decided: CUDA — which a ROCm build answers,
+since HIP is reached through torch's CUDA API — then MPS, then CPU. The five in-process models use it, and so do the
+eight tools that carried their own copy of the same shortcut (`beir`, `finetune`, `laya_encoder_finetune`,
+`laya_finetune_probe`, `multihop_ordering`, `order_train`, `order_eval`, `arguana_stance`). An explicit device name is
+returned verbatim, including one this host cannot serve: a caller who asked for `cuda` needs the load error, not a
+silent downgrade to the CPU it was trying to avoid.
+
+A device check has to answer two questions that are not the same one, so it asks both — `is_available()` *and*
+`device_count() > 0` — because a build that enumerates its devices and then fails on first initialisation answers
+the first one yes. `tests/test_accelerator.py` covers every branch without a GPU by passing stand-in modules, which
+also means the CUDA and MPS paths are exercised on a machine that has neither.
+
+### The ROCm runtime the wheel opens by bare name
+
+A ROCm torch opens `libcaffe2_nvrtc.so` by bare name, so the dynamic loader resolves it through `LD_LIBRARY_PATH`
+and not through the wheel's own `$ORIGIN` rpath. Without that variable, device enumeration succeeds and the first
+initialisation raises `Error in dlopen: libcaffe2_nvrtc.so: cannot open shared object file`, which reads like a
+missing file and is really a missing search path — in every process the user did not wrap by hand, which is every
+test runner and every `make` target.
+
+`prepare_rocm_libraries` repairs it in two places, because there are two kinds of process: opening the library by
+absolute path puts its soname in the running process's loader table, and writing the directory into the inherited
+`LD_LIBRARY_PATH` is what fixes the child processes torch starts itself. The second half is not optional —
+`torch.compile` forks an inductor compile worker, which has a fresh loader and none of the above, and it reported an
+uncaught exception in a subprocess the caller never asked for. It probes the CUDA device even when the model was put
+on the CPU, so `make laya-finetune-probe --device cpu` failed with the GPU error, which is why the repair runs before
+the explicit-device early return rather than inside the CUDA branch. Both repairs are best-effort, silent, and do
+nothing on a CPU, CUDA or MPS build. The one path where device selection belongs to another library, `LayaModel`'s
+`laya.load(device=None)`, applies the same repair before handing over.
+
+The encoder probe, the target written for exactly this measurement, could not run here before: on this host it is
+`warm_step_seconds_mean` 3.204 s on the CPU and 0.399 s on the GPU, an 8.0× training step, with the checkpoint
+round-trip still byte-identical (`reload_ok`).
+
+### `doctor` reports the resolution, not the request
+
+`auto` is a request; the hardware that produced a number is the claim. `doctor` now prints
+`multilingual on auto -> cuda:0 - AMD Radeon Graphics (ROCm 6.1.40091-a8dbc0c19)` and carries `resolved_device` and
+`accelerator` in its JSON payload. Reading it back also fixed a label bug: `LayaModel.device` reports `cuda:0`, and
+indexing that again produced `cuda:0:0`.
+
+### The wheel is a variable, because it is a property of the host
+
+`make setup` pinned `torch==2.2.2` and `numpy<2` unconditionally. 2.2.2 is the last release supporting macOS Intel,
+which is why that pin exists, and it is also CPU-only — so the one install path this project documents could not
+produce a GPU-capable environment on any host. The accelerator is a property of the *wheel* and no code change can
+re-enable a GPU the installed torch was not built for, so `TORCH_SPEC`, `TORCH_INDEX` and `NUMPY_SPEC` are now
+variables whose defaults are unchanged for the Mac, `make setup-rocm` installs the ROCm wheel, and the numpy pin
+follows the torch spec because only 2.2.2 predates numpy 2. `setup` also tolerates an uninitialised `vendor/laya`
+submodule rather than failing the whole install on it.
+
 ## 3.0.9 — 2026-11-03
 
 The first CI run of this repository failed, and every failure was a test that passed only on the machine which had

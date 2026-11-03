@@ -50,6 +50,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 os.environ.setdefault("HF_HOME", str(ROOT / "eval" / "beir" / "hf-cache"))
 
 import evalkit  # noqa: E402
+from laya_rag.accelerator import resolve_device  # noqa: E402
 from laya_rag.chunking import Chunk  # noqa: E402
 from laya_rag.config import EngineConfig  # noqa: E402
 from laya_rag.index_store import VectorIndex  # noqa: E402
@@ -599,8 +600,7 @@ class BiEncoder:
         import torch
         from transformers import AutoModel, AutoTokenizer
 
-        if device in (None, "auto"):
-            device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = resolve_device(device, torch)
         if pooling == "auto":
             # A local directory carries its own pooling; a name heuristic cannot tell that
             # eval/distill-nfcorpus-model is BGE-derived and would silently mean-pool it.
@@ -695,8 +695,7 @@ class CrossEncoder:
         import torch
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-        if device in (None, "auto"):
-            device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = resolve_device(device, torch)
         self.torch = torch
         self.device = device
         self.batch_size = batch_size

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "laya-rag"
-version = "3.0.9"
+version = "3.0.10"
 description = "Retrieval-augmented generation engine powered by the Laya decision engine, with an HTTP API and a web interface"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,10 +12,12 @@ license = { text = "Apache-2.0" }
 dependencies = [
     "laya>=0.3.23,<0.5.0",
     "snowballstemmer>=2.2",
-    # `numpy<2` is not this package's own constraint: it is what the pinned torch 2.2.2
-    # (`make setup`) requires, and this repository's venv pins that. The engine code runs
-    # under numpy 2 as well — the full offline suite passes on 2.5 — but installing the
-    # package alone must not pull a numpy that the Laya checkpoint path cannot load.
+    # This package's own floor is numpy 2.1 and the full offline suite passes on 2.5.
+    # `numpy<2` belongs to the *wheel*, not to this package: only the torch 2.2.2 build
+    # (`make setup`'s portable default) predates numpy 2 support, so `make setup` derives
+    # its numpy pin from TORCH_SPEC and a ROCm or CUDA host installs the numpy its torch was
+    # built against. Installing this package alone must not pin a numpy the host's torch
+    # cannot load, which is why the constraint here stays the package's real one.
     "numpy>=2.1.0",
     # The API serves `GZipMiddleware(..., exclude_content_types=...)` and imports
     # `DEFAULT_EXCLUDED_CONTENT_TYPES`; both arrived in Starlette 0.48, while

@@ -34,6 +34,7 @@ os.environ.setdefault("HF_HOME", str(ROOT / "eval" / "order-hf-cache"))
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 import evalkit, jobkit  # noqa: E402
+from laya_rag.accelerator import resolve_device  # noqa: E402
 from multihop_rerank_experiment import metrics_from_matches  # noqa: E402
 from musique import gold_matches, load_split  # noqa: E402
 
@@ -232,7 +233,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         from sentence_transformers import CrossEncoder
 
         model = CrossEncoder(args.cross_encoder, num_labels=1, max_length=args.max_length,
-                             device=args.device or ("mps" if _mps() else "cpu"))
+                             device=resolve_device(args.device))
     started = time.perf_counter()
     for position, qid in enumerate(todo, 1):
         pool = list(rows[qid]["pool"])[: args.pool]
@@ -266,12 +267,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("\n" + render_markdown(report))
     print("wrote", str(stem) + ".json", "and", str(stem) + ".md")
     return 0
-
-
-def _mps() -> bool:
-    import torch
-
-    return torch.backends.mps.is_available()
 
 
 if __name__ == "__main__":

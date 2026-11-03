@@ -36,6 +36,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import beir  # noqa: E402
 import evalkit  # noqa: E402
+from laya_rag.accelerator import resolve_device  # noqa: E402
 from laya_rag.index_store import VectorIndex  # noqa: E402
 from laya_rag.lexical import reciprocal_rank_fusion  # noqa: E402
 
@@ -277,7 +278,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sentence_transformers import InputExample, SentenceTransformer, losses
     from torch.utils.data import DataLoader
 
-    device = args.device or ("mps" if torch.backends.mps.is_available() else "cpu")
+    device = resolve_device(args.device, torch)
     report: dict[str, Any] = {
         "settings": vars(args),
         "dataset": args.dataset,

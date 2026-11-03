@@ -33,6 +33,9 @@ from typing import Any, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "vendor" / "laya"))
+sys.path.insert(0, str(ROOT / "src"))
+
+from laya_rag.accelerator import resolve_device  # noqa: E402
 
 os.environ.setdefault("USE_TF", "0")
 os.environ.setdefault("USE_TORCH", "1")
@@ -44,7 +47,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--checkpoint", default="multilingual",
                     choices=("laya", "english", "multilingual", "typed-decisions"))
     ap.add_argument("--models-dir", default=str(ROOT / "models"))
-    ap.add_argument("--device", default="auto", help="auto picks MPS when available")
+    ap.add_argument("--device", default="auto", help="auto picks CUDA/ROCm, then MPS, then CPU")
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--query-len", type=int, default=192)
     ap.add_argument("--doc-len", type=int, default=256)
@@ -59,9 +62,7 @@ def subfolder(checkpoint: str) -> str | None:
 
 
 def pick_device(torch: Any, requested: str) -> str:
-    if requested in ("", "auto", None):
-        return "mps" if torch.backends.mps.is_available() else "cpu"
-    return requested
+    return resolve_device(requested, torch)
 
 
 def mean_pool(hidden: Any, mask: Any) -> Any:

@@ -40,6 +40,7 @@ os.environ.setdefault("HF_HOME", str(ROOT / "eval" / "colbert-hf-cache"))
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "src"))
 import evalkit, jobkit  # noqa: E402
+from laya_rag.accelerator import resolve_device  # noqa: E402
 from multihop_official import chunk_text  # noqa: E402
 from multihop_rerank_experiment import (  # noqa: E402
     coverage_doc_quota_order,
@@ -194,7 +195,7 @@ class ColBERT:
         from transformers import BertModel, BertTokenizerFast
 
         self.torch = torch
-        self.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
+        self.device = resolve_device(device, torch)
         state = load_file(hf_hub_download(model_id, "model.safetensors"))
         weight = state["linear.weight"]
         self.tokenizer = BertTokenizerFast.from_pretrained(model_id)

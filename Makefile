@@ -115,10 +115,11 @@ EVIDENCE_ANSWER_ROW ?= eval/benchmarks/multihop-rag/engine-extractive-rank150.js
 EVIDENCE_GATE_ROWS ?= eval/gate/multihop.json
 EVIDENCE_EXTRA_ARGS ?=
 
-.PHONY: help setup doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe multihop-fetch multihop-row heavy-wait listwise-rerank gate-dataset gate-train gate-transfer evidence-protocol evidence-pipeline submission-check job-status lint clean
+.PHONY: help setup setup-rocm doctor index serve query gui mcp mcp-http test test-real test-gui test-mcp eval bench bench-index-parallel bench-biencoder-parallel beir beir-merge-rankings beir-ablate beir-atom-channel beir-coverage lexical-selector fusion-tuning context-prefix bright multihop multihop-gate multihop-coverage multihop-diagnostics multihop-significance multihop-ce-cache multihop-rerank-experiment multihop-atom-index multihop-recalibrate multihop-answerability answerability-features multihop-answerability-grouped beir-routing finetune distill-eval laya-finetune laya-finetune-probe laya-query-adapter laya-judge-check gate-calibration engine-beir engine-multihop engine-extractive frames-extractive engine-multihop-compare engine-musique engine-musique-compare multihop-ordering arguana-stance trust-report order-train order-eval-zero-shot order-eval-adapted order-compare endtoend cost-report verify-precision citation-report ann-bench ondisk-scale distill-verify frames-eval lexical-control ondisk bench-lexical adversarial-audit charts claim-check consistency-check channel-coverage charts-compare mteb-eval calibration-report audit-verify nugget-recall reranker-fairness leakage-audit labelling-pairs labelling-queue heavy-status two-wiki generator-free-iteration quantization-probe multihop-fetch multihop-row heavy-wait listwise-rerank gate-dataset gate-train gate-transfer evidence-protocol evidence-pipeline submission-check job-status lint clean
 
 help:
 	@echo "setup        create .venv and install the engine in editable mode"
+	@echo "setup-rocm   the same, with the AMD ROCm torch wheel (run on an AMD host)"
 	@echo "doctor       check that the Laya checkpoint loads"
 	@echo "index        (re)index CORPUS (default: $(CORPUS))"
 	@echo "serve        run the HTTP service and GUI on PORT (default: $(PORT))"
@@ -221,18 +222,51 @@ help:
 	@echo "lint         byte-compile the package and syntax-check the JavaScript"
 	@echo "clean        remove the index and caches"
 
+# Torch is the one dependency whose wheel is shaped by the *host* rather than the project, and
+# the accelerator is a property of the wheel: no code change can re-enable a GPU the installed
+# torch was not built for. The same version number also means different things on each host --
+# 2.2.2 is the last release that supports macOS Intel and it is CPU-only, a CUDA box wants the
+# cu wheels, and an AMD box wants the ROCm ones. So the spec is a variable, the default stays
+# the portable one, and a host with a GPU says so:
+#   make setup-rocm                                        # AMD, ROCm 6.1 (gfx1030 class)
+#   make setup TORCH_SPEC="torch==2.6.0" TORCH_INDEX=https://download.pytorch.org/whl/cu124
+TORCH_SPEC ?= torch==2.2.2
+TORCH_INDEX ?=
+TORCH_INDEX_ARGS = $(if $(TORCH_INDEX),--index-url $(TORCH_INDEX),)
+# torch 2.2.2 predates numpy 2; every newer wheel is fine on it, and this package's own code
+# runs under either (see the note in pyproject.toml), so the pin follows the torch spec instead
+# of constraining a host that does not need constraining.
+NUMPY_SPEC ?= $(if $(filter torch==2.2.2,$(TORCH_SPEC)),numpy<2,numpy>=2.1.0)
+#: The ROCm wheel index `setup-rocm` installs from. Override for a different ROCm minor.
+ROCM_TORCH_INDEX ?= https://download.pytorch.org/whl/rocm6.1
+ROCM_TORCH_SPEC ?= torch==2.6.0+rocm6.1
+
 setup:
 	@test -x $(PY) || $(PYTHON) -m venv $(VENV)
 	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet --upgrade pip
 	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet \
-		"numpy<2" "torch==2.2.2" "transformers==4.57.6" \
+		$(TORCH_INDEX_ARGS) --extra-index-url https://pypi.org/simple "$(TORCH_SPEC)"
+	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet \
+		"$(NUMPY_SPEC)" "transformers==4.57.6" \
 		"safetensors>=0.4.0" "huggingface_hub>=0.34.0,<1.0"
-	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet -e vendor/laya --no-deps
+	@if [ -f vendor/laya/pyproject.toml ] || [ -f vendor/laya/setup.py ]; then \
+		PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet -e vendor/laya --no-deps; \
+	else \
+		echo "note: vendor/laya is an uninitialised submodule; skipping its editable install"; \
+		echo "      (git submodule update --init vendor/laya, then re-run make setup)"; \
+	fi
 	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet \
 		"fastapi>=0.110.0" "starlette>=0.48" "uvicorn>=0.27.0" "pydantic>=2.0" \
 		"pytest>=8.0" "httpx>=0.27" "ruff>=0.6"
 	PIP_CACHE_DIR="$(PIP_CACHE)" $(PY) -m pip install --quiet -e . --no-deps
 	@echo "ready: $(PY)"
+
+# The AMD/ROCm install. Same `setup`, different wheel -- and the wheel is the whole point: a
+# CPU wheel on a ROCm host reports `torch.cuda.is_available() == False`, so every model in this
+# package resolves to cpu and the numbers are CPU numbers with nothing in them saying so.
+setup-rocm:
+	@$(MAKE) --no-print-directory setup \
+		TORCH_SPEC="$(ROCM_TORCH_SPEC)" TORCH_INDEX="$(ROCM_TORCH_INDEX)"
 
 doctor:
 	$(PY) -m laya_rag.cli doctor

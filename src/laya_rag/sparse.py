@@ -27,6 +27,8 @@ import threading
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .accelerator import resolve_device
+
 SPARSE_FILE = "sparse.json"
 
 
@@ -58,9 +60,7 @@ class SparseEncoder:
             import torch
             from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-            device = self.device
-            if device in (None, "auto"):
-                device = "mps" if torch.backends.mps.is_available() else "cpu"
+            device = resolve_device(self.device, torch)
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
             self._model = AutoModelForMaskedLM.from_pretrained(self.model_id).to(device).eval()
             self._torch = torch

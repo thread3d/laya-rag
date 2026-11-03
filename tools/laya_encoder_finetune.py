@@ -55,6 +55,7 @@ sys.path.insert(0, str(ROOT / "vendor" / "laya"))
 
 import beir  # noqa: E402
 import evalkit  # noqa: E402
+from laya_rag.accelerator import resolve_device  # noqa: E402
 
 CHECKPOINTS: dict[str, str | None] = {
     "laya": None,
@@ -442,9 +443,7 @@ def false_negative_blocks(
 
 
 def pick_device(torch: Any, requested: str) -> str:
-    if requested in ("", "auto", None):
-        return "mps" if torch.backends.mps.is_available() else "cpu"
-    return requested
+    return resolve_device(requested, torch)
 
 
 def export_checkpoint(agent: Any, encoder: Any, out: Path, torch: Any) -> None:
